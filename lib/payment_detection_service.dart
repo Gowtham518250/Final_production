@@ -1898,7 +1898,16 @@ class _VI implements Comparable<_VI> {
   }
 }
 
+class _RecentVoicePayment {
+  final PaymentEvent event;
+  final DateTime recordedAt;
+  const _RecentVoicePayment(this.event, this.recordedAt);
+}
+
 class PriorityVoiceQueue {
+  static const Duration _crossSourceEchoWindow = Duration(minutes: 12);
+  static const Duration _sameNotificationReplayWindow = Duration(seconds: 90);
+
   final _queue = SplayTreeSet<_VI>(
     (a, b) =>
         a.compareTo(b) != 0 ? a.compareTo(b) : a.hashCode.compareTo(b.hashCode),
@@ -1918,6 +1927,93 @@ class PriorityVoiceQueue {
   //   - Multiple different payments are tracked (not just the last one)
   //   - Old entries expire automatically so same customer can pay again later
   final Map<String, DateTime> _spokenFps = {};
+  final List<_RecentVoicePayment> _recentPayments = [];
+
+  static bool _isBankRelay(PaymentApp app) => const {
+    PaymentApp.bankSms,
+    PaymentApp.bankApp,
+    PaymentApp.icici,
+    PaymentApp.sbiYono,
+    PaymentApp.axis,
+    PaymentApp.hdfc,
+    PaymentApp.payzapp,
+  }.contains(app);
+
+  static bool _isUpiApp(PaymentApp app) => const {
+    PaymentApp.googlePay,
+    PaymentApp.phonePe,
+    PaymentApp.paytm,
+    PaymentApp.amazonPay,
+    PaymentApp.bhim,
+    PaymentApp.whatsappPay,
+    PaymentApp.cred,
+  }.contains(app);
+
+  static PaymentDirection _directionOf(PaymentEvent event) {
+    if (event.direction == PaymentTransactionDirection.incomingCredit) {
+      return PaymentDirection.credited;
+    }
+    if (event.direction == PaymentTransactionDirection.outgoingDebit) {
+      return PaymentDirection.debited;
+    }
+    return VoiceBuilder.detectDirection(event.rawText);
+  }
+
+  static String _normalizedText(String text) => text.toLowerCase().trim();
+
+  bool _isRecentCrossSourceEcho(PaymentEvent event) {
+    if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
+    final now = event.timestamp;
+    _recentPayments.removeWhere(
+      (entry) =>
+          now.difference(entry.event.timestamp).abs() >
+          _crossSourceEchoWindow,
+    );
+    final direction = _directionOf(event);
+    for (final previous in _recentPayments) {
+      final old = previous.event;
+      if (old.isMerchantConfirmed || old.hasReferenceConflict) continue;
+      if (event.id == old.id) return true;
+
+      final currentReference = event.normalizedReferenceId;
+      final priorReference = old.normalizedReferenceId;
+      if (currentReference != null && priorReference != null) {
+        // A conflicting reference must reach review; it is not a duplicate.
+        if (event.hasReferenceConflictWith(old)) continue;
+        if (currentReference == priorReference) return true;
+        // Two different authoritative references represent different transfers.
+        continue;
+      }
+
+      if ((event.amount - old.amount).abs() >= 0.01 ||
+          direction == PaymentDirection.unknown ||
+          direction != _directionOf(old)) {
+        continue;
+      }
+
+      final age = now.difference(old.timestamp).abs();
+      final crossChannel =
+          event.app != old.app &&
+          ((_isBankRelay(event.app) && (_isUpiApp(old.app) || _isBankRelay(old.app))) ||
+              (_isBankRelay(old.app) && (_isUpiApp(event.app) || _isBankRelay(event.app))));
+      if (crossChannel && age <= _crossSourceEchoWindow) return true;
+
+      final samePayloadReplay =
+          event.app == old.app &&
+          _normalizedText(event.rawText) == _normalizedText(old.rawText) &&
+          age <= _sameNotificationReplayWindow;
+      if (samePayloadReplay) return true;
+    }
+    return false;
+  }
+
+  void _rememberPayment(PaymentEvent event) {
+    _recentPayments.removeWhere((entry) => entry.event.id == event.id);
+    _recentPayments.add(_RecentVoicePayment(event, DateTime.now()));
+    if (_recentPayments.length > 100) _recentPayments.removeAt(0);
+    final cutoff = DateTime.now().subtract(_crossSourceEchoWindow);
+    _recentPayments.removeWhere((entry) => entry.recordedAt.isBefore(cutoff));
+  }
 
   bool _isAlreadySpoken(String fp) {
     final expiry = _spokenFps[fp];
@@ -1938,17 +2034,35 @@ class PriorityVoiceQueue {
 
   void enqueue(PaymentEvent e, PaymentUiState ui) {
     if (!PdsConfig.isVoiceEnabled) return;
+    if (e.isDuplicate || e.hasReferenceConflict) {
+      // Replay/conflict records may be shown for audit, but must not speak as
+      // a fresh payment receipt or sound-box announcement.
+      _rememberPayment(e);
+      PdsLogger.d(
+        'VOICE',
+        'DUPLICATE/CONFLICT ANNOUNCEMENT BLOCKED: ${e.fingerprint}',
+      );
+      return;
+    }
 
     // Use the transaction fingerprint so alternate notification wording for
     // the same payment cannot produce a second announcement.
     final fingerprint = e.isMerchantConfirmed
         ? '${e.voiceFingerprint}_merchant_confirmed'
         : e.voiceFingerprint;
-    if (_isAlreadySpoken(fingerprint)) {
-      PdsLogger.d('VOICE', 'DUPLICATE NOTIFICATION BLOCKED: $fingerprint');
+    final repeatedFingerprint = _isAlreadySpoken(fingerprint);
+    final crossSourceEcho = _isRecentCrossSourceEcho(e);
+    if (repeatedFingerprint || crossSourceEcho) {
+      PdsLogger.d(
+        'VOICE',
+        'DUPLICATE ANNOUNCEMENT BLOCKED: fp=$fingerprint '
+            'crossSource=$crossSourceEcho',
+      );
+      _rememberPayment(e);
       return;
     }
     _markSpoken(fingerprint);
+    _rememberPayment(e);
 
     final text = ui.voiceText(_lang);
     if (text.isEmpty) return;
@@ -2036,6 +2150,7 @@ class PriorityVoiceQueue {
     _queue.clear();
     _recentTs.clear();
     _spokenFps.clear();
+    _recentPayments.clear();
   }
 }
 
@@ -2182,6 +2297,14 @@ class PendingPaymentBuffer {
     // Let the pipeline or drain control when it's marked as emitted.
     _buffer.add(entry);
     PdsLogger.d('TCM', 'Buffered ₹${e.amount} (voiceSpoken: $voiceSpoken)');
+  }
+
+  bool hasUnconfirmedReference(String reference) {
+    return _buffer.any(
+      (entry) =>
+          !entry.confirmed &&
+          entry.event.normalizedReferenceId == reference,
+    );
   }
 
   _PendingEntry? matchSms({
@@ -2870,17 +2993,25 @@ class PaymentDetectionService {
       decision: decision,
       detectionSource: source,
       isFailed: isFailed,
-      direction: switch (VoiceBuilder.detectDirection(cleanText)) {
-        PaymentDirection.credited => PaymentTransactionDirection.incomingCredit,
-        PaymentDirection.debited => PaymentTransactionDirection.outgoingDebit,
-        PaymentDirection.unknown => PaymentTransactionDirection.unknown,
-      },
+      direction: _Classifier.isIncomingCreditText(cleanText)
+          ? PaymentTransactionDirection.incomingCredit
+          : VoiceBuilder.detectDirection(cleanText) == PaymentDirection.debited
+          ? PaymentTransactionDirection.outgoingDebit
+          : PaymentTransactionDirection.unknown,
     );
   }
 
   /// A device notification or SMS can alert the merchant, but cannot prove
   /// funds settled. Automatically detected events stay pending for review.
   static PaymentEvent requireMerchantConfirmation(PaymentEvent event) {
+    // Persisted reference conflicts always remain review-only, even if a
+    // stale callback claims the event had previously been confirmed.
+    if (event.hasReferenceConflict) {
+      return event.copyWith(
+        decision: PaymentDecision.likely,
+        verificationStatus: PaymentVerificationStatus.unverified,
+      );
+    }
     if (event.decision == PaymentDecision.rejected) {
       return event;
     }
@@ -2903,13 +3034,22 @@ class PaymentDetectionService {
   }
 
   static bool isSafeIncomingCredit(PaymentEvent event) {
-    return event.amount.isFinite &&
-        event.amount > 0 &&
-        !event.isFailed &&
-        !event.isDuplicate &&
-        event.direction != PaymentTransactionDirection.outgoingDebit &&
-        VoiceBuilder.detectDirection(event.rawText) ==
-            PaymentDirection.credited;
+    if (!event.amount.isFinite ||
+        event.amount <= 0 ||
+        event.isFailed ||
+        event.isDuplicate ||
+        event.hasReferenceConflict ||
+        event.direction == PaymentTransactionDirection.outgoingDebit) {
+      return false;
+    }
+    // Events emitted by our classifier may contain valid inbound wording that
+    // VoiceBuilder's narrower audio phrasing detector doesn't recognize.
+    // Accept that explicit pipeline direction only when the text classifier
+    // independently sees an incoming credit and no contradictory debit cue.
+    return VoiceBuilder.detectDirection(event.rawText) ==
+            PaymentDirection.credited ||
+        (event.direction == PaymentTransactionDirection.incomingCredit &&
+            _Classifier.isIncomingCreditText(event.rawText));
   }
 
   // ── Streams ───────────────────────────────────────────────────────────────
@@ -2955,6 +3095,9 @@ class PaymentDetectionService {
   StreamSubscription<AccessibilityEvent>? _accessSub;
 
   final Map<String, DateTime> _dedupStore = {};
+  // In-memory amounts let duplicate detection distinguish a genuine repeat
+  // from a reused UTR with a conflicting amount. The dedup key itself is UTR-only.
+  final Map<String, double> _dedupReferenceAmounts = {};
   bool _dedupDirty = false;
 
   Timer? _tcmDrainTimer;
@@ -2999,11 +3142,22 @@ class PaymentDetectionService {
     PdsLogger.i('SVC', 'Bill set: ₹$amount');
   }
 
-  void recordBillPayment(double amount) {
+  final LinkedHashSet<String> _appliedBillPaymentIds = LinkedHashSet<String>();
+
+  void recordBillPayment(double amount, {String? idempotencyKey}) {
+    if (!amount.isFinite || amount <= 0) return;
+    final key = idempotencyKey?.trim() ?? '';
+    if (key.isNotEmpty && !_appliedBillPaymentIds.add(key)) {
+      PdsLogger.d('BILL', 'Repeated payment event ignored: $key');
+      return;
+    }
+    if (_appliedBillPaymentIds.length > 1000) {
+      _appliedBillPaymentIds.remove(_appliedBillPaymentIds.first);
+    }
     if (!billContext.isActive || amount <= 0) return;
-    final appliedAmount = math
-        .min(amount, billContext.remainingAmount)
-        .toDouble();
+    final remaining = billContext.remainingAmount;
+    if (!remaining.isFinite || remaining <= 0) return;
+    final appliedAmount = math.min(amount, remaining).toDouble();
     if (appliedAmount <= 0) return;
     billContext.recordPartial(appliedAmount);
     if (billContext.isFullyPaid) {
@@ -3755,10 +3909,17 @@ class PaymentDetectionService {
         PaymentApp.amazonPay,
         PaymentApp.bhim,
       }.contains(app);
+      // PhonePe/GPay notifications often omit a bank-style UTR, but their
+      // explicit incoming-credit text is still useful as a *candidate* while
+      // this merchant has an active bill. It remains LIKELY and cannot alter
+      // accounting until the merchant verifies it. Don't require the voice
+      // wording regex alone: the payment classifier recognizes more formats.
+      final hasExplicitIncomingCredit =
+          _Classifier.classify(fields) == _ClassifyResult.passed &&
+          _Classifier.isIncomingCreditText(fields) &&
+          !FraudEngine.isPromotionalMessage(fields);
       final isActiveBillCredit =
-          isTrustedPaymentApp &&
-          billContext.isActive &&
-          VoiceBuilder.detectDirection(fields) == PaymentDirection.credited;
+          isTrustedPaymentApp && billContext.isActive && hasExplicitIncomingCredit;
       _processText(
         fields.trim(),
         app,
@@ -3804,11 +3965,21 @@ class PaymentDetectionService {
       if (_processedSmsCache.length > 100) _processedSmsCache.removeAt(0);
 
       _watchdog.recordSms();
+      // A structurally credible incoming SMS for the currently active bill
+      // may be shown as a LIKELY candidate even if this non-DLT sender cannot
+      // earn the trusted-bank score. It can never update the sale without the
+      // merchant's explicit confirmation.
+      final activeBillCreditCandidate =
+          billContext.isActive &&
+          _Classifier.classify(body) == _ClassifyResult.passed &&
+          _Classifier.isIncomingCreditText(body) &&
+          !FraudEngine.isPromotionalMessage(body);
       _processText(
         body.trim(),
         PaymentApp.bankSms,
         source: 'sms',
         sender: normalizedSender,
+        allowUnverifiedIncomingCandidate: activeBillCreditCandidate,
       );
     } catch (e, st) {
       PdsLogger.e('L2', 'Handler error', e, st);
@@ -3917,21 +4088,71 @@ class PaymentDetectionService {
       detectionSource: source,
       direction: isDebit
           ? PaymentTransactionDirection.outgoingDebit
-          : switch (VoiceBuilder.detectDirection(text)) {
-              PaymentDirection.credited =>
-                PaymentTransactionDirection.incomingCredit,
-              PaymentDirection.debited =>
-                PaymentTransactionDirection.outgoingDebit,
-              PaymentDirection.unknown => PaymentTransactionDirection.unknown,
-            },
+          : _Classifier.isIncomingCreditText(text)
+          ? PaymentTransactionDirection.incomingCredit
+          : VoiceBuilder.detectDirection(text) == PaymentDirection.debited
+          ? PaymentTransactionDirection.outgoingDebit
+          : PaymentTransactionDirection.unknown,
     );
     final fp = tempEvent.fingerprint;
-    if (_dedupStore.containsKey(fp) || _activeFingerprints.contains(fp)) {
-      PdsLogger.d('L4.5', 'DUPLICATE BLOCKED EARLY: fp=$fp');
+    final normalizedReference = tempEvent.normalizedReferenceId;
+    final nowForDedup = DateTime.now();
+    final storedExpiry = _dedupStore[fp];
+    final storeStillActive =
+        storedExpiry != null && nowForDedup.isBefore(storedExpiry);
+    final isActive = _activeFingerprints.contains(fp);
+
+    if (normalizedReference != null &&
+        !storeStillActive &&
+        !isActive) {
+      // Expired local identity must not permanently poison a later payment.
+      _dedupReferenceAmounts.remove(normalizedReference);
+    }
+
+    final previousReferenceAmount = normalizedReference != null &&
+            (storeStillActive || isActive)
+        ? _dedupReferenceAmounts[normalizedReference]
+        : null;
+    final referenceAmountConflict =
+        previousReferenceAmount != null &&
+        (previousReferenceAmount - amount).abs() >= 0.01;
+    final sameReferenceDuplicate =
+        previousReferenceAmount != null && !referenceAmountConflict;
+
+    // A UTR repeat with the same amount is a duplicate. The same UTR with a
+    // different amount is not suppressed: it must reach the merchant-review
+    // path and the payment-history conflict guard. Without a reference, use
+    // the per-event fingerprint and require merchant confirmation.
+    final canUseSmsAsCorroboration =
+        sameReferenceDuplicate &&
+        source == 'sms' &&
+        normalizedReference != null &&
+        _pendingBuffer.hasUnconfirmedReference(normalizedReference);
+
+    if (sameReferenceDuplicate && !canUseSmsAsCorroboration) {
+      PdsLogger.d('L4.5', 'DUPLICATE REFERENCE BLOCKED: fp=$fp');
       _stats.recordDupe();
       return;
     }
-    _activeFingerprints.add(fp);
+    if (canUseSmsAsCorroboration) {
+      // A bank/PSP SMS with the same UTR can strengthen the earlier PhonePe
+      // candidate via TCM. It remains one transaction: the SMS path is muted
+      // when the original candidate already announced it.
+      PdsLogger.i('L4.5', 'SAME UTR SMS CORROBORATION allowed silently: ref=$normalizedReference');
+    }
+    if (referenceAmountConflict) {
+      PdsLogger.w(
+        'L4.5',
+        'REFERENCE AMOUNT CONFLICT: ref=$normalizedReference '
+            'stored=₹$previousReferenceAmount incoming=₹$amount; routing for review',
+      );
+    } else if (normalizedReference != null &&
+        previousReferenceAmount == null) {
+      _dedupReferenceAmounts[normalizedReference] = amount;
+    }
+
+    final registeredActiveFingerprint = !referenceAmountConflict;
+    if (registeredActiveFingerprint) _activeFingerprints.add(fp);
     _dedupStore[fp] = DateTime.now().add(
       isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
     );
@@ -4349,8 +4570,9 @@ class PaymentDetectionService {
           isPartialPayment: isPartial,
           isBillMatch: isBillSettled || isPartial,
           remainingAmount: isPartial
-              ? billContext.remainingAmount - amount
+              ? math.max(0.0, billContext.remainingAmount - amount).toDouble()
               : 0.0,
+          hasReferenceConflict: referenceAmountConflict,
         ),
       );
 
@@ -4386,7 +4608,7 @@ class PaymentDetectionService {
         unawaited(_emit(eventToEmit, isBillSettlement: isBillSettled));
       }
     } finally {
-      _activeFingerprints.remove(tempEvent.fingerprint);
+      if (registeredActiveFingerprint) _activeFingerprints.remove(fp);
     }
   }
 
@@ -4766,18 +4988,16 @@ class PaymentDetectionService {
 
   void _recordConfirmedBillPayment(PaymentEvent event) {
     if (!billContext.isActive || billContext.isExpired) return;
-    final match = billContext.evaluate(event.amount);
-    if (match == BillMatchResult.exact) {
-      billContext.markSettled();
-      billContext.clear();
+    if (!event.amount.isFinite ||
+        event.amount <= 0 ||
+        event.isDuplicate ||
+        event.hasReferenceConflict ||
+        !isSafeIncomingCredit(event)) {
       return;
     }
-    if (match == BillMatchResult.partial) {
-      billContext.recordPartial(event.amount);
-      if (billContext.isFullyPaid) {
-        billContext.markSettled();
-        billContext.clear();
-      }
+    final match = billContext.evaluate(event.amount);
+    if (match == BillMatchResult.exact || match == BillMatchResult.partial) {
+      recordBillPayment(event.amount, idempotencyKey: event.fingerprint);
     }
   }
 
@@ -5114,6 +5334,8 @@ abstract class _BankSenderRegistry {
     'INDUSL',
     'YESBNK',
     'YESBANK',
+    'PHONPE',
+    'PHONEPE',
     'IDFCBK',
     'IDFC',
     'FEDBNK',
@@ -5350,6 +5572,19 @@ abstract class _Classifier {
 
   static bool hasPaymentContext(String t) =>
       _context.hasMatch(t) || isIncomingAccountTransfer(t);
+
+  /// Broad but conservative inbound-credit signal shared by notification,
+  /// SMS, confirmation and sale-accounting gates. Explicit debit/conflicting
+  /// direction always wins; ambiguous messages remain unclassified.
+  static bool isIncomingCreditText(String text) {
+    final direction = VoiceBuilder.detectDirection(text);
+    if (direction == PaymentDirection.credited) return true;
+    if (direction == PaymentDirection.debited || _debit.hasMatch(text)) {
+      return false;
+    }
+    return _incomingCredit.hasMatch(text) ||
+        _incomingAccountTransfer.hasMatch(text);
+  }
 
   // FIX-57: Multilanguage credit verbs (10 languages, not 5)
   // NOW includes Bengali, Malayalam, Punjabi for regional shops

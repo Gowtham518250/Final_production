@@ -34,6 +34,22 @@ void main() {
       );
     });
 
+
+    test('conflicting transaction reference cannot update the sale ledger', () {
+      expect(
+        SalePaymentPolicy.resolveDetectedReceiptAmount(
+          detectedAmount: 70,
+          remainingDue: 100,
+          isIncomingCredit: true,
+          isMerchantConfirmed: true,
+          isFailed: false,
+          isDuplicate: false,
+          hasReferenceConflict: true,
+        ),
+        isNull,
+      );
+    });
+
     test('caps a verified incoming payment at the remaining due', () {
       expect(
         SalePaymentPolicy.resolveDetectedReceiptAmount(

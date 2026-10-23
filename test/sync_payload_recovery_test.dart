@@ -104,5 +104,121 @@ void main() {
 
       expect(payload, isNull);
     });
+
+    test('does not reconstruct cancelled or voided sales', () {
+      final baseSale = <String, dynamic>{
+        'sale_id': 'offline-sale-50',
+        'offline_id': 'offline-sale-50',
+        'invoice_number': 'BILL-0050',
+        'status': 'CANCELLED',
+        'business_date': '2026-10-23',
+        'total_amount': 10.0,
+        'paid_amount': 0.0,
+        'items': <dynamic>[
+          <String, dynamic>{
+            'product_name': 'Rice',
+            'qty': 1,
+            'price': 10.0,
+          },
+        ],
+      };
+
+      expect(
+        buildInvoicePayloadFromLocalSale(
+          <String, dynamic>{
+            'sale_id': 'offline-sale-50',
+            'offline_id': 'offline-sale-50',
+            'invoice_number': 'BILL-0050',
+          },
+          [baseSale],
+        ),
+        isNull,
+      );
+    });
+
+    test('does not match by a generic row ID when sale identifiers disagree', () {
+      final payload = buildInvoicePayloadFromLocalSale(
+        <String, dynamic>{
+          'sale_id': 'offline-sale-51',
+          'invoice_number': 'BILL-0051',
+        },
+        <dynamic>[
+          <String, dynamic>{
+            'id': 'offline-sale-51',
+            'sale_id': 'another-sale',
+            'invoice_number': 'BILL-OTHER',
+            'business_date': '2026-10-23',
+            'total_amount': 10.0,
+            'paid_amount': 0.0,
+            'items': <dynamic>[
+              <String, dynamic>{
+                'product_name': 'Rice',
+                'qty': 1,
+                'price': 10.0,
+              },
+            ],
+          },
+        ],
+      );
+
+      expect(payload, isNull);
+    });
+
+    test('rejects negative discounts and invalid financial values', () {
+      final payload = buildInvoicePayloadFromLocalSale(
+        <String, dynamic>{
+          'sale_id': 'offline-sale-52',
+          'invoice_number': 'BILL-0052',
+        },
+        <dynamic>[
+          <String, dynamic>{
+            'sale_id': 'offline-sale-52',
+            'invoice_number': 'BILL-0052',
+            'business_date': '2026-10-23',
+            'total_amount': 10.0,
+            'paid_amount': 0.0,
+            'items': <dynamic>[
+              <String, dynamic>{
+                'product_name': 'Rice',
+                'qty': 1,
+                'price': 10.0,
+                'discount_amount': -5.0,
+              },
+            ],
+          },
+        ],
+      );
+
+      expect(payload, isNull);
+    });
+
+    test('does not fabricate a midnight timestamp if the sale time is unknown', () {
+      final payload = buildInvoicePayloadFromLocalSale(
+        <String, dynamic>{
+          'sale_id': 'offline-sale-53',
+          'invoice_number': 'BILL-0053',
+        },
+        <dynamic>[
+          <String, dynamic>{
+            'sale_id': 'offline-sale-53',
+            'invoice_number': 'BILL-0053',
+            'business_date': '2026-10-23',
+            'total_amount': 10.0,
+            'paid_amount': 0.0,
+            'items': <dynamic>[
+              <String, dynamic>{
+                'product_name': 'Rice',
+                'qty': 1,
+                'price': 10.0,
+              },
+            ],
+          },
+        ],
+      );
+
+      expect(payload, isNotNull);
+      expect(payload!['invoice_date'], '2026-10-23');
+      expect(payload.containsKey('sale_timestamp'), isFalse);
+    });
   });
 }

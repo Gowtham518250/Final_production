@@ -394,10 +394,17 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   final LinkedHashSet<String> _processedPaymentIds =
       LinkedHashSet<String>(); // FIX-1: bounded set with FIFO
   final List<PaymentEvent> _recentAppliedPaymentEvents = [];
+  // Detection candidates are kept separately from applied receipts. This is
+  // only for suppressing duplicate prompts across notification/SMS/Truecaller;
+  // it never adds money to the sale or treats a candidate as verified.
+  final List<PaymentEvent> _recentPaymentCandidates = [];
+  // Reference identity is stronger than amount/time similarity. Keep a bounded
+  // amount-aware map so a reused reference with a conflicting amount is flagged.
+  final LinkedHashMap<String, PaymentEvent> _processedReferenceEvents =
+      LinkedHashMap<String, PaymentEvent>();
   final List<PaymentEvent> _pendingPaymentConfirmations = [];
   final Set<String> _queuedPaymentConfirmationIds = {};
   bool _paymentConfirmationDialogShowing = false;
-  bool _autoSaveAttemptedForBill = false;
   // FIX-UPI-LOOP: Session ID tied to the current bill — changes on every new bill so
   // stale LIKELY re-announce events from the singleton stream are discarded.
   String _billSessionId = '';
@@ -3271,6 +3278,15 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             event.rawText,
           ),
         };
+        if (event.hasReferenceConflict) {
+          final conflictedReference = event.normalizedReferenceId;
+          final previous = conflictedReference == null
+              ? null
+              : _processedReferenceEvents[conflictedReference];
+          _showPaymentReferenceConflict(event, previous);
+          return;
+        }
+
         if (event.isDuplicate ||
             !event.amount.isFinite ||
             event.amount <= 0 ||
@@ -3283,7 +3299,37 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           }
           return;
         }
+        // Check known references before asking for merchant confirmation.
+        // A second alert that reuses a reference with a different amount or
+        // direction is a conflict, not a fresh receipt.
+        final normalizedReference = event.normalizedReferenceId;
+        if (normalizedReference != null) {
+          final previousReferenceEvent =
+              _processedReferenceEvents[normalizedReference] ??
+              _findRecentPaymentCandidateByReference(normalizedReference);
+          if (previousReferenceEvent != null &&
+              previousReferenceEvent.id != event.id) {
+            if (event.hasReferenceConflictWith(previousReferenceEvent)) {
+              _showPaymentReferenceConflict(event, previousReferenceEvent);
+            } else if (kDebugMode) {
+              debugPrint(
+                '⚠️ Duplicate payment reference ignored: $normalizedReference',
+              );
+            }
+            return;
+          }
+        }
+
         if (!event.isMerchantConfirmed) {
+          if (_isRecentPaymentCandidateEcho(event)) {
+            if (kDebugMode) {
+              debugPrint(
+                '⚠️ Cross-source payment candidate ignored for duplicate prompt: '
+                '${event.amount} from ${event.app.name}',
+              );
+            }
+            return;
+          }
           if (event.decision == PaymentDecision.likely) {
             _queueSalePaymentConfirmation(event, capturedSessionId);
           }
@@ -3298,6 +3344,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           isMerchantConfirmed: event.isMerchantConfirmed,
           isFailed: event.isFailed,
           isDuplicate: event.isDuplicate,
+          hasReferenceConflict: event.hasReferenceConflict,
         );
         if (acceptedAmount == null || acceptedAmount <= 0) return;
 
@@ -3311,9 +3358,16 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           return;
         }
         _processedPaymentIds.add(event.fingerprint);
-        // FIX-1: Cap at 100 entries, FIFO rollover
+        _rememberRecentPaymentCandidate(event);
+        // FIX-1: Cap at 100 entries, FIFO rollover.
         if (_processedPaymentIds.length > 100) {
           _processedPaymentIds.remove(_processedPaymentIds.first);
+        }
+        if (normalizedReference != null) {
+          _processedReferenceEvents[normalizedReference] = event;
+          if (_processedReferenceEvents.length > 100) {
+            _processedReferenceEvents.remove(_processedReferenceEvents.keys.first);
+          }
         }
         _recentAppliedPaymentEvents.add(event);
         if (_recentAppliedPaymentEvents.length > 20) {
@@ -3341,7 +3395,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           _paidAmount = updatedPaidAmount;
           _paymentConfirmed = fullyPaid;
         });
-        PaymentDetectionService().recordBillPayment(acceptedAmount);
+        // Confirmation handling already applies this event to the local
+        // BillContext. Reuse its stable identity so this listener cannot count
+        // that same receipt a second time, while the background isolate still
+        // receives one sync command for its separate context.
+        PaymentDetectionService().recordBillPayment(
+          acceptedAmount,
+          idempotencyKey: event.fingerprint,
+        );
         unawaited(syncRecordedBillPayment(acceptedAmount));
 
         // UI Feedback only — Announcement is handled by the Detection Engine
@@ -3351,9 +3412,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           SnackBar(
             content: LiveTranslatedText(
               event.isFailed
-                  ? 'âŒ PAYMENT FAILED'
+                  ? 'Payment failed.'
                   : (_paymentConfirmed
-                        ? 'Payment received ₹${acceptedAmount.toStringAsFixed(2)}. Bill paid in full.'
+                        ? 'Payment received ₹${acceptedAmount.toStringAsFixed(2)}. Bill fully paid. Save Sales is now enabled.'
                         : 'Payment received ₹${acceptedAmount.toStringAsFixed(2)}. Total received ₹${_paidAmount.toStringAsFixed(2)}. ₹${(freshTotal - _paidAmount).toStringAsFixed(2)} left to pay.'),
             ),
             backgroundColor: event.isFailed
@@ -3363,12 +3424,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       : Colors.orange.shade800),
           ),
         );
-        if (fullyPaid &&
-            !_autoSaveAttemptedForBill &&
-            !_borrowWaitingForCustomer) {
-          _autoSaveAttemptedForBill = true;
-          unawaited(submitAllSales());
-        }
+        // Do not submit the sale implicitly. The state above marks the bill
+        // paid and enables Save Sales; the merchant remains in control of
+        // committing the invoice after reviewing the final bill.
       });
     }
   }
@@ -3487,27 +3545,163 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
   }
 
-  bool _isDuplicateCrossSourcePayment(PaymentEvent event) {
-    final now = event.timestamp;
-    _recentAppliedPaymentEvents.removeWhere(
-      (previous) => now.difference(previous.timestamp).inSeconds.abs() > 120,
+  static bool _isBankRelayPaymentApp(PaymentApp app) => const {
+    PaymentApp.bankSms,
+    PaymentApp.bankApp,
+    PaymentApp.icici,
+    PaymentApp.sbiYono,
+    PaymentApp.axis,
+    PaymentApp.hdfc,
+    PaymentApp.payzapp,
+  }.contains(app);
+
+  static bool _isUplikePaymentApp(PaymentApp app) => const {
+    PaymentApp.googlePay,
+    PaymentApp.phonePe,
+    PaymentApp.paytm,
+    PaymentApp.amazonPay,
+    PaymentApp.bhim,
+    PaymentApp.whatsappPay,
+    PaymentApp.cred,
+  }.contains(app);
+
+  PaymentEvent? _findRecentPaymentCandidateByReference(String reference) {
+    final now = DateTime.now();
+    _recentPaymentCandidates.removeWhere(
+      (candidate) =>
+          now.difference(candidate.timestamp).abs() > const Duration(minutes: 12),
     );
-    for (final previous in _recentAppliedPaymentEvents) {
-      if (event.referenceId?.isNotEmpty == true &&
-          previous.referenceId == event.referenceId) {
-        return true;
+    for (final candidate in _recentPaymentCandidates.reversed) {
+      if (candidate.normalizedReferenceId == reference) return candidate;
+    }
+    return null;
+  }
+
+  void _rememberRecentPaymentCandidate(PaymentEvent event) {
+    _recentPaymentCandidates.removeWhere((candidate) => candidate.id == event.id);
+    _recentPaymentCandidates.add(event);
+    if (_recentPaymentCandidates.length > 100) {
+      _recentPaymentCandidates.removeAt(0);
+    }
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 12));
+    _recentPaymentCandidates.removeWhere(
+      (candidate) => candidate.timestamp.isBefore(cutoff),
+    );
+  }
+
+  bool _isRecentPaymentCandidateEcho(PaymentEvent event) {
+    final now = event.timestamp;
+    _recentPaymentCandidates.removeWhere(
+      (candidate) =>
+          now.difference(candidate.timestamp).abs() > const Duration(minutes: 12),
+    );
+    final currentReference = event.normalizedReferenceId;
+    final currentDirection = event.direction == PaymentTransactionDirection.unknown
+        ? VoiceBuilder.detectDirection(event.rawText)
+        : event.direction == PaymentTransactionDirection.incomingCredit
+        ? PaymentDirection.credited
+        : PaymentDirection.debited;
+    var isEcho = false;
+
+    for (final previous in _recentPaymentCandidates) {
+      if (previous.id == event.id) {
+        isEcho = true;
+        break;
       }
-      if (event.referenceId?.isNotEmpty == true ||
-          previous.referenceId?.isNotEmpty == true ||
-          event.app == previous.app ||
-          (event.amount - previous.amount).abs() >= 0.01) {
+      final previousReference = previous.normalizedReferenceId;
+      if (currentReference != null && previousReference != null) {
+        if (currentReference == previousReference &&
+            !event.hasReferenceConflictWith(previous)) {
+          isEcho = true;
+          break;
+        }
+        // Different authoritative references cannot safely be merged.
         continue;
       }
-      if (now.difference(previous.timestamp).inSeconds.abs() <= 45) {
-        return true;
+
+      final previousDirection =
+          previous.direction == PaymentTransactionDirection.unknown
+          ? VoiceBuilder.detectDirection(previous.rawText)
+          : previous.direction == PaymentTransactionDirection.incomingCredit
+          ? PaymentDirection.credited
+          : PaymentDirection.debited;
+      if ((event.amount - previous.amount).abs() >= 0.01 ||
+          currentDirection == PaymentDirection.unknown ||
+          currentDirection != previousDirection) {
+        continue;
+      }
+
+      final age = now.difference(previous.timestamp).abs();
+      final crossChannel =
+          event.app != previous.app &&
+          ((_isBankRelayPaymentApp(event.app) &&
+                  (_isUplikePaymentApp(previous.app) ||
+                      _isBankRelayPaymentApp(previous.app))) ||
+              (_isBankRelayPaymentApp(previous.app) &&
+                  (_isUplikePaymentApp(event.app) ||
+                      _isBankRelayPaymentApp(event.app))));
+      final sameNotificationReplay =
+          event.app == previous.app &&
+          event.rawText.toLowerCase().trim() ==
+              previous.rawText.toLowerCase().trim() &&
+          age <= const Duration(seconds: 90);
+      if ((crossChannel && age <= const Duration(minutes: 12)) ||
+          sameNotificationReplay) {
+        isEcho = true;
+        break;
       }
     }
-    return false;
+
+    // Remember suppressed events too, so a third delayed source for the same
+    // receipt doesn't reopen another confirmation dialog.
+    _rememberRecentPaymentCandidate(event);
+    return isEcho;
+  }
+
+  void _showPaymentReferenceConflict(
+    PaymentEvent event, [
+    PaymentEvent? previous,
+  ]) {
+    final amountConflict =
+        previous != null && (event.amount - previous.amount).abs() >= 0.01;
+    final detail = previous == null
+        ? 'This reference is already marked as conflicting in local payment history.'
+        : amountConflict
+        ? 'The same reference was previously recorded for ₹${previous.amount.toStringAsFixed(2)}, but this alert reports ₹${event.amount.toStringAsFixed(2)}.'
+        : 'The same reference appears with conflicting transaction direction.';
+    final reviewEvent = event.copyWith(
+      decision: PaymentDecision.likely,
+      verificationStatus: PaymentVerificationStatus.unverified,
+      isDuplicate: true,
+      hasReferenceConflict: true,
+    );
+    if (!mounted) return;
+    setState(() {
+      _recentHistory.insert(0, reviewEvent);
+      if (_recentHistory.length > 5) _recentHistory.removeLast();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 8),
+        backgroundColor: Colors.red.shade700,
+        content: LiveTranslatedText(
+          'Payment reference conflict. $detail No additional amount was recorded. Check the bank statement before resolving this receipt.',
+        ),
+      ),
+    );
+  }
+
+  bool _isDuplicateCrossSourcePayment(PaymentEvent event) {
+    final reference = event.normalizedReferenceId;
+    if (reference == null) {
+      // Amount/time similarity is not transaction identity. Without a UTR,
+      // keep the event on the merchant-confirmation path instead of silently
+      // discarding a potentially legitimate repeated payment.
+      return false;
+    }
+    return _recentAppliedPaymentEvents.any(
+      (previous) => previous.normalizedReferenceId == reference,
+    );
   }
 
   void _showFullScreenQr(Uint8List bytes) {
@@ -3896,9 +4090,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final schemeResult = SchemeEngine.applyBestScheme(schemeItems, subTotal);
 
       if (mounted) {
-        if (grand - _paidAmount > 0.01) {
-          _autoSaveAttemptedForBill = false;
-        }
         setState(() {
           _schemeDiscount =
               (schemeResult['discount_amount'] as num?)?.toDouble() ?? 0;
@@ -3971,7 +4162,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       _paidAmount = 0;
       _pendingDetectedPaymentAmount = null;
       _paymentConfirmed = false;
-      _autoSaveAttemptedForBill = false;
       // FIX-UPI-LOOP: Reset to Cash mode on new bill so the UPI waiting UI doesn't
       // show immediately on blank bills. The shopkeeper can manually switch to UPI
       // or it will auto-switch when a real payment arrives for the new bill.

@@ -76,12 +76,7 @@ class PaymentProcessingManager {
         // gate as the normal path; logging failures must never promote an
         // unconfirmed notification into a recorded payment.
         if (payment.isMerchantConfirmed &&
-            payment.amount.isFinite &&
-            payment.amount > 0 &&
-            VoiceBuilder.detectDirection(payment.rawText) ==
-                PaymentDirection.credited &&
-            !payment.isDuplicate &&
-            !payment.isFailed &&
+            PaymentDetectionService.isSafeIncomingCredit(payment) &&
             invoiceNumber.isNotEmpty) {
           await LocalStorageService.recordUnifiedPayment(
             '',
@@ -124,13 +119,14 @@ class PaymentProcessingManager {
     // A notification is only a signal, not proof of settlement. Never mutate
     // the invoice ledger or queue a financial write for LIKELY/rejected or
     // already-duplicate events; those remain visible for merchant review.
-    final direction = VoiceBuilder.detectDirection(payment.rawText);
+    final direction = payment.direction ==
+            PaymentTransactionDirection.incomingCredit
+        ? PaymentDirection.credited
+        : payment.direction == PaymentTransactionDirection.outgoingDebit
+        ? PaymentDirection.debited
+        : VoiceBuilder.detectDirection(payment.rawText);
     if (!payment.isMerchantConfirmed ||
-        !payment.amount.isFinite ||
-        payment.amount <= 0 ||
-        direction != PaymentDirection.credited ||
-        payment.isDuplicate ||
-        payment.isFailed) {
+        !PaymentDetectionService.isSafeIncomingCredit(payment)) {
       await _errorLogger.logPaymentError(
         detectionSource: payment.detectionSource,
         errorReason: 'Automatic payment recording skipped: event is not a unique confirmed incoming credit',

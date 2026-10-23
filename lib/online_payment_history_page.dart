@@ -52,7 +52,10 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
           final confirmedEntries = entries
               .where(_isConfirmed)
               .toList(growable: false);
-          final pendingEntries = entries.length - confirmedEntries.length;
+          final conflictEntries = entries.where(_isConflict).length;
+          final pendingEntries = entries
+              .where((entry) => !_isConfirmed(entry) && !_isConflict(entry))
+              .length;
           final confirmedTotal = confirmedEntries.fold<double>(
             0,
             (sum, entry) => sum + ((entry['amount'] as num?)?.toDouble() ?? 0),
@@ -75,10 +78,11 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                       Icons.account_balance_wallet_outlined,
                       color: Colors.green,
                     ),
-                    title: const LiveTranslatedText('Confirmed receipts'),
+                    title: const LiveTranslatedText('Merchant-confirmed receipts'),
                     subtitle: LiveTranslatedText(
-                      '${confirmedEntries.length} confirmed · '
-                      '$pendingEntries awaiting verification',
+                      '${confirmedEntries.length} merchant-confirmed · '
+                      '$pendingEntries pending · '
+                      '$conflictEntries reference conflicts',
                     ),
                     trailing: Text(
                       NumberFormat.currency(
@@ -98,17 +102,27 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                   Builder(
                     builder: (context) {
                       final confirmed = _isConfirmed(entry);
+                      final conflict = _isConflict(entry);
+                      final statusColor = conflict
+                          ? Colors.red
+                          : confirmed
+                          ? Colors.green
+                          : Colors.orange;
                       return Card(
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: confirmed
+                            backgroundColor: conflict
+                                ? Colors.red.shade50
+                                : confirmed
                                 ? Colors.green.shade50
                                 : Colors.orange.shade50,
                             child: Icon(
-                              confirmed
+                              conflict
+                                  ? Icons.warning_amber_rounded
+                                  : confirmed
                                   ? Icons.check_circle_outline
                                   : Icons.pending_outlined,
-                              color: confirmed ? Colors.green : Colors.orange,
+                              color: statusColor,
                             ),
                           ),
                           title: Text(
@@ -126,9 +140,13 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                             '${_formatTime(entry['timestamp'])}',
                           ),
                           trailing: LiveTranslatedText(
-                            confirmed ? 'Confirmed' : 'Pending verification',
+                            conflict
+                                ? 'Review conflict'
+                                : confirmed
+                                ? 'Merchant-confirmed'
+                                : 'Pending review',
                             style: TextStyle(
-                              color: confirmed ? Colors.green : Colors.orange,
+                              color: statusColor,
                               fontSize: 12,
                             ),
                           ),
@@ -138,9 +156,10 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                   ),
                 const SizedBox(height: 12),
                 const LiveTranslatedText(
-                  'Detected incoming credits are saved on this device. '
-                  'Only confirmed receipts are included in the total; '
-                  'verify pending payments before treating them as paid.',
+                  'This history is stored on this device. Only merchant-confirmed '
+                  'receipts are included in the total. Merchant confirmation is '
+                  'not independent bank verification; reference conflicts are '
+                  'excluded until reviewed against the bank statement.',
                   style: TextStyle(color: Colors.black54, fontSize: 12),
                 ),
               ],
@@ -153,7 +172,11 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
 
   bool _isConfirmed(Map<String, dynamic> entry) =>
       entry['status'] == 'CONFIRMED' ||
-      (entry['status'] == null && entry['verified'] == true);
+      (entry['status'] == null &&
+          (entry['merchant_confirmed'] == true || entry['verified'] == true));
+
+  bool _isConflict(Map<String, dynamic> entry) =>
+      entry['status'] == 'CONFLICT_REVIEW';
 
   String _formatTime(dynamic raw) {
     final date = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
