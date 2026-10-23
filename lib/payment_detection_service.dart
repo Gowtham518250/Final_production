@@ -1851,7 +1851,7 @@ abstract class _SenderValidator {
   // alone is not cryptographic proof of delivery or settlement.
   static const _provisionalSenderAliases = <String>{'PHONEPE'};
 
-  static final _dltHeader = RegExp(r'^[A-Za-z]{2}-([A-Za-z0-9]{3,20})
+  static final _dltHeader = RegExp(r'^[A-Za-z]{2}-([A-Za-z0-9]{3,20})$');
 
   static bool isLegitimate(String s) {
     final t = s.trim();
