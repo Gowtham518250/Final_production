@@ -251,6 +251,7 @@ class SyncService {
       var cursor = prefs.getInt(cursorKey) ?? 0;
       var nextCursor = cursor;
       var needsRefresh = false;
+      var needsOnlineOrderSalesRefresh = false;
       final observedEvents = <Map<String, dynamic>>[];
       var hasMore = true;
       // Order status changes also require sales reconciliation so cancelled
@@ -305,6 +306,9 @@ class SyncService {
             observedEvents.add(event);
             final type = event['type']?.toString() ?? '';
             if (refreshTypes.contains(type)) needsRefresh = true;
+            if (type == 'order.status_changed' || type == 'sales.updated') {
+              needsOnlineOrderSalesRefresh = true;
+            }
           }
         }
 
@@ -320,6 +324,13 @@ class SyncService {
         // this pulse will retry instead of stacking another download.
         if (_userDataDownloadInProgress) return;
         await downloadUserDataSafe();
+      }
+
+      // Dashboard cloud restore first removes invoices linked to cancelled orders.
+      // Then refresh canonical sales so all screens converge on the same snapshot.
+      if (needsOnlineOrderSalesRefresh) {
+        final refreshed = await refreshSalesCacheFromBackend();
+        if (!refreshed) return; // Do not advance the durable cursor; retry next pulse.
       }
 
       if (observedEvents.isNotEmpty && !_durableEventsController.isClosed) {
