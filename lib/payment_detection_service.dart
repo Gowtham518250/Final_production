@@ -1843,7 +1843,7 @@ abstract class _SenderValidator {
     'AXISBK',
     'AXISBN', 'KOTAKB', 'PNBSMS', 'UNIONB', 'IDFCFB', 'RBLBNK', 'YESBNK',
     'INDBNK', 'CANBNK', 'BOBIBK', 'PAYTM', 'PHONPE', 'GOOGPY', 'AMZNPY',
-    'BHIMUP', 'CREDCL', 'FRCHRG', 'MOBKWK',
+    'BHIMUP', 'CREDCL', 'FRCHRG', 'MOBKWK', 'PHONEPE',
   };
 
   static final _dltHeader = RegExp(r'^[A-Za-z]{2}-([A-Za-z0-9]{3,20})$');
@@ -2743,8 +2743,10 @@ class PaymentDetectionService {
       _watchdog.isStale(ChannelType.notification);
   bool get isSmsChannelStale => _watchdog.isStale(ChannelType.sms);
 
-  // Deduplication cache for SMS (BUG-S2)
+  // Deduplication caches suppress exact transport replays without combining
+  // separate no-reference events into one financial transaction identity.
   final List<String> _processedSmsCache = [];
+  final Map<String, DateTime> _processedNotificationCache = {};
 
   static VoiceLanguage mapLanguage(String code) {
     final lang = code.split(RegExp(r'[-_]')).first.toLowerCase();
@@ -3815,6 +3817,32 @@ class PaymentDetectionService {
   // HANDLERS
   // ==========================================================================
 
+  bool _isDuplicateNotification(String packageName, String text) {
+    final now = DateTime.now();
+    _processedNotificationCache.removeWhere(
+      (_, expiry) => !expiry.isAfter(now),
+    );
+
+    final normalizedText = text
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (normalizedText.isEmpty) return false;
+
+    final keyMaterial =
+        packageName.trim().toLowerCase() + '|' + normalizedText;
+    final key = sha256.convert(utf8.encode(keyMaterial)).toString();
+    final expiry = _processedNotificationCache[key];
+    if (expiry != null && expiry.isAfter(now)) return true;
+
+    _processedNotificationCache[key] = now.add(PdsConfig.dedupHashTtl);
+    // Bound memory in case an app floods notification updates.
+    while (_processedNotificationCache.length > 200) {
+      _processedNotificationCache.remove(_processedNotificationCache.keys.first);
+    }
+    return false;
+  }
+
   void _handleNotification(ServiceNotificationEvent event) {
     try {
       final pkg = event.packageName ?? '';
@@ -3849,6 +3877,13 @@ class PaymentDetectionService {
         _safeValue(() => (event as dynamic).summaryText),
       ]);
       if (fields.isEmpty) return;
+      if (_isDuplicateNotification(pkg, fields)) {
+        PdsLogger.i(
+          'L1',
+          'Duplicate notification replay suppressed: ' + pkg,
+        );
+        return;
+      }
 
       final notificationSender = event.title?.trim();
       if (_isTrustedBankSmsNotification(pkg, notificationSender) &&
