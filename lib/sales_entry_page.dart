@@ -394,6 +394,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   final LinkedHashSet<String> _processedPaymentIds =
       LinkedHashSet<String>(); // FIX-1: bounded set with FIFO
   final List<PaymentEvent> _recentAppliedPaymentEvents = [];
+  // Reference identity is stronger than amount/time similarity. Keep a bounded
+  // amount-aware map so a reused reference with a conflicting amount is flagged.
+  final LinkedHashMap<String, PaymentEvent> _processedReferenceEvents =
+      LinkedHashMap<String, PaymentEvent>();
   final List<PaymentEvent> _pendingPaymentConfirmations = [];
   final Set<String> _queuedPaymentConfirmationIds = {};
   bool _paymentConfirmationDialogShowing = false;
@@ -3290,6 +3294,24 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           return;
         }
 
+        // A matching reference with a different amount/direction is not a
+        // second receipt. Surface it for review before any invoice state changes.
+        final normalizedReference = event.normalizedReferenceId;
+        if (normalizedReference != null) {
+          final previousReferenceEvent =
+              _processedReferenceEvents[normalizedReference];
+          if (previousReferenceEvent != null) {
+            if (event.hasReferenceConflictWith(previousReferenceEvent)) {
+              _showPaymentReferenceConflict(event, previousReferenceEvent);
+            } else if (kDebugMode) {
+              debugPrint(
+                '⚠️ Duplicate payment reference ignored: $normalizedReference',
+              );
+            }
+            return;
+          }
+        }
+
         final remainingDue = math.max(0.0, freshTotal - _paidAmount).toDouble();
         final acceptedAmount = SalePaymentPolicy.resolveDetectedReceiptAmount(
           detectedAmount: event.amount,
@@ -3311,9 +3333,15 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           return;
         }
         _processedPaymentIds.add(event.fingerprint);
-        // FIX-1: Cap at 100 entries, FIFO rollover
+        // FIX-1: Cap at 100 entries, FIFO rollover.
         if (_processedPaymentIds.length > 100) {
           _processedPaymentIds.remove(_processedPaymentIds.first);
+        }
+        if (normalizedReference != null) {
+          _processedReferenceEvents[normalizedReference] = event;
+          if (_processedReferenceEvents.length > 100) {
+            _processedReferenceEvents.remove(_processedReferenceEvents.keys.first);
+          }
         }
         _recentAppliedPaymentEvents.add(event);
         if (_recentAppliedPaymentEvents.length > 20) {
@@ -3487,27 +3515,46 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
   }
 
-  bool _isDuplicateCrossSourcePayment(PaymentEvent event) {
-    final now = event.timestamp;
-    _recentAppliedPaymentEvents.removeWhere(
-      (previous) => now.difference(previous.timestamp).inSeconds.abs() > 120,
+  void _showPaymentReferenceConflict(
+    PaymentEvent event,
+    PaymentEvent previous,
+  ) {
+    final amountConflict = (event.amount - previous.amount).abs() >= 0.01;
+    final detail = amountConflict
+        ? 'The same reference was previously recorded for ₹${previous.amount.toStringAsFixed(2)}, but this alert reports ₹${event.amount.toStringAsFixed(2)}.'
+        : 'The same reference appears with conflicting transaction direction.';
+    final reviewEvent = event.copyWith(
+      decision: PaymentDecision.likely,
+      verificationStatus: PaymentVerificationStatus.unverified,
+      isDuplicate: true,
     );
-    for (final previous in _recentAppliedPaymentEvents) {
-      if (event.referenceId?.isNotEmpty == true &&
-          previous.referenceId == event.referenceId) {
-        return true;
-      }
-      if (event.referenceId?.isNotEmpty == true ||
-          previous.referenceId?.isNotEmpty == true ||
-          event.app == previous.app ||
-          (event.amount - previous.amount).abs() >= 0.01) {
-        continue;
-      }
-      if (now.difference(previous.timestamp).inSeconds.abs() <= 45) {
-        return true;
-      }
+    if (!mounted) return;
+    setState(() {
+      _recentHistory.insert(0, reviewEvent);
+      if (_recentHistory.length > 5) _recentHistory.removeLast();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 8),
+        backgroundColor: Colors.red.shade700,
+        content: LiveTranslatedText(
+          'Payment reference conflict. $detail No additional amount was recorded. Check the bank statement before resolving this receipt.',
+        ),
+      ),
+    );
+  }
+
+  bool _isDuplicateCrossSourcePayment(PaymentEvent event) {
+    final reference = event.normalizedReferenceId;
+    if (reference == null) {
+      // Amount/time similarity is not transaction identity. Without a UTR,
+      // keep the event on the merchant-confirmation path instead of silently
+      // discarding a potentially legitimate repeated payment.
+      return false;
     }
-    return false;
+    return _recentAppliedPaymentEvents.any(
+      (previous) => previous.normalizedReferenceId == reference,
+    );
   }
 
   void _showFullScreenQr(Uint8List bytes) {
