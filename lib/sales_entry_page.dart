@@ -405,7 +405,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   final List<PaymentEvent> _pendingPaymentConfirmations = [];
   final Set<String> _queuedPaymentConfirmationIds = {};
   bool _paymentConfirmationDialogShowing = false;
-  bool _autoSaveAttemptedForBill = false;
   // FIX-UPI-LOOP: Session ID tied to the current bill — changes on every new bill so
   // stale LIKELY re-announce events from the singleton stream are discarded.
   String _billSessionId = '';
@@ -3404,9 +3403,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           SnackBar(
             content: LiveTranslatedText(
               event.isFailed
-                  ? 'âŒ PAYMENT FAILED'
+                  ? 'Payment failed.'
                   : (_paymentConfirmed
-                        ? 'Payment received ₹${acceptedAmount.toStringAsFixed(2)}. Bill paid in full.'
+                        ? 'Payment received ₹${acceptedAmount.toStringAsFixed(2)}. Bill fully paid. Save Sales is now enabled.'
                         : 'Payment received ₹${acceptedAmount.toStringAsFixed(2)}. Total received ₹${_paidAmount.toStringAsFixed(2)}. ₹${(freshTotal - _paidAmount).toStringAsFixed(2)} left to pay.'),
             ),
             backgroundColor: event.isFailed
@@ -3416,12 +3415,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       : Colors.orange.shade800),
           ),
         );
-        if (fullyPaid &&
-            !_autoSaveAttemptedForBill &&
-            !_borrowWaitingForCustomer) {
-          _autoSaveAttemptedForBill = true;
-          unawaited(submitAllSales());
-        }
+        // Do not submit the sale implicitly. The state above marks the bill
+        // paid and enables Save Sales; the merchant remains in control of
+        // committing the invoice after reviewing the final bill.
       });
     }
   }
