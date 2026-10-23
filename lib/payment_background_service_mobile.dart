@@ -61,25 +61,40 @@ Future<void> _persistPaymentHistoryThenForward(
   ServiceInstance service,
   PaymentEvent event,
 ) async {
-  var hasReferenceConflict = event.hasReferenceConflict;
+  var forwardedEvent = event;
   try {
-    await OnlinePaymentHistoryService.recordIncomingPayment(event);
-    hasReferenceConflict =
-        await OnlinePaymentHistoryService.hasReferenceConflict(event);
+    forwardedEvent =
+        await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
+
+    // An exact reference duplicate stays attached to the original history
+    // row. A conflicting reference is already moved to CONFLICT_REVIEW by
+    // annotateKnownReferenceState. Don't overwrite either state with the
+    // second notification's pending status.
+    if (!forwardedEvent.isDuplicate &&
+        !forwardedEvent.hasReferenceConflict) {
+      await OnlinePaymentHistoryService.recordIncomingPayment(forwardedEvent);
+    }
   } catch (error, stackTrace) {
     debugPrint('⚠️ Could not save background payment receipt: $error');
     debugPrint(stackTrace.toString());
   }
 
-  // Carry durable local conflict state across isolates. The POS will show
-  // a review warning and refuse to count this as a receipt.
-  final forwardedEvent = hasReferenceConflict
-      ? event.copyWith(
-          hasReferenceConflict: true,
-          decision: PaymentDecision.likely,
-          verificationStatus: PaymentVerificationStatus.unverified,
-        )
-      : event;
+  // Carry durable reference state across isolates. This prevents a late
+  // Truecaller/PhonePe/SMS replay from reopening confirmation after restart.
+  if (forwardedEvent.hasReferenceConflict) {
+    forwardedEvent = forwardedEvent.copyWith(
+      hasReferenceConflict: true,
+      isDuplicate: false,
+      decision: PaymentDecision.likely,
+      verificationStatus: PaymentVerificationStatus.unverified,
+    );
+  } else if (forwardedEvent.isDuplicate) {
+    forwardedEvent = forwardedEvent.copyWith(
+      isDuplicate: true,
+      decision: PaymentDecision.likely,
+      verificationStatus: PaymentVerificationStatus.unverified,
+    );
+  }
   service.invoke('payment_detected', forwardedEvent.toJson());
 }
 
