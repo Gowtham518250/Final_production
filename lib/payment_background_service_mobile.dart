@@ -61,13 +61,26 @@ Future<void> _persistPaymentHistoryThenForward(
   ServiceInstance service,
   PaymentEvent event,
 ) async {
+  var hasReferenceConflict = event.hasReferenceConflict;
   try {
     await OnlinePaymentHistoryService.recordIncomingPayment(event);
+    hasReferenceConflict =
+        await OnlinePaymentHistoryService.hasReferenceConflict(event);
   } catch (error, stackTrace) {
     debugPrint('⚠️ Could not save background payment receipt: $error');
     debugPrint(stackTrace.toString());
   }
-  service.invoke('payment_detected', event.toJson());
+
+  // Carry durable local conflict state across isolates. The POS will show
+  // a review warning and refuse to count this as a receipt.
+  final forwardedEvent = hasReferenceConflict
+      ? event.copyWith(
+          hasReferenceConflict: true,
+          decision: PaymentDecision.likely,
+          verificationStatus: PaymentVerificationStatus.unverified,
+        )
+      : event;
+  service.invoke('payment_detected', forwardedEvent.toJson());
 }
 
 Future<void> _ensurePaymentNotificationChannel() async {
