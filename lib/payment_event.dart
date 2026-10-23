@@ -6,6 +6,7 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 
 enum PaymentApp {
   googlePay,
@@ -100,10 +101,12 @@ class PaymentEvent {
   }) : id = id ?? _genId(),
        updatedAt = updatedAt ?? DateTime.now();
 
-  static String _genId() {
-    final ts = DateTime.now().microsecondsSinceEpoch;
-    return 'pmt_$ts';
-  }
+  static final Uuid _eventIdGenerator = Uuid();
+
+  // Microsecond timestamps can collide when several notifications are handled
+  // in the same clock tick. Every no-reference candidate needs its own ID so
+  // unrelated payments never share an accounting fingerprint.
+  static String _genId() => 'pmt_${_eventIdGenerator.v4()}';
 
   bool get isMerchantConfirmed =>
       decision == PaymentDecision.confirmed &&
