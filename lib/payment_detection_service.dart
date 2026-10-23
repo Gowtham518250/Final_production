@@ -2034,6 +2034,16 @@ class PriorityVoiceQueue {
 
   void enqueue(PaymentEvent e, PaymentUiState ui) {
     if (!PdsConfig.isVoiceEnabled) return;
+    if (e.isDuplicate || e.hasReferenceConflict) {
+      // Replay/conflict records may be shown for audit, but must not speak as
+      // a fresh payment receipt or sound-box announcement.
+      _rememberPayment(e);
+      PdsLogger.d(
+        'VOICE',
+        'DUPLICATE/CONFLICT ANNOUNCEMENT BLOCKED: ${e.fingerprint}',
+      );
+      return;
+    }
 
     // Use the transaction fingerprint so alternate notification wording for
     // the same payment cannot produce a second announcement.
