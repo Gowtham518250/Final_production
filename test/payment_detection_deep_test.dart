@@ -778,7 +778,7 @@ void main() {
     );
 
     test(
-      'same direction and same amount still deduplicate inside the same bucket',
+      'same amount/time without a reference stays ambiguous for accounting',
       () {
         final now = DateTime(2026, 10, 1, 14, 30);
 
@@ -796,7 +796,10 @@ void main() {
           rawText: 'Payment received ₹500',
         );
 
-        expect(first.fingerprint, equals(second.fingerprint));
+        expect(first.fingerprint, isNot(equals(second.fingerprint)));
+        // Keep looser matching only for voice; it must not become financial
+        // transaction identity without an authoritative transaction reference.
+        expect(first.voiceFingerprint, equals(second.voiceFingerprint));
       },
     );
   });
