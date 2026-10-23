@@ -135,12 +135,18 @@ class PaymentEvent {
   bool hasReferenceConflictWith(PaymentEvent other) {
     if (!hasSameReferenceAs(other)) return false;
     if ((amount - other.amount).abs() >= 0.01) return true;
-    final currentDirection = direction == PaymentTransactionDirection.unknown
-        ? _transactionDirection(rawText)
-        : direction.name;
-    final otherDirection = other.direction == PaymentTransactionDirection.unknown
-        ? _transactionDirection(other.rawText)
-        : other.direction.name;
+    final currentDirection =
+        direction == PaymentTransactionDirection.incomingCredit
+        ? 'credit'
+        : direction == PaymentTransactionDirection.outgoingDebit
+        ? 'debit'
+        : _transactionDirection(rawText);
+    final otherDirection =
+        other.direction == PaymentTransactionDirection.incomingCredit
+        ? 'credit'
+        : other.direction == PaymentTransactionDirection.outgoingDebit
+        ? 'debit'
+        : _transactionDirection(other.rawText);
     return currentDirection != 'unknown' &&
         otherDirection != 'unknown' &&
         currentDirection != otherDirection;
@@ -261,11 +267,14 @@ class PaymentEvent {
         '${timestamp.month.toString().padLeft(2, '0')}-'
         '${timestamp.day.toString().padLeft(2, '0')}';
     final fiveMinuteSlot = timestamp.hour * 12 + (timestamp.minute ~/ 5);
-    final direction = direction == PaymentTransactionDirection.unknown
+    final transactionDirection =
+        this.direction == PaymentTransactionDirection.unknown
         ? _transactionDirection(rawText)
-        : direction.name;
+        : (this.direction == PaymentTransactionDirection.incomingCredit
+            ? 'credit'
+            : 'debit');
     final payload =
-        '${amount.toStringAsFixed(2)}_${_appFamily(app)}_$direction_'
+        '${amount.toStringAsFixed(2)}_${_appFamily(app)}_$transactionDirection_'
         '$dateBucket_$fiveMinuteSlot';
     return 'voice_${md5.convert(utf8.encode(payload))}';
   }
