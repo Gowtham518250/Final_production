@@ -3,7 +3,7 @@ import '../lib/payment_event.dart';
 
 void main() {
   group('PaymentEvent fingerprint', () {
-    test('matches same-day variants in the same five-minute slot', () {
+    test('does not merge no-reference events into an accounting identity', () {
       final first = PaymentEvent(
         amount: 500,
         timestamp: DateTime(2026, 10, 9, 10, 11),
@@ -17,7 +17,12 @@ void main() {
         rawText: '₹500 received',
       );
 
-      expect(first.fingerprint, variant.fingerprint);
+      // Without a transaction reference, similar amounts/times are only a
+      // heuristic and must not collapse two potentially legitimate receipts.
+      expect(first.fingerprint, isNot(variant.fingerprint));
+      // Voice-only deduplication may stay heuristic because it does not write
+      // to the financial ledger.
+      expect(first.voiceFingerprint, variant.voiceFingerprint);
     });
 
     test('does not collide with the same amount and slot on another date', () {
@@ -87,6 +92,52 @@ void main() {
       );
 
       expect(credit.fingerprint, isNot(debit.fingerprint));
+    });
+
+
+
+    test('normalizes reference identity and excludes amount from the key', () {
+      final first = PaymentEvent(
+        id: 'reference-1',
+        amount: 500,
+        timestamp: DateTime(2026, 10, 9, 10, 11),
+        app: PaymentApp.googlePay,
+        referenceId: 'utr-12 34-AB',
+        rawText: '₹500 credited to your account',
+      );
+      final conflictingAmount = PaymentEvent(
+        id: 'reference-2',
+        amount: 700,
+        timestamp: DateTime(2026, 10, 9, 10, 12),
+        app: PaymentApp.bankSms,
+        referenceId: 'UTR1234AB',
+        rawText: '₹700 received',
+      );
+
+      expect(first.normalizedReferenceId, 'UTR1234AB');
+      expect(first.fingerprint, conflictingAmount.fingerprint);
+      expect(first.hasSameReferenceAs(conflictingAmount), isTrue);
+      expect(first.hasReferenceConflictWith(conflictingAmount), isTrue);
+    });
+
+    test('copyWith increments version and updates revision timestamp', () {
+      final original = PaymentEvent(
+        id: 'revisioned-event',
+        amount: 10,
+        timestamp: DateTime(2026, 10, 9, 10),
+        app: PaymentApp.phonePe,
+        version: 3,
+        updatedAt: DateTime(2026, 10, 1),
+      );
+
+      final revised = original.copyWith(
+        verificationStatus: PaymentVerificationStatus.merchantConfirmed,
+        decision: PaymentDecision.confirmed,
+      );
+
+      expect(revised.version, 4);
+      expect(revised.updatedAt.isAfter(original.updatedAt), isTrue);
+      expect(revised.id, original.id);
     });
 
     test('serializes all fields needed to process a background event', () {
