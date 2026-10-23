@@ -2870,11 +2870,11 @@ class PaymentDetectionService {
       decision: decision,
       detectionSource: source,
       isFailed: isFailed,
-      direction: switch (VoiceBuilder.detectDirection(cleanText)) {
-        PaymentDirection.credited => PaymentTransactionDirection.incomingCredit,
-        PaymentDirection.debited => PaymentTransactionDirection.outgoingDebit,
-        PaymentDirection.unknown => PaymentTransactionDirection.unknown,
-      },
+      direction: _Classifier.isIncomingCreditText(cleanText)
+          ? PaymentTransactionDirection.incomingCredit
+          : VoiceBuilder.detectDirection(cleanText) == PaymentDirection.debited
+          ? PaymentTransactionDirection.outgoingDebit
+          : PaymentTransactionDirection.unknown,
     );
   }
 
@@ -2911,13 +2911,22 @@ class PaymentDetectionService {
   }
 
   static bool isSafeIncomingCredit(PaymentEvent event) {
-    return event.amount.isFinite &&
-        event.amount > 0 &&
-        !event.isFailed &&
-        !event.isDuplicate &&
-        event.direction != PaymentTransactionDirection.outgoingDebit &&
-        VoiceBuilder.detectDirection(event.rawText) ==
-            PaymentDirection.credited;
+    if (!event.amount.isFinite ||
+        event.amount <= 0 ||
+        event.isFailed ||
+        event.isDuplicate ||
+        event.hasReferenceConflict ||
+        event.direction == PaymentTransactionDirection.outgoingDebit) {
+      return false;
+    }
+    // Events emitted by our classifier may contain valid inbound wording that
+    // VoiceBuilder's narrower audio phrasing detector doesn't recognize.
+    // Accept that explicit pipeline direction only when the text classifier
+    // independently sees an incoming credit and no contradictory debit cue.
+    return VoiceBuilder.detectDirection(event.rawText) ==
+            PaymentDirection.credited ||
+        (event.direction == PaymentTransactionDirection.incomingCredit &&
+            _Classifier.isIncomingCreditText(event.rawText));
   }
 
   // ── Streams ───────────────────────────────────────────────────────────────
@@ -3766,10 +3775,18 @@ class PaymentDetectionService {
         PaymentApp.amazonPay,
         PaymentApp.bhim,
       }.contains(app);
+      // PhonePe/GPay notifications often omit a bank-style UTR, but their
+      // explicit incoming-credit text is still useful as a *candidate* while
+      // this merchant has an active bill. It remains LIKELY and cannot alter
+      // accounting until the merchant verifies it. Don't require the voice
+      // wording regex alone: the payment classifier recognizes more formats.
+      final hasExplicitIncomingCredit =
+          _Classifier.classify(fields) == _ClassifyResult.passed &&
+          _Classifier.isIncomingCreditText(fields) &&
+          _Classifier.hasPaymentContext(fields) &&
+          !FraudEngine.isPromotionalMessage(fields);
       final isActiveBillCredit =
-          isTrustedPaymentApp &&
-          billContext.isActive &&
-          VoiceBuilder.detectDirection(fields) == PaymentDirection.credited;
+          isTrustedPaymentApp && billContext.isActive && hasExplicitIncomingCredit;
       _processText(
         fields.trim(),
         app,
@@ -3815,11 +3832,22 @@ class PaymentDetectionService {
       if (_processedSmsCache.length > 100) _processedSmsCache.removeAt(0);
 
       _watchdog.recordSms();
+      // A structurally credible incoming SMS for the currently active bill
+      // may be shown as a LIKELY candidate even if this non-DLT sender cannot
+      // earn the trusted-bank score. It can never update the sale without the
+      // merchant's explicit confirmation.
+      final activeBillCreditCandidate =
+          billContext.isActive &&
+          _Classifier.classify(body) == _ClassifyResult.passed &&
+          _Classifier.isIncomingCreditText(body) &&
+          _Classifier.hasPaymentContext(body) &&
+          !FraudEngine.isPromotionalMessage(body);
       _processText(
         body.trim(),
         PaymentApp.bankSms,
         source: 'sms',
         sender: normalizedSender,
+        allowUnverifiedIncomingCandidate: activeBillCreditCandidate,
       );
     } catch (e, st) {
       PdsLogger.e('L2', 'Handler error', e, st);
@@ -3928,13 +3956,11 @@ class PaymentDetectionService {
       detectionSource: source,
       direction: isDebit
           ? PaymentTransactionDirection.outgoingDebit
-          : switch (VoiceBuilder.detectDirection(text)) {
-              PaymentDirection.credited =>
-                PaymentTransactionDirection.incomingCredit,
-              PaymentDirection.debited =>
-                PaymentTransactionDirection.outgoingDebit,
-              PaymentDirection.unknown => PaymentTransactionDirection.unknown,
-            },
+          : _Classifier.isIncomingCreditText(text)
+          ? PaymentTransactionDirection.incomingCredit
+          : VoiceBuilder.detectDirection(text) == PaymentDirection.debited
+          ? PaymentTransactionDirection.outgoingDebit
+          : PaymentTransactionDirection.unknown,
     );
     final fp = tempEvent.fingerprint;
     final normalizedReference = tempEvent.normalizedReferenceId;
@@ -4400,8 +4426,9 @@ class PaymentDetectionService {
           isPartialPayment: isPartial,
           isBillMatch: isBillSettled || isPartial,
           remainingAmount: isPartial
-              ? billContext.remainingAmount - amount
+              ? math.max(0.0, billContext.remainingAmount - amount).toDouble()
               : 0.0,
+          hasReferenceConflict: referenceAmountConflict,
         ),
       );
 
@@ -5165,6 +5192,8 @@ abstract class _BankSenderRegistry {
     'INDUSL',
     'YESBNK',
     'YESBANK',
+    'PHONPE',
+    'PHONEPE',
     'IDFCBK',
     'IDFC',
     'FEDBNK',
@@ -5401,6 +5430,19 @@ abstract class _Classifier {
 
   static bool hasPaymentContext(String t) =>
       _context.hasMatch(t) || isIncomingAccountTransfer(t);
+
+  /// Broad but conservative inbound-credit signal shared by notification,
+  /// SMS, confirmation and sale-accounting gates. Explicit debit/conflicting
+  /// direction always wins; ambiguous messages remain unclassified.
+  static bool isIncomingCreditText(String text) {
+    final direction = VoiceBuilder.detectDirection(text);
+    if (direction == PaymentDirection.credited) return true;
+    if (direction == PaymentDirection.debited || _debit.hasMatch(text)) {
+      return false;
+    }
+    return _incomingCredit.hasMatch(text) ||
+        _incomingAccountTransfer.hasMatch(text);
+  }
 
   // FIX-57: Multilanguage credit verbs (10 languages, not 5)
   // NOW includes Bengali, Malayalam, Punjabi for regional shops
