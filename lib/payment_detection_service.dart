@@ -3898,7 +3898,6 @@ class PaymentDetectionService {
       final hasExplicitIncomingCredit =
           _Classifier.classify(fields) == _ClassifyResult.passed &&
           _Classifier.isIncomingCreditText(fields) &&
-          _Classifier.hasPaymentContext(fields) &&
           !FraudEngine.isPromotionalMessage(fields);
       final isActiveBillCredit =
           isTrustedPaymentApp && billContext.isActive && hasExplicitIncomingCredit;
@@ -3955,7 +3954,6 @@ class PaymentDetectionService {
           billContext.isActive &&
           _Classifier.classify(body) == _ClassifyResult.passed &&
           _Classifier.isIncomingCreditText(body) &&
-          _Classifier.hasPaymentContext(body) &&
           !FraudEngine.isPromotionalMessage(body);
       _processText(
         body.trim(),
