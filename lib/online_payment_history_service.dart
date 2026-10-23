@@ -24,7 +24,6 @@ class OnlinePaymentHistoryService {
 
   static Future<bool> recordIncomingPayment(PaymentEvent event) async {
     if (event.isFailed ||
-        event.isDuplicate ||
         event.decision == PaymentDecision.rejected ||
         !event.amount.isFinite ||
         event.amount <= 0) {
@@ -37,6 +36,12 @@ class OnlinePaymentHistoryService {
                 PaymentDirection.credited);
     if (!isIncomingCredit) return false;
 
+    final reference = event.normalizedReferenceId;
+    // A duplicate without a reference has no safe transaction identity to
+    // reconcile against. Do not add a second history row for an explicitly
+    // marked duplicate.
+    if (event.isDuplicate && reference == null) return false;
+
     final prefs = await SharedPreferences.getInstance();
     final userId = await _currentUserId(prefs);
     final fingerprint = sha256
@@ -44,6 +49,79 @@ class OnlinePaymentHistoryService {
         .toString();
     final prefix = _userPrefix(userId);
     final key = '$prefix$fingerprint';
+    final existingRaw = prefs.getString(key);
+    Map<String, dynamic>? existing;
+    if (existingRaw != null) {
+      try {
+        final decoded = jsonDecode(existingRaw);
+        if (decoded is Map) existing = Map<String, dynamic>.from(decoded);
+      } on FormatException {
+        // Replace corrupt local history only with a valid current event.
+      }
+    }
+
+    if (existing != null) {
+      final oldStatus = existing['status']?.toString();
+      final oldAmount = (existing['amount'] as num?)?.toDouble();
+
+      // Once a reference is conflicted, never automatically restore it to a
+      // confirmed receipt. Keep all observed amounts for the merchant review.
+      if (oldStatus == 'CONFLICT_REVIEW') {
+        final amounts = <double>{
+          if (oldAmount != null && oldAmount.isFinite) oldAmount,
+          if (existing['conflicting_amounts'] is List)
+            for (final value in existing['conflicting_amounts'] as List)
+              if (value is num && value.toDouble().isFinite) value.toDouble(),
+          event.amount,
+        }.toList()
+          ..sort();
+        await prefs.setString(
+          key,
+          jsonEncode(<String, dynamic>{
+            ...existing,
+            'status': 'CONFLICT_REVIEW',
+            'merchant_confirmed': false,
+            'verified': false,
+            'conflicting_amounts': amounts,
+            'conflict_detected_at': event.timestamp.toIso8601String(),
+          }),
+        );
+        await _trimHistory(prefs, prefix);
+        return false;
+      }
+
+      // Same normalized reference but a different amount is an identity
+      // conflict. Persist the review state and exclude it from confirmed totals.
+      if (reference != null &&
+          oldAmount != null &&
+          oldAmount.isFinite &&
+          (oldAmount - event.amount).abs() >= 0.01) {
+        final amounts = <double>{oldAmount, event.amount}.toList()..sort();
+        await prefs.setString(
+          key,
+          jsonEncode(<String, dynamic>{
+            ...existing,
+            'status': 'CONFLICT_REVIEW',
+            'merchant_confirmed': false,
+            'verified': false,
+            'reference_id': reference,
+            'conflict_reason': 'same_reference_different_amount',
+            'conflicting_amounts': amounts,
+            'conflict_detected_at': event.timestamp.toIso8601String(),
+          }),
+        );
+        await _trimHistory(prefs, prefix);
+        return false;
+      }
+
+      // Don't overwrite a good record with a duplicate callback or downgrade a
+      // receipt that was already merchant-confirmed back to pending.
+      if (event.isDuplicate ||
+          (oldStatus == 'CONFIRMED' && !event.isMerchantConfirmed)) {
+        return false;
+      }
+    }
+
     final record = <String, dynamic>{
       'amount': event.amount,
       'timestamp': event.timestamp.toIso8601String(),
@@ -51,7 +129,12 @@ class OnlinePaymentHistoryService {
       'status': event.isMerchantConfirmed
           ? 'CONFIRMED'
           : 'PENDING_CONFIRMATION',
-      'verified': event.isMerchantConfirmed,
+      'merchant_confirmed': event.isMerchantConfirmed,
+      // No bank API is consulted here: merchant confirmation is not bank
+      // verification, so never label this locally observed event as verified.
+      'verified': false,
+      if (reference != null) 'reference_id': reference,
+      'direction': event.direction.name,
     };
 
     await prefs.setString(key, jsonEncode(record));
