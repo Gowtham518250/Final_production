@@ -1959,8 +1959,7 @@ class PriorityVoiceQueue {
     return VoiceBuilder.detectDirection(event.rawText);
   }
 
-  static String _normalizedText(String text) =>
-      text.toLowerCase().replaceAll(RegExp(r'\\s+'), ' ').trim();
+  static String _normalizedText(String text) => text.toLowerCase().trim();
 
   bool _isRecentCrossSourceEcho(PaymentEvent event) {
     if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
