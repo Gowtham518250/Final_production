@@ -110,6 +110,9 @@ void main() {
     expect(records.single['merchant_confirmed'], isFalse);
     expect(records.single['verified'], isFalse);
     expect(records.single['conflicting_amounts'], [125.5, 200.0]);
+    expect(await OnlinePaymentHistoryService.hasReferenceConflict(
+      event(amount: 125.50, id: 'third-notification'),
+    ), isTrue);
   });
 
   test('keeps locally unverified history out of the verified state', () async {
