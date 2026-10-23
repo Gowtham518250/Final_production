@@ -13,6 +13,7 @@ class SalePaymentPolicy {
     required bool isMerchantConfirmed,
     required bool isFailed,
     required bool isDuplicate,
+    bool hasReferenceConflict = false,
   }) {
     // Detection alerts are candidates only; require explicit merchant
     // confirmation before changing sale accounting.
@@ -20,6 +21,7 @@ class SalePaymentPolicy {
         !isMerchantConfirmed ||
         isFailed ||
         isDuplicate ||
+        hasReferenceConflict ||
         !detectedAmount.isFinite ||
         detectedAmount <= 0 ||
         !remainingDue.isFinite ||
