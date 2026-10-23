@@ -3307,7 +3307,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           final previousReferenceEvent =
               _processedReferenceEvents[normalizedReference] ??
               _findRecentPaymentCandidateByReference(normalizedReference);
-          if (previousReferenceEvent != null) {
+          if (previousReferenceEvent != null &&
+              previousReferenceEvent.id != event.id) {
             if (event.hasReferenceConflictWith(previousReferenceEvent)) {
               _showPaymentReferenceConflict(event, previousReferenceEvent);
             } else if (kDebugMode) {
@@ -3343,6 +3344,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           isMerchantConfirmed: event.isMerchantConfirmed,
           isFailed: event.isFailed,
           isDuplicate: event.isDuplicate,
+          hasReferenceConflict: event.hasReferenceConflict,
         );
         if (acceptedAmount == null || acceptedAmount <= 0) return;
 
