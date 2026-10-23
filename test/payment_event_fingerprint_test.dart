@@ -149,6 +149,7 @@ void main() {
         rawText: '₹250 credited to your account',
         decision: PaymentDecision.confirmed,
         isBillMatch: true,
+        hasReferenceConflict: true,
         isPartialPayment: true,
         remainingAmount: 750,
       );
@@ -160,6 +161,7 @@ void main() {
       expect(restored.rawText, event.rawText);
       expect(restored.decision, event.decision);
       expect(restored.isBillMatch, isTrue);
+      expect(restored.hasReferenceConflict, isTrue);
       expect(restored.isPartialPayment, isTrue);
       expect(restored.remainingAmount, 750);
     });
