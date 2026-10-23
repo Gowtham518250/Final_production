@@ -117,7 +117,8 @@ class PaymentEvent {
         .trim()
         .toUpperCase()
         .replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    if (normalized.isEmpty ||
+    // Short placeholders are too weak to be a reliable transaction reference.
+    if (normalized.length < 4 ||
         const {'NA', 'NAN', 'NONE', 'NULL', 'UNKNOWN', 'NOTAVAILABLE'}
             .contains(normalized)) {
       return null;
