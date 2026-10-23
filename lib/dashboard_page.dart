@@ -18,6 +18,7 @@ import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:typed_data';
 import 'secure_token_storage.dart';
+import 'daily_summary_recipient.dart';
 import 'secure_preferences_service.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -5472,13 +5473,51 @@ class _DashboardPageState extends State<DashboardPage>
       setState(() => loading = true);
 
       final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-      final userEmail = prefs.getString('email') ?? '';
+      final storedUserId = prefs.get('user_id') ?? prefs.get('userId');
+      final userId =
+          int.tryParse(storedUserId?.toString() ?? '') ?? 0;
 
-      if (userId <= 0 || userEmail.isEmpty) {
+      // Current sessions persist the login address under user_email, while
+      // older sign-in flows also used email or owner_email.
+      var userEmail = DailySummaryRecipient.resolve([
+        prefs.getString('user_email'),
+        prefs.getString('email'),
+        prefs.getString('owner_email'),
+      ]);
+
+      // Recover the address from encrypted session metadata if legacy public
+      // preference keys are absent. This avoids requiring the owner to log in
+      // again merely because the old email key was not populated.
+      if (userEmail.isEmpty) {
+        try {
+          userEmail = DailySummaryRecipient.resolve([
+            await SecureTokenStorage.getUserEmail(),
+          ]);
+        } catch (error) {
+          if (kDebugMode) {
+            debugPrint('Daily summary: secure account email unavailable: $error');
+          }
+        }
+      }
+
+      if (userId <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: LiveTranslatedText('❌ User email not found'),
+            content: LiveTranslatedText(
+              '❌ User session not found. Please sign in again.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      if (userEmail.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: LiveTranslatedText(
+              '❌ Account email not found. Please sign in again or update your account email.',
+            ),
             backgroundColor: Colors.red,
           ),
         );
