@@ -139,6 +139,37 @@ void main() {
       },
     );
 
+    test('same-UTR PhonePe notification and SMS correlate into one silent replay', () async {
+      final service = PaymentDetectionService();
+      service.clearBill();
+      service.setBillExpected(10);
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'Payment received ₹5 credited to your account. UTR 123456789012',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      service.handleSms(
+        'VM-PHONEPE',
+        'Your account is credited with Rs.5. UTR 123456789012',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(events, hasLength(2));
+      expect(events[0].normalizedReferenceId, '123456789012');
+      expect(events[1].normalizedReferenceId, '123456789012');
+      expect(events.every((event) => event.isMerchantConfirmed), isFalse);
+
+      await subscription.cancel();
+      service.clearBill();
+    });
+
     test('VA-APGB SMS credit wording emits a partial payment event', () async {
       final service = PaymentDetectionService();
       const body =
