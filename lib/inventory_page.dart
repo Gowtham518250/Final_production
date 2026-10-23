@@ -2487,8 +2487,28 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
   Widget _buildLanguageSwitcher() {
     final langProvider = Provider.of<LanguageProvider>(context, listen: false);
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.language, color: Colors.white, size: 24),
-      tooltip: 'Change Language',
+      // The inventory AppBar has a white background; keep this control
+      // visibly distinct instead of using a white-on-white icon.
+      icon: Container(
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF2FF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _primary.withValues(alpha: 0.32),
+            width: 1,
+          ),
+        ),
+        child: const Icon(
+          Icons.language_rounded,
+          color: _primary,
+          size: 23,
+        ),
+      ),
+      tooltip: 'Change language',
+      padding: const EdgeInsets.all(4),
       onSelected: (code) => langProvider.setLanguage(code),
       itemBuilder: (ctx) => LanguageProvider.languages.map((l) {
         return PopupMenuItem<String>(
