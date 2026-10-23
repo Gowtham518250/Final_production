@@ -143,6 +143,66 @@ class OnlinePaymentHistoryService {
   }
 
 
+  /// Mark repeated references before forwarding an event from the background
+  /// isolate. The stored history key survives process restarts, unlike the
+  /// detector's in-memory dedup cache.
+  static Future<PaymentEvent> annotateKnownReferenceState(
+    PaymentEvent event,
+  ) async {
+    final reference = event.normalizedReferenceId;
+    if (reference == null) return event;
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await _currentUserId(prefs);
+    final fingerprint = sha256
+        .convert(utf8.encode(event.fingerprint))
+        .toString();
+    final key = '${_userPrefix(userId)}$fingerprint';
+    final raw = prefs.getString(key);
+    if (raw == null) return event;
+
+    Map<String, dynamic> existing;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return event;
+      existing = Map<String, dynamic>.from(decoded);
+    } on FormatException {
+      return event;
+    }
+
+    if (existing['status']?.toString() == 'CONFLICT_REVIEW') {
+      return event.copyWith(
+        hasReferenceConflict: true,
+        isDuplicate: false,
+        decision: PaymentDecision.likely,
+        verificationStatus: PaymentVerificationStatus.unverified,
+      );
+    }
+
+    final oldAmount = (existing['amount'] as num?)?.toDouble();
+    if (oldAmount != null &&
+        oldAmount.isFinite &&
+        (oldAmount - event.amount).abs() >= 0.01) {
+      // recordIncomingPayment transitions the old reference into a durable
+      // conflict-review state and removes it from confirmed history totals.
+      await recordIncomingPayment(event);
+      return event.copyWith(
+        hasReferenceConflict: true,
+        isDuplicate: false,
+        decision: PaymentDecision.likely,
+        verificationStatus: PaymentVerificationStatus.unverified,
+      );
+    }
+
+    // Same reference and amount already observed: do not prompt or announce it
+    // again after the app/service restarts. This is not bank verification.
+    return event.copyWith(
+      isDuplicate: true,
+      decision: PaymentDecision.likely,
+      verificationStatus: PaymentVerificationStatus.unverified,
+    );
+  }
+
   /// Returns true when this normalized transaction reference has a stored
   /// amount conflict. Used by the background isolate to mark the forwarded
   /// event before a POS listener can offer it as a receipt.
