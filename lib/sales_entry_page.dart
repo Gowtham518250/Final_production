@@ -3395,7 +3395,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           _paidAmount = updatedPaidAmount;
           _paymentConfirmed = fullyPaid;
         });
-        PaymentDetectionService().recordBillPayment(acceptedAmount);
+        // Confirmation handling already applies this event to the local
+        // BillContext. Reuse its stable identity so this listener cannot count
+        // that same receipt a second time, while the background isolate still
+        // receives one sync command for its separate context.
+        PaymentDetectionService().recordBillPayment(
+          acceptedAmount,
+          idempotencyKey: event.fingerprint,
+        );
         unawaited(syncRecordedBillPayment(acceptedAmount));
 
         // UI Feedback only — Announcement is handled by the Detection Engine
