@@ -1843,7 +1843,7 @@ abstract class _SenderValidator {
     'AXISBK',
     'AXISBN', 'KOTAKB', 'PNBSMS', 'UNIONB', 'IDFCFB', 'RBLBNK', 'YESBNK',
     'INDBNK', 'CANBNK', 'BOBIBK', 'PAYTM', 'PHONPE', 'GOOGPY', 'AMZNPY',
-    'BHIMUP', 'CREDCL', 'FRCHRG', 'MOBKWK',
+    'BHIMUP', 'CREDCL', 'FRCHRG', 'MOBKWK', 'PHONEPE',
   };
 
   static final _dltHeader = RegExp(r'^[A-Za-z]{2}-([A-Za-z0-9]{3,20})$');
