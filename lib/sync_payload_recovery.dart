@@ -246,12 +246,16 @@ Map<String, dynamic>? buildInvoicePayloadFromLocalSale(
   final rawTax = firstText([queueData['tax'], localSale['tax']]);
   final tax = rawTax.isEmpty ? 0.0 : numberValue(rawTax);
   if (totalAmount == null ||
+      !totalAmount.isFinite ||
       totalAmount < 0 ||
       paidAmount == null ||
+      !paidAmount.isFinite ||
       paidAmount < 0 ||
       paidAmount > totalAmount + 0.01 ||
       tax == null ||
-      tax < 0) {
+      !tax.isFinite ||
+      tax < 0 ||
+      !sumOfLines.isFinite) {
     return null;
   }
 
