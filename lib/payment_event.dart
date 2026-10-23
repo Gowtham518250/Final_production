@@ -279,8 +279,8 @@ class PaymentEvent {
             ? 'credit'
             : 'debit');
     final payload =
-        '${amount.toStringAsFixed(2)}_${_appFamily(app)}_$transactionDirection_'
-        '$dateBucket_$fiveMinuteSlot';
+        '${amount.toStringAsFixed(2)}_${_appFamily(app)}_${transactionDirection}_'
+        '${dateBucket}_$fiveMinuteSlot';
     return 'voice_${md5.convert(utf8.encode(payload))}';
   }
 
