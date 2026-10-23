@@ -1,0 +1,3025 @@
+import 'dart:convert';
+import 'cache_consistency_service.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:synchronized/synchronized.dart';
+import 'api_client.dart';
+import 'models.dart';
+import 'local_storage_service.dart';
+import 'secure_token_storage.dart';
+import 'sync_queue_manager.dart';
+import 'sync_payload_recovery.dart';
+import 'sale_service.dart';
+import 'error_log_helper.dart';
+import 'sales_dedup_helper.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'agent_debug_log.dart';
+import 'attendance_offline_service.dart';
+import 'services/order_history_service.dart';
+import 'online_order_service.dart';
+
+class SyncService {
+  static DateTime? _lastServerTime;
+  static Duration? _serverTimeOffset; // Duration, not DateTime!
+
+  static final _syncStatusController = StreamController<int>.broadcast();
+  static Stream<int> get syncQueueStream => _syncStatusController.stream;
+  static const int _maxQueueRetries = 8;
+
+  // 🔒 Use Lock for atomic operations (prevents race conditions)
+  static final _syncLock = Lock();
+
+  static final _refreshNotifier = StreamController<void>.broadcast();
+  static Stream<void> get refreshStream => _refreshNotifier.stream;
+  static final _durableEventsController =
+      StreamController<List<Map<String, dynamic>>>.broadcast();
+  static Stream<List<Map<String, dynamic>>> get durableEventsStream =>
+      _durableEventsController.stream;
+
+  /// Public method: call after saving to Hive to force Dashboard to reload.
+  static void triggerDashboardRefresh() {
+    try {
+      _refreshNotifier.add(null);
+    } catch (_) {}
+  }
+
+  static Timer? _pulseTimer;
+  static bool _initialized = false;
+  static StreamSubscription<ConnectivityResult>? _connectivitySub;
+  static const Duration _automaticUserDataRefreshInterval = Duration(
+    minutes: 5,
+  );
+  static DateTime? _lastUserDataDownloadAt;
+  static bool _userDataDownloadInProgress = false;
+  static bool _pulseInProgress = false;
+  static bool _durableChangesPollInProgress = false;
+
+  /// Initialize and start periodic sync workers
+  static Future<void> init() async {
+    if (_initialized) {
+      if (kDebugMode)
+        debugPrint('⚠️ SyncService already initialized, skipping...');
+      return;
+    }
+    _initialized = true;
+
+    try {
+      // Flush already-persisted offline actions first. Then establish the
+      // change-feed cursor before the initial full download so new installs
+      // do not replay the shop's entire historical event log.
+      await processQueueSafe();
+      await _initializeDurableSyncCursor();
+      await downloadUserDataSafe();
+
+      // Listen for connectivity changes after the initial bootstrap so a
+      // reconnect callback cannot start a competing full refresh mid-bootstrap.
+      _connectivitySub?.cancel();
+      bool? previousOfflineState;
+      _connectivitySub = Connectivity().onConnectivityChanged.listen((
+        ConnectivityResult result,
+      ) {
+        final isOffline = result == ConnectivityResult.none;
+        final justReconnected = previousOfflineState == true && !isOffline;
+        previousOfflineState = isOffline;
+
+        // Reconnects should flush queued writes immediately, but a network
+        // type change (Wi-Fi <-> mobile) must not force another full invoice pull.
+        if (justReconnected) {
+          unawaited(processQueueSafe());
+          unawaited(_downloadUserDataIfDue());
+        }
+      });
+
+      // Start the throttled queue/data refresh pulse only after bootstrap.
+      _startPulseTimer();
+
+      if (kDebugMode) debugPrint('✅ SyncService initialized successfully');
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.init',
+      );
+    }
+  }
+
+  /// Keep queued writes responsive without repeatedly downloading the full
+  /// invoice dataset. Queue flushing is lightweight when empty; cloud data pulls
+  /// are throttled to one automatic refresh every five minutes.
+  static void _startPulseTimer() {
+    _pulseTimer?.cancel();
+    _pulseTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (!_initialized || _pulseInProgress) return;
+      _pulseInProgress = true;
+
+      try {
+        final connection = await Connectivity().checkConnectivity();
+        if (connection != ConnectivityResult.none) {
+          await processQueueSafe();
+          await _pollDurableChanges();
+          await _downloadUserDataIfDue();
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('⚠️ Pulse timer error: $e');
+        await ErrorLogHelper.logException(
+          e,
+          StackTrace.current,
+          context: 'SyncService.pulseTimer',
+        );
+      } finally {
+        _pulseInProgress = false;
+      }
+    });
+  }
+
+  /// Establish a per-owner event baseline before doing a full sync. This
+  /// prevents a fresh install from replaying the entire history while preserving
+  /// all changes committed after the baseline for the subsequent cursor pull.
+  static Future<bool> _initializeDurableSyncCursor() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final tokenParts = token.split('.');
+      if (tokenParts.length != 3) return false;
+      final claims = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(tokenParts[1]))),
+      );
+      if (claims is! Map ||
+          claims['role']?.toString().toUpperCase() != 'OWNER') {
+        return false;
+      }
+
+      final userId =
+          int.tryParse(claims['sub']?.toString() ?? '') ??
+          prefs.getInt('user_id') ??
+          prefs.getInt('userId');
+      if (userId == null || userId <= 0) return false;
+
+      final cursorKey = 'durable_sync_cursor_v1_$userId';
+      if (prefs.containsKey(cursorKey)) return true;
+
+      final unsupportedProbeKey = 'durable_sync_next_probe_ms_v1_$userId';
+      final nextProbeMs = prefs.getInt(unsupportedProbeKey) ?? 0;
+      if (DateTime.now().millisecondsSinceEpoch < nextProbeMs) return false;
+
+      final response = await ApiClient.getJson(
+        '/api/sync/changes?after=0&limit=1',
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 404) {
+        // During a staged deployment, avoid probing the older backend every
+        // 30 seconds. Existing five-minute full refresh remains the fallback.
+        await prefs.setInt(
+          unsupportedProbeKey,
+          DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch,
+        );
+        return false;
+      }
+      if (response.statusCode != 200) return false;
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        throw const FormatException('Invalid durable sync baseline response');
+      }
+      final highWatermark =
+          int.tryParse(decoded['high_watermark']?.toString() ?? '') ?? 0;
+      await prefs.setInt(cursorKey, highWatermark);
+      await prefs.remove(unsupportedProbeKey);
+      return true;
+    } catch (e) {
+      // Bootstrap failure must not block queue flushing or legacy full sync.
+      if (kDebugMode) debugPrint('Durable sync baseline deferred: $e');
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.durableCursorBaseline',
+      );
+      return false;
+    }
+  }
+
+  /// Recover database changes even when the Redis/WebSocket notification was missed.
+  /// The cursor is saved only after the corresponding local refresh has been requested.
+  static Future<void> _pollDurableChanges() async {
+    if (!_initialized || _durableChangesPollInProgress) return;
+    _durableChangesPollInProgress = true;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return;
+
+      // The durable feed is shop-scoped and owner-only. Read the role from the
+      // signed token so worker/customer sessions do not hammer an endpoint they
+      // are not authorized to use.
+      final tokenParts = token.split('.');
+      if (tokenParts.length != 3) return;
+      final claims = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(tokenParts[1]))),
+      );
+      if (claims is! Map) return;
+      if (claims['role']?.toString().toUpperCase() != 'OWNER') return;
+
+      final userId =
+          int.tryParse(claims['sub']?.toString() ?? '') ??
+          prefs.getInt('user_id') ??
+          prefs.getInt('userId');
+      if (userId == null || userId <= 0) return;
+
+      final cursorKey = 'durable_sync_cursor_v1_$userId';
+      final unsupportedProbeKey = 'durable_sync_next_probe_ms_v1_$userId';
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final nextProbeMs = prefs.getInt(unsupportedProbeKey) ?? 0;
+      if (nowMs < nextProbeMs) return;
+
+      // Login may occur after SyncService initialization. In that case create
+      // a baseline now, then run a full refresh after the baseline was saved.
+      // Any writes during that refresh have sequence numbers above the cursor
+      // and will be recovered by the next pulse.
+      if (!prefs.containsKey(cursorKey)) {
+        final initialized = await _initializeDurableSyncCursor();
+        if (initialized) {
+          await downloadUserDataSafe();
+        }
+        return;
+      }
+      var cursor = prefs.getInt(cursorKey) ?? 0;
+      var nextCursor = cursor;
+      var needsRefresh = false;
+      final observedEvents = <Map<String, dynamic>>[];
+      var hasMore = true;
+      // Order status changes also require sales reconciliation so cancelled
+      // online orders are removed from the local invoice and sales mirrors.
+      final refreshTypes = <String>{
+        'invoice.created',
+        'invoice.updated',
+        'invoice.deleted',
+        'payment.updated',
+        'order.status_changed',
+      };
+
+      // Bound network work per pulse on low-memory / mobile connections. If
+      // more pages remain, the next pulse continues from the saved cursor.
+      for (var page = 0; page < 3 && hasMore; page++) {
+        final response = await ApiClient.getJson(
+          '/api/sync/changes?after=$cursor&limit=500',
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 404) {
+          // Backend code may be deployed before its API is available. Back off
+          // probes for five minutes instead of logging a 404 on every 30s pulse.
+          await prefs.setInt(
+            unsupportedProbeKey,
+            DateTime.now()
+                .add(const Duration(minutes: 5))
+                .millisecondsSinceEpoch,
+          );
+          return;
+        }
+        if (response.statusCode == 409) {
+          // The server log was restored/reset or the local cursor belongs to a
+          // newer server state. Rebuild from the start rather than skipping data.
+          await prefs.setInt(cursorKey, 0);
+          return;
+        }
+        if (response.statusCode != 200) {
+          throw Exception('Durable sync feed returned ${response.statusCode}');
+        }
+        await prefs.remove(unsupportedProbeKey);
+
+        final decoded = jsonDecode(response.body);
+        if (decoded is! Map) {
+          throw const FormatException('Invalid durable sync response');
+        }
+        final rawEvents = decoded['events'];
+        if (rawEvents is List) {
+          for (final rawEvent in rawEvents) {
+            if (rawEvent is! Map) continue;
+            final event = Map<String, dynamic>.from(rawEvent);
+            observedEvents.add(event);
+            final type = event['type']?.toString() ?? '';
+            if (refreshTypes.contains(type)) needsRefresh = true;
+          }
+        }
+
+        nextCursor =
+            int.tryParse(decoded['next_cursor']?.toString() ?? '') ??
+            nextCursor;
+        cursor = nextCursor;
+        hasMore = decoded['has_more'] == true;
+      }
+
+      if (needsRefresh) {
+        // Never advance past observed changes while another full read is active;
+        // this pulse will retry instead of stacking another download.
+        if (_userDataDownloadInProgress) return;
+        await downloadUserDataSafe();
+      }
+
+      if (observedEvents.isNotEmpty && !_durableEventsController.isClosed) {
+        _durableEventsController.add(
+          List<Map<String, dynamic>>.unmodifiable(observedEvents),
+        );
+      }
+      await prefs.setInt(cursorKey, nextCursor);
+    } catch (e) {
+      // Leave the previous cursor in place on transport/parse failure. The next
+      // pulse retries the same page; the five-minute full pull remains fallback.
+      if (kDebugMode) debugPrint('Durable sync recovery deferred: $e');
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.durableChanges',
+      );
+    } finally {
+      _durableChangesPollInProgress = false;
+    }
+  }
+
+  static Future<void> _downloadUserDataIfDue() async {
+    if (!_initialized || _userDataDownloadInProgress) return;
+
+    final lastDownload = _lastUserDataDownloadAt;
+    if (lastDownload != null &&
+        DateTime.now().difference(lastDownload) <
+            _automaticUserDataRefreshInterval) {
+      return;
+    }
+
+    await downloadUserDataSafe();
+  }
+
+  /// Dispose all resources
+  static Future<void> dispose() async {
+    if (kDebugMode) debugPrint('🛑 Disposing SyncService...');
+    _pulseTimer?.cancel();
+    _pulseTimer = null;
+    _pulseInProgress = false;
+    await _connectivitySub?.cancel();
+    _connectivitySub = null;
+    _initialized = false;
+
+    try {
+      await _syncStatusController.close();
+      await _refreshNotifier.close();
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Error closing streams: $e');
+    }
+  }
+
+  static Future<bool> checkInWorker(String workerId) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) {
+        await ErrorLogHelper.logMessage(
+          'Token unavailable for checkIn',
+          level: 'WARNING',
+        );
+        return false;
+      }
+
+      // Backend guard: suppress duplicate check-in POSTs for the same employee/day.
+      try {
+        final today = DateTime.now().toIso8601String().split('T').first;
+        final existing = await ApiClient.getJson(
+          '${ApiClient.attendancePrefix}/date/$today?employee_id=$workerId',
+          headers: {'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 8));
+        if (existing.statusCode == 200) {
+          final decoded = jsonDecode(existing.body);
+          final records = decoded is List
+              ? decoded
+              : (decoded is Map && decoded['records'] is List
+                    ? decoded['records'] as List
+                    : const []);
+          bool hasOpenSession(dynamic raw) {
+            if (raw is! Map) return false;
+
+            final employee = raw['employee_id'] ?? raw['worker_id'];
+            if (employee?.toString() != workerId.toString()) return false;
+
+            final sessions = raw['sessions'];
+            if (sessions is Map && sessions.isNotEmpty) {
+              for (final value in sessions.values) {
+                if (value is Map &&
+                    value['check_in_time'] != null &&
+                    value['check_out_time'] == null) {
+                  return true;
+                }
+              }
+            }
+
+            return raw['check_in_time'] != null &&
+                raw['check_out_time'] == null;
+          }
+
+          final alreadyOpen = records.any(hasOpenSession);
+          if (alreadyOpen) {
+            if (kDebugMode) {
+              debugPrint(
+                '✅ Active attendance session already exists for $workerId; duplicate check-in suppressed',
+              );
+            }
+            return true;
+          }
+        }
+      } catch (e) {
+        if (kDebugMode)
+          debugPrint(
+            '⚠️ Attendance preflight failed; continuing with authenticated check-in: $e',
+          );
+      }
+
+      final res = await ApiClient.postJson(
+        '${ApiClient.checkIn}?employee_id=$workerId',
+        {},
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        if (kDebugMode) debugPrint('✅ Worker checked in: $workerId');
+        return true;
+      } else {
+        await ErrorLogHelper.logMessage(
+          'Worker check-in failed: ${res.statusCode}',
+          level: 'ERROR',
+          attributes: {
+            'workerId': workerId,
+            'status': res.statusCode.toString(),
+          },
+        );
+        return false;
+      }
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.checkInWorker',
+        attributes: {'workerId': workerId},
+      );
+      return false;
+    }
+  }
+
+  /// Attempt an immediate online checkout for a worker.
+  /// If the backend accepts it, acknowledge/remove the durable outbox item.
+  /// Returns false without destroying the queued operation when offline or
+  /// when the server rejects the request.
+  static Future<bool> syncAttendanceCheckoutNow({
+    required String workerId,
+    required String operationId,
+  }) async {
+    try {
+      final connection = await Connectivity().checkConnectivity();
+      if (connection == ConnectivityResult.none) return false;
+
+      final parsedWorkerId = int.tryParse(workerId);
+      if (parsedWorkerId == null || parsedWorkerId <= 0) return false;
+      final today = DateTime.now().toIso8601String().split('T').first;
+      final localRecords = await OfflineAttendanceService.loadLocalRecords();
+      Map<String, dynamic>? latestSession;
+      for (final record in localRecords) {
+        final recordWorkerId = (record['worker_id'] ?? record['employee_id'])
+            ?.toString();
+        final recordDate = (record['attendance_date'] ?? '')
+            .toString()
+            .split('T')
+            .first;
+        if (recordWorkerId != workerId || recordDate != today) continue;
+        if (record['check_in_time'] == null ||
+            record['check_out_time'] == null) {
+          continue;
+        }
+        final index =
+            int.tryParse((record['session_index'] ?? 0).toString()) ?? 0;
+        final previousIndex =
+            int.tryParse((latestSession?['session_index'] ?? -1).toString()) ??
+            -1;
+        if (index > previousIndex) latestSession = record;
+      }
+      if (latestSession == null) return false;
+
+      // Use the same timestamp-preserving endpoint as queue retries. Do not
+      // remove the queued write after the legacy check-out endpoint accepts it.
+      final success = await _syncAttendanceSessionSnapshot({
+        ...latestSession,
+        'worker_id': parsedWorkerId,
+        'employee_id': parsedWorkerId,
+        'operation_id': operationId,
+        'idempotency_key': operationId,
+      });
+      if (!success) return false;
+
+      await SyncQueueManager.removeByBusinessIdentifier(
+        'attendance_check_out',
+        {'operation_id': operationId, 'idempotency_key': operationId},
+      );
+      return true;
+    } catch (e, stackTrace) {
+      await ErrorLogHelper.logException(
+        e,
+        stackTrace,
+        context: 'SyncService.syncAttendanceCheckoutNow',
+        attributes: {'workerId': workerId, 'operationId': operationId},
+      );
+      return false;
+    }
+  }
+
+  /// Verify from the backend that a worker no longer has an open session.
+  /// Used after an immediate checkout attempt so the UI only reports server
+  /// success when the remote session is actually closed.
+  static Future<bool> verifyWorkerCheckedOut(String workerId) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final today = DateTime.now().toIso8601String().split('T').first;
+      final response = await ApiClient.getJson(
+        '${ApiClient.attendancePrefix}/date/$today?employee_id=$workerId',
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) return false;
+      final decoded = jsonDecode(response.body);
+      final records = decoded is List
+          ? decoded
+          : (decoded is Map && decoded['records'] is List
+                ? decoded['records'] as List
+                : const []);
+
+      for (final raw in records) {
+        if (raw is! Map) continue;
+        final employee = raw['employee_id'] ?? raw['worker_id'];
+        if (employee?.toString() != workerId.toString()) continue;
+
+        final sessions = raw['sessions'];
+        if (sessions is Map && sessions.isNotEmpty) {
+          for (final value in sessions.values) {
+            if (value is Map &&
+                value['check_in_time'] != null &&
+                value['check_out_time'] == null) {
+              return false;
+            }
+          }
+        }
+
+        if (raw['check_in_time'] != null && raw['check_out_time'] == null) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ verifyWorkerCheckedOut failed: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Syncs an individual check-out event to the backend
+  static Future<bool> checkOutWorker(String workerId) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) {
+        await ErrorLogHelper.logMessage(
+          'Token unavailable for checkOut',
+          level: 'WARNING',
+        );
+        return false;
+      }
+
+      final res = await ApiClient.postJson(
+        '${ApiClient.checkOut}?employee_id=$workerId',
+        {},
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        try {
+          final body = jsonDecode(res.body);
+          final date = DateTime.now().toIso8601String().split('T').first;
+          final rawSession = body is Map
+              ? body['session']?.toString().toLowerCase()
+              : null;
+          final sessionIndex = rawSession == 'morning'
+              ? 0
+              : (rawSession == 'evening'
+                    ? 1
+                    : (int.tryParse(
+                            body is Map
+                                ? body['session_index']?.toString() ?? ''
+                                : '',
+                          ) ??
+                          0));
+
+          await OfflineAttendanceService.markSynced(
+            employeeId: int.parse(workerId),
+            workerId: int.parse(workerId),
+            date: date,
+            sessionIndex: sessionIndex,
+          );
+        } catch (_) {
+          // The server accepted the checkout; local reconciliation will
+          // correct any cache mismatch on the next attendance refresh.
+        }
+        if (kDebugMode) debugPrint('✅ Worker checked out: $workerId');
+        return true;
+      } else {
+        await ErrorLogHelper.logMessage(
+          'Worker check-out failed: ${res.statusCode}',
+          level: 'ERROR',
+          attributes: {
+            'workerId': workerId,
+            'status': res.statusCode.toString(),
+            'response': res.body,
+          },
+        );
+        if (kDebugMode) {
+          debugPrint(
+            '❌ Worker check-out failed: HTTP ${res.statusCode} body=${res.body}',
+          );
+        }
+        return false;
+      }
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.checkOutWorker',
+        attributes: {'workerId': workerId},
+      );
+      return false;
+    }
+  }
+
+  /// Syncs a queued attendance check-in event to the backend.
+  ///
+  /// Queue payloads have appeared in different builds with either
+  /// `employee_id` or `worker_id`. Normalize both here and reuse the same
+  /// authenticated endpoint used by the live check-in flow so offline
+  /// check-ins are persisted to the backend when connectivity returns.
+  /// Persist one offline attendance session using its original local timestamps.
+  /// A queue item may only contain IDs/date from an older app version, so the
+  /// durable local session record is the compatibility fallback for its details.
+  static Future<bool> _syncAttendanceSessionSnapshot(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final rawWorkerId =
+          data['worker_id'] ??
+          data['workerId'] ??
+          data['employee_id'] ??
+          data['id'];
+      final workerId = rawWorkerId?.toString().trim() ?? '';
+      if (workerId.isEmpty) {
+        await ErrorLogHelper.logMessage(
+          'Queued attendance session missing worker_id',
+          level: 'ERROR',
+        );
+        return false;
+      }
+
+      final date =
+          (data['attendance_date'] ??
+                  DateTime.now().toIso8601String().split('T').first)
+              .toString()
+              .split('T')
+              .first;
+      final sessionIndex =
+          int.tryParse(
+            (data['session_index'] ?? data['sessionIndex'] ?? '0').toString(),
+          ) ??
+          0;
+
+      final localRecords = await OfflineAttendanceService.loadLocalRecords();
+      Map<String, dynamic>? localSession;
+      for (final candidate in localRecords) {
+        final candidateWorker =
+            (candidate['worker_id'] ?? candidate['employee_id'])?.toString();
+        final candidateDate = (candidate['attendance_date'] ?? '')
+            .toString()
+            .split('T')
+            .first;
+        final candidateIndex =
+            int.tryParse((candidate['session_index'] ?? 0).toString()) ?? 0;
+        if (candidateWorker == workerId &&
+            candidateDate == date &&
+            candidateIndex == sessionIndex) {
+          localSession = candidate;
+          break;
+        }
+      }
+
+      final checkInTime =
+          data['check_in_time'] ?? localSession?['check_in_time'];
+      final checkOutTime =
+          data['check_out_time'] ?? localSession?['check_out_time'];
+      final workingHours =
+          data['working_hours'] ?? localSession?['working_hours'];
+      if (checkInTime == null) {
+        await ErrorLogHelper.logMessage(
+          'Queued attendance session lacks its original check-in timestamp',
+          level: 'ERROR',
+          attributes: {
+            'workerId': workerId,
+            'date': date,
+            'sessionIndex': sessionIndex.toString(),
+          },
+        );
+        return false;
+      }
+
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+      final response = await ApiClient.postJson(
+        '/api/attendance/sync-session',
+        {
+          'worker_id': int.parse(workerId),
+          'attendance_date': date,
+          'session_index': sessionIndex,
+          'check_in_time': checkInTime.toString(),
+          'check_out_time': checkOutTime?.toString(),
+          'working_hours': workingHours,
+          'status': (data['status'] ?? localSession?['status'] ?? 'PRESENT')
+              .toString(),
+          'operation_id':
+              data['operation_id'] ??
+              data['idempotency_key'] ??
+              data['action_id'],
+        },
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 12));
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        await ErrorLogHelper.logMessage(
+          'Offline attendance session sync failed: ' +
+              response.statusCode.toString(),
+          level: 'ERROR',
+          attributes: {
+            'workerId': workerId,
+            'date': date,
+            'sessionIndex': sessionIndex.toString(),
+            'response': response.body,
+          },
+        );
+        return false;
+      }
+
+      await OfflineAttendanceService.markSynced(
+        employeeId: int.parse(workerId),
+        workerId: int.parse(workerId),
+        date: date,
+        sessionIndex: sessionIndex,
+      );
+      return true;
+    } catch (e, stackTrace) {
+      await ErrorLogHelper.logException(
+        e,
+        stackTrace,
+        context: 'SyncService._syncAttendanceSessionSnapshot',
+        attributes: {'data': jsonEncode(data)},
+      );
+      return false;
+    }
+  }
+
+  static Future<bool> _syncAttendanceCheckInItem(Map<String, dynamic> data) =>
+      _syncAttendanceSessionSnapshot(data);
+
+  static Future<bool> _syncAttendanceCheckOutItem(Map<String, dynamic> data) =>
+      _syncAttendanceSessionSnapshot(data);
+
+  /// Syncs worker profile data to the backend
+  static Future<bool> syncWorkerProfile(Map<String, dynamic> workerData) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs?.getInt('user_id') ?? prefs?.getInt('userId');
+
+      if (token.isEmpty || userId == null) {
+        await ErrorLogHelper.logMessage(
+          'Missing token or userId for worker sync',
+          level: 'WARNING',
+        );
+        return false;
+      }
+
+      final res = await ApiClient.postJson(
+        '${ApiClient.attendancePrefix}/workers?user_id=$userId',
+        workerData,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        if (kDebugMode)
+          debugPrint(
+            '✅ Worker profile synced: ${workerData['id'] ?? 'unknown'}',
+          );
+        return true;
+      } else {
+        await ErrorLogHelper.logMessage(
+          'Worker profile sync failed: ${res.statusCode}',
+          level: 'ERROR',
+          attributes: {'worker': workerData['id']?.toString() ?? 'unknown'},
+        );
+        return false;
+      }
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.syncWorkerProfile',
+      );
+      return false;
+    }
+  }
+
+  /// Downloads user data (workers, sales, shop details) from backend.
+  /// Concurrent calls are coalesced so overlapping refresh triggers do not queue
+  /// multiple full-data reads behind the same lock.
+  static Future<void> downloadUserDataSafe() async {
+    if (_userDataDownloadInProgress) return;
+    _userDataDownloadInProgress = true;
+    try {
+      await _syncLock.synchronized(() async {
+        try {
+          await _downloadUserDataImpl();
+        } catch (e) {
+          await ErrorLogHelper.logException(
+            e,
+            StackTrace.current,
+            context: 'SyncService.downloadUserData',
+          );
+        }
+      });
+      _lastUserDataDownloadAt = DateTime.now();
+    } finally {
+      _userDataDownloadInProgress = false;
+    }
+  }
+
+  /// Internal implementation - calls Synchronized
+  static Future<void> _downloadUserDataImpl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs == null) {
+        await ErrorLogHelper.logMessage(
+          'SharedPreferences unavailable',
+          level: 'WARNING',
+        );
+        return;
+      }
+
+      final userId = prefs.getInt('user_id') ?? prefs.getInt('userId');
+      if (userId == null) {
+        if (kDebugMode) debugPrint('⚠️ No userId found, skipping download');
+        return;
+      }
+
+      // 1. Fetch Workers
+      try {
+        final token = await SecureTokenStorage.getToken() ?? '';
+        if (token.isEmpty) {
+          await ErrorLogHelper.logMessage(
+            'Token unavailable for worker fetch',
+            level: 'WARNING',
+          );
+        } else {
+          final res = await ApiClient.getJson(
+            '${ApiClient.attendancePrefix}/workers?user_id=$userId',
+            headers: {'Authorization': 'Bearer $token'},
+          );
+
+          if (res.statusCode == 200) {
+            final List<dynamic> workers = jsonDecode(res.body);
+            await prefs.setString('workers_json', jsonEncode(workers));
+            if (kDebugMode)
+              debugPrint('✅ Workers downloaded: ${workers.length} records');
+          } else {
+            await ErrorLogHelper.logMessage(
+              'Worker fetch failed: ${res.statusCode}',
+              level: 'WARNING',
+            );
+          }
+        }
+      } catch (e) {
+        await ErrorLogHelper.logException(
+          e,
+          StackTrace.current,
+          context: 'SyncService.downloadWorkers',
+        );
+      }
+
+      // 2. Fetch Invoices/Sales (to populate Dashboard and Credit Book)
+      try {
+        final token = await SecureTokenStorage.getToken() ?? '';
+        if (token.isNotEmpty) {
+          final List<dynamic> allApiItems = [];
+
+          // Fetch invoices from /api/invoices/
+          try {
+            final invoicesRes = await ApiClient.getJson(
+              ApiClient.invoicesList,
+              headers: {'Authorization': 'Bearer $token'},
+            );
+            if (invoicesRes.statusCode == 200) {
+              final decoded = jsonDecode(invoicesRes.body);
+              final invoices = decoded is List
+                  ? decoded
+                  : (decoded['invoices'] ?? decoded['results'] ?? []);
+              allApiItems.addAll(invoices);
+            }
+          } catch (e) {
+            if (kDebugMode)
+              debugPrint('⚠️ Failed to fetch invoices from /api/invoices: $e');
+          }
+
+          try {
+            final cancelledOrders =
+                await OnlineOrderService.fetchCancelledOrdersForCloudRestore();
+            await OnlineOrderService.removeCancelledOrderRecordsLocally(
+              cancelledOrders,
+            );
+            final eligibleInvoices =
+                OnlineOrderService.excludeCancelledOrderInvoices(
+                  allApiItems.whereType<Map>().map(
+                    (item) => Map<String, dynamic>.from(item),
+                  ),
+                  cancelledOrders,
+                );
+            allApiItems
+              ..clear()
+              ..addAll(eligibleInvoices);
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint(
+                '⚠️ Cloud sales restore skipped because cancelled orders '
+                'could not be verified: $e',
+              );
+            }
+            allApiItems.clear();
+          }
+
+          // Canonical source: /api/invoices. The legacy /auth/sales feed is line-item based
+          // and is intentionally NOT merged into the canonical invoice dataset because doing so
+          // can double-count the same business transaction. Legacy recovery is handled separately.
+
+          // IMPORTANT: persist the canonical invoice records separately from
+          // the dashboard sales mirror. Dashboard sales may be rebuilt from the
+          // cloud, but Khata/Paid Invoice history must not depend on that mirror.
+          try {
+            final Map<String, List<Map<String, dynamic>>> invoiceGroups = {};
+            String invoiceKey(Map<String, dynamic> row) {
+              for (final field in const [
+                'invoice_id',
+                'sale_id',
+                'invoice_number',
+                'number',
+                'backend_id',
+                'id',
+              ]) {
+                final value = row[field]?.toString().trim() ?? '';
+                if (value.isNotEmpty && value != '0' && value != 'null') {
+                  return value;
+                }
+              }
+              return '';
+            }
+
+            for (final raw in allApiItems) {
+              if (raw is! Map) continue;
+              final row = Map<String, dynamic>.from(raw);
+              final key = invoiceKey(row);
+              if (key.isEmpty) continue;
+              invoiceGroups
+                  .putIfAbsent(key, () => <Map<String, dynamic>>[])
+                  .add(row);
+            }
+
+            double amount(dynamic value) {
+              if (value is num) return value.toDouble();
+              return double.tryParse(value?.toString() ?? '') ?? 0.0;
+            }
+
+            final List<Map<String, dynamic>> restoredInvoices = [];
+            for (final group in invoiceGroups.values) {
+              final first = group.first;
+
+              dynamic rawItems = first['line_items'] ?? first['items'];
+              if (rawItems is! List || rawItems.isEmpty) {
+                rawItems = group;
+              }
+
+              final List<Map<String, dynamic>> lineItems = [];
+              if (rawItems is List) {
+                for (final rawItem in rawItems) {
+                  if (rawItem is! Map) continue;
+                  final name =
+                      (rawItem['product_name'] ??
+                              rawItem['description'] ??
+                              rawItem['item'] ??
+                              rawItem['name'] ??
+                              rawItem['product'] ??
+                              '')
+                          .toString()
+                          .trim();
+                  if (name.isEmpty) continue;
+
+                  final price = amount(
+                    rawItem['unit_price'] ?? rawItem['price'] ?? 0,
+                  );
+                  final qty = amount(
+                    rawItem['quantity'] ?? rawItem['qty'] ?? 1,
+                  );
+                  final lineTotal = amount(
+                    rawItem['line_total'] ??
+                        rawItem['total'] ??
+                        rawItem['total_with_tax'] ??
+                        price * (qty > 0 ? qty : 1),
+                  );
+
+                  lineItems.add({
+                    ...rawItem,
+                    'product_name': name,
+                    'quantity': qty > 0 ? qty : 1,
+                    'qty': qty > 0 ? qty : 1,
+                    'price': price,
+                    'unit_price': price,
+                    'total': lineTotal,
+                    'line_total': lineTotal,
+                    'total_with_tax': lineTotal,
+                  });
+                }
+              }
+
+              final total = amount(
+                first['total_amount'] ??
+                    first['total'] ??
+                    first['invoice_total'] ??
+                    first['grand_total'],
+              );
+              final paid = amount(
+                first['paid_amount'] ??
+                    first['amount_paid'] ??
+                    first['paid'] ??
+                    first['received_amount'],
+              ).clamp(0.0, total).toDouble();
+              final outstanding = (total - paid)
+                  .clamp(0.0, double.infinity)
+                  .toDouble();
+              final statusRaw =
+                  (first['payment_status'] ?? first['status'] ?? '')
+                      .toString()
+                      .toUpperCase();
+              final status =
+                  statusRaw == 'PAID' ||
+                      statusRaw == 'PARTIAL' ||
+                      statusRaw == 'UNPAID'
+                  ? statusRaw
+                  : (paid >= total - 0.01
+                        ? 'PAID'
+                        : paid > 0
+                        ? 'PARTIAL'
+                        : 'UNPAID');
+
+              restoredInvoices.add({
+                ...first,
+                'invoice_id': first['invoice_id'] ?? first['id'],
+                'invoice_number':
+                    first['invoice_number'] ??
+                    first['number'] ??
+                    first['sale_id'] ??
+                    first['id'],
+                'sale_id':
+                    first['sale_id'] ?? first['invoice_number'] ?? first['id'],
+                'customer_name':
+                    first['customer_name'] ?? first['name'] ?? 'Cash Customer',
+                'customer_phone':
+                    first['customer_phone'] ?? first['phone'] ?? '',
+                'business_date':
+                    first['business_date'] ??
+                    first['invoice_date'] ??
+                    first['sale_date'] ??
+                    first['date'] ??
+                    first['created_at'],
+                'created_at': first['created_at'],
+                'sale_timestamp':
+                    first['sale_timestamp'] ?? first['created_at'],
+                'total_amount': total,
+                'paid_amount': paid,
+                'pending_amount': outstanding,
+                'payment_status': status,
+                'status': status,
+                'line_items': lineItems,
+                'items': lineItems,
+                'sync_status': 'synced',
+                'is_synced': true,
+                'source': 'cloud_restore',
+              });
+            }
+
+            if (restoredInvoices.isNotEmpty) {
+              await LocalStorageService.saveLocalInvoices(restoredInvoices);
+              if (kDebugMode) {
+                debugPrint(
+                  '✅ Cloud restore: ${restoredInvoices.length} canonical invoices persisted',
+                );
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('⚠️ Failed to persist canonical invoice restore: $e');
+            }
+          }
+
+          final currentLocal = await LocalStorageService.loadSales();
+          final localBills = currentLocal
+              .whereType<Map>()
+              .map((s) => Map<String, dynamic>.from(s))
+              .toList();
+          // Check every stable identity alias when reconciling cloud invoices.
+          // Local rows use sale_id=SALE_<timestamp> while the server invoice uses
+          // invoice_number=BILL-xxxx; comparing only sale_id misses that mirror
+          // and restores it as a second cash sale.
+          final List<Map<String, dynamic>> newItems = [];
+
+          // Group API rows — /auth/sales returns one row per line item (flattened)
+          final Map<String, List<dynamic>> grouped = {};
+          for (final item in allApiItems) {
+            if (item is! Map) continue;
+            final saleId =
+                (item['invoice_number'] ??
+                        item['sale_id'] ??
+                        item['number'] ??
+                        '')
+                    .toString();
+            if (saleId.isEmpty) continue;
+            grouped.putIfAbsent(saleId, () => []).add(item);
+          }
+
+          for (final entry in grouped.entries) {
+            final saleId = entry.key;
+            final hasLocalMirror = entry.value.whereType<Map>().any(
+              (raw) => SalesDedupHelper.isDuplicateBill(
+                Map<String, dynamic>.from(raw),
+                localBills,
+              ),
+            );
+            if (hasLocalMirror) {
+              if (kDebugMode) {
+                debugPrint(
+                  '⏭️ Skipping cloud sale mirror $saleId: '
+                  'a local bill already shares its stable identity.',
+                );
+              }
+              continue;
+            }
+
+            final firstItem = entry.value.first as Map;
+            dynamic rawLineItems =
+                firstItem['line_items'] ?? firstItem['items'];
+            if (rawLineItems == null ||
+                (rawLineItems is List && rawLineItems.isEmpty)) {
+              rawLineItems = entry.value;
+            }
+            if (rawLineItems is! List || rawLineItems.isEmpty) continue;
+
+            final validItems = <Map<String, dynamic>>[];
+            for (final li in rawLineItems) {
+              if (li is! Map) continue;
+              final name =
+                  (li['product_name'] ??
+                          li['description'] ??
+                          li['item'] ??
+                          li['name'] ??
+                          li['product'] ??
+                          '')
+                      .toString()
+                      .trim();
+              if (name.isEmpty ||
+                  name.toLowerCase() == 'unknown' ||
+                  name.toLowerCase() == 'unknown item')
+                continue;
+
+              final double price =
+                  double.tryParse(
+                    (li['unit_price'] ?? li['price'] ?? 0).toString(),
+                  ) ??
+                  0.0;
+              final double qty =
+                  double.tryParse(
+                    (li['quantity'] ?? li['qty'] ?? 1).toString(),
+                  ) ??
+                  1.0;
+              final double lineTotal =
+                  double.tryParse(
+                    (li['line_total'] ??
+                            li['total'] ??
+                            li['total_with_tax'] ??
+                            (price * qty))
+                        .toString(),
+                  ) ??
+                  price * qty;
+
+              validItems.add({
+                'product_name': name,
+                'item': name,
+                'name': name,
+                'product': name,
+                'qty': qty,
+                'quantity': qty,
+                'price': price,
+                'unit_price': price,
+                'total': lineTotal,
+                'line_total': lineTotal,
+                'total_with_tax': lineTotal,
+              });
+            }
+            if (validItems.isEmpty) continue;
+
+            final businessDate =
+                firstItem['business_date'] ??
+                firstItem['sale_date'] ??
+                firstItem['invoice_date'] ??
+                firstItem['date'];
+            newItems.add({
+              // Keep all canonical aliases on a restored record so later sync
+              // passes can recognize the same bill across SALE_ and BILL IDs.
+              'sale_id':
+                  firstItem['sale_id'] ?? firstItem['offline_id'] ?? saleId,
+              'offline_id': firstItem['offline_id'] ?? firstItem['sale_id'],
+              'invoice_number':
+                  firstItem['invoice_number'] ?? firstItem['number'] ?? saleId,
+              'invoice_id': firstItem['invoice_id'] ?? firstItem['id'],
+              'backend_id': firstItem['backend_id'] ?? firstItem['id'],
+              'customer_name': firstItem['customer_name'] ?? 'Cash Customer',
+              'customer_phone': firstItem['customer_phone'] ?? '',
+              'items': validItems,
+              'business_date': businessDate,
+              'created_at': firstItem['created_at'],
+              'updated_at': firstItem['updated_at'],
+              'total':
+                  firstItem['total_amount']?.toString() ??
+                  firstItem['total']?.toString() ??
+                  firstItem['totalAmount']?.toString() ??
+                  '0',
+              'paid_amount': firstItem['paid_amount']?.toString() ?? '0',
+              'payment_status': firstItem['payment_status'] ?? 'PAID',
+              'sync_status': 'synced',
+              'is_synced': true,
+              'source': 'cloud_restore',
+            });
+          }
+
+          // #region agent log
+          AgentDebugLog.log(
+            location: 'sync_service.dart:downloadUserData',
+            message: 'CLOUD MERGE RESULT',
+            hypothesisId: 'H4',
+            data: {
+              'apiItemCount': allApiItems.length,
+              'groupedBills': grouped.length,
+              'newItemsMerged': newItems.length,
+            },
+          );
+          // #endregion
+
+          if (newItems.isNotEmpty) {
+            final List<Map<String, dynamic>> merged = [
+              ...localBills,
+              ...newItems,
+            ];
+            final deduped = SalesDedupHelper.dedupeBills(merged);
+            await LocalStorageService.saveSales(deduped);
+            if (kDebugMode) {
+              debugPrint(
+                '✅ Cloud restore: ${newItems.length} new bills from API',
+              );
+            }
+            _refreshNotifier.add(null);
+          }
+        }
+      } catch (e) {
+        await ErrorLogHelper.logException(
+          e,
+          StackTrace.current,
+          context: 'SyncService.downloadSales',
+        );
+      }
+
+      // Option B: always run one-time dedupe after cloud fetch
+      final cleanup = await SalesDedupHelper.cleanupAndPersist();
+      if (cleanup.removed > 0) {
+        _refreshNotifier.add(null);
+      }
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService._downloadUserDataImpl',
+      );
+    }
+  }
+
+  /// High-reliability sale sync (Queued by default for offline-first)
+  static Future<void> syncSale(Map<String, dynamic> sale) async {
+    try {
+      await SyncQueueManager.enqueue('sync_sale', sale);
+      _syncStatusController.add(await SyncQueueManager.getQueueSize());
+      await processQueueSafe();
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.syncSale',
+      );
+    }
+  }
+
+  /// Update payment status - queued for offline safety
+  static Future<void> updateSalePayment(
+    String saleId,
+    String status,
+    double amount, {
+    String? idempotencyKey,
+    String? referenceId,
+    String? payerName,
+  }) async {
+    try {
+      await SyncQueueManager.enqueue('update_payment', {
+        'invoice_number': saleId,
+        'payment_status': status,
+        'paid_amount': amount,
+        'payment_method': 'ONLINE',
+        'source': 'PAYMENT_DETECTION',
+        if (idempotencyKey != null && idempotencyKey.isNotEmpty)
+          'idempotency_key': idempotencyKey,
+        if (referenceId != null && referenceId.isNotEmpty)
+          'reference_id': referenceId,
+        if (payerName != null && payerName.isNotEmpty) 'payer_name': payerName,
+      });
+      _syncStatusController.add(await SyncQueueManager.getQueueSize());
+      await processQueueSafe();
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.updateSalePayment',
+      );
+    }
+  }
+
+  /// Process sync queue - Thread-safe with Lock.
+  ///
+  /// UI-critical attendance actions may request a short wait for an already
+  /// running background sync so a tap is not silently ignored.
+  static Future<void> processQueueSafe({bool waitForActiveSync = false}) async {
+    if (SyncQueueManager.isSyncing) {
+      if (!waitForActiveSync) {
+        if (kDebugMode) {
+          debugPrint('⚠️ Sync already in progress, skipping overlap');
+        }
+        return;
+      }
+
+      final deadline = DateTime.now().add(const Duration(seconds: 8));
+      while (SyncQueueManager.isSyncing && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+
+      if (SyncQueueManager.isSyncing) {
+        if (kDebugMode) {
+          debugPrint(
+            '⚠️ Attendance sync wait timed out; background sync remains active',
+          );
+        }
+        return;
+      }
+    }
+
+    SyncQueueManager.isSyncing = true;
+    try {
+      await _syncLock.synchronized(() async {
+        try {
+          await _processQueueImpl();
+        } catch (e) {
+          await ErrorLogHelper.logException(
+            e,
+            StackTrace.current,
+            context: 'SyncService.processQueue',
+          );
+        }
+      });
+    } finally {
+      SyncQueueManager.isSyncing = false;
+    }
+  }
+
+  /// Internal queue processing implementation
+  static Future<void> _processQueueImpl() async {
+    try {
+      // Self-healing: recover any quarantined or stuck items from previous sessions
+      await SyncQueueManager.recoverQuarantinedForCurrentUser();
+      await SyncQueueManager.recoverStuckItems();
+
+      final dynamic connection = await Connectivity().checkConnectivity();
+      final bool isOffline = connection is List
+          ? (connection.isEmpty ||
+                (connection.length == 1 &&
+                    connection.first == ConnectivityResult.none))
+          : connection == ConnectivityResult.none;
+
+      if (isOffline) {
+        _syncStatusController.add(await SyncQueueManager.getQueueSize());
+        return;
+      }
+
+      final List<Map<String, dynamic>> pending =
+          await SyncQueueManager.getAll();
+      if (kDebugMode)
+        debugPrint('🔄 Processing sync queue: ${pending.length} items');
+
+      int successCount = 0;
+      int failureCount = 0;
+      int consecutiveNetworkFailures = 0;
+
+      for (var item in pending) {
+        final actionId = item['action_id'];
+        final action = item['action'];
+        final status = item['status'];
+
+        if (status == 'PARKED') continue; // Skip permanently failed items
+
+        final nextAttemptRaw = item['next_attempt_at']?.toString();
+        if (nextAttemptRaw != null && nextAttemptRaw.isNotEmpty) {
+          final nextAttemptAt = DateTime.tryParse(nextAttemptRaw);
+          if (nextAttemptAt != null && DateTime.now().isBefore(nextAttemptAt)) {
+            continue;
+          }
+        }
+
+        // Retry timing is controlled by next_attempt_at written below after failures.
+
+        final data = Map<String, dynamic>.from(item['data'] ?? {});
+        item['status'] = 'SYNCING';
+        item['updated_at'] = DateTime.now().toIso8601String();
+        await SyncQueueManager.update(actionId, item);
+        bool success = false;
+
+        try {
+          switch (action) {
+            case 'sync_sale':
+              success = await _syncSaleItem(data);
+              break;
+
+            case 'save_sale':
+            case 'create_sale':
+              success = await _syncSaleBatchItem(data);
+              break;
+
+            case 'sync_invoice_batch':
+              success = await _syncInvoiceBatchItem(data);
+              break;
+
+            case 'record_payment':
+              success = await _recordPaymentItem(data);
+              break;
+
+            case 'update_payment':
+            case 'update_invoice_payment':
+              success = await _updatePaymentItem(data);
+              break;
+
+            case 'update_invoice_paid':
+            case 'update_invoice_unpaid':
+              success = await _updateInvoiceItem(data, action);
+              break;
+
+            case 'send_daily_email':
+              success = await _sendEmailItem(data);
+              break;
+
+            case 'worker_profile':
+              success = await syncWorkerProfile(data);
+              break;
+
+            case 'attendance_check_in':
+              success = await _syncAttendanceCheckInItem(data);
+              break;
+
+            case 'attendance_check_out':
+              success = await _syncAttendanceCheckOutItem(data);
+              break;
+
+            case 'decrease_stock':
+              success = await _decreaseStockItem(data);
+              break;
+
+            case 'update_local_product':
+              success = await _updateLocalProductItem(data);
+              break;
+
+            case 'create_local_product':
+              success = await _createLocalProductItem(data);
+              break;
+
+            case 'delete_product':
+              success = await _deleteProductItem(data);
+              break;
+
+            case 'create_purchase_order':
+              success = await _createPurchaseOrderItem(data);
+              break;
+
+            case 'customer_place_order':
+              success = await _customerPlaceOrderItem(data);
+              break;
+
+            case 'update_purchase_order_status':
+              success = await _updatePurchaseOrderStatusItem(data);
+              break;
+
+            case 'record_khata_payment':
+              success = await _recordKhataPaymentItem(data);
+              break;
+
+            case 'update_khata_deadline':
+              success = await _updateKhataDeadlineItem(data);
+              break;
+
+            case 'save_customer':
+            case 'create_customer':
+              success = await _saveCustomerItem(data);
+              break;
+
+            default:
+              if (kDebugMode) debugPrint('⚠️ Unknown action: $action');
+              success = false;
+          }
+
+          // A recovery path may have rebuilt a legacy queued sale from the
+          // local history. Persist that payload into the durable outbox before
+          // ACK/removal, so a crash during this attempt cannot lose the repair.
+          final storedQueueData = item['data'];
+          if (data['payload'] is Map &&
+              (storedQueueData is! Map || storedQueueData['payload'] is! Map)) {
+            item['data'] = data;
+            await SyncQueueManager.update(actionId, item);
+          }
+
+          if (success) {
+            // ACK protocol: persist local SYNCED state first. Only then can the
+            // durable outbox item be removed. If local marking fails, the queue
+            // stays intact and the operation is retried safely.
+            if (action == 'save_sale' || action == 'sync_sale') {
+              final saleId =
+                  data['sale_id']?.toString() ??
+                  data['invoice_number']?.toString() ??
+                  '';
+              if (saleId.isNotEmpty) {
+                final marked = await SaleService.markSaleAsSynced(saleId);
+                if (!marked) {
+                  success = false;
+                  throw StateError('LOCAL_SYNC_ACK_FAILED:$saleId');
+                }
+                SyncService.triggerDashboardRefresh();
+              }
+            }
+
+            if (success &&
+                (action == 'create_local_product' ||
+                    action == 'update_local_product' ||
+                    action == 'delete_product')) {
+              await _ackInventoryCacheMutation(action, data);
+            }
+
+            if (success) {
+              await SyncQueueManager.remove(actionId);
+              successCount++;
+              consecutiveNetworkFailures = 0;
+              if (action == 'create_purchase_order' ||
+                  action == 'update_purchase_order_status' ||
+                  action == 'update_payment' ||
+                  action == 'update_invoice_payment' ||
+                  action == 'update_invoice_paid' ||
+                  action == 'update_invoice_unpaid' ||
+                  action == 'record_payment') {
+                SyncService.triggerDashboardRefresh();
+              }
+            }
+          }
+          if (!success) {
+            final retryCount = ((item['retries'] as num?)?.toInt() ?? 0) + 1;
+            item['retries'] = retryCount;
+            item['last_attempt'] = DateTime.now().toUtc().toIso8601String();
+            item['last_error'] = 'SYNC_FAILED';
+
+            const criticalActions = <String>{
+              'save_sale',
+              'create_sale',
+              'sync_sale',
+              'sync_invoice_batch',
+              'update_payment',
+              'update_invoice_payment',
+              'update_invoice_paid',
+              'update_invoice_unpaid',
+              'record_khata_payment',
+              'update_khata_deadline',
+              'record_payment',
+              'decrease_stock',
+              'create_purchase_order',
+              'update_purchase_order_status',
+              'customer_place_order',
+              'attendance_check_in',
+              'attendance_check_out',
+            };
+
+            final isCritical = criticalActions.contains(action);
+
+            final retryDelaySeconds = switch (retryCount) {
+              1 => 2,
+              2 => 5,
+              3 => 15,
+              4 => 30,
+              5 => 60,
+              6 => 120,
+              7 => 300,
+              8 => 600,
+              9 => 1800,
+              _ => 3600,
+            };
+
+            item['next_attempt_at'] = DateTime.now()
+                .toUtc()
+                .add(Duration(seconds: retryDelaySeconds))
+                .toIso8601String();
+
+            if (isCritical) {
+              // Critical operations NEVER become permanently dead.
+              item['status'] = 'RETRY_WAIT';
+              item['needs_attention'] = retryCount >= 8;
+              if (kDebugMode)
+                debugPrint(
+                  '⚠️ CRITICAL: Action $actionId (retry $retryCount) will retry in ${retryDelaySeconds}s.',
+                );
+            } else {
+              // Non-critical operations may be parked after repeated failure,
+              // but the record remains durable for manual recovery.
+              item['status'] = retryCount >= 12 ? 'PARKED' : 'RETRY_WAIT';
+              item['needs_attention'] = retryCount >= 12;
+              if (kDebugMode)
+                debugPrint(
+                  '⚠️ Action $actionId (retry $retryCount) will retry in ${retryDelaySeconds}s.',
+                );
+            }
+
+            await SyncQueueManager.update(actionId, item);
+            failureCount++;
+            consecutiveNetworkFailures++;
+          }
+        } catch (e, stack) {
+          final storedQueueData = item['data'];
+          if (data['payload'] is Map &&
+              (storedQueueData is! Map || storedQueueData['payload'] is! Map)) {
+            item['data'] = data;
+          }
+          await ErrorLogHelper.logException(
+            e,
+            stack,
+            context: 'SyncService._processQueueImpl - action: $action',
+            attributes: {'action_id': actionId, 'action': action},
+          );
+          failureCount++;
+          consecutiveNetworkFailures++;
+
+          final retryCount = ((item['retries'] as num?)?.toInt() ?? 0) + 1;
+          item['retries'] = retryCount;
+          item['last_attempt'] = DateTime.now().toUtc().toIso8601String();
+          item['last_error'] = e.toString();
+
+          const criticalActions = <String>{
+            'save_sale',
+            'create_sale',
+            'sync_sale',
+            'sync_invoice_batch',
+            'update_payment',
+            'update_invoice_payment',
+            'update_invoice_paid',
+            'update_invoice_unpaid',
+            'record_khata_payment',
+            'update_khata_deadline',
+            'record_payment',
+            'decrease_stock',
+            'create_purchase_order',
+            'update_purchase_order_status',
+            'customer_place_order',
+            'attendance_check_in',
+            'attendance_check_out',
+          };
+
+          final isCritical = criticalActions.contains(action);
+
+          final retryDelaySeconds = switch (retryCount) {
+            1 => 2,
+            2 => 5,
+            3 => 15,
+            4 => 30,
+            5 => 60,
+            6 => 120,
+            7 => 300,
+            8 => 600,
+            9 => 1800,
+            _ => 3600,
+          };
+
+          item['next_attempt_at'] = DateTime.now()
+              .toUtc()
+              .add(Duration(seconds: retryDelaySeconds))
+              .toIso8601String();
+
+          if (isCritical) {
+            // Critical operations NEVER become permanently dead.
+            item['status'] = 'RETRY_WAIT';
+            item['needs_attention'] = retryCount >= 8;
+            if (kDebugMode)
+              debugPrint(
+                '🚨 CRITICAL EXCEPTION: Action $actionId (retry $retryCount) will retry in ${retryDelaySeconds}s. Error: $e',
+              );
+          } else {
+            // Non-critical operations may be parked after repeated failure,
+            // but the record remains durable for manual recovery.
+            item['status'] = retryCount >= 12 ? 'PARKED' : 'RETRY_WAIT';
+            item['needs_attention'] = retryCount >= 12;
+            if (kDebugMode)
+              debugPrint(
+                '⚠️ Action $actionId (retry $retryCount) will retry in ${retryDelaySeconds}s.',
+              );
+          }
+
+          await SyncQueueManager.update(actionId, item);
+        }
+      }
+
+      _syncStatusController.add(await SyncQueueManager.getQueueSize());
+
+      if (kDebugMode) {
+        debugPrint(
+          '✅ Sync complete: $successCount succeeded, $failureCount failed',
+        );
+      }
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService._processQueueImpl',
+      );
+    }
+  }
+
+  /// Explicitly retry queued sale/payment writes now, without waiting for backoff.
+  /// Returns the number of durable queue items that were made immediately retryable.
+  static Future<Map<String, dynamic>>
+  retryPendingBusinessOperationsNow() async {
+    if (SyncQueueManager.isSyncing) {
+      return <String, dynamic>{
+        'started': false,
+        'reason': 'sync_already_running',
+        'awakened': 0,
+      };
+    }
+
+    const actions = <String>{
+      'save_sale',
+      'create_sale',
+      'sync_sale',
+      'sync_invoice_batch',
+      'record_payment',
+      'update_payment',
+      'update_invoice_payment',
+      'update_invoice_paid',
+      'update_invoice_unpaid',
+      'record_khata_payment',
+    };
+
+    // Claim the sync flag before the first await. Otherwise the 30-second
+    // background pulse could begin processing while we clear the retry delay.
+    SyncQueueManager.isSyncing = true;
+    try {
+      return await _syncLock.synchronized(() async {
+        final awakened = await SyncQueueManager.makeActionsRetryableNow(
+          actions,
+        );
+        if (awakened <= 0) {
+          return <String, dynamic>{
+            'started': false,
+            'reason': 'no_retryable_business_operations',
+            'awakened': 0,
+          };
+        }
+
+        await _processQueueImpl();
+        return <String, dynamic>{
+          'started': true,
+          'reason': 'retry_requested',
+          'awakened': awakened,
+        };
+      });
+    } finally {
+      SyncQueueManager.isSyncing = false;
+    }
+  }
+
+  /// Sync one or many line items for a single bill (idempotent).
+  static Future<bool> _syncSaleBatchItem(Map<String, dynamic> data) async {
+    // ONE sale sync path: /api/invoices/sync. It is the authoritative atomic
+    // transaction for invoice + lines + backend inventory deduction.
+    Map<String, dynamic>? payload;
+    String endpoint = ApiClient.invoicesSync;
+
+    if (data['payload'] is Map) {
+      payload = Map<String, dynamic>.from(data['payload'] as Map);
+      endpoint = data['endpoint']?.toString() ?? ApiClient.invoicesSync;
+    } else if (data['invoice_payload'] is Map) {
+      payload = Map<String, dynamic>.from(data['invoice_payload'] as Map);
+    }
+
+    if (payload == null || payload.isEmpty) {
+      try {
+        final localSales = await LocalStorageService.loadSales();
+        final recovered = buildInvoicePayloadFromLocalSale(data, localSales);
+        if (recovered != null) {
+          payload = recovered;
+          data['payload'] = recovered;
+          data['invoice_payload'] = recovered;
+          data['endpoint'] = ApiClient.invoicesSync;
+          data['invoice_number'] ??= recovered['invoice_number'];
+          data['sale_id'] ??= recovered['offline_id'];
+          if (kDebugMode) {
+            debugPrint(
+              '🔁 Rebuilt a legacy queued invoice payload from local history '
+              'for ${recovered['invoice_number']}.',
+            );
+          }
+        }
+      } catch (e) {
+        if (kDebugMode)
+          debugPrint('⚠️ Legacy invoice payload recovery failed: $e');
+      }
+
+      if (payload == null || payload.isEmpty) {
+        // Fail closed: keep the original queue entry, but report a specific
+        // error rather than retrying an unusable payload without explanation.
+        throw StateError(
+          'SALE_SYNC_INVALID_PAYLOAD: no matching local invoice history was found to rebuild this queued sale.',
+        );
+      }
+    }
+
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      final res = await ApiClient.postJson(
+        endpoint,
+        payload,
+        headers: {if (token.isNotEmpty) 'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      // 201 = created; 200 = already exists/idempotent duplicate.
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return true;
+      }
+
+      // Preserve the real backend rejection in the queue's last_error field.
+      // Connectivity can be live while the backend rejects malformed/stale data.
+      var responseDetail = res.body.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (responseDetail.length > 240) {
+        responseDetail = responseDetail.substring(0, 240);
+      }
+      final diagnostic = responseDetail.isEmpty
+          ? 'HTTP ${res.statusCode}'
+          : 'HTTP ${res.statusCode}: $responseDetail';
+      throw StateError('SALE_SYNC_REJECTED: $diagnostic');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Offline Sale/Invoice Sync failed: $e');
+      // Let the durable queue processor persist the actual failure and retry time.
+      rethrow;
+    }
+  }
+
+  static Future<bool> _syncSaleItem(Map<String, dynamic> data) async {
+    // Legacy sync_sale entries are converted into the same JSON invoice-sync
+    // contract used by save_sale/create_sale. Mutate the in-memory queue record
+    // so the normalized payload can be persisted back into the durable outbox.
+    try {
+      if (data['payload'] is Map || data['invoice_payload'] is Map) {
+        return _syncSaleBatchItem(data);
+      }
+
+      final rawItems = data['line_items'] ?? data['items'];
+      final lineItems = rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+          : <Map<String, dynamic>>[];
+
+      final invoiceNumber =
+          (data['invoice_number'] ?? data['sale_id'] ?? data['id'] ?? '')
+              .toString()
+              .trim();
+      final rawDate =
+          (data['invoice_date'] ??
+                  data['business_date'] ??
+                  data['sale_date'] ??
+                  data['date'] ??
+                  data['created_at'] ??
+                  data['sale_timestamp'] ??
+                  '')
+              .toString()
+              .trim();
+
+      // Old queue rows can be missing line items or the business date. Recover
+      // only from an exact stable-ID match in local history; never guess today's
+      // date or substitute another sale based on amount/product similarity.
+      if (invoiceNumber.isEmpty || lineItems.isEmpty || rawDate.isEmpty) {
+        final localSales = await LocalStorageService.loadSales();
+        final recovered = buildInvoicePayloadFromLocalSale(data, localSales);
+        if (recovered == null) {
+          throw StateError(
+            'SALE_SYNC_INVALID_PAYLOAD: missing invoice ID, business date, or line items, and no matching local sale was available for recovery.',
+          );
+        }
+        data['endpoint'] = ApiClient.invoicesSync;
+        data['payload'] = recovered;
+        data['invoice_payload'] = recovered;
+        data['invoice_number'] ??= recovered['invoice_number'];
+        data['sale_id'] ??= recovered['offline_id'];
+        return _syncSaleBatchItem(data);
+      }
+
+      final payload = <String, dynamic>{
+        'invoice_number': invoiceNumber,
+        'offline_id': data['offline_id'] ?? data['sale_id'] ?? invoiceNumber,
+        'customer_name': data['customer_name'] ?? 'Cash Customer',
+        if (data['customer_phone'] != null)
+          'customer_phone': data['customer_phone'],
+        'total_amount': data['total_amount'] ?? data['total'] ?? 0,
+        'paid_amount': data['paid_amount'] ?? data['amount_paid'] ?? 0,
+        'payment_status': data['payment_status'] ?? 'PAID',
+        'invoice_date': rawDate.length >= 10
+            ? rawDate.substring(0, 10)
+            : rawDate,
+        if (data['payment_method'] != null)
+          'payment_method': data['payment_method'],
+        if (data['tax'] != null) 'tax': data['tax'],
+        if (data['sale_timestamp'] != null)
+          'sale_timestamp': data['sale_timestamp'],
+        if (data['created_at'] != null) 'created_at': data['created_at'],
+        if (data['notes'] != null) 'notes': data['notes'],
+        'line_items': lineItems,
+      };
+
+      data
+        ..['endpoint'] = ApiClient.invoicesSync
+        ..['payload'] = payload
+        ..['invoice_payload'] = payload
+        ..['invoice_number'] = invoiceNumber
+        ..['sale_id'] ??= data['offline_id'] ?? invoiceNumber;
+      return _syncSaleBatchItem(data);
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing legacy sale queue item: $e');
+      rethrow;
+    }
+  }
+
+  static Future<bool> _recordPaymentItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final payload = Map<String, dynamic>.from(data);
+      final invoiceNumber = payload['invoice_number']?.toString().trim() ?? '';
+      if (invoiceNumber.isEmpty) return false;
+
+      final res = await ApiClient.postJson(
+        ApiClient.invoicesPayments,
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      // 200/201 = recorded; 409 is acceptable for idempotent replay.
+      return res.statusCode == 200 ||
+          res.statusCode == 201 ||
+          res.statusCode == 409;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error recording payment: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _updatePaymentItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final res = await ApiClient.putJson(
+        '${ApiClient.invoicesPrefix}/update_payment',
+        data,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      return res.statusCode == 200;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error updating payment: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _updateInvoiceItem(
+    Map<String, dynamic> data,
+    String action,
+  ) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final invoiceNumber = data['invoice_number'];
+      final paymentStatus = data['payment_status'];
+
+      final res = await ApiClient.putJson(
+        '${ApiClient.invoicesPrefix}/number/$invoiceNumber',
+        {
+          'payment_status': paymentStatus,
+          'paid_amount': data['paid_amount'] ?? data['amount'],
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (res.statusCode == 200) {
+        if (kDebugMode)
+          debugPrint('✅ Invoice $invoiceNumber marked as $paymentStatus');
+        return true;
+      } else {
+        if (kDebugMode)
+          debugPrint('❌ Failed to update invoice: ${res.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error updating invoice: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _sendEmailItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final res = await ApiClient.postJson(
+        '/api/email/send-summary',
+        data,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        if (kDebugMode) debugPrint('📧 Daily email sent: ${data['email']}');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error sending email: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _decreaseStockItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final productId = data['product_id'];
+
+      final res = await ApiClient.putJson(
+        '${ApiClient.inventoryPrefix}/products/$productId/decrease-stock',
+        {
+          'quantity': data['quantity'],
+          'reason': 'SALE',
+          'reference_id':
+              data['reference_id'] ??
+              'SALE_${DateTime.now().millisecondsSinceEpoch}',
+        },
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      return res.statusCode == 200;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing stock decrease: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _updateLocalProductItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final id = data['id'];
+      final userId = data['user_id'];
+      final payload = data['payload'];
+
+      final res = await ApiClient.putJson(
+        '${ApiClient.inventoryPrefix}/products/$id?user_id=$userId',
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing local product update: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _createLocalProductItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final userId = data['user_id'];
+      final payload = data['payload'];
+      if (payload is! Map) return false;
+
+      final raw = Map<String, dynamic>.from(payload);
+      try {
+        final sku = (raw['sku'] ?? raw['barcode'] ?? '').toString();
+        if (sku.isNotEmpty) {
+          final latestLocal = await LocalStorageService.loadLocalProducts();
+          final latest = latestLocal[sku];
+          if (latest is Map) {
+            raw.addAll(Map<String, dynamic>.from(latest));
+          }
+        }
+      } catch (_) {
+        // Keep the durable outbox payload if local-cache reconciliation is unavailable.
+      }
+      final apiPayload = <String, dynamic>{
+        'product_name': raw['product_name'] ?? raw['name'] ?? '',
+        'sku': raw['sku'] ?? raw['barcode'] ?? '',
+        'unit_price': raw['unit_price'] ?? raw['price'] ?? 0,
+        'purchase_price': raw['purchase_price'] ?? raw['cost_price'] ?? 0,
+        'mrp': raw['mrp'] ?? 0,
+        // Keep the stock number as a number (including fractions) and carry
+        // its matching unit through the durable offline queue.
+        'current_stock':
+            raw['current_stock'] ?? raw['stock'] ?? raw['quantity'] ?? 0,
+        'min_stock': raw['min_stock'] ?? 10,
+        'unit': raw['unit'] ?? raw['unit_name'] ?? 'pcs',
+        'category': raw['category'] ?? 'General',
+        'image_url': raw['image_url'],
+      };
+
+      final res = await ApiClient.postJson(
+        '${ApiClient.inventoryPrefix}/products?user_id=$userId',
+        apiPayload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        // Mirror into the backend-products cache so it shows as synced
+        // without waiting for the next full inventory fetch.
+        try {
+          final saved = jsonDecode(res.body);
+          final cached = await LocalStorageService.loadBackendProducts();
+          cached.add(saved);
+          await LocalStorageService.saveBackendProducts(cached);
+        } catch (_) {}
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing local product create: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _deleteProductItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+      final id = int.tryParse(data['id']?.toString() ?? '');
+      final userId = data['user_id'];
+      if (id == null || id <= 0) return false;
+      final res = await ApiClient.deleteJson(
+        '${ApiClient.inventoryPrefix}/products/$id?user_id=$userId',
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+      return res.statusCode == 200 ||
+          res.statusCode == 204 ||
+          res.statusCode == 404;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing product deletion: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _customerPlaceOrderItem(Map<String, dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final role =
+          (prefs.getString('role') ??
+                  prefs.getString('user_role') ??
+                  prefs.getString('user_type') ??
+                  '')
+              .trim()
+              .toLowerCase();
+      if (role != 'customer') {
+        if (kDebugMode) {
+          debugPrint(
+            'Customer order sync deferred: active session is not a customer.',
+          );
+        }
+        return false;
+      }
+
+      // Customer order writes must never use the owner's auth_token_enc.
+      // Only fall back to the legacy plaintext customer token for existing
+      // installations that have not yet stored customer_token_enc.
+      final token =
+          await SecureTokenStorage.getCustomerToken() ??
+          prefs.getString('auth_token') ??
+          '';
+      if (token.trim().isEmpty) return false;
+
+      final payload = {
+        'shop_id': data['shop_id'],
+        'items': data['items'],
+        'delivery_address': data['delivery_address'] ?? 'Store Pickup',
+        'idempotency_key': data['idempotency_key'] ?? data['operation_id'],
+        'payment_method':
+            (data['payment_method']?.toString().toUpperCase() == 'UPI')
+            ? 'UPI'
+            : 'COD',
+      };
+
+      final res = await ApiClient.postJson(
+        '/store/order',
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+
+      if (res.statusCode != 200 && res.statusCode != 201) return false;
+
+      final body = jsonDecode(res.body);
+      final serverOrderId = body is Map ? body['order_id']?.toString() : null;
+      if (serverOrderId == null || serverOrderId.isEmpty) return false;
+
+      await OrderHistoryService.markOrderSynced(
+        localOrderId: data['local_order_id']?.toString() ?? '',
+        serverOrderId: serverOrderId,
+      );
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Customer order sync failed: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _createPurchaseOrderItem(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+      final normalizedItems = <Map<String, dynamic>>[];
+      final rawItems = data['items'];
+      if (rawItems is List) {
+        for (final raw in rawItems) {
+          if (raw is! Map) continue;
+          final item = Map<String, dynamic>.from(raw);
+          final name =
+              (item['product_name'] ??
+                      item['product'] ??
+                      item['name'] ??
+                      item['item'] ??
+                      '')
+                  .toString()
+                  .trim();
+          final qty =
+              double.tryParse(
+                (item['quantity'] ?? item['qty'] ?? 0).toString(),
+              ) ??
+              0.0;
+          final cost =
+              double.tryParse(
+                (item['unit_cost'] ?? item['unit_price'] ?? item['price'] ?? 0)
+                    .toString(),
+              ) ??
+              0.0;
+          if (name.isEmpty || qty <= 0) continue;
+          normalizedItems.add({
+            'product_id': item['product_id'] ?? item['id'],
+            'product_name': name,
+            'quantity': qty,
+            'unit_cost': cost,
+          });
+        }
+      }
+      if (normalizedItems.isEmpty) return false;
+      final payload = {
+        ...data,
+        'supplier_name': (data['supplier_name'] ?? data['supplier'] ?? '')
+            .toString()
+            .trim(),
+        'items': normalizedItems,
+      };
+      final res = await ApiClient.postJson(
+        '/purchase-orders/',
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+      final success = res.statusCode == 200 || res.statusCode == 201;
+
+      if (success) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final raw = prefs.getString('purchase_orders_data');
+          if (raw != null && raw.isNotEmpty) {
+            final decoded = jsonDecode(raw);
+            if (decoded is List) {
+              final list = decoded.toList();
+              final localId = data['local_id']?.toString();
+              if (localId != null && localId.isNotEmpty) {
+                final decodedServer = jsonDecode(res.body);
+                final serverMap = decodedServer is Map
+                    ? Map<String, dynamic>.from(decodedServer)
+                    : <String, dynamic>{};
+                for (var i = 0; i < list.length; i++) {
+                  final value = list[i];
+                  if (value is! Map) continue;
+                  if (value['id']?.toString() == localId) {
+                    list[i] = {
+                      ...Map<String, dynamic>.from(value),
+                      ...serverMap,
+                      'sync_status': 'synced',
+                    };
+                    break;
+                  }
+                }
+                await prefs.setString('purchase_orders_data', jsonEncode(list));
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!success && kDebugMode) {
+        debugPrint(
+          '❌ Purchase order backend rejected sync: ' +
+              res.statusCode.toString() +
+              ' ' +
+              res.body,
+        );
+      }
+      return success;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error creating purchase order: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _updatePurchaseOrderStatusItem(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final poId = data['po_id'];
+      final action = data['po_action']; // 'mark-delivered' or 'cancel'
+
+      final res = await ApiClient.postJson(
+        '/purchase-orders/$poId/$action',
+        {},
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+
+      final success = res.statusCode == 200 || res.statusCode == 201;
+      if (success) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final raw = prefs.getString('purchase_orders_data');
+          if (raw != null && raw.isNotEmpty) {
+            final decoded = jsonDecode(raw);
+            if (decoded is List) {
+              final list = decoded.toList();
+              final targetStatus = action == 'mark-delivered'
+                  ? 'DELIVERED'
+                  : 'CANCELLED';
+              for (var i = 0; i < list.length; i++) {
+                final value = list[i];
+                if (value is! Map) continue;
+                if (value['id']?.toString() == poId.toString() ||
+                    value['server_id']?.toString() == poId.toString()) {
+                  list[i] = {
+                    ...Map<String, dynamic>.from(value),
+                    'status': targetStatus,
+                    'sync_status': 'synced',
+                  };
+                }
+              }
+              await prefs.setString('purchase_orders_data', jsonEncode(list));
+            }
+          }
+        } catch (_) {}
+      }
+      return success;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error updating purchase order status: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _updateKhataDeadlineItem(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final payload =
+          <String, dynamic>{
+            'customer_phone': data['customer_phone'],
+            'customer_id': data['customer_id'],
+            'due_date': data['due_date'],
+          }..removeWhere(
+            (key, value) => value == null || value.toString().trim().isEmpty,
+          );
+
+      final res = await ApiClient.postJson(
+        '/api/khata/update-deadline',
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing Khata deadline: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _recordKhataPaymentItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      // Repair old queued records created by previous builds that could contain
+      // customer_id: "" or a phone number in the integer field.
+      final payload = Map<String, dynamic>.from(data);
+
+      final rawCustomerId = payload['customer_id'];
+      int? customerId;
+
+      if (rawCustomerId is int && rawCustomerId > 0) {
+        customerId = rawCustomerId;
+      } else if (rawCustomerId is num && rawCustomerId.toInt() > 0) {
+        customerId = rawCustomerId.toInt();
+      } else {
+        final parsed = int.tryParse(rawCustomerId?.toString().trim() ?? '');
+        if (parsed != null && parsed > 0) {
+          customerId = parsed;
+        }
+      }
+
+      final customerPhone =
+          (payload['customer_phone'] ?? payload['phone'] ?? '')
+              .toString()
+              .trim();
+
+      // Never send an empty/string customer_id to a FastAPI integer field.
+      if (customerId != null) {
+        payload['customer_id'] = customerId;
+      } else {
+        payload.remove('customer_id');
+      }
+
+      if (customerPhone.isNotEmpty) {
+        payload['customer_phone'] = customerPhone;
+      } else {
+        payload.remove('customer_phone');
+      }
+
+      final rawInvoiceId = payload['invoice_id'];
+      final invoiceId = rawInvoiceId is int
+          ? rawInvoiceId
+          : int.tryParse(rawInvoiceId?.toString().trim() ?? '');
+
+      // Exact invoice settlement is the safest identity and does not require a
+      // customer phone/id. This is important for Mark Paid because the payment
+      // must survive app-data clearing against the same server invoice.
+      if (invoiceId != null && invoiceId > 0) {
+        payload['invoice_id'] = invoiceId;
+      } else if (customerId == null && customerPhone.isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+            '❌ Khata payment has no valid invoice/customer identity; keeping it queued.',
+          );
+        }
+        return false;
+      }
+
+      final res = await ApiClient.postJson(
+        '/api/khata/record-payment',
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      // 200/201 = created or idempotent success.
+      // 409 is also treated as success when the backend reports a duplicate
+      // idempotency key, because the payment already exists server-side.
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        return true;
+      }
+
+      if (res.statusCode == 409) {
+        return true;
+      }
+
+      if (kDebugMode) {
+        debugPrint(
+          '❌ Khata payment sync rejected: '
+          '${res.statusCode} ${res.body}',
+        );
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ Error syncing khata payment: $e');
+      }
+      return false;
+    }
+  }
+
+  static Future<bool> _saveCustomerItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final payload = {
+        'name': data['name'] ?? data['customer_name'] ?? '',
+        'phone': data['phone'] ?? data['phone_number'] ?? '',
+        'address': data['address'] ?? '',
+        'email': data['email'] ?? '',
+      };
+
+      final res = await ApiClient.postJson(
+        ApiClient.customersPrefix,
+        payload,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error syncing customer: $e');
+      return false;
+    }
+  }
+
+  static Future<void> _ackInventoryCacheMutation(
+    String action,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final local = await LocalStorageService.loadLocalProducts();
+      if (action == 'create_local_product') {
+        final payload = data['payload'];
+        final sku = payload is Map ? payload['sku']?.toString() : null;
+        if (sku != null && sku.isNotEmpty) {
+          local.remove(sku);
+          await LocalStorageService.saveLocalProducts(local);
+        }
+      } else if (action == 'update_local_product') {
+        final id = data['id']?.toString() ?? '';
+        final payload = data['payload'];
+        final key = local.keys.firstWhere((k) {
+          if (k.toString() == id) return true;
+          final raw = local[k];
+          if (raw is! Map) return false;
+          return <dynamic>[
+            raw['id'],
+            raw['product_id'],
+            raw['backend_id'],
+            raw['server_id'],
+          ].any((candidate) => candidate?.toString() == id);
+        }, orElse: () => '');
+        if (key.isNotEmpty && local[key] is Map) {
+          final record = Map<String, dynamic>.from(local[key] as Map);
+          record['sync_status'] = 'synced';
+          record['last_ack_at'] = DateTime.now().toUtc().toIso8601String();
+          if (payload is Map) {
+            record['local_updated_at'] =
+                payload['local_updated_at'] ?? record['local_updated_at'];
+          }
+          local[key] = record;
+          await LocalStorageService.saveLocalProducts(local);
+        }
+      } else if (action == 'delete_product') {
+        final id = data['id']?.toString() ?? '';
+        local.removeWhere(
+          (key, value) =>
+              key.toString() == id ||
+              (value is Map && value['id']?.toString() == id),
+        );
+        await LocalStorageService.saveLocalProducts(local);
+      }
+
+      // Reconcile the backend-product cache only after the server confirms the
+      // update. Sparse updates (such as image_url-only edits) must be applied
+      // to the cached row and then marked synced; otherwise a later refresh can
+      // replace the photo with a stale server snapshot.
+      if (action == 'update_local_product') {
+        final id = data['id']?.toString() ?? '';
+        final payload = data['payload'];
+        final backendProducts = await LocalStorageService.loadBackendProducts();
+        final backendIndex = backendProducts.indexWhere(
+          (item) => <dynamic>[
+            item['id'],
+            item['product_id'],
+            item['backend_id'],
+            item['server_id'],
+          ].any((candidate) => candidate?.toString() == id),
+        );
+        if (backendIndex >= 0) {
+          final cachedProduct = Map<String, dynamic>.from(
+            backendProducts[backendIndex],
+          );
+          if (payload is Map) {
+            for (final entry in payload.entries) {
+              if (entry.key.toString() == 'sync_status' ||
+                  entry.key.toString() == 'last_ack_at') {
+                continue;
+              }
+              cachedProduct[entry.key.toString()] = entry.value;
+            }
+          }
+          cachedProduct['sync_status'] = 'synced';
+          cachedProduct['last_ack_at'] = DateTime.now()
+              .toUtc()
+              .toIso8601String();
+          backendProducts[backendIndex] = cachedProduct;
+          await LocalStorageService.saveBackendProducts(backendProducts);
+        }
+      }
+
+      await CacheConsistencyService.markLocalMutationAcknowledged(
+        'inventory',
+        operationId: data['operation_id']?.toString(),
+      );
+    } catch (e) {
+      if (kDebugMode)
+        debugPrint('⚠️ Inventory local ACK reconciliation failed: $e');
+    }
+  }
+
+  /// Pull the authoritative sales snapshot for read-side freshness.
+  /// Local pending transactions are preserved; acknowledged/server-newer
+  /// records reconcile by updated_at rather than blindly replacing the cache.
+  static Future<bool> refreshSalesCacheFromBackend() async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+
+      final response = await ApiClient.getJson(
+        ApiClient.salesListEndpoint,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 12));
+
+      if (response.statusCode != 200) return false;
+
+      final decoded = jsonDecode(response.body);
+      final rawRemote = decoded is List
+          ? decoded
+          : decoded is Map && decoded['sales'] is List
+          ? decoded['sales']
+          : decoded is Map && decoded['results'] is List
+          ? decoded['results']
+          : <dynamic>[];
+
+      final local = await LocalStorageService.loadSales();
+      final merged = CacheConsistencyService.mergeLists(
+        local,
+        rawRemote,
+        dataset: 'sales',
+      );
+      await LocalStorageService.replaceSalesCanonical(merged);
+      await CacheConsistencyService.markRemoteRefresh(
+        'sales',
+        recordCount: merged.length,
+      );
+      SyncService.triggerDashboardRefresh();
+
+      if (kDebugMode) {
+        debugPrint(
+          '✅ Sales read reconciliation complete: local=${local.length}, '
+          'remote=${rawRemote.length}, merged=${merged.length}',
+        );
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Sales read reconciliation skipped: $e');
+      }
+      return false;
+    }
+  }
+
+  static Future<DateTime> getAuthoritativeTime() async {
+    try {
+      // Try to get server time from backend
+      // Format: GET /api/time -> {"timestamp": "2026-04-09T15:30:00Z"}
+      final response = await http
+          .get(
+            Uri.parse('${ApiClient.baseUrl}/api/time'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        try {
+          final json = jsonDecode(response.body) as Map<String, dynamic>;
+          final serverTime = DateTime.parse(
+            json['timestamp'] as String? ?? DateTime.now().toIso8601String(),
+          );
+          _lastServerTime = serverTime;
+          _serverTimeOffset = serverTime.difference(DateTime.now());
+          if (kDebugMode)
+            debugPrint('✅ Server time synced: ${serverTime.toIso8601String()}');
+          return serverTime;
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Failed to parse server time: $e');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Server time fetch failed: $e');
+    }
+
+    // Fallback: use device time + last known offset (if any)
+    if (_serverTimeOffset != null) {
+      return DateTime.now().add(_serverTimeOffset!);
+    }
+
+    // Ultimate fallback: device time (less secure)
+    return DateTime.now();
+  }
+
+  static Future<DateTime> getDateBoundaryTime() => getAuthoritativeTime();
+
+  static Future<bool> isDeviceTimeValid() async {
+    try {
+      final serverTime = await getAuthoritativeTime();
+      final deviceTime = DateTime.now();
+      final drift = serverTime.difference(deviceTime).abs();
+
+      if (drift.inMinutes > 5) {
+        if (kDebugMode)
+          debugPrint(
+            '🚨 Device time drift detected: ${drift.inMinutes} minutes',
+          );
+        return false; // Device time is too far off
+      }
+      return true;
+    } catch (e) {
+      return true; // Can't validate, assume OK
+    }
+  }
+
+  /// Verify synchronization state: backend + pending = local
+  /// Sync one or many line items for a single bill (idempotent).
+  static Future<bool> _syncInvoiceBatchItem(Map<String, dynamic> data) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+
+      final response = await ApiClient.postJson(
+        ApiClient.invoicesSync,
+        data,
+        headers: {if (token.isNotEmpty) 'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 15));
+
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Offline Invoice Batch Sync failed: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Verify synchronization state.
+  ///
+  /// Diagnostic only. This method must NOT decide whether
+  /// a sale is saved, synced, or retried.
+  static Future<Map<String, dynamic>> verifySyncState() async {
+    try {
+      // -------------------------------------------------------
+      // 1. Local sales
+      // -------------------------------------------------------
+      final localSales = await LocalStorageService.loadSales();
+
+      final localCount = localSales.length;
+
+      // -------------------------------------------------------
+      // 2. Pending durable queue
+      // -------------------------------------------------------
+      final pendingQueue = await SyncQueueManager.getAll();
+
+      final pendingCount = pendingQueue.length;
+
+      // -------------------------------------------------------
+      // 3. Connectivity
+      // -------------------------------------------------------
+      bool online = false;
+
+      try {
+        final connection = await Connectivity().checkConnectivity();
+
+        online = connection != ConnectivityResult.none;
+      } catch (_) {
+        online = false;
+      }
+
+      // -------------------------------------------------------
+      // 4. Backend counts
+      // -------------------------------------------------------
+      int backendSalesCount = 0;
+      int backendInvoiceCount = 0;
+
+      final token = await SecureTokenStorage.getToken() ?? '';
+
+      if (online && token.isNotEmpty) {
+        // -----------------------------
+        // Backend sales
+        // -----------------------------
+        try {
+          final salesResponse = await ApiClient.getJson(
+            ApiClient.salesListEndpoint,
+            headers: {'Authorization': 'Bearer $token'},
+          );
+
+          if (salesResponse.statusCode == 200) {
+            final decoded = jsonDecode(salesResponse.body);
+
+            if (decoded is List) {
+              backendSalesCount = decoded.length;
+            } else if (decoded is Map) {
+              final count = decoded['count'];
+
+              if (count is num) {
+                backendSalesCount = count.toInt();
+              } else if (decoded['sales'] is List) {
+                backendSalesCount = (decoded['sales'] as List).length;
+              } else if (decoded['results'] is List) {
+                backendSalesCount = (decoded['results'] as List).length;
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Could not fetch backend sales count: $e');
+          }
+        }
+
+        // -----------------------------
+        // Backend invoices
+        // -----------------------------
+        try {
+          final invoiceResponse = await ApiClient.getJson(
+            ApiClient.invoicesList,
+            headers: {'Authorization': 'Bearer $token'},
+          );
+
+          if (invoiceResponse.statusCode == 200) {
+            final decoded = jsonDecode(invoiceResponse.body);
+
+            if (decoded is List) {
+              backendInvoiceCount = decoded.length;
+            } else if (decoded is Map) {
+              if (decoded['invoices'] is List) {
+                backendInvoiceCount = (decoded['invoices'] as List).length;
+              } else if (decoded['results'] is List) {
+                backendInvoiceCount = (decoded['results'] as List).length;
+              } else if (decoded['count'] is num) {
+                backendInvoiceCount = (decoded['count'] as num).toInt();
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Could not fetch backend invoice count: $e');
+          }
+        }
+      }
+
+      // -------------------------------------------------------
+      // IMPORTANT:
+      // Do NOT simply add backend sales + invoices.
+      //
+      // A sale may already exist as an invoice, which would
+      // double-count the same business transaction.
+      //
+      // Therefore this verification is intentionally
+      // conservative.
+      // -------------------------------------------------------
+
+      final backendCount = backendInvoiceCount > 0
+          ? backendInvoiceCount
+          : backendSalesCount;
+
+      bool verified = true;
+      String verificationMessage;
+
+      if (!online) {
+        verificationMessage =
+            '⚠️ Offline: local=$localCount, '
+            'pending=$pendingCount; cloud confirmation is unavailable.';
+
+        verified = false;
+      } else if (token.isEmpty) {
+        verificationMessage =
+            '⚠️ Online but authentication token unavailable: '
+            'local=$localCount, pending=$pendingCount; cloud confirmation is unavailable.';
+
+        verified = false;
+      } else if (backendCount == 0) {
+        verificationMessage =
+            '⚠️ Backend returned no countable records: '
+            'local=$localCount, pending=$pendingCount; sync is not verified.';
+
+        verified = false;
+      } else {
+        // Approximate consistency check only.
+        //
+        // Pending items are expected to already exist locally,
+        // so we compare local against backend + a reasonable
+        // pending range rather than requiring exact equality.
+        final lowerBound = backendCount;
+
+        final upperBound = backendCount + pendingCount + 10;
+
+        if (localCount >= lowerBound && localCount <= upperBound) {
+          verificationMessage =
+              '✅ Sync approximately verified: '
+              'backend=$backendCount, '
+              'pending=$pendingCount, '
+              'local=$localCount';
+        } else {
+          verified = false;
+
+          verificationMessage =
+              '❌ Possible sync mismatch: '
+              'backend=$backendCount, '
+              'pending=$pendingCount, '
+              'local=$localCount';
+        }
+      }
+
+      if (kDebugMode) {
+        debugPrint(verificationMessage);
+      }
+
+      return {
+        'verified': verified,
+        'message': verificationMessage,
+        'local_count': localCount,
+        'pending_count': pendingCount,
+        'backend_count': backendCount,
+        'backend_sales_count': backendSalesCount,
+        'backend_invoice_count': backendInvoiceCount,
+        'online': online,
+      };
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('❌ Sync verification failed: $e');
+        debugPrint(stackTrace.toString());
+      }
+
+      return {
+        'verified': false,
+        'message': 'Verification failed: $e',
+        'local_count': 0,
+        'pending_count': 0,
+        'backend_count': 0,
+        'backend_sales_count': 0,
+        'backend_invoice_count': 0,
+        'online': false,
+      };
+    }
+  }
+}
