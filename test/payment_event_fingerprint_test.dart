@@ -40,6 +40,7 @@ void main() {
       );
 
       expect(today.fingerprint, isNot(tomorrow.fingerprint));
+      expect(today.voiceFingerprint, isNot(tomorrow.voiceFingerprint));
     });
 
     test('keeps native-script credit and debit fingerprints separate', () {
@@ -57,6 +58,7 @@ void main() {
       );
 
       expect(credit.fingerprint, isNot(debit.fingerprint));
+      expect(credit.voiceFingerprint, isNot(debit.voiceFingerprint));
     });
 
     test('voice fingerprint merges alternate native-script wording', () {
