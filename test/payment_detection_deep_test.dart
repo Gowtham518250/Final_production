@@ -1251,7 +1251,9 @@ void main() {
     queue.dispose();
 
     expect(spoken, hasLength(1));
-    expect(spoken.single, contains('detected'));
+    // Direction-aware alerts should say "credited" and still request review.
+    expect(spoken.single, contains('credited'));
+    expect(spoken.single, contains('verify'));
   });
 
   test('duplicate and reference-conflict events are not announced', () async {
