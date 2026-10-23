@@ -17,10 +17,13 @@ void main() {
     bool isFailed = false,
     bool isDuplicate = false,
     String referenceId = 'UTR-12345',
+    String id = 'payment-1',
+    double amount = 125.50,
+    DateTime? timestamp,
   }) => PaymentEvent(
-    id: 'payment-1',
-    amount: 125.50,
-    timestamp: DateTime(2026, 10, 22, 9),
+    id: id,
+    amount: amount,
+    timestamp: timestamp ?? DateTime(2026, 10, 22, 9),
     app: PaymentApp.phonePe,
     referenceId: referenceId,
     rawText: 'Sensitive notification text should never be persisted',
@@ -62,7 +65,8 @@ void main() {
       expect(records, hasLength(1));
       expect(records.single['amount'], 125.50);
       expect(records.single['app'], 'PhonePe');
-      expect(records.single['verified'], isTrue);
+      expect(records.single['merchant_confirmed'], isTrue);
+      expect(records.single['verified'], isFalse);
       expect(records.single['status'], 'CONFIRMED');
       expect(records.single.containsKey('rawText'), isFalse);
       expect(records.single.containsKey('referenceId'), isFalse);
@@ -82,7 +86,41 @@ void main() {
 
     expect(records, hasLength(1));
     expect(records.single['status'], 'CONFIRMED');
-    expect(records.single['verified'], isTrue);
+    expect(records.single['merchant_confirmed'], isTrue);
+    expect(records.single['verified'], isFalse);
+  });
+
+  test('marks same-reference amount conflicts for review instead of replacing history', () async {
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(amount: 125.50, id: 'initial-confirmed'),
+    );
+
+    final accepted = await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(
+        amount: 200,
+        id: 'conflicting-alert',
+        timestamp: DateTime(2026, 10, 22, 9, 1),
+      ),
+    );
+
+    expect(accepted, isFalse);
+    final records = await OnlinePaymentHistoryService.load();
+    expect(records, hasLength(1));
+    expect(records.single['status'], 'CONFLICT_REVIEW');
+    expect(records.single['merchant_confirmed'], isFalse);
+    expect(records.single['verified'], isFalse);
+    expect(records.single['conflicting_amounts'], [125.5, 200.0]);
+  });
+
+  test('keeps locally unverified history out of the verified state', () async {
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(verification: PaymentVerificationStatus.unverified),
+    );
+
+    final records = await OnlinePaymentHistoryService.load();
+    expect(records.single['status'], 'PENDING_CONFIRMATION');
+    expect(records.single['merchant_confirmed'], isFalse);
+    expect(records.single['verified'], isFalse);
   });
 
   test('does not store rejected or outgoing payments', () async {
