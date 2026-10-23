@@ -2519,6 +2519,7 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<bool> _fetchInvoicesFromBackend() async {
+    var removedCancelledOrderRecords = 0;
     try {
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) return false;
@@ -2554,9 +2555,10 @@ class _DashboardPageState extends State<DashboardPage>
       try {
         final cancelledOrders =
             await OnlineOrderService.fetchCancelledOrdersForCloudRestore();
-        await OnlineOrderService.removeCancelledOrderRecordsLocally(
-          cancelledOrders,
-        );
+        removedCancelledOrderRecords =
+            await OnlineOrderService.removeCancelledOrderRecordsLocally(
+              cancelledOrders,
+            );
         final eligibleInvoices =
             OnlineOrderService.excludeCancelledOrderInvoices(
               allItems.whereType<Map>().map(
@@ -2577,7 +2579,12 @@ class _DashboardPageState extends State<DashboardPage>
         return false;
       }
 
-      if (allItems.isEmpty) return false;
+      if (allItems.isEmpty) {
+        // The backend may return no invoices after a cancellation. The local
+        // cleanup above still changed the canonical cache and must trigger a
+        // dashboard recompute instead of leaving stale totals on screen.
+        return removedCancelledOrderRecords > 0;
+      }
 
       final List<dynamic> currentLocal = await LocalStorageService.loadSales();
 
@@ -2839,7 +2846,7 @@ class _DashboardPageState extends State<DashboardPage>
       );
       // #endregion
 
-      return changed;
+      return changed || removedCancelledOrderRecords > 0;
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to fetch sales/invoices: $e');
       return false;
