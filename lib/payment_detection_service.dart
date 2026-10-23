@@ -1898,7 +1898,16 @@ class _VI implements Comparable<_VI> {
   }
 }
 
+class _RecentVoicePayment {
+  final PaymentEvent event;
+  final DateTime recordedAt;
+  const _RecentVoicePayment(this.event, this.recordedAt);
+}
+
 class PriorityVoiceQueue {
+  static const Duration _crossSourceEchoWindow = Duration(minutes: 12);
+  static const Duration _sameNotificationReplayWindow = Duration(seconds: 90);
+
   final _queue = SplayTreeSet<_VI>(
     (a, b) =>
         a.compareTo(b) != 0 ? a.compareTo(b) : a.hashCode.compareTo(b.hashCode),
@@ -1918,6 +1927,94 @@ class PriorityVoiceQueue {
   //   - Multiple different payments are tracked (not just the last one)
   //   - Old entries expire automatically so same customer can pay again later
   final Map<String, DateTime> _spokenFps = {};
+  final List<_RecentVoicePayment> _recentPayments = [];
+
+  static bool _isBankRelay(PaymentApp app) => const {
+    PaymentApp.bankSms,
+    PaymentApp.bankApp,
+    PaymentApp.icici,
+    PaymentApp.sbiYono,
+    PaymentApp.axis,
+    PaymentApp.hdfc,
+    PaymentApp.payzapp,
+  }.contains(app);
+
+  static bool _isUpiApp(PaymentApp app) => const {
+    PaymentApp.googlePay,
+    PaymentApp.phonePe,
+    PaymentApp.paytm,
+    PaymentApp.amazonPay,
+    PaymentApp.bhim,
+    PaymentApp.whatsappPay,
+    PaymentApp.cred,
+  }.contains(app);
+
+  static PaymentDirection _directionOf(PaymentEvent event) {
+    if (event.direction == PaymentTransactionDirection.incomingCredit) {
+      return PaymentDirection.credited;
+    }
+    if (event.direction == PaymentTransactionDirection.outgoingDebit) {
+      return PaymentDirection.debited;
+    }
+    return VoiceBuilder.detectDirection(event.rawText);
+  }
+
+  static String _normalizedText(String text) =>
+      text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\\u0080-\\uFFFF]'), '');
+
+  bool _isRecentCrossSourceEcho(PaymentEvent event) {
+    if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
+    final now = event.timestamp;
+    _recentPayments.removeWhere(
+      (entry) =>
+          now.difference(entry.event.timestamp).abs() >
+          _crossSourceEchoWindow,
+    );
+    final direction = _directionOf(event);
+    for (final previous in _recentPayments) {
+      final old = previous.event;
+      if (old.isMerchantConfirmed || old.hasReferenceConflict) continue;
+      if (event.id == old.id) return true;
+
+      final currentReference = event.normalizedReferenceId;
+      final priorReference = old.normalizedReferenceId;
+      if (currentReference != null && priorReference != null) {
+        // A conflicting reference must reach review; it is not a duplicate.
+        if (event.hasReferenceConflictWith(old)) continue;
+        if (currentReference == priorReference) return true;
+        // Two different authoritative references represent different transfers.
+        continue;
+      }
+
+      if ((event.amount - old.amount).abs() >= 0.01 ||
+          direction == PaymentDirection.unknown ||
+          direction != _directionOf(old)) {
+        continue;
+      }
+
+      final age = now.difference(old.timestamp).abs();
+      final crossChannel =
+          event.app != old.app &&
+          ((_isBankRelay(event.app) && (_isUpiApp(old.app) || _isBankRelay(old.app))) ||
+              (_isBankRelay(old.app) && (_isUpiApp(event.app) || _isBankRelay(event.app))));
+      if (crossChannel && age <= _crossSourceEchoWindow) return true;
+
+      final samePayloadReplay =
+          event.app == old.app &&
+          _normalizedText(event.rawText) == _normalizedText(old.rawText) &&
+          age <= _sameNotificationReplayWindow;
+      if (samePayloadReplay) return true;
+    }
+    return false;
+  }
+
+  void _rememberPayment(PaymentEvent event) {
+    _recentPayments.removeWhere((entry) => entry.event.id == event.id);
+    _recentPayments.add(_RecentVoicePayment(event, DateTime.now()));
+    if (_recentPayments.length > 100) _recentPayments.removeAt(0);
+    final cutoff = DateTime.now().subtract(_crossSourceEchoWindow);
+    _recentPayments.removeWhere((entry) => entry.recordedAt.isBefore(cutoff));
+  }
 
   bool _isAlreadySpoken(String fp) {
     final expiry = _spokenFps[fp];
@@ -1944,11 +2041,19 @@ class PriorityVoiceQueue {
     final fingerprint = e.isMerchantConfirmed
         ? '${e.voiceFingerprint}_merchant_confirmed'
         : e.voiceFingerprint;
-    if (_isAlreadySpoken(fingerprint)) {
-      PdsLogger.d('VOICE', 'DUPLICATE NOTIFICATION BLOCKED: $fingerprint');
+    final repeatedFingerprint = _isAlreadySpoken(fingerprint);
+    final crossSourceEcho = _isRecentCrossSourceEcho(e);
+    if (repeatedFingerprint || crossSourceEcho) {
+      PdsLogger.d(
+        'VOICE',
+        'DUPLICATE ANNOUNCEMENT BLOCKED: fp=$fingerprint '
+            'crossSource=$crossSourceEcho',
+      );
+      _rememberPayment(e);
       return;
     }
     _markSpoken(fingerprint);
+    _rememberPayment(e);
 
     final text = ui.voiceText(_lang);
     if (text.isEmpty) return;
@@ -2036,6 +2141,7 @@ class PriorityVoiceQueue {
     _queue.clear();
     _recentTs.clear();
     _spokenFps.clear();
+    _recentPayments.clear();
   }
 }
 
