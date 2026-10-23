@@ -1107,5 +1107,159 @@ void main() {
         expect(debits.single, contains('debited'));
       },
     );
+
+  test('recognized PhonePe DLT sender credit stays pending for merchant review', () async {
+    final service = PaymentDetectionService();
+    service.clearBill();
+    service.setBillExpected(10);
+
+    final received = expectLater(
+      service.onPaymentDetected,
+      emits(
+        isA<PaymentEvent>()
+            .having((payment) => payment.amount, 'amount', 5)
+            .having(
+              (payment) => payment.direction,
+              'direction',
+              PaymentTransactionDirection.incomingCredit,
+            )
+            .having(
+              (payment) => payment.decision,
+              'decision',
+              PaymentDecision.likely,
+            ),
+      ),
+    );
+
+    service.handleSms(
+      'VM-PHONEPE',
+      'Your UPI credit of Rs.5 was received in your account',
+    );
+    await received;
+    service.clearBill();
+  });
+
+  test('short trusted PhonePe notification is a review candidate, not an auto-credit', () async {
+    final service = PaymentDetectionService();
+    service.clearBill();
+    service.setBillExpected(10);
+
+    final received = expectLater(
+      service.onPaymentDetected,
+      emits(
+        isA<PaymentEvent>()
+            .having((payment) => payment.amount, 'amount', 5)
+            .having(
+              (payment) => payment.direction,
+              'direction',
+              PaymentTransactionDirection.incomingCredit,
+            )
+            .having(
+              (payment) => payment.decision,
+              'decision',
+              PaymentDecision.likely,
+            )
+            .having(
+              (payment) => payment.isMerchantConfirmed,
+              'merchantConfirmed',
+              isFalse,
+            ),
+      ),
+    );
+
+    service.debugHandleNotification(
+      ServiceNotificationEvent(
+        packageName: 'com.phonepe.app',
+        title: 'PhonePe',
+        content: 'UPI credit ₹5 received',
+      ),
+    );
+    await received;
+    service.clearBill();
+  });
+
+
+  test('suppresses a PhonePe credit replayed by Truecaller ten minutes later', () async {
+    final queue = PriorityVoiceQueue();
+    final spoken = <String>[];
+    queue.onSpeak = spoken.add;
+    final firstTime = DateTime(2026, 10, 1, 14, 30);
+
+    final phonePe = PaymentEvent(
+      id: 'phonepe-credit',
+      amount: 5,
+      timestamp: firstTime,
+      app: PaymentApp.phonePe,
+      rawText: 'You received ₹5 from Rahul',
+      direction: PaymentTransactionDirection.incomingCredit,
+      decision: PaymentDecision.likely,
+    );
+    final truecaller = PaymentEvent(
+      id: 'truecaller-credit',
+      amount: 5,
+      timestamp: firstTime.add(const Duration(minutes: 10)),
+      app: PaymentApp.bankApp,
+      rawText: 'UPI transfer from Apgbank to Account 4222 +₹5',
+      direction: PaymentTransactionDirection.incomingCredit,
+      decision: PaymentDecision.likely,
+    );
+
+    PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
+      id: event.id,
+      decision: event.decision,
+      amount: event.amount,
+      isFailed: false,
+      detectedAt: event.timestamp,
+      rawText: event.rawText,
+      direction: event.direction,
+    );
+
+    queue.enqueue(phonePe, stateFor(phonePe));
+    queue.enqueue(truecaller, stateFor(truecaller));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    queue.dispose();
+
+    expect(spoken, hasLength(1));
+    expect(spoken.single, contains('detected'));
+  });
+
+  test('duplicate and reference-conflict events are not announced', () async {
+    final queue = PriorityVoiceQueue();
+    final spoken = <String>[];
+    queue.onSpeak = spoken.add;
+    final event = PaymentEvent(
+      id: 'duplicate-credit',
+      amount: 5,
+      timestamp: DateTime(2026, 10, 1, 14, 30),
+      app: PaymentApp.phonePe,
+      rawText: 'You received ₹5 from Rahul',
+      direction: PaymentTransactionDirection.incomingCredit,
+      decision: PaymentDecision.likely,
+      isDuplicate: true,
+    );
+    final conflict = event.copyWith(
+      id: 'conflicting-credit',
+      isDuplicate: false,
+      hasReferenceConflict: true,
+    );
+
+    PaymentUiState stateFor(PaymentEvent payment) => PaymentUiState(
+      id: payment.id,
+      decision: payment.decision,
+      amount: payment.amount,
+      isFailed: false,
+      detectedAt: payment.timestamp,
+      rawText: payment.rawText,
+      direction: payment.direction,
+    );
+
+    queue.enqueue(event, stateFor(event));
+    queue.enqueue(conflict, stateFor(conflict));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    queue.dispose();
+
+    expect(spoken, isEmpty);
+  });
+
   });
 }
