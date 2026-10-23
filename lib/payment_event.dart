@@ -56,6 +56,9 @@ class PaymentEvent {
   final double remainingAmount; // Only meaningful when isPartialPayment = true
   // True only when the detector matched this event to the currently expected bill.
   final bool isBillMatch;
+  // Set when local history found this reference already associated with
+  // conflicting financial data. Conflicted events must never update a sale.
+  final bool hasReferenceConflict;
 
   // ── Debug / Audit ─────────────────────────────────────────────────────────────
   final String rawText;
@@ -83,6 +86,7 @@ class PaymentEvent {
     this.isPartialPayment = false,
     this.remainingAmount = 0.0,
     this.isBillMatch = false,
+    this.hasReferenceConflict = false,
     this.rawText = '',
     this.confidenceScore = 0.0,
     this.detectionSource = 'notification',
@@ -324,6 +328,7 @@ class PaymentEvent {
     bool? isPartialPayment,
     double? remainingAmount,
     bool? isBillMatch,
+    bool? hasReferenceConflict,
     String? rawText,
     double? confidenceScore,
     String? detectionSource,
@@ -349,6 +354,7 @@ class PaymentEvent {
       isPartialPayment: isPartialPayment ?? this.isPartialPayment,
       remainingAmount: remainingAmount ?? this.remainingAmount,
       isBillMatch: isBillMatch ?? this.isBillMatch,
+      hasReferenceConflict: hasReferenceConflict ?? this.hasReferenceConflict,
       rawText: rawText ?? this.rawText,
       confidenceScore: confidenceScore ?? this.confidenceScore,
       detectionSource: detectionSource ?? this.detectionSource,
@@ -380,6 +386,7 @@ class PaymentEvent {
     'isPartialPayment': isPartialPayment,
     'remainingAmount': remainingAmount,
     'isBillMatch': isBillMatch,
+    'hasReferenceConflict': hasReferenceConflict,
     'rawText': rawText,
     'confidenceScore': confidenceScore,
     'confidenceTier': confidenceTier.name,
@@ -411,6 +418,7 @@ class PaymentEvent {
     isPartialPayment: json['isPartialPayment'] ?? false,
     remainingAmount: (json['remainingAmount'] as num?)?.toDouble() ?? 0.0,
     isBillMatch: json['isBillMatch'] ?? false,
+    hasReferenceConflict: json['hasReferenceConflict'] ?? false,
     rawText: json['rawText'] ?? '',
     confidenceScore: (json['confidenceScore'] as num?)?.toDouble() ?? 0.0,
     detectionSource: json['detectionSource'] ?? 'notification',
