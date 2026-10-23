@@ -3142,11 +3142,22 @@ class PaymentDetectionService {
     PdsLogger.i('SVC', 'Bill set: ₹$amount');
   }
 
-  void recordBillPayment(double amount) {
+  final LinkedHashSet<String> _appliedBillPaymentIds = LinkedHashSet<String>();
+
+  void recordBillPayment(double amount, {String? idempotencyKey}) {
+    if (!amount.isFinite || amount <= 0) return;
+    final key = idempotencyKey?.trim() ?? '';
+    if (key.isNotEmpty && !_appliedBillPaymentIds.add(key)) {
+      PdsLogger.d('BILL', 'Repeated payment event ignored: $key');
+      return;
+    }
+    if (_appliedBillPaymentIds.length > 1000) {
+      _appliedBillPaymentIds.remove(_appliedBillPaymentIds.first);
+    }
     if (!billContext.isActive || amount <= 0) return;
-    final appliedAmount = math
-        .min(amount, billContext.remainingAmount)
-        .toDouble();
+    final remaining = billContext.remainingAmount;
+    if (!remaining.isFinite || remaining <= 0) return;
+    final appliedAmount = math.min(amount, remaining).toDouble();
     if (appliedAmount <= 0) return;
     billContext.recordPartial(appliedAmount);
     if (billContext.isFullyPaid) {
@@ -4977,18 +4988,16 @@ class PaymentDetectionService {
 
   void _recordConfirmedBillPayment(PaymentEvent event) {
     if (!billContext.isActive || billContext.isExpired) return;
-    final match = billContext.evaluate(event.amount);
-    if (match == BillMatchResult.exact) {
-      billContext.markSettled();
-      billContext.clear();
+    if (!event.amount.isFinite ||
+        event.amount <= 0 ||
+        event.isDuplicate ||
+        event.hasReferenceConflict ||
+        !isSafeIncomingCredit(event)) {
       return;
     }
-    if (match == BillMatchResult.partial) {
-      billContext.recordPartial(event.amount);
-      if (billContext.isFullyPaid) {
-        billContext.markSettled();
-        billContext.clear();
-      }
+    final match = billContext.evaluate(event.amount);
+    if (match == BillMatchResult.exact || match == BillMatchResult.partial) {
+      recordBillPayment(event.amount, idempotencyKey: event.fingerprint);
     }
   }
 
