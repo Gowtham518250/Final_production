@@ -2881,6 +2881,14 @@ class PaymentDetectionService {
   /// A device notification or SMS can alert the merchant, but cannot prove
   /// funds settled. Automatically detected events stay pending for review.
   static PaymentEvent requireMerchantConfirmation(PaymentEvent event) {
+    // Persisted reference conflicts always remain review-only, even if a
+    // stale callback claims the event had previously been confirmed.
+    if (event.hasReferenceConflict) {
+      return event.copyWith(
+        decision: PaymentDecision.likely,
+        verificationStatus: PaymentVerificationStatus.unverified,
+      );
+    }
     if (event.decision == PaymentDecision.rejected) {
       return event;
     }
