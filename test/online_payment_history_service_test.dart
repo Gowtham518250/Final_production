@@ -115,6 +115,47 @@ void main() {
     ), isTrue);
   });
 
+
+  test('replayed same reference after a delay is marked duplicate across restarts', () async {
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(id: 'phonepe-first'),
+    );
+
+    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
+      event(
+        id: 'truecaller-late-replay',
+        timestamp: DateTime(2026, 10, 22, 9, 10),
+      ),
+    );
+
+    expect(replay.isDuplicate, isTrue);
+    expect(replay.hasReferenceConflict, isFalse);
+    final records = await OnlinePaymentHistoryService.load();
+    expect(records, hasLength(1));
+    expect(records.single['status'], 'CONFIRMED');
+  });
+
+  test('delayed same-reference different amount is flagged for review', () async {
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(id: 'phonepe-first', amount: 125.50),
+    );
+
+    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
+      event(
+        id: 'truecaller-conflict',
+        amount: 200,
+        timestamp: DateTime(2026, 10, 22, 9, 10),
+      ),
+    );
+
+    expect(replay.isDuplicate, isFalse);
+    expect(replay.hasReferenceConflict, isTrue);
+    expect(replay.isMerchantConfirmed, isFalse);
+    final records = await OnlinePaymentHistoryService.load();
+    expect(records, hasLength(1));
+    expect(records.single['status'], 'CONFLICT_REVIEW');
+  });
+
   test('keeps locally unverified history out of the verified state', () async {
     await OnlinePaymentHistoryService.recordIncomingPayment(
       event(verification: PaymentVerificationStatus.unverified),
