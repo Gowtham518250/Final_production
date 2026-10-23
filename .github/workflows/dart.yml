@@ -2,7 +2,7 @@ name: Flutter CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "clean-retailmind-20261023" ]
   pull_request:
     branches: [ "main" ]
 
