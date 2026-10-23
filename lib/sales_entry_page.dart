@@ -4081,9 +4081,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final schemeResult = SchemeEngine.applyBestScheme(schemeItems, subTotal);
 
       if (mounted) {
-        if (grand - _paidAmount > 0.01) {
-          _autoSaveAttemptedForBill = false;
-        }
         setState(() {
           _schemeDiscount =
               (schemeResult['discount_amount'] as num?)?.toDouble() ?? 0;
