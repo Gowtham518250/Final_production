@@ -2743,8 +2743,11 @@ class PaymentDetectionService {
       _watchdog.isStale(ChannelType.notification);
   bool get isSmsChannelStale => _watchdog.isStale(ChannelType.sms);
 
-  // Deduplication cache for SMS (BUG-S2)
+  // Deduplication caches for transport-level replays. These suppress exact
+  // duplicate notifications/SMS within a short window without treating two
+  // different no-reference payments as the same ledger transaction.
   final List<String> _processedSmsCache = [];
+  final Map<String, DateTime> _processedNotificationCache = {};
 
   static VoiceLanguage mapLanguage(String code) {
     final lang = code.split(RegExp(r'[-_]')).first.toLowerCase();
@@ -3815,6 +3818,36 @@ class PaymentDetectionService {
   // HANDLERS
   // ==========================================================================
 
+  bool _isDuplicateNotification(String packageName, String text) {
+    final now = DateTime.now();
+    _processedNotificationCache.removeWhere(
+      (_, expiry) => !expiry.isAfter(now),
+    );
+
+    final normalizedText = text
+        .toLowerCase()
+        .replaceAll(RegExp(r'\\s+'), ' ')
+        .trim();
+    if (normalizedText.isEmpty) return false;
+
+    final key = sha256
+        .convert(
+          utf8.encode(
+            '${packageName.trim().toLowerCase()}|$normalizedText',
+          ),
+        )
+        .toString();
+    final expiry = _processedNotificationCache[key];
+    if (expiry != null && expiry.isAfter(now)) return true;
+
+    _processedNotificationCache[key] = now.add(PdsConfig.dedupHashTtl);
+    // Bound memory in case an app floods notification updates.
+    while (_processedNotificationCache.length > 200) {
+      _processedNotificationCache.remove(_processedNotificationCache.keys.first);
+    }
+    return false;
+  }
+
   void _handleNotification(ServiceNotificationEvent event) {
     try {
       final pkg = event.packageName ?? '';
@@ -3849,6 +3882,10 @@ class PaymentDetectionService {
         _safeValue(() => (event as dynamic).summaryText),
       ]);
       if (fields.isEmpty) return;
+      if (_isDuplicateNotification(pkg, fields)) {
+        PdsLogger.i('L1', 'Duplicate notification replay suppressed: $pkg');
+        return;
+      }
 
       final notificationSender = event.title?.trim();
       if (_isTrustedBankSmsNotification(pkg, notificationSender) &&
