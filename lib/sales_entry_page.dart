@@ -3275,6 +3275,15 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             event.rawText,
           ),
         };
+        if (event.hasReferenceConflict) {
+          final conflictedReference = event.normalizedReferenceId;
+          final previous = conflictedReference == null
+              ? null
+              : _processedReferenceEvents[conflictedReference];
+          _showPaymentReferenceConflict(event, previous);
+          return;
+        }
+
         if (event.isDuplicate ||
             !event.amount.isFinite ||
             event.amount <= 0 ||
@@ -3517,11 +3526,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   }
 
   void _showPaymentReferenceConflict(
-    PaymentEvent event,
-    PaymentEvent previous,
-  ) {
-    final amountConflict = (event.amount - previous.amount).abs() >= 0.01;
-    final detail = amountConflict
+    PaymentEvent event, [
+    PaymentEvent? previous,
+  ]) {
+    final amountConflict =
+        previous != null && (event.amount - previous.amount).abs() >= 0.01;
+    final detail = previous == null
+        ? 'This reference is already marked as conflicting in local payment history.'
+        : amountConflict
         ? 'The same reference was previously recorded for ₹${previous.amount.toStringAsFixed(2)}, but this alert reports ₹${event.amount.toStringAsFixed(2)}.'
         : 'The same reference appears with conflicting transaction direction.';
     final reviewEvent = event.copyWith(
