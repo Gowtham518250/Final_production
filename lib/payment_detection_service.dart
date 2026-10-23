@@ -2955,6 +2955,9 @@ class PaymentDetectionService {
   StreamSubscription<AccessibilityEvent>? _accessSub;
 
   final Map<String, DateTime> _dedupStore = {};
+  // In-memory amounts let duplicate detection distinguish a genuine repeat
+  // from a reused UTR with a conflicting amount. The dedup key itself is UTR-only.
+  final Map<String, double> _dedupReferenceAmounts = {};
   bool _dedupDirty = false;
 
   Timer? _tcmDrainTimer;
@@ -3926,12 +3929,52 @@ class PaymentDetectionService {
             },
     );
     final fp = tempEvent.fingerprint;
-    if (_dedupStore.containsKey(fp) || _activeFingerprints.contains(fp)) {
-      PdsLogger.d('L4.5', 'DUPLICATE BLOCKED EARLY: fp=$fp');
+    final normalizedReference = tempEvent.normalizedReferenceId;
+    final nowForDedup = DateTime.now();
+    final storedExpiry = _dedupStore[fp];
+    final storeStillActive =
+        storedExpiry != null && nowForDedup.isBefore(storedExpiry);
+    final isActive = _activeFingerprints.contains(fp);
+
+    if (normalizedReference != null &&
+        !storeStillActive &&
+        !isActive) {
+      // Expired local identity must not permanently poison a later payment.
+      _dedupReferenceAmounts.remove(normalizedReference);
+    }
+
+    final previousReferenceAmount = normalizedReference != null &&
+            (storeStillActive || isActive)
+        ? _dedupReferenceAmounts[normalizedReference]
+        : null;
+    final referenceAmountConflict =
+        previousReferenceAmount != null &&
+        (previousReferenceAmount - amount).abs() >= 0.01;
+    final sameReferenceDuplicate =
+        previousReferenceAmount != null && !referenceAmountConflict;
+
+    // A UTR repeat with the same amount is a duplicate. The same UTR with a
+    // different amount is not suppressed: it must reach the merchant-review
+    // path and the payment-history conflict guard. Without a reference, use
+    // the per-event fingerprint and require merchant confirmation.
+    if (sameReferenceDuplicate) {
+      PdsLogger.d('L4.5', 'DUPLICATE REFERENCE BLOCKED: fp=$fp');
       _stats.recordDupe();
       return;
     }
-    _activeFingerprints.add(fp);
+    if (referenceAmountConflict) {
+      PdsLogger.w(
+        'L4.5',
+        'REFERENCE AMOUNT CONFLICT: ref=$normalizedReference '
+            'stored=₹$previousReferenceAmount incoming=₹$amount; routing for review',
+      );
+    } else if (normalizedReference != null &&
+        previousReferenceAmount == null) {
+      _dedupReferenceAmounts[normalizedReference] = amount;
+    }
+
+    final registeredActiveFingerprint = !referenceAmountConflict;
+    if (registeredActiveFingerprint) _activeFingerprints.add(fp);
     _dedupStore[fp] = DateTime.now().add(
       isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
     );
@@ -4386,7 +4429,7 @@ class PaymentDetectionService {
         unawaited(_emit(eventToEmit, isBillSettlement: isBillSettled));
       }
     } finally {
-      _activeFingerprints.remove(tempEvent.fingerprint);
+      if (registeredActiveFingerprint) _activeFingerprints.remove(fp);
     }
   }
 
