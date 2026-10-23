@@ -268,6 +268,26 @@ void main() {
       expect(guarded.isMerchantConfirmed, isFalse);
     });
 
+    test('persisted reference conflict cannot be promoted to confirmed', () {
+      final event = PaymentEvent(
+        id: 'reference-conflict-event',
+        amount: 700,
+        timestamp: DateTime(2026, 10, 23, 10),
+        app: PaymentApp.bankSms,
+        referenceId: 'UTR123456',
+        rawText: '₹700 credited to your account',
+        hasReferenceConflict: true,
+        verificationStatus: PaymentVerificationStatus.merchantConfirmed,
+        decision: PaymentDecision.confirmed,
+      );
+
+      final guarded = PaymentDetectionService.requireMerchantConfirmation(event);
+
+      expect(guarded.decision, PaymentDecision.likely);
+      expect(guarded.hasReferenceConflict, isTrue);
+      expect(guarded.isMerchantConfirmed, isFalse);
+    });
+
     test('failed events cannot retain merchant-confirmed status', () {
       final event = PaymentEvent(
         id: 'failed-merchant-confirmation',
