@@ -2299,6 +2299,14 @@ class PendingPaymentBuffer {
     PdsLogger.d('TCM', 'Buffered ₹${e.amount} (voiceSpoken: $voiceSpoken)');
   }
 
+  bool hasUnconfirmedReference(String reference) {
+    return _buffer.any(
+      (entry) =>
+          !entry.confirmed &&
+          entry.event.normalizedReferenceId == reference,
+    );
+  }
+
   _PendingEntry? matchSms({
     required double amount,
     required String? utr,
@@ -4104,10 +4112,22 @@ class PaymentDetectionService {
     // different amount is not suppressed: it must reach the merchant-review
     // path and the payment-history conflict guard. Without a reference, use
     // the per-event fingerprint and require merchant confirmation.
-    if (sameReferenceDuplicate) {
+    final canUseSmsAsCorroboration =
+        sameReferenceDuplicate &&
+        source == 'sms' &&
+        normalizedReference != null &&
+        _pendingBuffer.hasUnconfirmedReference(normalizedReference);
+
+    if (sameReferenceDuplicate && !canUseSmsAsCorroboration) {
       PdsLogger.d('L4.5', 'DUPLICATE REFERENCE BLOCKED: fp=$fp');
       _stats.recordDupe();
       return;
+    }
+    if (canUseSmsAsCorroboration) {
+      // A bank/PSP SMS with the same UTR can strengthen the earlier PhonePe
+      // candidate via TCM. It remains one transaction: the SMS path is muted
+      // when the original candidate already announced it.
+      PdsLogger.i('L4.5', 'SAME UTR SMS CORROBORATION allowed silently: ref=$normalizedReference');
     }
     if (referenceAmountConflict) {
       PdsLogger.w(
