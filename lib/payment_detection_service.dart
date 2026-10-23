@@ -1960,7 +1960,7 @@ class PriorityVoiceQueue {
   }
 
   static String _normalizedText(String text) =>
-      text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\\u0080-\\uFFFF]'), '');
+      text.toLowerCase().replaceAll(RegExp(r'\\s+'), ' ').trim();
 
   bool _isRecentCrossSourceEcho(PaymentEvent event) {
     if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
