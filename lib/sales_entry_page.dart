@@ -3287,15 +3287,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           }
           return;
         }
-        if (!event.isMerchantConfirmed) {
-          if (event.decision == PaymentDecision.likely) {
-            _queueSalePaymentConfirmation(event, capturedSessionId);
-          }
-          return;
-        }
-
-        // A matching reference with a different amount/direction is not a
-        // second receipt. Surface it for review before any invoice state changes.
+        // Check known references before asking for merchant confirmation.
+        // A second alert that reuses a reference with a different amount or
+        // direction is a conflict, not a fresh receipt.
         final normalizedReference = event.normalizedReferenceId;
         if (normalizedReference != null) {
           final previousReferenceEvent =
@@ -3310,6 +3304,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             }
             return;
           }
+        }
+
+        if (!event.isMerchantConfirmed) {
+          if (event.decision == PaymentDecision.likely) {
+            _queueSalePaymentConfirmation(event, capturedSessionId);
+          }
+          return;
         }
 
         final remainingDue = math.max(0.0, freshTotal - _paidAmount).toDouble();
