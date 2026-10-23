@@ -6,6 +6,7 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 
 enum PaymentApp {
   googlePay,
@@ -100,10 +101,13 @@ class PaymentEvent {
   }) : id = id ?? _genId(),
        updatedAt = updatedAt ?? DateTime.now();
 
-  static String _genId() {
-    final ts = DateTime.now().microsecondsSinceEpoch;
-    return 'pmt_$ts';
-  }
+  static final Uuid _eventIdGenerator = Uuid();
+
+  // DateTime.now().microsecondsSinceEpoch can return the same value for
+  // multiple events created in one tick, causing unrelated no-UTR payments to
+  // share the same accounting fingerprint. UUIDs keep their event identities
+  // distinct even during bursts of notification/SMS delivery.
+  static String _genId() => 'pmt_${_eventIdGenerator.v4()}';
 
   bool get isMerchantConfirmed =>
       decision == PaymentDecision.confirmed &&
