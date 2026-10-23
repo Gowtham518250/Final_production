@@ -110,46 +110,56 @@ class PaymentEvent {
   /// Fallback: MD5 of amount + payerName + rawText snippet.
   /// detectionSource intentionally excluded — same payment from two sources
   /// must hash identically for cross-source deduplication.
-  String get fingerprint {
-    if (referenceId != null && referenceId!.isNotEmpty) {
-      // Include amount — two customers can share the same short UPI ref ID
-      return 'utr_${amount.toStringAsFixed(2)}_$referenceId';
+  /// Normalized reference used for transaction identity. Formatting characters
+  /// and casing vary by source, so e.g. "utr-12 34" and "UTR1234" are equal.
+  String? get normalizedReferenceId {
+    final normalized = (referenceId ?? '')
+        .trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (normalized.isEmpty ||
+        const {'NA', 'NAN', 'NONE', 'NULL', 'UNKNOWN', 'NOTAVAILABLE'}
+            .contains(normalized)) {
+      return null;
     }
-    // For non-UTR payments we need a stable hash that is identical across
-    // ALL sources for the same payment:
-    //   - PhonePe sends 2 notifications: one says "Ravi paid ₹5",
-    //     the next says "₹5 received" — payerName is present in one, null in the other.
-    //   - The bank SMS has completely different text.
-    //
-    // So we hash ONLY: amount + app-family + 5-min time bucket.
-    // payerName and vpa are intentionally excluded because they are inconsistent
-    // across notification variants and SMS for the same single payment.
-    //
-    // The 5-min bucket allows the same customer to pay the same amount again
-    // after 5 minutes without being treated as a duplicate.
-    // Include the full local calendar date. The previous fingerprint used
-    // only hour + five-minute slot, so an identical payment on a later day
-    // could collide with a still-live dedup entry.
-    final dateBucket =
-        '${timestamp.year.toString().padLeft(4, '0')}-'
-        '${timestamp.month.toString().padLeft(2, '0')}-'
-        '${timestamp.day.toString().padLeft(2, '0')}';
-    final fiveMinuteSlot = timestamp.hour * 12 + (timestamp.minute ~/ 5);
+    return normalized;
+  }
 
-    // Credit and debit are different transaction directions.
-    final direction = _transactionDirection(rawText);
+  bool hasSameReferenceAs(PaymentEvent other) {
+    final reference = normalizedReferenceId;
+    return reference != null && reference == other.normalizedReferenceId;
+  }
 
-    // Group by app family so notification variants remain consistently grouped.
-    final appFamily = _appFamily(app);
+  /// A repeated reference with a different amount or a contradictory known
+  /// direction is a conflict that needs review, not a new receipt.
+  bool hasReferenceConflictWith(PaymentEvent other) {
+    if (!hasSameReferenceAs(other)) return false;
+    if ((amount - other.amount).abs() >= 0.01) return true;
+    final currentDirection = direction == PaymentTransactionDirection.unknown
+        ? _transactionDirection(rawText)
+        : direction.name;
+    final otherDirection = other.direction == PaymentTransactionDirection.unknown
+        ? _transactionDirection(other.rawText)
+        : other.direction.name;
+    return currentDirection != 'unknown' &&
+        otherDirection != 'unknown' &&
+        currentDirection != otherDirection;
+  }
 
-    final payload =
-        '${amount.toStringAsFixed(2)}_'
-        '$appFamily'
-        '_$direction'
-        '_$dateBucket'
-        '_$fiveMinuteSlot';
-
-    return 'hash_${md5.convert(utf8.encode(payload))}';
+  /// Accounting identity: a normalized reference is the primary key and is
+  /// deliberately independent of amount, wording, timestamp, and source. This
+  /// lets a repeated reference with a conflicting amount be recognized.
+  ///
+  /// Without a transaction reference we cannot prove two notifications describe
+  /// the same transfer. Use this event's stable ID instead of merging payments
+  /// merely because their amount and timestamps are similar. Such candidates
+  /// must remain available for merchant review.
+  String get fingerprint {
+    final reference = normalizedReferenceId;
+    if (reference != null) {
+      return 'utr_${sha256.convert(utf8.encode(reference))}';
+    }
+    return 'event_$id';
   }
 
   static String _transactionDirection(String text) {
@@ -239,7 +249,26 @@ class PaymentEvent {
 
   /// Voice deduplication uses transaction identity, not notification wording,
   /// so alternate text for one credit or debit is announced only once.
-  String get voiceFingerprint => 'voice_$fingerprint';
+  /// Voice-only heuristic: announcements can be deduplicated more loosely
+  /// because suppressing a repeated sound does not change the ledger.
+  String get voiceFingerprint {
+    final reference = normalizedReferenceId;
+    if (reference != null) {
+      return 'voice_utr_${sha256.convert(utf8.encode(reference))}';
+    }
+    final dateBucket =
+        '${timestamp.year.toString().padLeft(4, '0')}-'
+        '${timestamp.month.toString().padLeft(2, '0')}-'
+        '${timestamp.day.toString().padLeft(2, '0')}';
+    final fiveMinuteSlot = timestamp.hour * 12 + (timestamp.minute ~/ 5);
+    final direction = direction == PaymentTransactionDirection.unknown
+        ? _transactionDirection(rawText)
+        : direction.name;
+    final payload =
+        '${amount.toStringAsFixed(2)}_${_appFamily(app)}_$direction_'
+        '$dateBucket_$fiveMinuteSlot';
+    return 'voice_${md5.convert(utf8.encode(payload))}';
+  }
 
   ConfidenceTier get confidenceTier {
     if (confidenceScore >= 0.75) return ConfidenceTier.high;
@@ -318,8 +347,10 @@ class PaymentEvent {
       id: id ?? this.id,
       decision: decision ?? this.decision,
       saleId: saleId ?? this.saleId,
-      version: version ?? this.version,
-      updatedAt: updatedAt ?? this.updatedAt,
+      // Every copy represents a new event revision unless the caller
+      // explicitly supplies a version/timestamp from a durable source.
+      version: version ?? this.version + 1,
+      updatedAt: updatedAt ?? DateTime.now(),
     );
   }
 
