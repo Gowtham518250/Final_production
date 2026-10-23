@@ -136,21 +136,47 @@ class GoogleAuthService {
           );
         }
 
-        // Only update local session data after backend authentication succeeds.
-        // Failures above must not clear the currently signed-in account.
-        if (kDebugMode) {
-          debugPrint('Google identity authenticated by Retail Mind');
-          debugPrint('User ID: ' + extractedUserId.toString());
-        }
-        await UserDataClearService.clearAllUserData();
-        await LocalStorageService.clearOrphanSalesBoxes();
-
         final databaseName =
             (data['username'] ?? data['user_name'] ?? name).toString().trim();
         final databaseEmail =
             (data['email'] ?? email).toString().trim().toLowerCase();
         final accountRole =
             (data['role'] ?? data['user_type'] ?? 'OWNER').toString();
+        final normalizedAccountRole = accountRole.trim().toUpperCase();
+
+        // Preserve same-account offline data and queued operations. Only clear
+        // legacy session/cache state when the authenticated database identity
+        // differs from the previous session (or cannot be established).
+        final prefs = await SharedPreferences.getInstance();
+        final previousUserId = int.tryParse(
+              (prefs.get('user_id') ?? prefs.get('userId') ?? '').toString(),
+            ) ??
+            0;
+        final previousRole = (
+          prefs.getString('user_role') ??
+          prefs.getString('user_type') ??
+          prefs.getString('role') ??
+          ''
+        ).trim().toUpperCase();
+        final sameAccount =
+            previousUserId > 0 &&
+            previousUserId == extractedUserId &&
+            (previousRole.isEmpty || previousRole == normalizedAccountRole);
+
+        if (!sameAccount) {
+          if (kDebugMode) {
+            debugPrint('Switching Google sign-in to a different account; resetting session cache.');
+          }
+          await UserDataClearService.clearAllUserData();
+          await LocalStorageService.clearOrphanSalesBoxes();
+        } else if (kDebugMode) {
+          debugPrint('Same Google account re-authenticated; preserving user-scoped local data.');
+        }
+
+        if (kDebugMode) {
+          debugPrint('Google identity authenticated by Retail Mind');
+          debugPrint('User ID: ' + extractedUserId.toString());
+        }
 
         final deviceId = await SessionManagementService.getDeviceId();
         await SessionManagementService.initializeSession(
@@ -163,7 +189,6 @@ class GoogleAuthService {
           deviceId: deviceId,
         );
 
-        final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
           'user_name',
           databaseName.isNotEmpty ? databaseName : email,
