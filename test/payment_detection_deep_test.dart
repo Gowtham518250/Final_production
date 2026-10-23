@@ -1251,7 +1251,10 @@ void main() {
     queue.dispose();
 
     expect(spoken, hasLength(1));
-    expect(spoken.single, contains('detected'));
+    // The voice queue preserves explicit credit direction instead of using
+    // the generic "detected" wording; it must still ask the merchant to verify.
+    expect(spoken.single, contains('credited'));
+    expect(spoken.single, contains('verify'));
   });
 
   test('duplicate and reference-conflict events are not announced', () async {
