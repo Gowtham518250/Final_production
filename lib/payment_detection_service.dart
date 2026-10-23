@@ -3877,10 +3877,15 @@ class PaymentDetectionService {
         _safeValue(() => (event as dynamic).summaryText),
       ]);
       if (fields.isEmpty) return;
-      if (_isDuplicateNotification(pkg, fields)) {
+      final replayClassification = _Classifier.classify(fields);
+      final looksLikePaymentEvent =
+          _Extractor.amount(fields) != null &&
+          (replayClassification == _ClassifyResult.passed ||
+              replayClassification == _ClassifyResult.debit);
+      if (looksLikePaymentEvent && _isDuplicateNotification(pkg, fields)) {
         PdsLogger.i(
           'L1',
-          'Duplicate notification replay suppressed: ' + pkg,
+          'Duplicate payment notification replay suppressed: ' + pkg,
         );
         return;
       }
