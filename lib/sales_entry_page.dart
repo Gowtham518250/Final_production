@@ -4153,7 +4153,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       _paidAmount = 0;
       _pendingDetectedPaymentAmount = null;
       _paymentConfirmed = false;
-      _autoSaveAttemptedForBill = false;
       // FIX-UPI-LOOP: Reset to Cash mode on new bill so the UPI waiting UI doesn't
       // show immediately on blank bills. The shopkeeper can manually switch to UPI
       // or it will auto-switch when a real payment arrives for the new bill.
