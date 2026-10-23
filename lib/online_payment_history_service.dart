@@ -142,6 +142,29 @@ class OnlinePaymentHistoryService {
     return true;
   }
 
+
+  /// Returns true when this normalized transaction reference has a stored
+  /// amount conflict. Used by the background isolate to mark the forwarded
+  /// event before a POS listener can offer it as a receipt.
+  static Future<bool> hasReferenceConflict(PaymentEvent event) async {
+    final reference = event.normalizedReferenceId;
+    if (reference == null) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await _currentUserId(prefs);
+    final fingerprint = sha256
+        .convert(utf8.encode('utr_${sha256.convert(utf8.encode(reference))}'))
+        .toString();
+    final raw = prefs.getString('${_userPrefix(userId)}$fingerprint');
+    if (raw == null) return false;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map &&
+          decoded['status']?.toString() == 'CONFLICT_REVIEW';
+    } on FormatException {
+      return false;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> load() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = await _currentUserId(prefs);
