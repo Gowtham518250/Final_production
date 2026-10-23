@@ -2716,17 +2716,23 @@ class SyncService {
       if (response.statusCode != 200) return false;
 
       final decoded = jsonDecode(response.body);
-      final rawRemote = decoded is List
-          ? decoded
-          : decoded is Map && decoded['sales'] is List
-          ? decoded['sales']
-          : decoded is Map && decoded['results'] is List
-          ? decoded['results']
-          : <dynamic>[];
+      final List<dynamic> rawRemote;
+      if (decoded is List) {
+        rawRemote = List<dynamic>.from(decoded);
+      } else if (decoded is Map && decoded['sales'] is List) {
+        rawRemote = List<dynamic>.from(decoded['sales'] as List);
+      } else if (decoded is Map && decoded['results'] is List) {
+        rawRemote = List<dynamic>.from(decoded['results'] as List);
+      } else {
+        // An unknown payload is not an authoritative empty snapshot.
+        return false;
+      }
 
       final local = await LocalStorageService.loadSales();
+      final reconciledLocal =
+          CacheConsistencyService.reconcileOnlineOrderSales(local, rawRemote);
       final merged = CacheConsistencyService.mergeLists(
-        local,
+        reconciledLocal,
         rawRemote,
         dataset: 'sales',
       );
@@ -2740,6 +2746,7 @@ class SyncService {
       if (kDebugMode) {
         debugPrint(
           '✅ Sales read reconciliation complete: local=${local.length}, '
+          'pruned=${local.length - reconciledLocal.length}, '
           'remote=${rawRemote.length}, merged=${merged.length}',
         );
       }
