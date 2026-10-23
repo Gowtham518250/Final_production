@@ -3,7 +3,7 @@ name: Flutter Android Build Smoke
 on:
   pull_request:
     branches:
-      - main
+      - clean-retailmind-20261023
     paths:
       - "**.dart"
       - "pubspec.yaml"

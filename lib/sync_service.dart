@@ -251,6 +251,7 @@ class SyncService {
       var cursor = prefs.getInt(cursorKey) ?? 0;
       var nextCursor = cursor;
       var needsRefresh = false;
+      var needsOnlineOrderSalesRefresh = false;
       final observedEvents = <Map<String, dynamic>>[];
       var hasMore = true;
       // Order status changes also require sales reconciliation so cancelled
@@ -305,6 +306,9 @@ class SyncService {
             observedEvents.add(event);
             final type = event['type']?.toString() ?? '';
             if (refreshTypes.contains(type)) needsRefresh = true;
+            if (type == 'order.status_changed' || type == 'sales.updated') {
+              needsOnlineOrderSalesRefresh = true;
+            }
           }
         }
 
@@ -320,6 +324,13 @@ class SyncService {
         // this pulse will retry instead of stacking another download.
         if (_userDataDownloadInProgress) return;
         await downloadUserDataSafe();
+      }
+
+      // Dashboard cloud restore first removes invoices linked to cancelled orders.
+      // Then refresh canonical sales so all screens converge on the same snapshot.
+      if (needsOnlineOrderSalesRefresh) {
+        final refreshed = await refreshSalesCacheFromBackend();
+        if (!refreshed) return; // Do not advance the durable cursor; retry next pulse.
       }
 
       if (observedEvents.isNotEmpty && !_durableEventsController.isClosed) {
@@ -2705,17 +2716,23 @@ class SyncService {
       if (response.statusCode != 200) return false;
 
       final decoded = jsonDecode(response.body);
-      final rawRemote = decoded is List
-          ? decoded
-          : decoded is Map && decoded['sales'] is List
-          ? decoded['sales']
-          : decoded is Map && decoded['results'] is List
-          ? decoded['results']
-          : <dynamic>[];
+      final List<dynamic> rawRemote;
+      if (decoded is List) {
+        rawRemote = List<dynamic>.from(decoded);
+      } else if (decoded is Map && decoded['sales'] is List) {
+        rawRemote = List<dynamic>.from(decoded['sales'] as List);
+      } else if (decoded is Map && decoded['results'] is List) {
+        rawRemote = List<dynamic>.from(decoded['results'] as List);
+      } else {
+        // An unknown payload is not an authoritative empty snapshot.
+        return false;
+      }
 
       final local = await LocalStorageService.loadSales();
+      final reconciledLocal =
+          CacheConsistencyService.reconcileOnlineOrderSales(local, rawRemote);
       final merged = CacheConsistencyService.mergeLists(
-        local,
+        reconciledLocal,
         rawRemote,
         dataset: 'sales',
       );
@@ -2729,6 +2746,7 @@ class SyncService {
       if (kDebugMode) {
         debugPrint(
           '✅ Sales read reconciliation complete: local=${local.length}, '
+          'pruned=${local.length - reconciledLocal.length}, '
           'remote=${rawRemote.length}, merged=${merged.length}',
         );
       }

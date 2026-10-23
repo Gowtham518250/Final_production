@@ -145,6 +145,106 @@ class CacheConsistencyService {
     return remoteWins ? <String, dynamic>{...local, ...remote, 'conflict_state': 'remote_wins'} : <String, dynamic>{...remote, ...local, 'conflict_state': 'local_newer'};
   }
 
+  /// Remove stale server-owned online-order invoices after a successful
+  /// canonical snapshot. Pending/offline local writes remain until their ACK.
+  static List<Map<String, dynamic>> reconcileOnlineOrderSales(
+    List<dynamic> local,
+    List<dynamic> remote,
+  ) {
+    String invoiceNumber(Map<String, dynamic> record) {
+      for (final field in const [
+        'invoice_number',
+        'invoice_no',
+        'sale_id',
+        'invoiceNumber',
+        'saleId',
+      ]) {
+        final value = record[field]?.toString().trim() ?? '';
+        if (value.isNotEmpty && value.toLowerCase() != 'null') {
+          return value.toUpperCase();
+        }
+      }
+      return '';
+    }
+
+    String orderKey(String invoiceNumber) {
+      final match = RegExp(r'^(ONL-\d+)(?:-|$)', caseSensitive: false)
+          .firstMatch(invoiceNumber.trim());
+      return match?.group(1)?.toUpperCase() ?? '';
+    }
+
+    bool isOnlineOrder(Map<String, dynamic> record, String number) {
+      if (orderKey(number).isNotEmpty) return true;
+      final metadata = [
+        record['source'],
+        record['origin'],
+        record['order_source'],
+        record['transaction_type'],
+        record['type'],
+      ].whereType<Object>().join(' ').toUpperCase();
+      if (RegExp(r'ONLINE[ _-]?ORDER').hasMatch(metadata)) return true;
+      return (record['notes']?.toString().toUpperCase() ?? '')
+          .contains('ONLINE ORDER #');
+    }
+
+    bool isPendingLocalWrite(Map<String, dynamic> record) {
+      final state = (record['sync_status'] ??
+              record['syncState'] ??
+              record['sync_state'] ??
+              record['queue_status'])
+          ?.toString()
+          .trim()
+          .toLowerCase();
+      const pendingStates = {
+        'pending',
+        'pending_sync',
+        'retry_wait',
+        'failed',
+        'dirty',
+        'queued',
+        'offline_pending',
+      };
+      return pendingStates.contains(state) ||
+          record['is_offline'] == true ||
+          record['is_synced'] == false ||
+          record['synced'] == false ||
+          record['pending_sync'] == true;
+    }
+
+    final remoteNumbers = <String>{};
+    final remoteOrderKeys = <String>{};
+    for (final raw in remote) {
+      if (raw is! Map) continue;
+      final record = Map<String, dynamic>.from(raw);
+      final number = invoiceNumber(record);
+      if (number.isEmpty) continue;
+      remoteNumbers.add(number);
+      final key = orderKey(number);
+      if (key.isNotEmpty) remoteOrderKeys.add(key);
+    }
+
+    final output = <Map<String, dynamic>>[];
+    for (final raw in local) {
+      if (raw is! Map) continue;
+      final record = Map<String, dynamic>.from(raw);
+      final number = invoiceNumber(record);
+      if (!isOnlineOrder(record, number) ||
+          isPendingLocalWrite(record) ||
+          number.isEmpty) {
+        output.add(record);
+        continue;
+      }
+
+      final key = orderKey(number);
+      final present = remoteNumbers.contains(number) ||
+          (key.isNotEmpty && remoteOrderKeys.contains(key));
+      if (present) output.add(record);
+      // A previously-synced online-order invoice absent from this successful,
+      // validated server snapshot was cancelled/deleted remotely.
+    }
+    return output;
+  }
+
   static List<Map<String, dynamic>> mergeLists(List<dynamic> local, List<dynamic> remote, {required String dataset}) {
     final merged = <String, Map<String, dynamic>>{};
     final anonymous = <Map<String, dynamic>>[];
