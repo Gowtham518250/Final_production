@@ -23,4 +23,50 @@ void main() {
     expect(cache.maximumSize, 80);
     expect(cache.maximumSizeBytes, 40 * 1024 * 1024);
   });
+
+  test('decode dimensions respect display scale and memory bounds', () {
+    expect(
+      LowMemoryPerformance.decodeCacheDimension(
+        50,
+        3,
+        minPixels: 100,
+        maxPixels: 240,
+      ),
+      150,
+    );
+    expect(
+      LowMemoryPerformance.decodeCacheDimension(
+        500,
+        3,
+        minPixels: 320,
+        maxPixels: 640,
+      ),
+      640,
+    );
+    expect(
+      LowMemoryPerformance.decodeCacheDimension(
+        20,
+        2,
+        minPixels: 100,
+        maxPixels: 240,
+      ),
+      100,
+    );
+  });
+
+  test('decode dimension rejects invalid inputs', () {
+    expect(
+      () => LowMemoryPerformance.decodeCacheDimension(0, 3),
+      throwsArgumentError,
+    );
+    expect(
+      () => LowMemoryPerformance.decodeCacheDimension(
+        50,
+        3,
+        minPixels: 300,
+        maxPixels: 200,
+      ),
+      throwsArgumentError,
+    );
+  });
 }

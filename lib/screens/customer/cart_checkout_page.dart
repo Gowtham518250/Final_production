@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../visual_widgets.dart';
 import '../../customer_shop_service.dart';
 import '../../online_order_service.dart';
+import '../../low_memory_performance.dart';
 
 class CustomerCartPage extends StatefulWidget {
   final List<Map<String, dynamic>> cartItems;
@@ -309,6 +310,13 @@ class _CustomerCartPageState extends State<CustomerCartPage> {
 
   Widget _productThumb(String? url) {
     if (url != null && url.isNotEmpty) {
+      final media = MediaQuery.of(context);
+      final cacheSize = LowMemoryPerformance.decodeCacheDimension(
+        50,
+        media.devicePixelRatio,
+        minPixels: 100,
+        maxPixels: 240,
+      );
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Image.network(
@@ -316,6 +324,8 @@ class _CustomerCartPageState extends State<CustomerCartPage> {
           width: 50,
           height: 50,
           fit: BoxFit.cover,
+          cacheWidth: cacheSize,
+          cacheHeight: cacheSize,
           errorBuilder: (_, __, ___) => _placeholderIcon(),
         ),
       );

@@ -2,6 +2,7 @@ import '../../live_translated_text.dart';
 import 'package:flutter/material.dart';
 import '../../visual_widgets.dart';
 import '../../customer_shop_service.dart';
+import '../../low_memory_performance.dart';
 
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
@@ -198,12 +199,23 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
 
   Widget _productImage(String? url) {
     if (url != null && url.isNotEmpty) {
+      final media = MediaQuery.of(context);
+      // A product card occupies roughly half the available grid width. Decode
+      // near the rendered size instead of retaining full-resolution uploads.
+      final logicalImageWidth = (media.size.width - 48) / 2;
+      final cacheWidth = LowMemoryPerformance.decodeCacheDimension(
+        logicalImageWidth,
+        media.devicePixelRatio,
+        minPixels: 320,
+        maxPixels: 960,
+      );
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Image.network(
           url,
           fit: BoxFit.cover,
           width: double.infinity,
+          cacheWidth: cacheWidth,
           errorBuilder: (_, __, ___) => _productPlaceholder(),
         ),
       );
