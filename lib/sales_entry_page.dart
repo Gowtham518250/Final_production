@@ -58,7 +58,6 @@ import 'package:vibration/vibration.dart';
 import 'session_management.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'data_validation_service.dart';
-import 'stock_validation_service.dart';
 
 // API Endpoints
 const String salesCreateEndpoint = '/api/invoices/sync';
@@ -2838,38 +2837,82 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
   // 🔒 STOCK VALIDATION: Check stock availability before sale
   Future<bool> _validateStockAvailability() async {
-    final checks = entries.map((entry) async {
-      final itemName = entry['item']?.text.trim();
-      final qtyText = entry['qty']?.text.trim();
-
-      if (itemName == null ||
-          itemName.isEmpty ||
-          qtyText == null ||
-          qtyText.isEmpty) {
-        return null;
-      }
-
-      final quantity = int.tryParse(qtyText) ?? 0;
-      if (quantity <= 0) return null;
-
-      return StockValidationService.instance.validateItemStock(
-        itemName: itemName,
-        requestedQuantity: quantity,
-      );
-    }).toList();
-
-    final validations = await Future.wait(checks);
-    for (final validation in validations) {
-      if (validation == null) continue;
-      if (!validation.isValid) {
-        if (mounted) setState(() => message = validation.message);
-        return false;
-      }
-
-      if (validation.requiresManualConfirmation && kDebugMode) {
+    // Keep checkout responsive: the previous implementation made one HTTP
+    // request per bill line. Validate against the cached inventory snapshot
+    // instead. Invoice sync remains the server-side validation path.
+    // Unknown products are valid custom sale lines, not a checkout error.
+    List<Map<String, dynamic>> products = [];
+    try {
+      final backendProducts = await LocalStorageService.loadBackendProducts();
+      final localProducts = await LocalStorageService.loadLocalProducts();
+      final localValues = localProducts.values
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .toList(growable: false);
+      products = [...backendProducts, ...localValues];
+    } catch (error) {
+      if (kDebugMode) {
         debugPrint(
-          '⚠️ Stock validation requires manual confirmation: ${validation.message}',
+          'Local stock snapshot unavailable; continuing to server sync validation: ' +
+              error.toString(),
         );
+      }
+      return true;
+    }
+
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    for (final entry in entries) {
+      final name = entry['item']?.text.trim() ?? '';
+      final quantity = double.tryParse(entry['qty']?.text.trim() ?? '') ?? 0;
+      if (name.isEmpty || !quantity.isFinite || quantity <= 0) continue;
+
+      final normalizedName = normalize(name);
+      Map<String, dynamic>? found;
+      for (final product in products) {
+        final productName = normalize(
+          (product['product_name'] ??
+                  product['name'] ??
+                  product['itemName'] ??
+                  '')
+              .toString(),
+        );
+        if (productName.isNotEmpty && productName == normalizedName) {
+          found = product;
+          break;
+        }
+      }
+
+      // Untracked/custom products have no inventory identity and therefore
+      // no inventory stock to deduct. They are still saleable as bill lines.
+      if (found == null) continue;
+
+      final stockRaw = found['current_stock'] ??
+          found['stock'] ??
+          found['stock_quantity'] ??
+          found['available_stock'];
+      final stock = stockRaw is num
+          ? stockRaw.toDouble()
+          : double.tryParse(stockRaw?.toString() ?? '');
+      if (stock == null || !stock.isFinite) continue;
+
+      if (quantity > stock) {
+        if (mounted) {
+          setState(() {
+            message = 'Insufficient stock for ' +
+                name +
+                '. Available: ' +
+                stock.toStringAsFixed(stock % 1 == 0 ? 0 : 3) +
+                ', requested: ' +
+                quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 3) +
+                '.';
+          });
+        }
+        return false;
       }
     }
 
