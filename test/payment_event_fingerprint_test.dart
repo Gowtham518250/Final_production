@@ -75,7 +75,10 @@ void main() {
         rawText: 'మీకు ₹500 అందింది',
       );
 
-      expect(first.fingerprint, differentText.fingerprint);
+      // Without a transaction reference, financial identity must remain
+      // distinct even when amount, timestamp, and wording are similar.
+      expect(first.fingerprint, isNot(differentText.fingerprint));
+      // The non-ledger voice heuristic may suppress alternate wording.
       expect(first.voiceFingerprint, differentText.voiceFingerprint);
     });
 
