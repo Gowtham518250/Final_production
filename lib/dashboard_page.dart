@@ -549,7 +549,9 @@ class _DashboardPageState extends State<DashboardPage>
         curve: Curves.easeInOut,
       ),
     );
-    _onlineStorePulseController.repeat(reverse: true);
+    // Give the disabled-store CTA a subtle one-time entrance animation, then
+    // stop the ticker instead of repainting it forever on low-end phones.
+    _onlineStorePulseController.forward();
 
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
@@ -1959,7 +1961,8 @@ class _DashboardPageState extends State<DashboardPage>
             _onlineStorePulseController.stop();
             _onlineStorePulseController.value = 1.0;
           } else if (!_onlineStorePulseController.isAnimating) {
-            _onlineStorePulseController.repeat(reverse: true);
+            // Re-emphasize the CTA once when the shop is taken offline.
+            _onlineStorePulseController.forward(from: 0);
           }
         });
         // 🔒 SECURITY: Persist with scoped SharedPreferences
