@@ -189,9 +189,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   void _onVoiceOrderParsed(List<Map<String, dynamic>> items) {
     if (items.isEmpty || !mounted) return;
 
-    // Voice assistant returns catalogue-resolved names, IDs and SKUs.
-    // Resolve the ID against this shop's loaded product list before insertion;
-    // never treat a generated product name as proof of product identity.
+    final customItems = <String>[];
+    final customItemsMissingPrice = <String>[];
+
+    // Catalogue IDs are resolved only against this shop. If no local product
+    // exists, accept the reviewed voice line as a custom bill item instead of
+    // dropping it. A custom line deliberately has no barcode/SKU/product ID,
+    // so the sale path cannot deduct stock from an unrelated catalogue row.
     for (final item in items) {
       final name = (item['name'] ?? item['product_name'] ?? '')
           .toString()
@@ -220,29 +224,45 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         return (productId.isNotEmpty && id == productId) ||
             (name.isNotEmpty && productName == name.toLowerCase());
       }, orElse: () => <String, dynamic>{});
+
+      if (name.isEmpty || !qty.isFinite || qty <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: LiveTranslatedText(
+                'Could not add a voice item with an invalid name or quantity. Please review it manually.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        continue;
+      }
+
+      if (matchedProduct.isEmpty) {
+        _addVoiceItem(
+          name,
+          qty,
+          providedPrice: price.isFinite && price > 0 ? price : null,
+          providedGst: double.tryParse(item['gst']?.toString() ?? ''),
+          // Never carry a guessed barcode or SKU into an untracked line.
+          providedBarcode: null,
+        );
+        customItems.add(name);
+        if (!price.isFinite || price <= 0) {
+          customItemsMissingPrice.add(name);
+        }
+        continue;
+      }
+
       final barcode =
-          (item['barcode'] ??
-                  matchedProduct['barcode'] ??
+          (matchedProduct['barcode'] ??
                   matchedProduct['bar_code'] ??
                   matchedProduct['sku'] ??
                   matchedProduct['product_code'] ??
                   '')
               .toString()
               .trim();
-
-      if (name.isEmpty || !qty.isFinite || qty <= 0 || matchedProduct.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: LiveTranslatedText(
-                'Voice item was not matched to this shop catalogue. Please choose the product manually.',
-              ),
-              backgroundColor: Colors.orange.shade800,
-            ),
-          );
-        }
-        continue;
-      }
 
       _addVoiceItem(
         (matchedProduct['product_name'] ?? matchedProduct['name'] ?? name)
@@ -257,6 +277,23 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     if (mounted) {
       setState(() => _isVoiceAssistantOpen = false);
       calculateTotal();
+      if (customItems.isNotEmpty) {
+        final missingPriceText = customItemsMissingPrice.isEmpty
+            ? ''
+            : ' Enter a selling price for: '
+                '${customItemsMissingPrice.take(3).join(', ')}.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: LiveTranslatedText(
+              'Added custom bill item(s): ${customItems.take(3).join(', ')}. '
+              'Not in inventory; no stock will be deducted. Review before saving.'
+              '$missingPriceText',
+            ),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     }
   }
 
