@@ -3095,6 +3095,10 @@ class PaymentDetectionService {
   StreamSubscription<AccessibilityEvent>? _accessSub;
 
   final Map<String, DateTime> _dedupStore = {};
+  // Short-lived guard for the same Android notification delivered more than
+  // once by the listener. Transport replay protection is separate from UTR
+  // identity and never upgrades an event to a confirmed payment.
+  final Map<String, DateTime> _recentNotificationPayloads = {};
   // In-memory amounts let duplicate detection distinguish a genuine repeat
   // from a reused UTR with a conflicting amount. The dedup key itself is UTR-only.
   final Map<String, double> _dedupReferenceAmounts = {};
@@ -3851,6 +3855,34 @@ class PaymentDetectionService {
       if (fields.isEmpty) return;
 
       final notificationSender = event.title?.trim();
+      final now = DateTime.now();
+      _recentNotificationPayloads.removeWhere(
+        (_, expiresAt) => !expiresAt.isAfter(now),
+      );
+      final normalizedPayload = fields
+          .toLowerCase()
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      final notificationFingerprint = sha256
+          .convert(
+            utf8.encode(
+              '${pkg.toLowerCase()}|${notificationSender?.toLowerCase() ?? ''}|$normalizedPayload',
+            ),
+          )
+          .toString();
+      final duplicateExpiry =
+          _recentNotificationPayloads[notificationFingerprint];
+      if (duplicateExpiry != null && duplicateExpiry.isAfter(now)) {
+        PdsLogger.d('L1', 'Duplicate notification replay suppressed');
+        return;
+      }
+      _recentNotificationPayloads[notificationFingerprint] =
+          now.add(const Duration(seconds: 3));
+      if (_recentNotificationPayloads.length > 100) {
+        _recentNotificationPayloads.remove(
+          _recentNotificationPayloads.keys.first,
+        );
+      }
       if (_isTrustedBankSmsNotification(pkg, notificationSender) &&
           _Extractor.amount(fields) != null &&
           _Classifier.hasPaymentContext(fields)) {
