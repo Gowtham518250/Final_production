@@ -1621,6 +1621,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final normalizedName = name.trim().toLowerCase();
       final incomingPrice = providedPrice ?? 0.0;
       final incomingBarcode = (providedBarcode ?? '').trim();
+      final shouldCheckStock = stockTracked ?? incomingBarcode.isNotEmpty;
+
+      String formatMoney(double value) {
+        final rounded = double.parse(value.toStringAsFixed(2));
+        return rounded == rounded.roundToDouble()
+            ? rounded.toStringAsFixed(0)
+            : rounded.toStringAsFixed(2);
+      }
 
       // Same product + same price = one bill line. Merge quantity instead
       // of creating a second identical row.
@@ -1659,9 +1667,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
         if ((entries[existingIdx]['price']?.text.trim().isEmpty ?? true) &&
             incomingPrice > 0) {
-          entries[existingIdx]['price']?.text = incomingPrice.toStringAsFixed(
-            0,
-          );
+          entries[existingIdx]['price']?.text = formatMoney(incomingPrice);
         }
         if (providedGst != null && entries[existingIdx]['gst'] != null) {
           entries[existingIdx]['gst']!.text = providedGst.toStringAsFixed(0);
@@ -1691,7 +1697,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             : qty.toString();
 
         entries[targetIdx]['price']?.text = incomingPrice > 0
-            ? incomingPrice.toStringAsFixed(0)
+            ? formatMoney(incomingPrice)
             : '';
 
         if (providedGst != null && entries[targetIdx]['gst'] != null) {
@@ -1710,40 +1716,43 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (mounted) setState(() => _isVoiceProcessing = false);
     });
 
-    // 🚀 100/100 REAL-TIME STOCK PULSE: Alert if merchant adds an item that is low in stock
-    InventoryManagementService.checkStockRealtime(name).then((data) {
-      if (data != null &&
-          (data['isLow'] == true || (data['stock'] as num) <= 2) &&
-          mounted) {
-        final stockQty = (data['stock'] as num).toInt();
-        final pName = data['productName'];
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.orange[800],
-            content: Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: LiveTranslatedText(
-                    '⚠️ LOW STOCK: $pName (Only $stockQty left)',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+    // Only query stock status for a real inventory item. A custom line
+    // should not trigger another catalog read in the background.
+    if (shouldCheckStock) {
+      InventoryManagementService.checkStockRealtime(name).then((data) {
+        if (data != null &&
+            (data['isLow'] == true || (data['stock'] as num) <= 2) &&
+            mounted) {
+          final stockQty = (data['stock'] as num).toInt();
+          final pName = data['productName'];
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.orange[800],
+              content: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: LiveTranslatedText(
+                      '⚠️ LOW STOCK: $pName (Only $stockQty left)',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    });
+          );
+        }
+      });
+    }
   }
 
   void _showQuickAddCustomer() {
