@@ -11,6 +11,7 @@ import 'payment_announcement_service.dart';
 import 'payment_detection_service.dart';
 import 'payment_event.dart';
 import 'online_payment_history_service.dart';
+import 'sms_background_receiver.dart';
 
 StreamSubscription<Map<String, dynamic>?>? _paymentEventSubscription;
 StreamSubscription<PaymentEvent>? _paymentForwardSubscription;
@@ -194,6 +195,44 @@ Future<bool> onStart(ServiceInstance service) async {
 
     await pds.start();
 
+    // Telephony's background callback persists SMS into SharedPreferences.
+    // Drain that queue from the long-lived service isolate so messages received
+    // while the UI isolate is paused/killed are not left undetected forever.
+    var smsQueueDrainInProgress = false;
+    Future<void> drainPendingBackgroundSms() async {
+      if (smsQueueDrainInProgress) return;
+      smsQueueDrainInProgress = true;
+      try {
+        final pendingMessages = await getPendingBackgroundSms();
+        for (final message in pendingMessages) {
+          final sender = (message['sender'] ?? '').trim();
+          final body = (message['body'] ?? '').trim();
+          if (sender.isEmpty || body.isEmpty) continue;
+          pds.handleSms(sender, body);
+        }
+        if (pendingMessages.isNotEmpty) {
+          debugPrint(
+            '📩 Background payment service processed '
+            '${pendingMessages.length} queued SMS message(s)',
+          );
+        }
+      } catch (error, stackTrace) {
+        debugPrint('⚠️ Could not drain queued SMS: $error\n$stackTrace');
+      } finally {
+        smsQueueDrainInProgress = false;
+      }
+    }
+
+    // Process backlog immediately, then poll the durable SMS queue at a low
+    // frequency. This is separate from the removed one-second generic service
+    // update loop and avoids overlapping SharedPreferences reads.
+    await drainPendingBackgroundSms();
+    final smsQueueDrainTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => unawaited(drainPendingBackgroundSms()),
+    );
+    service.on('stop').listen((_) => smsQueueDrainTimer.cancel());
+
     // FIX: The UI isolate (dashboard) and this background isolate each hold
     // a *separate* PaymentDetectionService singleton instance. When the user
     // taps "Enable Payment Detection" and grants SMS/notification-listener
@@ -260,10 +299,8 @@ Future<bool> onStart(ServiceInstance service) async {
     return false;
   }
 
-  // FIX (Issue 4.1): Removed Timer.periodic(1 second) that was calling
-  // service.invoke('update') every second, causing constant CPU wake locks
-  // and significant battery drain. The PaymentDetectionService is
-  // event-driven (SMS/notifications), so no polling timer is required.
+  // The old one-second generic service.update loop remains removed: only the
+  // durable background-SMS queue is checked every five seconds as a fallback.
 
   return true;
 }
