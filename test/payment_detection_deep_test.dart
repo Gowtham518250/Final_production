@@ -1251,7 +1251,7 @@ void main() {
     queue.dispose();
 
     expect(spoken, hasLength(1));
-    expect(spoken.single, contains('detected'));
+    expect(spoken.single, contains('credited'));
   });
 
   test('duplicate and reference-conflict events are not announced', () async {
