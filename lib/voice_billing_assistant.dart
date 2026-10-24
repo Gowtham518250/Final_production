@@ -1482,7 +1482,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                       knownProduct?['product_id']?.toString(),
                   priceSource: line.priceSource,
                   barcode: knownProduct == null ? null : line.barcode,
-                  gst: knownProduct == null ? line.gst : line.gst,
+                  gst: knownProduct == null ? null : line.gst,
                   priceWarning: line.priceWarning ??
                       (knownProduct == null
                           ? 'Custom bill item: no inventory stock will be deducted.'
