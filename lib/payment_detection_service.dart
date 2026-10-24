@@ -3967,23 +3967,24 @@ class PaymentDetectionService {
         PaymentApp.amazonPay,
         PaymentApp.bhim,
       }.contains(app);
-      // PhonePe/GPay notifications often omit a bank-style UTR, but their
-      // explicit incoming-credit text is still useful as a *candidate* while
-      // this merchant has an active bill. It remains LIKELY and cannot alter
-      // accounting until the merchant verifies it. Don't require the voice
-      // wording regex alone: the payment classifier recognizes more formats.
+      // Official UPI-app notifications often omit a bank-style UTR. Surface
+      // explicit incoming-credit wording as a review candidate even when the
+      // merchant is not currently on an invoice screen. It is always kept
+      // LIKELY by the candidate path and cannot settle accounting by itself.
+      // Don't require the narrower voice wording regex alone: the payment
+      // classifier recognizes more formats.
       final hasExplicitIncomingCredit =
           _Classifier.classify(fields) == _ClassifyResult.passed &&
           _Classifier.isIncomingCreditText(fields) &&
           !FraudEngine.isPromotionalMessage(fields);
-      final isActiveBillCredit =
-          isTrustedPaymentApp && billContext.isActive && hasExplicitIncomingCredit;
+      final isUnverifiedIncomingCreditCandidate =
+          isTrustedPaymentApp && hasExplicitIncomingCredit;
       _processText(
         fields.trim(),
         app,
         source: 'notification',
         isUnverifiedApp: isUnverifiedApp,
-        allowUnverifiedIncomingCandidate: isActiveBillCredit,
+        allowUnverifiedIncomingCandidate: isUnverifiedIncomingCreditCandidate,
       );
     } catch (e, st) {
       PdsLogger.e('L1', 'Handler error', e, st);
