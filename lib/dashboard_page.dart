@@ -70,6 +70,7 @@ import 'online_store_service.dart';
 import 'online_order_service.dart';
 import 'low_stock_alerts_service.dart';
 import 'payment_detection_service.dart';
+import 'payment_background_service.dart';
 import 'online_payment_history_service.dart';
 import 'package:record/record.dart' as record;
 import 'package:path/path.dart' as p;
@@ -1034,31 +1035,28 @@ class _DashboardPageState extends State<DashboardPage>
     _paymentDetectionPulseController.value = 1.0;
 
     try {
-      // This only starts channels on the UI isolate's own
-      // PaymentDetectionService instance (a no-op today since that
-      // instance's .start() is never called on this isolate). The real,
-      // long-lived detection engine runs in the separate background
-      // service isolate (payment_background_service_mobile.dart), which
-      // has its own independent instance and does not know permissions
-      // just changed. Tell it explicitly to restart so it re-attaches its
-      // notification/SMS listeners with the now-granted permissions.
-      await PaymentDetectionService().ensureChannelsRunning();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ Payment detection channel startup failed: $e');
+      final backgroundService = FlutterBackgroundService();
+      final isRunning = await backgroundService.isRunning();
+      if (!isRunning) {
+        // Configure and start again if Android/OEM battery management stopped
+        // the service (or if startup had not completed yet).
+        await initializeBackgroundService();
+        debugPrint('🔁 Reconfigured/restarted stopped payment-detection service');
       }
-    }
 
-    try {
-      FlutterBackgroundService().invoke('restart_payment_detection');
+      // Only the background isolate owns the live listeners. Signal it after
+      // ensuring the service is running; its startup handler queues this
+      // request if listener initialization is still in progress.
+      backgroundService.invoke('restart_payment_detection');
       if (kDebugMode) {
         debugPrint(
-          '🔁 Signaled background isolate to restart payment detection',
+          '🔁 Signaled background isolate to attach payment channels',
         );
       }
+      backgroundService.invoke('setAsForeground');
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Failed to signal background service restart: $e');
+        debugPrint('⚠️ Payment detection service startup/restart failed: $e');
       }
     }
 
