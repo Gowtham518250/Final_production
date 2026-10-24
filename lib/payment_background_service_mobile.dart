@@ -193,7 +193,45 @@ Future<bool> onStart(ServiceInstance service) async {
       pds.recordBillPayment(amount);
     });
 
+    // Subscribe before startup: the Dashboard can signal that permissions
+    // were granted while the service isolate is still initializing. Queue
+    // such a signal rather than losing it before the listener exists.
+    var pdsReady = false;
+    var restartRequestedBeforeReady = false;
+    var restartInProgress = false;
+    service.on('restart_payment_detection').listen((event) async {
+      if (!pdsReady) {
+        restartRequestedBeforeReady = true;
+        debugPrint(
+          '⏳ Payment detection restart queued until listener startup completes',
+        );
+        return;
+      }
+      if (restartInProgress) {
+        debugPrint(
+          '⏳ Background isolate: restart already in progress; ignoring duplicate signal',
+        );
+        return;
+      }
+
+      restartInProgress = true;
+      try {
+        await pds.ensureChannelsRunning();
+        debugPrint('✅ Background payment channels are active');
+      } catch (e) {
+        debugPrint('⚠️ Background isolate: restart failed: $e');
+      } finally {
+        restartInProgress = false;
+      }
+    });
+
     await pds.start();
+    pdsReady = true;
+    if (restartRequestedBeforeReady) {
+      restartRequestedBeforeReady = false;
+      await pds.ensureChannelsRunning();
+      debugPrint('✅ Applied queued payment detection restart');
+    }
 
     // Telephony's background callback persists SMS into SharedPreferences.
     // Drain that queue from the long-lived service isolate so messages received
@@ -232,38 +270,6 @@ Future<bool> onStart(ServiceInstance service) async {
       (_) => unawaited(drainPendingBackgroundSms()),
     );
     service.on('stop').listen((_) => smsQueueDrainTimer.cancel());
-
-    // FIX: The UI isolate (dashboard) and this background isolate each hold
-    // a *separate* PaymentDetectionService singleton instance. When the user
-    // taps "Enable Payment Detection" and grants SMS/notification-listener
-    // permission, that only affects the UI isolate's instance — this
-    // background isolate (the one that actually keeps listening once the
-    // app is backgrounded) never learns permissions changed and its
-    // listeners stay dead. Listen for a signal from the UI isolate so the
-    // detector can attach newly permitted channels without replacing its
-    // payment event stream.
-    bool restartInProgress = false;
-    service.on('restart_payment_detection').listen((event) async {
-      if (restartInProgress) {
-        debugPrint(
-          '⏳ Background isolate: restart already in progress; ignoring duplicate signal',
-        );
-        return;
-      }
-
-      restartInProgress = true;
-      debugPrint(
-        '🔁 Background isolate: attaching payment channels after permission grant',
-      );
-      try {
-        await pds.ensureChannelsRunning();
-        debugPrint('✅ Background payment channels are active');
-      } catch (e) {
-        debugPrint('⚠️ Background isolate: restart failed: $e');
-      } finally {
-        restartInProgress = false;
-      }
-    });
 
     try {
       final accessibilityEnabled =
