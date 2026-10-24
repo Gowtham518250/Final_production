@@ -42,6 +42,8 @@ class VoiceBillingLine {
         'total': quantity * price,
         'confidence': confidence,
         'catalog_matched': catalogMatched,
+        'stock_tracked': catalogMatched,
+        'is_custom_item': !catalogMatched,
         'price_source': priceSource,
         'price_missing': price <= 0,
         if (barcode != null && barcode!.isNotEmpty) 'barcode': barcode,
