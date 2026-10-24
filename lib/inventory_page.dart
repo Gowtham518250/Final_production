@@ -22,6 +22,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'inventory_management_service.dart';
 import 'local_storage_service.dart';
 import 'inventory_stock_helper.dart';
+import 'low_memory_performance.dart';
 import 'sync_queue_manager.dart';
 import 'sync_service.dart';
 import 'secure_token_storage.dart';
@@ -624,6 +625,12 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
   Widget _productImagePreview(Uint8List? bytes, String? imageUrl, {double size = 82}) {
     final value = (imageUrl ?? '').trim();
+    final cacheSize = LowMemoryPerformance.decodeCacheDimension(
+      size,
+      MediaQuery.of(context).devicePixelRatio,
+      minPixels: 100,
+      maxPixels: 320,
+    );
     Widget image = Container(
       width: size,
       height: size,
@@ -631,18 +638,36 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       child: Icon(Icons.inventory_2_rounded, color: Colors.blueGrey.shade400, size: size * 0.36),
     );
     if (bytes != null && bytes.isNotEmpty) {
-      image = Image.memory(bytes, width: size, height: size, fit: BoxFit.cover,
+      image = Image.memory(
+        bytes,
+        width: size,
+        height: size,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
+        fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Icon(Icons.inventory_2_rounded, color: Colors.blueGrey.shade400, size: size * 0.36));
     } else if (value.startsWith('data:image/')) {
       final comma = value.indexOf(',');
       if (comma > 0) {
         try {
-          image = Image.memory(base64Decode(value.substring(comma + 1)), width: size, height: size, fit: BoxFit.cover,
+          image = Image.memory(
+            base64Decode(value.substring(comma + 1)),
+            width: size,
+            height: size,
+            cacheWidth: cacheSize,
+            cacheHeight: cacheSize,
+            fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: Colors.blueGrey.shade400, size: size * 0.36));
         } catch (_) {}
       }
     } else if (value.startsWith('https://') || value.startsWith('http://')) {
-      image = Image.network(value, width: size, height: size, fit: BoxFit.cover,
+      image = Image.network(
+        value,
+        width: size,
+        height: size,
+        cacheWidth: cacheSize,
+        cacheHeight: cacheSize,
+        fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: Colors.blueGrey.shade400, size: size * 0.36));
     }
     return Container(
