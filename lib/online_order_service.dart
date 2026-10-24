@@ -67,34 +67,66 @@ class OnlineOrderService {
     }
 
     final orderId = (order['order_id'] ?? order['id'] ?? '').toString().trim();
-    final invoiceSource =
-        (invoice['source'] ??
-                invoice['order_source'] ??
-                invoice['sale_type'] ??
-                '')
-            .toString()
-            .trim()
-            .toUpperCase();
-    if (orderId.isEmpty ||
-        !const {
-          'ONLINE_ORDER',
-          'ONLINE',
-          'WEB',
-          'APP',
-        }.contains(invoiceSource)) {
-      return false;
-    }
+    if (orderId.isEmpty) return false;
 
     final escapedOrderId = RegExp.escape(orderId);
-    final orderNote = RegExp(
-      r'(^|\b)Online Order #' + escapedOrderId + r'(\b|$)',
+
+    // Online-order invoices use ONL-<order id> with an optional timestamp
+    // suffix. The restore pipeline sets source=cloud_restore, so source alone
+    // cannot be used to decide whether this invoice belongs to an online order.
+    final onlineInvoiceNumber = RegExp(
+      r'^ONL[-_]' + escapedOrderId + r'(?:[-_]|$)',
       caseSensitive: false,
     );
-    return [
+    final invoiceNumbers = _values(invoice, [
+      'invoice_number',
+      'invoice_no',
+      'sale_id',
+      'sale_number',
+      'number',
+      'invoiceNumber',
+      'saleId',
+    ]);
+    if (invoiceNumbers.any(onlineInvoiceNumber.hasMatch)) return true;
+
+    // The server's invoice notes carry an explicit order reference for legacy
+    // invoice-number formats. Match that reference even after local cloud
+    // restore has replaced the original source label.
+    final orderNote = RegExp(
+      r'(^|\\b)Online Order #' + escapedOrderId + r'(\\b|$)',
+      caseSensitive: false,
+    );
+    if ([
       invoice['notes'],
       invoice['note'],
       invoice['description'],
-    ].any((value) => orderNote.hasMatch(value?.toString().trim() ?? ''));
+    ].any((value) => orderNote.hasMatch(value?.toString().trim() ?? ''))) {
+      return true;
+    }
+
+    final invoiceSource = (invoice['source'] ??
+            invoice['origin_source'] ??
+            invoice['order_source'] ??
+            invoice['sale_type'] ??
+            '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    if (!const {'ONLINE_ORDER', 'ONLINE', 'WEB', 'APP'}.contains(invoiceSource)) {
+      return false;
+    }
+
+    // Some legacy payloads carry ONL-<id> in an explicit reference field
+    // rather than the invoice number or notes.
+    final referenceFields = _values(invoice, [
+      'reference_id',
+      'referenceId',
+      'reference',
+      'order_reference',
+      'source_reference',
+    ]);
+    return referenceFields.contains('onl-$orderId'.toLowerCase()) ||
+        referenceFields.contains('online-order-$orderId'.toLowerCase());
   }
 
   static bool isCancelledOrder(Map<String, dynamic> order) {
