@@ -109,7 +109,12 @@ Future<bool> unregisterSmsBroadcastReceiver() async {
 Future<List<Map<String, String>>> getPendingBackgroundSms() async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    
+    // The background SMS callback and the long-lived detection service can run
+    // in different Dart isolates, each with its own SharedPreferences cache.
+    // Reload before enumerating keys so queued writes from the other isolate
+    // are visible to this reader.
+    await prefs.reload();
+
     // 1. Snapshot the current set of SMS queue keys.
     final allKeys = prefs.getKeys()
         .where((k) => k.startsWith(_kSmsQueuePrefix))
