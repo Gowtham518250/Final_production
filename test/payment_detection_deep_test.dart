@@ -344,6 +344,68 @@ void main() {
       );
     });
 
+    test('unregistered bank app credit without UTR becomes a review candidate', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final received = expectLater(
+        service.onPaymentDetected,
+        emits(
+          isA<PaymentEvent>()
+              .having((payment) => payment.amount, 'amount', 25)
+              .having(
+                (payment) => payment.direction,
+                'direction',
+                PaymentTransactionDirection.incomingCredit,
+              )
+              .having(
+                (payment) => payment.decision,
+                'decision',
+                PaymentDecision.likely,
+              ),
+        ),
+      );
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.example.otherbank',
+          title: 'Other Bank',
+          content: '₹25 credited to Account XXXX6789',
+        ),
+      );
+
+      await received;
+    });
+
+    test('well-formed DLT sender from an unlisted bank can emit a review candidate', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final received = expectLater(
+        service.onPaymentDetected,
+        emits(
+          isA<PaymentEvent>()
+              .having((payment) => payment.amount, 'amount', 500)
+              .having(
+                (payment) => payment.direction,
+                'direction',
+                PaymentTransactionDirection.incomingCredit,
+              )
+              .having(
+                (payment) => payment.decision,
+                'decision',
+                PaymentDecision.likely,
+              ),
+        ),
+      );
+
+      service.handleSms(
+        'VM-XYZBNK',
+        'Dear Customer, INR 500 credited to A/c XXXX1234. '
+        'UTR 123456789012',
+      );
+
+      await received;
+    });
+
     test('unregistered bank debit notification is surfaced as a debit candidate', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();
