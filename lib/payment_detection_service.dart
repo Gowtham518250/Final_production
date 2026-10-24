@@ -4351,7 +4351,11 @@ class PaymentDetectionService {
       }
 
       // ── FIX-29: Double validation — fraud risk gate ──────────────────────
-      if (fraud.riskScore > 0.5) {
+      // A structurally valid incoming-credit candidate for the active bill may
+      // carry a soft-risk penalty because it lacks a UTR/account/bank marker.
+      // Keep it visible as LIKELY for merchant review; never bypass hard fraud
+      // blocks above, and never allow this candidate path to auto-confirm it.
+      if (fraud.riskScore > 0.5 && !allowUnverifiedIncomingCandidate) {
         PdsLogger.w('FIX-29', 'FRAUD_RISK ${fraud.riskScore} > 0.5 → REJECT');
         _stats.recordDecision(PaymentDecision.rejected, amount);
         return;
