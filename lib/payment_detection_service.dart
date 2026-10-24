@@ -1869,6 +1869,14 @@ abstract class _SenderValidator {
   /// entity code via proper DLT format. Used to tag detections as
   /// verified vs provisional rather than to gate them outright — gating
   /// outright would break legitimate banks not yet in the list.
+  /// DLT-shaped sender IDs from banks not yet in our curated sender list
+  /// should still be parsed as unverified candidates. This only validates
+  /// header syntax, not the bank's identity or payment authenticity.
+  static bool isWellFormedDltHeader(String s) {
+    final t = s.trim();
+    return _valid.hasMatch(t) && _dltHeader.hasMatch(t);
+  }
+
   static bool isHighConfidence(String s) {
     final m = _dltHeader.firstMatch(s.trim());
     if (m == null) return false;
@@ -2733,6 +2741,18 @@ class PaymentDetectionService {
   @visibleForTesting
   void debugHandleNotification(ServiceNotificationEvent event) =>
       _handleNotification(event);
+
+  @visibleForTesting
+  void debugResetTransientDetectionState() {
+    _processedSmsCache.clear();
+    _recentNotificationPayloads.clear();
+    _dedupStore.clear();
+    _dedupReferenceAmounts.clear();
+    _activeFingerprints.clear();
+    _pendingBuffer.dispose();
+    billContext.clear();
+    history.clear();
+  }
 
   // Watchdog heartbeat, exposed read-only so the dashboard can show a
   // "last payment detected: Xm ago" health indicator instead of detection
@@ -3895,6 +3915,10 @@ class PaymentDetectionService {
         return;
       }
 
+      // Set only by the structurally guarded fallback for an unknown bank app.
+      // It remains a review candidate, never proof of settlement.
+      bool allowUnverifiedPackageCreditCandidate = false;
+
       if (app == PaymentApp.unknown) {
         // FIX: any package not in the static _AppRegistry whitelist was
         // dropped outright, silently, forever — closed via a content-based
@@ -3918,13 +3942,31 @@ class PaymentDetectionService {
           _processTruecallerIncomingTransfer(pkg, fields);
           return;
         }
-        final looksLikePayment =
-            (_Classifier.hasPaymentContext(fields) &&
-            _Extractor.amount(fields) != null &&
-            _Extractor.referenceId(fields) != null);
-        if (!looksLikePayment) return;
+        final amount = _Extractor.amount(fields);
+        final referenceId = _Extractor.referenceId(fields);
+        final accountSuffix = _Extractor.accountSuffix(fields);
+        final classification = _Classifier.classify(fields);
+        // Unknown bank packages are not trusted by app identity. Permit a
+        // review-only credit candidate when the message has payment context
+        // and an independent account/reference anchor; the registered-bank
+        // list is intentionally not the gate for which banks can be detected.
+        final looksLikeIncomingPayment =
+            classification == _ClassifyResult.passed &&
+            _Classifier.isIncomingCreditText(fields) &&
+            _Classifier.hasPaymentContext(fields) &&
+            (referenceId != null || accountSuffix != null);
+        // Unknown-app debits use the same structural guard. They are emitted
+        // as LIKELY and can never settle or mutate invoice accounting.
+        final looksLikeDebit =
+            classification == _ClassifyResult.debit &&
+            (referenceId != null || accountSuffix != null);
+        if (amount == null ||
+            (!looksLikeIncomingPayment && !looksLikeDebit)) {
+          return;
+        }
         app = PaymentApp.bankApp;
         isUnverifiedApp = true;
+        allowUnverifiedPackageCreditCandidate = looksLikeIncomingPayment;
         PdsLogger.w(
           'L1',
           'Unregistered package "$pkg" matched by content — treating as bankApp (LOW CONFIDENCE, unverified sender)',
@@ -3941,23 +3983,43 @@ class PaymentDetectionService {
         PaymentApp.amazonPay,
         PaymentApp.bhim,
       }.contains(app);
-      // PhonePe/GPay notifications often omit a bank-style UTR, but their
-      // explicit incoming-credit text is still useful as a *candidate* while
-      // this merchant has an active bill. It remains LIKELY and cannot alter
-      // accounting until the merchant verifies it. Don't require the voice
-      // wording regex alone: the payment classifier recognizes more formats.
+      // Official UPI-app notifications often omit a bank-style UTR. Surface
+      // explicit incoming-credit wording as a review candidate even when the
+      // merchant is not currently on an invoice screen. It is always kept
+      // LIKELY by the candidate path and cannot settle accounting by itself.
+      // Don't require the narrower voice wording regex alone: the payment
+      // classifier recognizes more formats.
       final hasExplicitIncomingCredit =
           _Classifier.classify(fields) == _ClassifyResult.passed &&
           _Classifier.isIncomingCreditText(fields) &&
           !FraudEngine.isPromotionalMessage(fields);
-      final isActiveBillCredit =
-          isTrustedPaymentApp && billContext.isActive && hasExplicitIncomingCredit;
+      final isBankRelayApp = const {
+        PaymentApp.bankApp,
+        PaymentApp.bankSms,
+        PaymentApp.icici,
+        PaymentApp.sbiYono,
+        PaymentApp.axis,
+        PaymentApp.hdfc,
+        PaymentApp.payzapp,
+      }.contains(app);
+      // Registered bank-app packages and UPI apps may differ in wording
+      // and may omit a UTR. Keep explicit bank-credit alerts visible for
+      // merchant review across banks. Unknown package names still need the
+      // independent reference/account anchor checked above.
+      final isUnverifiedBankCreditCandidate =
+          isBankRelayApp &&
+          hasExplicitIncomingCredit &&
+          _Classifier.hasPaymentContext(fields);
+      final isUnverifiedIncomingCreditCandidate =
+          (isTrustedPaymentApp && hasExplicitIncomingCredit) ||
+          isUnverifiedBankCreditCandidate ||
+          allowUnverifiedPackageCreditCandidate;
       _processText(
         fields.trim(),
         app,
         source: 'notification',
         isUnverifiedApp: isUnverifiedApp,
-        allowUnverifiedIncomingCandidate: isActiveBillCredit,
+        allowUnverifiedIncomingCandidate: isUnverifiedIncomingCreditCandidate,
       );
     } catch (e, st) {
       PdsLogger.e('L1', 'Handler error', e, st);
@@ -3974,7 +4036,8 @@ class PaymentDetectionService {
       // Do not discard them before analysing the message; simply treat them
       // as unverified so downstream confirmation still requires strong anchors.
       if (!isNumericSender &&
-          !_SenderValidator.isLegitimate(normalizedSender)) {
+          !_SenderValidator.isLegitimate(normalizedSender) &&
+          !_SenderValidator.isWellFormedDltHeader(normalizedSender)) {
         PdsLogger.w('L0', 'SPOOFED_SENDER "$normalizedSender"');
         _emitFraud(
           FraudVerdict.hardBlockSenderSpoofed,
@@ -4001,17 +4064,33 @@ class PaymentDetectionService {
       // may be shown as a LIKELY candidate even if this non-DLT sender cannot
       // earn the trusted-bank score. It can never update the sale without the
       // merchant's explicit confirmation.
+      final isExplicitIncomingCredit =
+          _Classifier.classify(body) == _ClassifyResult.passed &&
+          _Classifier.isIncomingCreditText(body) &&
+          _Classifier.hasPaymentContext(body) &&
+          !FraudEngine.isPromotionalMessage(body);
+      final hasIndependentTransactionAnchor =
+          _Extractor.referenceId(body) != null ||
+          _Extractor.accountSuffix(body) != null ||
+          _Classifier.isIncomingAccountTransfer(body) ||
+          _Classifier.hasStructuredPaymentContext(body);
       final activeBillCreditCandidate =
           billContext.isActive &&
           _Classifier.classify(body) == _ClassifyResult.passed &&
           _Classifier.isIncomingCreditText(body) &&
           !FraudEngine.isPromotionalMessage(body);
+      // Bank sender IDs vary across issuers, carriers and sub-brands. If an
+      // unfamiliar but well-formed DLT header sends a structured credit SMS,
+      // show a LIKELY candidate rather than silently discard it or trust it.
+      final unverifiedBankSmsCreditCandidate =
+          isExplicitIncomingCredit && hasIndependentTransactionAnchor;
       _processText(
         body.trim(),
         PaymentApp.bankSms,
         source: 'sms',
         sender: normalizedSender,
-        allowUnverifiedIncomingCandidate: activeBillCreditCandidate,
+        allowUnverifiedIncomingCandidate:
+            activeBillCreditCandidate || unverifiedBankSmsCreditCandidate,
       );
     } catch (e, st) {
       PdsLogger.e('L2', 'Handler error', e, st);
@@ -4624,12 +4703,12 @@ class PaymentDetectionService {
         if (matched != null && (matched.emitted || matched.voiceSpoken)) {
           PdsLogger.d(
             'TCM',
-            'SMS matched emitted notification — SILENT RECORD',
+            'SMS matched emitted notification — duplicate UI/voice event suppressed',
           );
+          // The notification already created the user-facing receipt. The SMS
+          // is corroborating evidence only; emitting it again created a second
+          // event and could reopen the confirmation prompt.
           _behaviorMemory.record(amount, name, vpa);
-          unawaited(
-            _emit(event, isBillSettlement: isBillSettled, forceMute: true),
-          );
           return;
         }
 
@@ -5109,9 +5188,26 @@ class PaymentDetectionService {
   static bool _isTrustedBankSmsNotification(
     String packageName,
     String? sender,
-  ) =>
-      _smsNotificationPackages.contains(packageName.toLowerCase()) &&
-      _isVerifiedBankSender(sender);
+  ) {
+    final pkg = packageName.toLowerCase();
+    if (!_smsNotificationPackages.contains(pkg) ||
+        !_isVerifiedBankSender(sender)) {
+      return false;
+    }
+
+    // Truecaller uses business-chat and caller labels as notification titles.
+    // A bare "APGB" title is not a bank SMS sender ID; treating it as one
+    // skips the guarded Business Chat transfer path and applies SMS scoring.
+    // Only route DLT-shaped Truecaller titles through the bank-SMS path.
+    if (pkg == 'com.truecaller') {
+      final header = (sender ?? '').trim().toUpperCase();
+      if (!RegExp(r'^[A-Z]{2}-[A-Z0-9]{3,20}(?:-[A-Z])?$')
+          .hasMatch(header)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   static bool _isSupportedTruecallerIncomingTransfer(
     String packageName,

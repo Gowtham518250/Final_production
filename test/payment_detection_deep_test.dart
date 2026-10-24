@@ -139,8 +139,9 @@ void main() {
       },
     );
 
-    test('same-UTR PhonePe notification and SMS correlate into one silent replay', () async {
+    test('same-UTR PhonePe notification and SMS produce one UI event', () async {
       final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
       service.clearBill();
       service.setBillExpected(10);
       final events = <PaymentEvent>[];
@@ -161,9 +162,8 @@ void main() {
       );
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
-      expect(events, hasLength(2));
-      expect(events[0].normalizedReferenceId, '123456789012');
-      expect(events[1].normalizedReferenceId, '123456789012');
+      expect(events, hasLength(1));
+      expect(events.single.normalizedReferenceId, '123456789012');
       expect(events.every((event) => event.isMerchantConfirmed), isFalse);
 
       await subscription.cancel();
@@ -269,6 +269,173 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('trusted UPI credit without an active bill is reviewable', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      service.clearBill();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'Payment received ₹250 credited to your account',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(events, hasLength(1));
+      expect(events.single.amount, 250);
+      expect(
+        events.single.direction,
+        PaymentTransactionDirection.incomingCredit,
+      );
+      expect(events.single.decision, PaymentDecision.likely);
+      expect(events.single.isMerchantConfirmed, isFalse);
+
+      await subscription.cancel();
+    });
+
+    test('APGB Truecaller Business Chat notification is detected', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.truecaller',
+          title: 'APGB',
+          content:
+              'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(events, hasLength(1));
+      expect(events.single.amount, 5);
+      expect(
+        events.single.direction,
+        PaymentTransactionDirection.incomingCredit,
+      );
+      expect(events.single.decision, PaymentDecision.likely);
+      expect(events.single.detectionSource, 'notification');
+
+      await subscription.cancel();
+    });
+
+    test('bare APGB Truecaller title is not misrouted as bank SMS', () {
+      expect(
+        PaymentDetectionService.debugIsTrustedBankSmsNotification(
+          'com.truecaller',
+          'APGB',
+        ),
+        isFalse,
+      );
+      expect(
+        PaymentDetectionService.debugIsTrustedBankSmsNotification(
+          'com.truecaller',
+          'VA-APGB-T',
+        ),
+        isTrue,
+      );
+    });
+
+    test('unregistered bank app credit without UTR becomes a review candidate', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final received = expectLater(
+        service.onPaymentDetected,
+        emits(
+          isA<PaymentEvent>()
+              .having((payment) => payment.amount, 'amount', 25)
+              .having(
+                (payment) => payment.direction,
+                'direction',
+                PaymentTransactionDirection.incomingCredit,
+              )
+              .having(
+                (payment) => payment.decision,
+                'decision',
+                PaymentDecision.likely,
+              ),
+        ),
+      );
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.example.otherbank',
+          title: 'Other Bank',
+          content: '₹25 credited to Account XXXX6789',
+        ),
+      );
+
+      await received;
+    });
+
+    test('well-formed DLT sender from an unlisted bank can emit a review candidate', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final received = expectLater(
+        service.onPaymentDetected,
+        emits(
+          isA<PaymentEvent>()
+              .having((payment) => payment.amount, 'amount', 500)
+              .having(
+                (payment) => payment.direction,
+                'direction',
+                PaymentTransactionDirection.incomingCredit,
+              )
+              .having(
+                (payment) => payment.decision,
+                'decision',
+                PaymentDecision.likely,
+              ),
+        ),
+      );
+
+      service.handleSms(
+        'VM-XYZBNK',
+        'Dear Customer, INR 500 credited to A/c XXXX1234. '
+        'UTR 123456789012',
+      );
+
+      await received;
+    });
+
+    test('unregistered bank debit notification is surfaced as a debit candidate', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final received = expectLater(
+        service.onPaymentDetected,
+        emits(
+          isA<PaymentEvent>()
+              .having(
+                (payment) => payment.direction,
+                'direction',
+                PaymentTransactionDirection.outgoingDebit,
+              )
+              .having(
+                (payment) => payment.decision,
+                'decision',
+                PaymentDecision.likely,
+              )
+              .having((payment) => payment.amount, 'amount', 500),
+        ),
+      );
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.unregistered.bank.mobile',
+          title: 'Bank Alert',
+          content: 'INR 500 debited from account XXXX8844',
+        ),
+      );
+
+      await received;
     });
 
     test(
