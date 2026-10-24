@@ -2894,7 +2894,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final stockRaw = found['current_stock'] ??
           found['stock'] ??
           found['stock_quantity'] ??
-          found['available_stock'];
+          found['available_stock'] ??
+          found['quantity'];
       final stock = stockRaw is num
           ? stockRaw.toDouble()
           : double.tryParse(stockRaw?.toString() ?? '');
