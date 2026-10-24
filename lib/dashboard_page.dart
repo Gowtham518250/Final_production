@@ -70,6 +70,7 @@ import 'online_store_service.dart';
 import 'online_order_service.dart';
 import 'low_stock_alerts_service.dart';
 import 'payment_detection_service.dart';
+import 'payment_background_service.dart';
 import 'online_payment_history_service.dart';
 import 'package:record/record.dart' as record;
 import 'package:path/path.dart' as p;
@@ -1037,10 +1038,10 @@ class _DashboardPageState extends State<DashboardPage>
       final backgroundService = FlutterBackgroundService();
       final isRunning = await backgroundService.isRunning();
       if (!isRunning) {
-        // The service can be stopped by Android/OEM battery management. A
-        // permission check alone must not assume its isolate still exists.
-        await backgroundService.startService();
-        debugPrint('🔁 Restarted stopped payment-detection service');
+        // Configure and start again if Android/OEM battery management stopped
+        // the service (or if startup had not completed yet).
+        await initializeBackgroundService();
+        debugPrint('🔁 Reconfigured/restarted stopped payment-detection service');
       }
 
       // Only the background isolate owns the live listeners. Signal it after
