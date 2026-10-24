@@ -225,12 +225,17 @@ class ProductionVoiceBillingService {
 
     String normalize(String value) => value
         .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\\u0900-\\u0d7f\\u0980-\\u09ff\\u0a00-\\u0aff\\u0b80-\\u0bff\\u0c00-\\u0c7f\\u0c80-\\u0cff\\u0d00-\\u0d7f\\s]'), ' ')
-        .replaceAll(RegExp(r'\\s+'), ' ')
+        .replaceAll(
+          RegExp(
+            r'[^a-z0-9\u0900-\u0d7f\u0980-\u09ff\u0a00-\u0aff\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\s]',
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
     Set<String> tokens(String value) => normalize(value)
-        .split(RegExp(r'\\s+'))
+        .split(RegExp(r'\s+'))
         .where((token) => token.length >= 3)
         .toSet();
 
