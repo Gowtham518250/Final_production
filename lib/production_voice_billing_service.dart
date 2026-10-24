@@ -140,33 +140,19 @@ class ProductionVoiceBillingService {
         item.name,
       );
 
-      final learnedMatch = shopProduct == null
-          ? catalogService.findBest(
-              item.name,
-              minScore: 0.72,
-            )
-          : null;
-
+      // Only this shop's actual inventory is allowed to assign stock identity
+      // or a saved catalog price. Learned/global aliases are hints, not proof
+      // that the merchant has registered the product. Unknown items remain
+      // custom bill lines even if another shop or training catalog knows them.
+      final product = shopProduct;
       final canonicalName = shopProduct?['name']?.toString() ??
           shopProduct?['product_name']?.toString() ??
-          learnedMatch?.canonicalName ??
-          ((item.catalogMatchName?.trim().isNotEmpty ?? false)
-              ? item.catalogMatchName!.trim()
-              : item.name.trim());
-
-      final product = shopProduct ??
-          _findKnownProduct(
-            knownProducts,
-            canonicalName,
-            learnedMatch?.canonicalName,
-          );
+          item.name.trim();
 
       final catalogPrice = _firstPositiveDouble([
         product?['price'],
         product?['selling_price'],
         product?['sale_price'],
-        learnedMatch?.defaultPrice,
-        item.catalogPrice,
       ]);
 
       final spokenPrice = item.priceWasSpoken && item.price > 0 ? item.price : null;
@@ -176,7 +162,6 @@ class ProductionVoiceBillingService {
         item.unit,
         fallback: product?['unit']?.toString() ??
             product?['uom']?.toString() ??
-            learnedMatch?.defaultUnit ??
             '',
       );
 
@@ -197,8 +182,7 @@ class ProductionVoiceBillingService {
           unit: unit,
           price: finalPrice,
           confidence: item.confidenceScore,
-          catalogMatched:
-              product != null || learnedMatch != null || item.catalogMatchName != null,
+          catalogMatched: shopProduct != null,
           priceSource: spokenPrice != null
               ? 'spoken'
               : catalogPrice != null && catalogPrice > 0
