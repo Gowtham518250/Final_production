@@ -2222,7 +2222,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
 
       _localProducts = mergedProducts;
-      known.addAll(localMap.values.map((v) => Map<String, dynamic>.from(v)));
+      known.addAll(
+        localMap.values.map((v) => <String, dynamic>{
+          ...Map<String, dynamic>.from(v),
+          'source': 'Local Catalog',
+        }),
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading local products: $e');
     }
@@ -2252,6 +2257,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               'price': item['price']?.toString() ?? '0',
               'gst': item['gst_percent']?.toString() ?? '18',
               'barcode': item['barcode'] ?? '',
+              // History is useful for autocomplete, but it must never be
+              // mistaken for a current stock-bearing inventory product.
+              'source': 'Sales History',
             });
           }
         }
