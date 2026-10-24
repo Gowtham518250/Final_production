@@ -1440,13 +1440,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     if (bestMatch != null && bestScore > 0.75) {
       // HIGH CONFIDENCE: Add immediately
       _addVoiceItem(
-        bestMatch['product_name']?.toString() ?? itemName,
+        bestMatch['product_name']?.toString() ?? bestMatch['name']?.toString() ?? itemName,
         qty,
         providedPrice: finalPrice,
         providedGst: finalGst,
         providedBarcode:
             bestMatch['barcode']?.toString() ??
-            bestMatch['id']?.toString() ??
+            bestMatch['sku']?.toString() ??
             '',
       );
     } else if (bestMatch != null && bestScore > 0.35) {
@@ -1491,7 +1491,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     LiveTranslatedText(
-                      bestMatch?['product_name'] ?? itemName,
+                      bestMatch?['product_name']?.toString() ?? bestMatch?['name']?.toString() ?? itemName,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -1515,16 +1515,30 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               onPressed: () => Navigator.pop(ctx),
               child: const LiveTranslatedText('NO, TRY AGAIN'),
             ),
+            TextButton(
+              onPressed: () {
+                // A medium-confidence fuzzy match is only a suggestion. Let
+                // the cashier sell the spoken product as a custom line instead
+                // of forcing it to become a different catalog item.
+                _addVoiceItem(
+                  itemName,
+                  qty,
+                  providedPrice: price > 0 ? price : null,
+                );
+                Navigator.pop(ctx);
+              },
+              child: const LiveTranslatedText('ADD AS NEW ITEM'),
+            ),
             ElevatedButton(
               onPressed: () {
                 _addVoiceItem(
-                  bestMatch?['product_name'] ?? itemName,
+                  bestMatch?['product_name']?.toString() ?? bestMatch?['name']?.toString() ?? itemName,
                   qty,
                   providedPrice: finalPrice,
                   providedGst: finalGst,
                   providedBarcode:
                       bestMatch?['barcode']?.toString() ??
-                      bestMatch?['id']?.toString() ??
+                      bestMatch?['sku']?.toString() ??
                       '',
                 );
                 Navigator.pop(ctx);
