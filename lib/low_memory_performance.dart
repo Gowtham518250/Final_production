@@ -14,6 +14,30 @@ class LowMemoryPerformance {
   static const int maximumCachedImages = 80;
   static const int maximumDecodedImageCacheBytes = 40 * 1024 * 1024;
 
+  /// Convert a widget's logical size to a bounded decode size in physical
+  /// pixels. This avoids decoding multi-megapixel product photos for small
+  /// catalog cards and cart thumbnails.
+  static int decodeCacheDimension(
+    double logicalPixels,
+    double devicePixelRatio, {
+    int minPixels = 64,
+    int maxPixels = 1280,
+  }) {
+    if (!logicalPixels.isFinite ||
+        !devicePixelRatio.isFinite ||
+        logicalPixels <= 0 ||
+        devicePixelRatio <= 0 ||
+        minPixels <= 0 ||
+        maxPixels < minPixels) {
+      throw ArgumentError('Invalid image decode dimensions or bounds.');
+    }
+
+    return (logicalPixels * devicePixelRatio)
+        .round()
+        .clamp(minPixels, maxPixels)
+        .toInt();
+  }
+
   static bool _configured = false;
   static final _memoryPressureObserver = _MemoryPressureObserver();
 
