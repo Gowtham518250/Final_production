@@ -26,15 +26,30 @@ void main() {
 
   test('decode dimensions respect display scale and memory bounds', () {
     expect(
-      LowMemoryPerformance.decodeCacheDimension(50, 3, minPixels: 100, maxPixels: 240),
+      LowMemoryPerformance.decodeCacheDimension(
+        50,
+        3,
+        minPixels: 100,
+        maxPixels: 240,
+      ),
       150,
     );
     expect(
-      LowMemoryPerformance.decodeCacheDimension(500, 3, minPixels: 320, maxPixels: 640),
+      LowMemoryPerformance.decodeCacheDimension(
+        500,
+        3,
+        minPixels: 320,
+        maxPixels: 640,
+      ),
       640,
     );
     expect(
-      LowMemoryPerformance.decodeCacheDimension(20, 2, minPixels: 100, maxPixels: 240),
+      LowMemoryPerformance.decodeCacheDimension(
+        20,
+        2,
+        minPixels: 100,
+        maxPixels: 240,
+      ),
       100,
     );
   });
@@ -45,7 +60,12 @@ void main() {
       throwsArgumentError,
     );
     expect(
-      () => LowMemoryPerformance.decodeCacheDimension(50, 3, minPixels: 300, maxPixels: 200),
+      () => LowMemoryPerformance.decodeCacheDimension(
+        50,
+        3,
+        minPixels: 300,
+        maxPixels: 200,
+      ),
       throwsArgumentError,
     );
   });
