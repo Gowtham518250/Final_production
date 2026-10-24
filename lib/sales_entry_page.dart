@@ -1614,6 +1614,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     bool? stockTracked,
   }) {
     if (!mounted || name.trim().isEmpty || qty <= 0) return;
+    final shouldCheckStock =
+        stockTracked ?? (providedBarcode?.trim().isNotEmpty ?? false);
 
     setState(() {
       _isVoiceProcessing = true;
@@ -1621,7 +1623,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final normalizedName = name.trim().toLowerCase();
       final incomingPrice = providedPrice ?? 0.0;
       final incomingBarcode = (providedBarcode ?? '').trim();
-      final shouldCheckStock = stockTracked ?? incomingBarcode.isNotEmpty;
 
       String formatMoney(double value) {
         final rounded = double.parse(value.toStringAsFixed(2));
