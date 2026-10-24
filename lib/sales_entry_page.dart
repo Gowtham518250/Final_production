@@ -2852,8 +2852,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
 
       // Validate numeric values
-      final quantity = int.tryParse(qtyText);
-      if (quantity == null || quantity <= 0) {
+      // Weight/volume products can be billed fractionally (for example 0.5 kg).
+      final quantity = double.tryParse(qtyText);
+      if (quantity == null || !quantity.isFinite || quantity <= 0) {
         if (mounted)
           setState(
             () => message = 'Item ${i + 1} has invalid quantity: $qtyText',
@@ -4371,7 +4372,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     for (var entry in nonEmpty) {
       final price = double.tryParse(entry['price']?.text.trim() ?? '0') ?? 0;
       final qty = double.tryParse(entry['qty']?.text.trim() ?? '0') ?? 0;
-      if (price <= 0) {
+      if (!price.isFinite || price <= 0) {
         if (mounted) {
           setState(
             () => message =
@@ -4380,7 +4381,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         }
         return false;
       }
-      if (qty <= 0) {
+      if (!qty.isFinite || qty <= 0) {
         if (mounted) {
           setState(
             () =>
