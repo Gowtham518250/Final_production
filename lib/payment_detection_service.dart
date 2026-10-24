@@ -3311,17 +3311,35 @@ class PaymentDetectionService {
   }
 
   Future<void> _ensureDetectionPermissions() async {
+    // This method runs inside the long-lived background-service isolate.
+    // Android permission/settings UI must be launched from a visible activity,
+    // never from this isolate. The Dashboard owns all permission requests and
+    // signals 'restart_payment_detection' after the user returns from Settings.
     if (!PdsConfig.isNotificationEnabled) {
       PdsLogger.i('SVC', 'Notification channel disabled by config');
-    } else if (!await NotificationListenerService.isPermissionGranted()) {
-      PdsLogger.w(
-        'SVC',
-        'Notification listener permission missing; requesting',
-      );
+    } else {
       try {
-        await NotificationListenerService.requestPermission();
+        final granted =
+            await NotificationListenerService.isPermissionGranted();
+        if (granted) {
+          PdsLogger.i('SVC', 'Notification access is granted');
+        } else {
+          PdsLogger.w(
+            'SVC',
+            'Notification access missing; enable it from the Dashboard',
+          );
+          _emitStatus(
+            ChannelType.notification,
+            ChannelStatus.permissionDenied,
+          );
+        }
       } catch (e, st) {
-        PdsLogger.e('SVC', 'Notification permission request failed', e, st);
+        PdsLogger.e('SVC', 'Notification permission check failed', e, st);
+        _emitStatus(
+          ChannelType.notification,
+          ChannelStatus.error,
+          detail: '$e',
+        );
       }
     }
 
@@ -3329,14 +3347,19 @@ class PaymentDetectionService {
       PdsLogger.i('SVC', 'SMS channel disabled by config');
     } else {
       try {
-        final granted = await Telephony.instance.requestSmsPermissions;
-        if (granted == true) {
-          PdsLogger.i('SVC', 'SMS permission granted');
+        final granted = await hasSmsPermission();
+        if (granted) {
+          PdsLogger.i('SVC', 'SMS permission is granted');
         } else {
-          PdsLogger.w('SVC', 'SMS permission denied or unavailable');
+          PdsLogger.w(
+            'SVC',
+            'SMS permission missing; grant it from the Dashboard',
+          );
+          _emitStatus(ChannelType.sms, ChannelStatus.permissionDenied);
         }
       } catch (e, st) {
-        PdsLogger.e('SVC', 'SMS permission request failed', e, st);
+        PdsLogger.e('SVC', 'SMS permission check failed', e, st);
+        _emitStatus(ChannelType.sms, ChannelStatus.error, detail: '$e');
       }
     }
   }
@@ -3647,33 +3670,26 @@ class PaymentDetectionService {
     if (!PdsConfig.isSmsEnabled) return;
     if (_isSmsListening) return; // Prevent duplicate listeners
     try {
-      final granted = await Telephony.instance.requestSmsPermissions;
-      if (granted == true) {
-        _isSmsListening = true;
-        Telephony.instance.listenIncomingSms(
-          onNewMessage: (m) => handleSms(m.address ?? '', m.body ?? ''),
-          onBackgroundMessage: smsBackgroundHandler,
-          listenInBackground: true,
-        );
-        PdsLogger.i('L2', 'SMS ONLINE');
-        _emitStatus(ChannelType.sms, ChannelStatus.online);
-      } else {
-        if (await Telephony.instance.requestSmsPermissions ?? false) {
-          // Retry once in case of transient denial
-          _isSmsListening = true;
-          Telephony.instance.listenIncomingSms(
-            onNewMessage: (m) => handleSms(m.address ?? '', m.body ?? ''),
-            onBackgroundMessage: smsBackgroundHandler,
-            listenInBackground: true,
-          );
-          PdsLogger.i('L2', 'SMS ONLINE after retry');
-          _emitStatus(ChannelType.sms, ChannelStatus.online);
-          return;
-        }
-        PdsLogger.w('L2', 'SMS PERMISSION_DENIED');
+      // Permission was requested by the visible Dashboard, not here. Calling
+      // Telephony.requestSmsPermissions from the background isolate can fail
+      // to present Android's permission UI and leave both channels unready.
+      final granted = await hasSmsPermission();
+      if (!granted) {
+        PdsLogger.w('L2', 'SMS PERMISSION_DENIED; waiting for Dashboard grant');
         _emitStatus(ChannelType.sms, ChannelStatus.permissionDenied);
+        return;
       }
+
+      Telephony.instance.listenIncomingSms(
+        onNewMessage: (m) => handleSms(m.address ?? '', m.body ?? ''),
+        onBackgroundMessage: smsBackgroundHandler,
+        listenInBackground: true,
+      );
+      _isSmsListening = true;
+      PdsLogger.i('L2', 'SMS ONLINE');
+      _emitStatus(ChannelType.sms, ChannelStatus.online);
     } catch (e, st) {
+      _isSmsListening = false;
       PdsLogger.e('L2', 'Start error', e, st);
       _emitStatus(ChannelType.sms, ChannelStatus.error, detail: '$e');
     }
