@@ -1986,6 +1986,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
   List<Map<String, dynamic>> _knownProducts = [];
   List<Map<String, dynamic>> _knownCustomers = [];
+  Future<void>? _productCatalogLoadFuture;
 
   String _normalizeBarcode(String value) {
     return value.trim().replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
@@ -2082,12 +2083,18 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             '';
         final pBarcode = _normalizeBarcode(rawBarcode.toString());
         final pData = {
-          'id': (p['id'] ?? p['product_id'] ?? '').toString(),
+          'id': (p['id'] ?? p['product_id'] ?? p['backend_id'] ?? '').toString(),
+          'product_name': p['product_name'] ?? p['name'] ?? '',
           'name': p['product_name'] ?? p['name'] ?? '',
-          'price': (p['price'] ?? p['unit_price'] ?? '0').toString(),
-          'gst': (p['gst_percent'] ?? p['gst'] ?? '18').toString(),
+          'price': (p['price'] ?? p['unit_price'] ?? p['selling_price'] ?? '0').toString(),
+          'unit_price': (p['unit_price'] ?? p['price'] ?? p['selling_price'] ?? '0').toString(),
+          'gst': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18').toString(),
+          'gst_percent': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18').toString(),
           'barcode': pBarcode,
           'sku': p['sku']?.toString() ?? pBarcode,
+          'current_stock': p['current_stock'] ?? p['stock'] ?? p['stock_quantity'],
+          'stock': p['stock'] ?? p['current_stock'] ?? p['stock_quantity'],
+          'min_stock': p['min_stock'] ?? p['minimum_stock'] ?? 0,
           'category': p['category'] ?? p['category_name'] ?? '',
           'source': 'Backend Catalog',
         };
@@ -2968,7 +2975,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     WidgetsBinding.instance.addObserver(this); // Add lifecycle observer
     PrinterService.autoConnect();
     addEntry();
-    _loadLocalProducts();
+    _productCatalogLoadFuture = _loadLocalProducts();
     _loadLocalCustomers();
     unawaited(_primeBillNumberSequence());
     unawaited(_refreshActiveFlashSaleFromBackend());
