@@ -58,7 +58,6 @@ import 'package:vibration/vibration.dart';
 import 'session_management.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'data_validation_service.dart';
-import 'stock_validation_service.dart';
 
 // API Endpoints
 const String salesCreateEndpoint = '/api/invoices/sync';
@@ -2890,7 +2889,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     String normalize(String value) => value
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .replaceAll(RegExp(r'\\s+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
     for (final entry in entries) {
