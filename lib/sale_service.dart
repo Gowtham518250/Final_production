@@ -479,6 +479,11 @@ try {
       final bool catalogLoaded = productsList.isNotEmpty;
 
       for (var item in items) {
+        // A custom voice-billing line is a financial invoice row only. It must
+        // not reserve or deduct inventory by matching its name to a catalog row.
+        if (item['stock_tracked'] == false || item['is_custom_item'] == true) {
+          continue;
+        }
         final productId = int.tryParse((item['product_id'] ?? item['id'] ?? '0').toString()) ?? 0;
         final qty = (item['qty'] is num
             ? (item['qty'] as num).toDouble()
