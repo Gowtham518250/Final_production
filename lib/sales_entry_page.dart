@@ -2883,65 +2883,77 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
   // 🔒 STOCK VALIDATION: Check stock availability before sale
   Future<bool> _validateStockAvailability() async {
-    final checks = entries.map((entry) async {
-      final itemName = entry['item']?.text.trim();
-      final qtyText = entry['qty']?.text.trim();
+    // The active product list is already loaded for search/voice billing.
+    // Check known stock from that snapshot instead of doing one HTTP request
+    // per invoice line. Unlisted custom lines are sellable and have no stock
+    // identity, so they must never block checkout.
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\\s+'), ' ')
+        .trim();
 
-      if (itemName == null ||
-          itemName.isEmpty ||
-          qtyText == null ||
-          qtyText.isEmpty) {
-        return null;
-      }
-
-      final quantity = int.tryParse(qtyText) ?? 0;
-      if (quantity <= 0) return null;
+    for (final entry in entries) {
+      final itemName = entry['item']?.text.trim() ?? '';
+      final quantity = double.tryParse(entry['qty']?.text.trim() ?? '') ?? 0;
+      if (itemName.isEmpty || !quantity.isFinite || quantity <= 0) continue;
 
       final barcode = entry['barcode']?.text.trim() ?? '';
-      final trackedInShop = _knownProducts.any((product) {
-        final name = (product['product_name'] ??
+      Map<String, dynamic>? matched;
+      for (final product in _knownProducts) {
+        if (product['source'] == 'Sales History') continue;
+        final productName = (product['product_name'] ??
                 product['name'] ??
                 product['productName'] ??
                 '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        final code = (product['barcode'] ??
-                product['bar_code'] ??
-                product['sku'] ??
-                product['product_code'] ??
-                product['id'] ??
-                product['product_id'] ??
-                '')
-            .toString()
-            .trim();
-        return name == itemName.toLowerCase() ||
-            (barcode.isNotEmpty && code == barcode);
-      });
-
-      // Custom voice lines intentionally have no inventory identity. Do not
-      // query stock by name: a backend catalog not loaded on this device could
-      // otherwise turn an untracked line into an unintended stock-linked sale.
-      if (!trackedInShop && barcode.isEmpty) return null;
-
-      return StockValidationService.instance.validateItemStock(
-        itemName: itemName,
-        requestedQuantity: quantity,
-      );
-    }).toList();
-
-    final validations = await Future.wait(checks);
-    for (final validation in validations) {
-      if (validation == null) continue;
-      if (!validation.isValid) {
-        if (mounted) setState(() => message = validation.message);
-        return false;
+            .toString();
+        final productCodes = <String>{
+          (product['barcode'] ??
+                  product['bar_code'] ??
+                  product['sku'] ??
+                  product['product_code'] ??
+                  '')
+              .toString()
+              .trim(),
+          (product['id'] ?? product['product_id'] ?? product['productId'] ?? '')
+              .toString()
+              .trim(),
+        }..removeWhere((code) => code.isEmpty);
+        if (normalize(productName) == normalize(itemName) ||
+            (barcode.isNotEmpty && productCodes.contains(barcode))) {
+          matched = product;
+          break;
+        }
       }
 
-      if (validation.requiresManualConfirmation && kDebugMode) {
-        debugPrint(
-          '⚠️ Stock validation requires manual confirmation: ${validation.message}',
-        );
+      // No current inventory match means a custom bill line; leave it alone.
+      if (matched == null) continue;
+
+      final stockRaw = matched['current_stock'] ??
+          matched['stock'] ??
+          matched['stock_quantity'] ??
+          matched['available_stock'] ??
+          matched['quantity'];
+      final stock = stockRaw is num
+          ? stockRaw.toDouble()
+          : double.tryParse(stockRaw?.toString() ?? '');
+      // Missing/stale cache stock is not treated as zero. The invoice sync
+      // path remains responsible for authoritative server-side reconciliation.
+      if (stock == null || !stock.isFinite) continue;
+
+      if (quantity > stock) {
+        if (mounted) {
+          setState(() {
+            message = 'Insufficient stock for ' +
+                itemName +
+                '. Available: ' +
+                stock.toStringAsFixed(stock % 1 == 0 ? 0 : 3) +
+                ', requested: ' +
+                quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 3) +
+                '.';
+          });
+        }
+        return false;
       }
     }
 
@@ -4403,6 +4415,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       // field aliases while retaining exact matching (not fuzzy guessing).
       final nameLower = rawName.trim().toLowerCase();
       final match = _knownProducts.firstWhere((p) {
+        // Old sales history seeds autocomplete only. It does not prove
+        // that a currently stock-tracked product exists in inventory.
+        if (p['source'] == 'Sales History') return false;
         final productName =
             (p['product_name'] ?? p['name'] ?? p['productName'] ?? '')
                 .toString()
@@ -4424,13 +4439,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             (barcode.isNotEmpty &&
                 (productCode == barcode || productId == barcode));
       }, orElse: () => <String, dynamic>{});
-      final stockTracked = match.isNotEmpty || barcode.isNotEmpty;
+      // A supplied barcode is not proof of a product in this shop. Only
+      // a match in the current inventory catalog receives stock identity.
+      final stockTracked = match.isNotEmpty;
       final realProductId = match.isNotEmpty
           ? (match['id'] ??
                 match['product_id'] ??
-                match['productId'] ??
-                barcode)
-          : (barcode.isNotEmpty ? barcode : null);
+                match['productId'])
+          : null;
 
       return {
         'product_name': rawName,
