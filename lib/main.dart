@@ -141,9 +141,13 @@ import 'error_boundary.dart';
 import 'input_validation_service.dart';
 import 'timeout_config.dart';
 import 'data_validation_service.dart';
+import 'low_memory_performance.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Bound decoded image memory before any screen can start loading images.
+  LowMemoryPerformance.configure();
 
   // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
   bool firebaseInitialized = false;
