@@ -199,6 +199,9 @@ try {
     return {
       'product_id': validId > 0 ? validId : null,
       'product_name': validName,
+      // Preserve custom-line intent through the server invoice-sync payload.
+      'stock_tracked': item['stock_tracked'] != false &&
+          item['is_custom_item'] != true,
       'quantity': qtyWire,
       'qty': qtyWire,
       'unit_price': price,
