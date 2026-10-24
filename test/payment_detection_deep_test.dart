@@ -271,6 +271,34 @@ void main() {
       );
     });
 
+    test('trusted UPI credit without an active bill is reviewable', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      service.clearBill();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'Payment received ₹250 credited to your account',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(events, hasLength(1));
+      expect(events.single.amount, 250);
+      expect(
+        events.single.direction,
+        PaymentTransactionDirection.incomingCredit,
+      );
+      expect(events.single.decision, PaymentDecision.likely);
+      expect(events.single.isMerchantConfirmed, isFalse);
+
+      await subscription.cancel();
+    });
+
     test('APGB Truecaller Business Chat notification is detected', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();
