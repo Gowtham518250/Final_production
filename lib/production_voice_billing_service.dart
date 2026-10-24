@@ -243,6 +243,7 @@ class ProductionVoiceBillingService {
 
     // Exact shop-product name first.
     for (final product in products) {
+      if (product['source'] == 'Sales History') continue;
       final names = [
         product['name'],
         product['product_name'],
@@ -258,6 +259,7 @@ class ProductionVoiceBillingService {
     final scored = <MapEntry<Map<String, dynamic>, double>>[];
 
     for (final product in products) {
+      if (product['source'] == 'Sales History') continue;
       final names = [
         product['name'],
         product['product_name'],
