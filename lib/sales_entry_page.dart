@@ -2830,6 +2830,33 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final quantity = int.tryParse(qtyText) ?? 0;
       if (quantity <= 0) return null;
 
+      final barcode = entry['barcode']?.text.trim() ?? '';
+      final trackedInShop = _knownProducts.any((product) {
+        final name = (product['product_name'] ??
+                product['name'] ??
+                product['productName'] ??
+                '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final code = (product['barcode'] ??
+                product['bar_code'] ??
+                product['sku'] ??
+                product['product_code'] ??
+                product['id'] ??
+                product['product_id'] ??
+                '')
+            .toString()
+            .trim();
+        return name == itemName.toLowerCase() ||
+            (barcode.isNotEmpty && code == barcode);
+      });
+
+      // Custom voice lines intentionally have no inventory identity. Do not
+      // query stock by name: a backend catalog not loaded on this device could
+      // otherwise turn an untracked line into an unintended stock-linked sale.
+      if (!trackedInShop && barcode.isEmpty) return null;
+
       return StockValidationService.instance.validateItemStock(
         itemName: itemName,
         requestedQuantity: quantity,
@@ -4330,16 +4357,19 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             (barcode.isNotEmpty &&
                 (productCode == barcode || productId == barcode));
       }, orElse: () => <String, dynamic>{});
+      final stockTracked = match.isNotEmpty || barcode.isNotEmpty;
       final realProductId = match.isNotEmpty
           ? (match['id'] ??
                 match['product_id'] ??
                 match['productId'] ??
                 barcode)
-          : barcode;
+          : (barcode.isNotEmpty ? barcode : null);
 
       return {
         'product_name': rawName,
         'product_id': realProductId,
+        'stock_tracked': stockTracked,
+        'is_custom_item': !stockTracked,
         'barcode': barcode,
         'price': price.toString(),
         'qty': qty,
