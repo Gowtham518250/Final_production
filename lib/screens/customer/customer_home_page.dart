@@ -207,7 +207,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         logicalImageWidth,
         media.devicePixelRatio,
         minPixels: 320,
-        maxPixels: 640,
+        maxPixels: 960,
       );
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
