@@ -3861,7 +3861,7 @@ class PaymentDetectionService {
       );
       final normalizedPayload = fields
           .toLowerCase()
-          .replaceAll(RegExp(r'\\s+'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
       final notificationFingerprint = sha256
           .convert(
