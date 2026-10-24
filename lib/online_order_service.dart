@@ -78,7 +78,7 @@ class OnlineOrderService {
       r'^ONL[-_]' + escapedOrderId + r'(?:[-_]|$)',
       caseSensitive: false,
     );
-    final invoiceNumbers = _values(invoice, [
+    final onlineInvoiceNumbers = _values(invoice, [
       'invoice_number',
       'invoice_no',
       'sale_id',
@@ -87,7 +87,7 @@ class OnlineOrderService {
       'invoiceNumber',
       'saleId',
     ]);
-    if (invoiceNumbers.any(onlineInvoiceNumber.hasMatch)) return true;
+    if (onlineInvoiceNumbers.any(onlineInvoiceNumber.hasMatch)) return true;
 
     // The server's invoice notes carry an explicit order reference for legacy
     // invoice-number formats. Match that reference even after local cloud
