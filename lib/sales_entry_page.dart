@@ -206,6 +206,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           .toString()
           .trim();
       final matchedProduct = _knownProducts.firstWhere((product) {
+        // Sales history helps autocomplete only; it is not live inventory.
+        if (product['source'] == 'Sales History') return false;
         final id =
             (product['id'] ??
                     product['product_id'] ??
@@ -1442,10 +1444,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         'current_stock':
             raw['current_stock'] ?? raw['stock'] ?? raw['stock_quantity'],
       };
-    }).where((product) => (product['product_name'] ?? '')
-        .toString()
-        .trim()
-        .isNotEmpty).toList(growable: false);
+    }).where((product) =>
+        product['source'] != 'Sales History' &&
+        (product['product_name'] ?? '').toString().trim().isNotEmpty
+    ).toList(growable: false);
 
     for (final product in allCatalog) {
       final pName = product['product_name'].toString().toLowerCase();
