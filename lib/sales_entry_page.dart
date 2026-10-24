@@ -1613,7 +1613,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     String? providedBarcode,
     bool? stockTracked,
   }) {
-    if (!mounted || name.trim().isEmpty || qty <= 0) return;
+    if (!mounted || name.trim().isEmpty || !qty.isFinite || qty <= 0) return;
     final shouldCheckStock =
         stockTracked ?? (providedBarcode?.trim().isNotEmpty ?? false);
 
@@ -2864,7 +2864,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
 
       final price = double.tryParse(priceText);
-      if (price == null || price < 0) {
+      if (price == null || !price.isFinite || price < 0) {
         if (mounted)
           setState(
             () => message = 'Item ${i + 1} has invalid price: $priceText',
