@@ -91,6 +91,26 @@ void main() {
     expect(result.warnings, isNotEmpty);
   });
 
+  test('keeps an unlisted product and its explicitly spoken price as a custom line', () async {
+    final result = await ProductionVoiceBillingService.parse(
+      transcript: 'chicken 150',
+      localeCode: 'en-IN',
+      catalogService: catalog,
+      knownProducts: const [],
+    );
+
+    expect(result.lines, hasLength(1));
+    final line = result.lines.single;
+    expect(line.name.toLowerCase(), 'chicken');
+    expect(line.quantity, 1);
+    expect(line.price, 150);
+    expect(line.priceSource, 'spoken');
+    expect(line.catalogMatched, isFalse);
+    expect(line.barcode, isNull);
+    expect(line.toMap()['catalog_matched'], isFalse);
+    expect(line.toMap()['price_source'], 'spoken');
+  });
+
   test('keeps missing price visible instead of silently inventing one', () async {
     final result = await ProductionVoiceBillingService.parse(
       transcript: '2 kg local rice',
