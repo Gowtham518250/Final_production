@@ -113,6 +113,7 @@ import 'online_store_manager_page.dart';
 import 'widgets/online_analytics_card.dart';
 import 'widgets/error_boundary.dart'; // Phase 3: Dashboard crash protection
 import 'performance_optimizations.dart'; // 🚀 Advanced performance optimizations
+import 'low_memory_performance.dart';
 
 // color constants for a cohesive shopkeeper-friendly theme
 const Color kPrimaryColor = Color(0xFF6366F1);
@@ -11404,6 +11405,12 @@ class _DashboardPageState extends State<DashboardPage>
                       ? shopName[0]
                       : 'S'))
             .toUpperCase();
+    final avatarCacheSize = LowMemoryPerformance.decodeCacheDimension(
+      48,
+      MediaQuery.of(context).devicePixelRatio,
+      minPixels: 96,
+      maxPixels: 192,
+    );
 
     return GestureDetector(
       onTap: _showShopSettingsMenu,
@@ -11426,7 +11433,12 @@ class _DashboardPageState extends State<DashboardPage>
           ),
           child: ClipOval(
             child: logoBytes != null
-                ? Image.memory(logoBytes!, fit: BoxFit.cover)
+                ? Image.memory(
+                    logoBytes!,
+                    fit: BoxFit.cover,
+                    cacheWidth: avatarCacheSize,
+                    cacheHeight: avatarCacheSize,
+                  )
                 : Container(
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
@@ -13855,7 +13867,16 @@ class _DashboardPageState extends State<DashboardPage>
                         ],
                       ),
                       padding: const EdgeInsets.all(12),
-                      child: Image.memory(_qrImageBytes!, fit: BoxFit.contain),
+                      child: Image.memory(
+                        _qrImageBytes!,
+                        fit: BoxFit.contain,
+                        cacheWidth: LowMemoryPerformance.decodeCacheDimension(
+                          220,
+                          MediaQuery.of(context).devicePixelRatio,
+                          minPixels: 440,
+                          maxPixels: 880,
+                        ),
+                      ),
                     )
                   else if (_upiId.trim().isNotEmpty)
                     Container(
@@ -14553,7 +14574,16 @@ class _DashboardPageState extends State<DashboardPage>
             child: logoBytes != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.memory(logoBytes!, fit: BoxFit.cover),
+                    child: Image.memory(
+                      logoBytes!,
+                      fit: BoxFit.cover,
+                      cacheWidth: LowMemoryPerformance.decodeCacheDimension(
+                        260,
+                        MediaQuery.of(context).devicePixelRatio,
+                        minPixels: 480,
+                        maxPixels: 960,
+                      ),
+                    ),
                   )
                 : Container(
                     decoration: BoxDecoration(
@@ -17412,6 +17442,12 @@ class _ShopSettingsBottomSheetState extends State<_ShopSettingsBottomSheet> {
                 ? _userCtrl.text[0]
                 : (_shopCtrl.text.isNotEmpty ? _shopCtrl.text[0] : 'S'))
             .toUpperCase();
+    final profileLogoCacheSize = LowMemoryPerformance.decodeCacheDimension(
+      90,
+      MediaQuery.of(context).devicePixelRatio,
+      minPixels: 180,
+      maxPixels: 360,
+    );
     return Center(
       child: Column(
         children: [
@@ -17432,7 +17468,12 @@ class _ShopSettingsBottomSheetState extends State<_ShopSettingsBottomSheet> {
             ),
             child: ClipOval(
               child: _logoBytes != null
-                  ? Image.memory(_logoBytes!, fit: BoxFit.cover)
+                  ? Image.memory(
+                      _logoBytes!,
+                      fit: BoxFit.cover,
+                      cacheWidth: profileLogoCacheSize,
+                      cacheHeight: profileLogoCacheSize,
+                    )
                   : Container(
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
@@ -17576,7 +17617,16 @@ class _ShopSettingsBottomSheetState extends State<_ShopSettingsBottomSheet> {
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: Image.memory(bytes, fit: BoxFit.contain),
+                            child: Image.memory(
+                              bytes,
+                              fit: BoxFit.contain,
+                              cacheWidth: LowMemoryPerformance.decodeCacheDimension(
+                                MediaQuery.of(context).size.width - 40,
+                                MediaQuery.of(context).devicePixelRatio,
+                                minPixels: 320,
+                                maxPixels: 960,
+                              ),
+                            ),
                           ),
                         ),
                         Positioned(
