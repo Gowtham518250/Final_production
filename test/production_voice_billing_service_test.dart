@@ -108,6 +108,8 @@ void main() {
     expect(line.catalogMatched, isFalse);
     expect(line.barcode, isNull);
     expect(line.toMap()['catalog_matched'], isFalse);
+    expect(line.toMap()['stock_tracked'], isFalse);
+    expect(line.toMap()['is_custom_item'], isTrue);
     expect(line.toMap()['price_source'], 'spoken');
   });
 
