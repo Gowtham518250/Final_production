@@ -1374,18 +1374,43 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     Map<String, dynamic>? bestMatch;
     double bestScore = 0.0;
 
-    final List<Map<String, dynamic>> localProducts =
-        await LocalStorageService.loadBackendProducts();
-    final Map<String, dynamic> localDict =
-        await LocalStorageService.loadLocalProducts();
+    // Catalog is loaded once when the billing screen opens. Re-reading the
+    // backend and local catalogs for every voice phrase added disk work and
+    // noticeable latency on lower-memory phones.
+    await _productCatalogLoadFuture;
+    final List<Map<String, dynamic>> allCatalog = _knownProducts.map((raw) {
+      final name = (raw['product_name'] ??
+              raw['name'] ??
+              raw['itemName'] ??
+              raw['product'] ??
+              '')
+          .toString()
+          .trim();
+      final productPrice =
+          raw['price'] ?? raw['unit_price'] ?? raw['selling_price'] ?? 0;
+      final gst =
+          raw['gst_percent'] ?? raw['gst'] ?? raw['tax_percent'] ?? 18;
+      return <String, dynamic>{
+        ...raw,
+        'product_name': name,
+        'name': name,
+        'id': (raw['id'] ?? raw['product_id'] ?? raw['backend_id'] ?? '')
+            .toString(),
+        'price': productPrice,
+        'unit_price': productPrice,
+        'gst_percent': gst,
+        'gst': gst,
+        'barcode': raw['barcode'] ?? raw['sku'] ?? '',
+        'current_stock':
+            raw['current_stock'] ?? raw['stock'] ?? raw['stock_quantity'],
+      };
+    }).where((product) => (product['product_name'] ?? '')
+        .toString()
+        .trim()
+        .isNotEmpty).toList(growable: false);
 
-    final List<Map<String, dynamic>> allCatalog = [
-      ...localProducts,
-      ...localDict.values.map((e) => Map<String, dynamic>.from(e)),
-    ];
-
-    for (var product in allCatalog) {
-      final pName = product['product_name']?.toString().toLowerCase() ?? '';
+    for (final product in allCatalog) {
+      final pName = product['product_name'].toString().toLowerCase();
       final score = _calculateSimilarity(itemName.toLowerCase(), pName);
       if (score > bestScore) {
         bestScore = score;
@@ -1393,11 +1418,24 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
     }
 
-    final finalPrice = (price > 0)
+    final finalPrice = price > 0
         ? price
-        : double.tryParse(bestMatch?['price']?.toString() ?? '0') ?? 0.0;
-    final finalGst =
-        double.tryParse(bestMatch?['gst_percent']?.toString() ?? '18') ?? 18.0;
+        : double.tryParse(
+              (bestMatch?['price'] ??
+                      bestMatch?['unit_price'] ??
+                      bestMatch?['selling_price'] ??
+                      '0')
+                  .toString(),
+            ) ??
+            0.0;
+    final finalGst = double.tryParse(
+          (bestMatch?['gst_percent'] ??
+                  bestMatch?['gst'] ??
+                  bestMatch?['tax_percent'] ??
+                  '18')
+              .toString(),
+        ) ??
+        18.0;
 
     if (bestMatch != null && bestScore > 0.75) {
       // HIGH CONFIDENCE: Add immediately
