@@ -147,11 +147,15 @@ try {
   final localProducts = await LocalStorageService.loadLocalProducts();
 
   final lineItems = items.map((item) {
+    final isCustomLine =
+        item['stock_tracked'] == false || item['is_custom_item'] == true;
     final productIdRaw = item['product_id'] ?? item['id'] ?? '0';
     final parsedId = int.tryParse(productIdRaw.toString()) ?? 0;
 
-    int validId = parsedId > 0 ? parsedId : 0;
-    if (validId == 0) {
+    // A custom line must not regain inventory identity by matching its name
+    // against a stale local cache during save/retry.
+    int validId = isCustomLine ? 0 : (parsedId > 0 ? parsedId : 0);
+    if (!isCustomLine && validId == 0) {
       final String itemName = item['product_name'] ?? item['itemName'] ?? item['name'] ?? '';
       final String barcode = item['barcode'] ?? '';
       final productsList = localProducts is List ? localProducts as List : localProducts.values.toList();
@@ -200,8 +204,8 @@ try {
       'product_id': validId > 0 ? validId : null,
       'product_name': validName,
       // Preserve custom-line intent through the server invoice-sync payload.
-      'stock_tracked': item['stock_tracked'] != false &&
-          item['is_custom_item'] != true,
+      'stock_tracked': !isCustomLine,
+      'is_custom_item': isCustomLine,
       'quantity': qtyWire,
       'qty': qtyWire,
       'unit_price': price,
