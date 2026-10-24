@@ -70,12 +70,40 @@ class OnlineOrderService {
     if (orderId.isEmpty) return false;
 
     final escapedOrderId = RegExp.escape(orderId);
+    final invoiceSource = (invoice['source'] ??
+            invoice['origin_source'] ??
+            invoice['order_source'] ??
+            invoice['sale_type'] ??
+            '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final isExplicitlyOffline = const {
+      'OFFLINE',
+      'POS',
+      'MANUAL',
+      'IN_STORE',
+    }.contains(invoiceSource);
+    final isOnlineSource = const {
+      'ONLINE_ORDER',
+      'ONLINE',
+      'WEB',
+      'APP',
+      'CLOUD_RESTORE',
+      'CLOUD-RESTORE',
+      'RESTORED',
+    }.contains(invoiceSource);
 
-    // Online-order invoices use ONL-<order id> with an optional timestamp
-    // suffix. The restore pipeline sets source=cloud_restore, so source alone
-    // cannot be used to decide whether this invoice belongs to an online order.
-    final onlineInvoiceNumber = RegExp(
-      r'^ONL[-_]' + escapedOrderId + r'(?:[-_]|$)',
+    // Restored online invoices commonly retain ONL-<order id>-<suffix>
+    // numbers but have source=cloud_restore. Accept that strong canonical form
+    // after restore, while avoiding a false match on a bare ONL-<id> with no
+    // online-order provenance.
+    final onlineInvoiceNumberWithSuffix = RegExp(
+      r'^ONL[-_]' + escapedOrderId + r'[-_].+$',
+      caseSensitive: false,
+    );
+    final exactOnlineInvoiceNumber = RegExp(
+      r'^ONL[-_]' + escapedOrderId + r'$',
       caseSensitive: false,
     );
     final onlineInvoiceNumbers = _values(invoice, [
@@ -87,34 +115,31 @@ class OnlineOrderService {
       'invoiceNumber',
       'saleId',
     ]);
-    if (onlineInvoiceNumbers.any(onlineInvoiceNumber.hasMatch)) return true;
+    if (!isExplicitlyOffline &&
+        onlineInvoiceNumbers.any(onlineInvoiceNumberWithSuffix.hasMatch)) {
+      return true;
+    }
+    if (isOnlineSource &&
+        onlineInvoiceNumbers.any(exactOnlineInvoiceNumber.hasMatch)) {
+      return true;
+    }
 
-    // The server's invoice notes carry an explicit order reference for legacy
-    // invoice-number formats. Match that reference even after local cloud
-    // restore has replaced the original source label.
+    // Invoice notes are accepted only when the record's source is consistent
+    // with an online/restore path. A normal in-store invoice must not be
+    // deleted just because its description mentions an order ID.
     final orderNote = RegExp(
       r'(^|\b)Online Order #' + escapedOrderId + r'(\b|$)',
       caseSensitive: false,
     );
-    if ([
-      invoice['notes'],
-      invoice['note'],
-      invoice['description'],
-    ].any((value) => orderNote.hasMatch(value?.toString().trim() ?? ''))) {
+    if (isOnlineSource &&
+        [
+          invoice['notes'],
+          invoice['note'],
+          invoice['description'],
+        ].any((value) => orderNote.hasMatch(value?.toString().trim() ?? ''))) {
       return true;
     }
-
-    final invoiceSource = (invoice['source'] ??
-            invoice['origin_source'] ??
-            invoice['order_source'] ??
-            invoice['sale_type'] ??
-            '')
-        .toString()
-        .trim()
-        .toUpperCase();
-    if (!const {'ONLINE_ORDER', 'ONLINE', 'WEB', 'APP'}.contains(invoiceSource)) {
-      return false;
-    }
+    if (!isOnlineSource) return false;
 
     // Some legacy payloads carry ONL-<id> in an explicit reference field
     // rather than the invoice number or notes.
