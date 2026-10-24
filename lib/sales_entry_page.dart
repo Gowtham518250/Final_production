@@ -246,6 +246,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           providedGst: double.tryParse(item['gst']?.toString() ?? ''),
           // Never carry a guessed barcode or SKU into an untracked line.
           providedBarcode: null,
+          stockTracked: false,
         );
         customItems.add(name);
         if (!price.isFinite || price <= 0) {
@@ -270,6 +271,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         providedPrice: price > 0 ? price : null,
         providedGst: double.tryParse(item['gst']?.toString() ?? ''),
         providedBarcode: barcode.isEmpty ? null : barcode,
+        stockTracked: true,
       );
     }
 
@@ -1484,6 +1486,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             bestMatch['barcode']?.toString() ??
             bestMatch['sku']?.toString() ??
             '',
+        stockTracked: true,
       );
     } else if (bestMatch != null && bestScore > 0.35) {
       // MEDIUM CONFIDENCE: Ask user
@@ -1560,6 +1563,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   itemName,
                   qty,
                   providedPrice: price > 0 ? price : null,
+                  stockTracked: false,
                 );
                 Navigator.pop(ctx);
               },
@@ -1576,6 +1580,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       bestMatch?['barcode']?.toString() ??
                       bestMatch?['sku']?.toString() ??
                       '',
+                  stockTracked: true,
                 );
                 Navigator.pop(ctx);
               },
@@ -1589,8 +1594,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         ),
       );
     } else {
-      // LOW CONFIDENCE: Manual add
-      _addVoiceItem(itemName, qty, providedPrice: finalPrice);
+      // LOW CONFIDENCE: Treat the spoken name as custom. A weak catalog
+      // similarity must never supply another product's price or stock identity.
+      _addVoiceItem(
+        itemName,
+        qty,
+        providedPrice: price > 0 ? price : null,
+        stockTracked: false,
+      );
     }
   }
 
@@ -1600,6 +1611,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     double? providedPrice,
     double? providedGst,
     String? providedBarcode,
+    bool? stockTracked,
   }) {
     if (!mounted || name.trim().isEmpty || qty <= 0) return;
 
