@@ -584,6 +584,9 @@ class _DashboardPageState extends State<DashboardPage>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
+      // Keep the initial wave limited to tasks needed for the first dashboard.
+      // Network-heavy maintenance work is started later and one operation at a
+      // time so low-memory phones do not have to process a burst of requests.
       await Future.wait<dynamic>(
         [
           _loadDailyInsightFromPrefs(),
@@ -591,36 +594,10 @@ class _DashboardPageState extends State<DashboardPage>
           _loadQr(),
           _checkPaymentsConfig(),
           _checkPermissions(),
-          _replayBackgroundSms(),
           _showOnboardingIfNeeded(),
-          _connectRealtime(),
           _loadWelcomeCardState(),
           _checkSoundboxStatus(),
-          _loadOnlineStoreStatus(),
-          (() async {
-            try {
-              final prefs = await SharedPreferences.getInstance();
-              final userId =
-                  prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-              if (userId > 0) {
-                if (kDebugMode)
-                  debugPrint('🔄 Fetching shop profile from backend first...');
-                await _fetchShopProfileFromBackend(userId);
-              }
-            } catch (e) {
-              if (kDebugMode) debugPrint('Error fetching shop profile: $e');
-            }
-          })(),
-          (() async {
-            try {
-              if (kDebugMode)
-                debugPrint('🔄 Fetching workers from backend first...');
-              await _fetchWorkersFromBackend();
-            } catch (e) {}
-          })(),
-          (() async {
-            await _loadShopAndWorkerDataLocally();
-          })(),
+          _loadShopAndWorkerDataLocally(),
         ].map((future) => future.catchError((_) => null)),
       );
 
@@ -635,8 +612,13 @@ class _DashboardPageState extends State<DashboardPage>
           Navigator.of(
             context,
           ).pushReplacementNamed('/owner-biometric-register');
+          return;
         }
       }
+
+      // Begin non-critical network and maintenance work only after first-screen
+      // hydration and any required security gate have completed.
+      unawaited(_loadDeferredDashboardData());
     });
 
     // Listen for payment detections
@@ -1456,6 +1438,58 @@ class _DashboardPageState extends State<DashboardPage>
         debugPrint('Error loading local shop/worker data: $e');
       }
     }
+  }
+
+  /// Stagger non-critical startup requests so the dashboard does not compete
+  /// with several network calls and cache writes at once on entry-level phones.
+  Future<void> _loadDeferredDashboardData() async {
+    Future<void> runSafely(
+      String label,
+      Future<void> Function() task,
+    ) async {
+      if (!mounted) return;
+      try {
+        await task();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Deferred dashboard task "$label" failed: $e');
+        }
+      }
+    }
+
+    // Connect realtime first, then perform optional refreshes serially to cap
+    // startup CPU, image/data decoding, and network contention.
+    await runSafely('realtime connection', _connectRealtime);
+    if (!mounted) return;
+
+    await runSafely('online store status', _loadOnlineStoreStatus);
+    if (!mounted) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawUserId = prefs.get('user_id') ?? prefs.get('userId');
+      final userId = rawUserId is int
+          ? rawUserId
+          : int.tryParse(rawUserId?.toString() ?? '') ?? 0;
+      if (userId > 0) {
+        await runSafely(
+          'shop profile refresh',
+          () => _fetchShopProfileFromBackend(userId),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Deferred dashboard shop-profile lookup failed: $e');
+      }
+    }
+    if (!mounted) return;
+
+    await runSafely('worker refresh', _fetchWorkersFromBackend);
+    if (!mounted) return;
+
+    // Replay retained SMS/payment events after the first screen and profile
+    // work has settled; this may parse a queue on older devices.
+    await runSafely('background event replay', _replayBackgroundSms);
   }
 
   @override

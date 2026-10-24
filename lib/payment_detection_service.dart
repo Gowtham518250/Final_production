@@ -1842,7 +1842,7 @@ abstract class _SenderValidator {
     'ICICIT',
     'AXISBK',
     'AXISBN', 'KOTAKB', 'PNBSMS', 'UNIONB', 'IDFCFB', 'RBLBNK', 'YESBNK',
-    'INDBNK', 'CANBNK', 'BOBIBK', 'PAYTM', 'PHONPE', 'GOOGPY', 'AMZNPY',
+    'INDBNK', 'CANBNK', 'BOBIBK', 'PAYTM', 'PHONPE', 'PHONEPE', 'GOOGPY', 'AMZNPY',
     'BHIMUP', 'CREDCL', 'FRCHRG', 'MOBKWK',
   };
 

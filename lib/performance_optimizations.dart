@@ -34,7 +34,7 @@ class PerformanceOptimizations {
       addAutomaticKeepAlives: true,
       // Add semantic child cache for accessibility performance
       addRepaintBoundaries: true,
-      cacheExtent: itemCount > 50 ? 500.0 : null, // Cache extent for large lists
+      cacheExtent: itemCount > 50 ? 220.0 : null, // Smaller prefetch window for low-memory devices
       itemBuilder: itemBuilder,
     );
   }
