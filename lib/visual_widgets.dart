@@ -732,25 +732,7 @@ class KpiGlassCard extends StatefulWidget {
   State<KpiGlassCard> createState() => _KpiGlassCardState();
 }
 
-class _KpiGlassCardState extends State<KpiGlassCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _shimmerController;
-
-  @override
-  void initState() {
-    super.initState();
-    _shimmerController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _shimmerController.dispose();
-    super.dispose();
-  }
-
+class _KpiGlassCardState extends State<KpiGlassCard> {
   @override
   Widget build(BuildContext context) {
     return Container(
