@@ -1019,11 +1019,40 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         // not sufficient to authorize stock-backed billing.
         final rawProductId =
             (raw['product_id'] ?? '').toString().trim();
-        final knownProduct = _findKnownProductById(rawProductId);
+        final knownProduct = _findKnownProductById(rawProductId) ??
+            (rawProductId.isEmpty ? _findKnownProduct(name) : null);
         if (knownProduct == null) {
-          final warning =
-              'I could not verify "$name" against this shop catalogue. Nothing was added; select the product manually.';
+          // An unlisted item can still be billed as a custom invoice line when
+          // the cashier reviews it. It must not inherit a product ID, barcode,
+          // catalogue price, or stock deduction. Preserve the detected/spoken
+          // price; when none was recognized, let the cashier enter it below.
+          final hasSpokenPrice = spokenPrice != null &&
+              spokenPrice.isFinite &&
+              spokenPrice > 0;
+          final unit = (raw['unit'] ?? raw['unit_name'] ?? 'pc')
+              .toString()
+              .trim();
+          final warning = hasSpokenPrice
+              ? '"$name" is not in this shop catalogue. It can be billed as a custom item with no stock deduction; verify its name and price.'
+              : '"$name" is not in this shop catalogue and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
           if (!warnings.contains(warning)) warnings.add(warning);
+          items.add(
+            ParsedItem(
+              name: name,
+              qty: quantity,
+              unit: unit.isEmpty ? 'pc' : unit,
+              price: hasSpokenPrice ? spokenPrice : 0.0,
+              confidence: confidence,
+              catalogMatched: false,
+              priceSource: hasSpokenPrice ? 'spoken' : 'missing',
+              gst: double.tryParse(
+                (raw['gst_percent'] ?? raw['gst'] ?? raw['tax_percent'] ?? '')
+                    .toString(),
+              ),
+              priceWarning: warning,
+              isConfirmed: false,
+            ),
+          );
           continue;
         }
 
@@ -1432,33 +1461,39 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           );
           items = fallback.lines
               .where((line) =>
-                  line.catalogMatched &&
                   line.name.trim().isNotEmpty &&
                   line.quantity.isFinite &&
                   line.quantity > 0 &&
                   line.price.isFinite &&
-                  line.price > 0)
-              .map(
-                (line) => ParsedItem(
-                  name: line.name,
+                  line.price >= 0)
+              .map((line) {
+                final knownProduct = line.catalogMatched
+                    ? _findKnownProduct(line.name)
+                    : null;
+                return ParsedItem(
+                  name: knownProduct == null ? line.name : (knownProduct['product_name'] ??
+                      knownProduct['name'] ?? line.name).toString(),
                   qty: line.quantity,
                   unit: line.unit,
                   price: line.price,
                   confidence: line.confidence,
-                  catalogMatched: true,
-                  productId: _findKnownProduct(line.name)?['id']?.toString() ??
-                      _findKnownProduct(line.name)?['product_id']?.toString(),
+                  catalogMatched: knownProduct != null,
+                  productId: knownProduct?['id']?.toString() ??
+                      knownProduct?['product_id']?.toString(),
                   priceSource: line.priceSource,
-                  barcode: line.barcode,
-                  gst: line.gst,
-                  priceWarning: line.priceWarning,
+                  barcode: knownProduct == null ? null : line.barcode,
+                  gst: knownProduct == null ? null : line.gst,
+                  priceWarning: line.priceWarning ??
+                      (knownProduct == null
+                          ? 'Custom bill item: no inventory stock will be deducted.'
+                          : null),
                   isConfirmed: false,
-                ),
-              )
+                );
+              })
               .toList();
           warnings = <String>[
             ...fallback.warnings,
-            'Groq is unreachable. Only locally matched products with a valid price were kept; review them before billing.',
+            'Groq is unreachable. Review every item name and price before billing; unlisted items will be added as custom lines without stock deduction.',
           ];
         }
       }
@@ -1577,18 +1612,47 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         continue;
       }
 
-      // Never trust a parser flag or its confidence as proof of product identity.
-      // Require an explicit backend product ID from the server path, or
-      // an exact product/SKU name from the local fallback. Fuzzy similarity
-      // is useful for suggestions, but must never authorize stock deduction.
+      // Only catalogue-backed products may carry a product ID or deduct stock.
+      // A cashier-reviewed, positively-priced custom line is nevertheless a
+      // valid invoice line; it remains explicitly untracked.
       final knownProduct = item.productId != null && item.productId!.isNotEmpty
           ? _findKnownProductById(item.productId!)
           : _findKnownProduct(item.name);
       if (knownProduct == null) {
-        rejectedCount++;
-        final warning =
-            'The product "${item.name}" is not verified in this shop catalogue and was not added.';
-        if (!_parseWarnings.contains(warning)) _parseWarnings.add(warning);
+        final validCustomLine = !item.catalogMatched &&
+            item.productId == null &&
+            (item.priceSource == 'spoken' || item.priceSource == 'manual') &&
+            item.name.trim().isNotEmpty &&
+            item.qty.isFinite &&
+            item.qty > 0 &&
+            item.price.isFinite &&
+            item.price > 0;
+        if (!validCustomLine) {
+          rejectedCount++;
+          final warning = item.price <= 0
+              ? 'Enter a positive selling price for "${item.name}" before adding it to the bill.'
+              : 'Review "${item.name}" and its price before adding it as a custom bill item.';
+          if (!_parseWarnings.contains(warning)) _parseWarnings.add(warning);
+          continue;
+        }
+
+        safe.add(
+          ParsedItem(
+            name: item.name.trim(),
+            qty: item.qty,
+            unit: item.unit.trim().isEmpty ? 'pc' : item.unit.trim(),
+            price: item.price,
+            confidence: item.confidence,
+            catalogMatched: false,
+            productId: null,
+            priceSource: item.priceSource,
+            // Do not attach an arbitrary barcode or catalogue GST to an
+            // untracked item. Its price is an explicitly reviewed bill price.
+            priceWarning: item.priceWarning ??
+                'Custom bill item: no inventory stock will be deducted.',
+            isConfirmed: true,
+          ),
+        );
         continue;
       }
 
@@ -1722,7 +1786,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     final selectedItems = ParsedItems.where((item) => item.isConfirmed).toList();
     if (selectedItems.isEmpty) {
       _showSnack(
-        'Select at least one verified product before adding it to the bill.',
+        'Select at least one reviewed item before adding it to the bill.',
         isError: true,
       );
       return;
@@ -2303,6 +2367,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   message: 'Price not found. Enter it in the bill before saving.',
                   child: const Icon(
                     Icons.price_check_rounded,
+                    color: Color(0xFFF59E0B),
+                    size: 14,
+                  ),
+                ),
+              ],
+              if (!item.catalogMatched) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message:
+                      'Custom bill item — not in inventory; no stock deduction.',
+                  child: const Icon(
+                    Icons.inventory_2_outlined,
                     color: Color(0xFFF59E0B),
                     size: 14,
                   ),

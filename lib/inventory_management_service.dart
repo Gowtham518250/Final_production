@@ -436,7 +436,20 @@ class InventoryManagementService {
       // ── 3. DEDUCTION LOGIC (PRIORITY MATCHING) ──
       for (var rawItem in items) {
         final Map<String, dynamic> item = Map<String, dynamic>.from(rawItem);
-        
+
+        // Do not infer inventory identity from a custom invoice line's name.
+        // This matters when the device catalog is stale but a similarly named
+        // backend/local stock item exists.
+        if (item['stock_tracked'] == false || item['is_custom_item'] == true) {
+          if (kDebugMode) {
+            debugPrint(
+              '🧾 Skipping stock deduction for custom bill item: '
+              '${item['product_name'] ?? item['item'] ?? item['name'] ?? ''}',
+            );
+          }
+          continue;
+        }
+
         final String rawId   = (item['product_id'] ?? item['id'] ?? '').toString().trim();
         final String rawName = (item['product_name'] ?? item['item'] ?? '').toString().trim();
         final String normSaleName = normalizeName(rawName);

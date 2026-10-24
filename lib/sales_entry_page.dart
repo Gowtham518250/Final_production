@@ -58,7 +58,6 @@ import 'package:vibration/vibration.dart';
 import 'session_management.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'data_validation_service.dart';
-import 'stock_validation_service.dart';
 
 // API Endpoints
 const String salesCreateEndpoint = '/api/invoices/sync';
@@ -189,9 +188,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   void _onVoiceOrderParsed(List<Map<String, dynamic>> items) {
     if (items.isEmpty || !mounted) return;
 
-    // Voice assistant returns catalogue-resolved names, IDs and SKUs.
-    // Resolve the ID against this shop's loaded product list before insertion;
-    // never treat a generated product name as proof of product identity.
+    final customItems = <String>[];
+    final customItemsMissingPrice = <String>[];
+
+    // Catalogue IDs are resolved only against this shop. If no local product
+    // exists, accept the reviewed voice line as a custom bill item instead of
+    // dropping it. A custom line deliberately has no barcode/SKU/product ID,
+    // so the sale path cannot deduct stock from an unrelated catalogue row.
     for (final item in items) {
       final name = (item['name'] ?? item['product_name'] ?? '')
           .toString()
@@ -203,6 +206,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           .toString()
           .trim();
       final matchedProduct = _knownProducts.firstWhere((product) {
+        // Sales history helps autocomplete only; it is not live inventory.
+        if (product['source'] == 'Sales History') return false;
         final id =
             (product['id'] ??
                     product['product_id'] ??
@@ -220,29 +225,46 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         return (productId.isNotEmpty && id == productId) ||
             (name.isNotEmpty && productName == name.toLowerCase());
       }, orElse: () => <String, dynamic>{});
+
+      if (name.isEmpty || !qty.isFinite || qty <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: LiveTranslatedText(
+                'Could not add a voice item with an invalid name or quantity. Please review it manually.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        continue;
+      }
+
+      if (matchedProduct.isEmpty) {
+        _addVoiceItem(
+          name,
+          qty,
+          providedPrice: price.isFinite && price > 0 ? price : null,
+          providedGst: double.tryParse(item['gst']?.toString() ?? ''),
+          // Never carry a guessed barcode or SKU into an untracked line.
+          providedBarcode: null,
+          stockTracked: false,
+        );
+        customItems.add(name);
+        if (!price.isFinite || price <= 0) {
+          customItemsMissingPrice.add(name);
+        }
+        continue;
+      }
+
       final barcode =
-          (item['barcode'] ??
-                  matchedProduct['barcode'] ??
+          (matchedProduct['barcode'] ??
                   matchedProduct['bar_code'] ??
                   matchedProduct['sku'] ??
                   matchedProduct['product_code'] ??
                   '')
               .toString()
               .trim();
-
-      if (name.isEmpty || !qty.isFinite || qty <= 0 || matchedProduct.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: LiveTranslatedText(
-                'Voice item was not matched to this shop catalogue. Please choose the product manually.',
-              ),
-              backgroundColor: Colors.orange.shade800,
-            ),
-          );
-        }
-        continue;
-      }
 
       _addVoiceItem(
         (matchedProduct['product_name'] ?? matchedProduct['name'] ?? name)
@@ -251,12 +273,30 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         providedPrice: price > 0 ? price : null,
         providedGst: double.tryParse(item['gst']?.toString() ?? ''),
         providedBarcode: barcode.isEmpty ? null : barcode,
+        stockTracked: true,
       );
     }
 
     if (mounted) {
       setState(() => _isVoiceAssistantOpen = false);
       calculateTotal();
+      if (customItems.isNotEmpty) {
+        final missingPriceText = customItemsMissingPrice.isEmpty
+            ? ''
+            : ' Enter a selling price for: '
+                '${customItemsMissingPrice.take(3).join(', ')}.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: LiveTranslatedText(
+              'Added custom bill item(s): ${customItems.take(3).join(', ')}. '
+              'Not in inventory; no stock will be deducted. Review before saving.'
+              '$missingPriceText',
+            ),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
     }
   }
 
@@ -1374,18 +1414,43 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     Map<String, dynamic>? bestMatch;
     double bestScore = 0.0;
 
-    final List<Map<String, dynamic>> localProducts =
-        await LocalStorageService.loadBackendProducts();
-    final Map<String, dynamic> localDict =
-        await LocalStorageService.loadLocalProducts();
+    // Reuse the catalog loaded at screen startup rather than reading the
+    // backend and local database for every spoken phrase. This removes repeated
+    // disk/network latency from the hot billing path.
+    await _productCatalogLoadFuture;
+    final List<Map<String, dynamic>> allCatalog = _knownProducts.map((raw) {
+      final name = (raw['product_name'] ??
+              raw['name'] ??
+              raw['itemName'] ??
+              raw['product'] ??
+              '')
+          .toString()
+          .trim();
+      final productPrice =
+          raw['price'] ?? raw['unit_price'] ?? raw['selling_price'] ?? 0;
+      final gst =
+          raw['gst_percent'] ?? raw['gst'] ?? raw['tax_percent'] ?? 18;
+      return <String, dynamic>{
+        ...raw,
+        'product_name': name,
+        'name': name,
+        'id': (raw['id'] ?? raw['product_id'] ?? raw['backend_id'] ?? '')
+            .toString(),
+        'price': productPrice,
+        'unit_price': productPrice,
+        'gst_percent': gst,
+        'gst': gst,
+        'barcode': raw['barcode'] ?? raw['sku'] ?? '',
+        'current_stock':
+            raw['current_stock'] ?? raw['stock'] ?? raw['stock_quantity'],
+      };
+    }).where((product) =>
+        product['source'] != 'Sales History' &&
+        (product['product_name'] ?? '').toString().trim().isNotEmpty
+    ).toList(growable: false);
 
-    final List<Map<String, dynamic>> allCatalog = [
-      ...localProducts,
-      ...localDict.values.map((e) => Map<String, dynamic>.from(e)),
-    ];
-
-    for (var product in allCatalog) {
-      final pName = product['product_name']?.toString().toLowerCase() ?? '';
+    for (final product in allCatalog) {
+      final pName = product['product_name'].toString().toLowerCase();
       final score = _calculateSimilarity(itemName.toLowerCase(), pName);
       if (score > bestScore) {
         bestScore = score;
@@ -1393,23 +1458,37 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
     }
 
-    final finalPrice = (price > 0)
+    final finalPrice = price > 0
         ? price
-        : double.tryParse(bestMatch?['price']?.toString() ?? '0') ?? 0.0;
-    final finalGst =
-        double.tryParse(bestMatch?['gst_percent']?.toString() ?? '18') ?? 18.0;
+        : double.tryParse(
+              (bestMatch?['price'] ??
+                      bestMatch?['unit_price'] ??
+                      bestMatch?['selling_price'] ??
+                      '0')
+                  .toString(),
+            ) ??
+            0.0;
+    final finalGst = double.tryParse(
+          (bestMatch?['gst_percent'] ??
+                  bestMatch?['gst'] ??
+                  bestMatch?['tax_percent'] ??
+                  '18')
+              .toString(),
+        ) ??
+        18.0;
 
     if (bestMatch != null && bestScore > 0.75) {
       // HIGH CONFIDENCE: Add immediately
       _addVoiceItem(
-        bestMatch['product_name']?.toString() ?? itemName,
+        bestMatch['product_name']?.toString() ?? bestMatch['name']?.toString() ?? itemName,
         qty,
         providedPrice: finalPrice,
         providedGst: finalGst,
         providedBarcode:
             bestMatch['barcode']?.toString() ??
-            bestMatch['id']?.toString() ??
+            bestMatch['sku']?.toString() ??
             '',
+        stockTracked: true,
       );
     } else if (bestMatch != null && bestScore > 0.35) {
       // MEDIUM CONFIDENCE: Ask user
@@ -1453,7 +1532,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     LiveTranslatedText(
-                      bestMatch?['product_name'] ?? itemName,
+                      bestMatch?['product_name']?.toString() ?? bestMatch?['name']?.toString() ?? itemName,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -1477,17 +1556,33 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               onPressed: () => Navigator.pop(ctx),
               child: const LiveTranslatedText('NO, TRY AGAIN'),
             ),
+            TextButton(
+              onPressed: () {
+                // A fuzzy suggestion is not authoritative. Let the cashier
+                // bill the spoken item as a custom line instead of silently
+                // changing it to a similarly named inventory product.
+                _addVoiceItem(
+                  itemName,
+                  qty,
+                  providedPrice: price > 0 ? price : null,
+                  stockTracked: false,
+                );
+                Navigator.pop(ctx);
+              },
+              child: const LiveTranslatedText('ADD AS NEW ITEM'),
+            ),
             ElevatedButton(
               onPressed: () {
                 _addVoiceItem(
-                  bestMatch?['product_name'] ?? itemName,
+                  bestMatch?['product_name']?.toString() ?? bestMatch?['name']?.toString() ?? itemName,
                   qty,
                   providedPrice: finalPrice,
                   providedGst: finalGst,
                   providedBarcode:
                       bestMatch?['barcode']?.toString() ??
-                      bestMatch?['id']?.toString() ??
+                      bestMatch?['sku']?.toString() ??
                       '',
+                  stockTracked: true,
                 );
                 Navigator.pop(ctx);
               },
@@ -1501,8 +1596,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         ),
       );
     } else {
-      // LOW CONFIDENCE: Manual add
-      _addVoiceItem(itemName, qty, providedPrice: finalPrice);
+      // LOW CONFIDENCE: Treat the spoken name as custom. A weak catalog
+      // similarity must never supply another product's price or stock identity.
+      _addVoiceItem(
+        itemName,
+        qty,
+        providedPrice: price > 0 ? price : null,
+        stockTracked: false,
+      );
     }
   }
 
@@ -1512,8 +1613,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     double? providedPrice,
     double? providedGst,
     String? providedBarcode,
+    bool? stockTracked,
   }) {
-    if (!mounted || name.trim().isEmpty || qty <= 0) return;
+    if (!mounted || name.trim().isEmpty || !qty.isFinite || qty <= 0) return;
+    final shouldCheckStock =
+        stockTracked ?? (providedBarcode?.trim().isNotEmpty ?? false);
 
     setState(() {
       _isVoiceProcessing = true;
@@ -1521,6 +1625,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final normalizedName = name.trim().toLowerCase();
       final incomingPrice = providedPrice ?? 0.0;
       final incomingBarcode = (providedBarcode ?? '').trim();
+
+      String formatMoney(double value) {
+        final rounded = double.parse(value.toStringAsFixed(2));
+        return rounded == rounded.roundToDouble()
+            ? rounded.toStringAsFixed(0)
+            : rounded.toStringAsFixed(2);
+      }
 
       // Same product + same price = one bill line. Merge quantity instead
       // of creating a second identical row.
@@ -1559,9 +1670,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
         if ((entries[existingIdx]['price']?.text.trim().isEmpty ?? true) &&
             incomingPrice > 0) {
-          entries[existingIdx]['price']?.text = incomingPrice.toStringAsFixed(
-            0,
-          );
+          entries[existingIdx]['price']?.text = formatMoney(incomingPrice);
         }
         if (providedGst != null && entries[existingIdx]['gst'] != null) {
           entries[existingIdx]['gst']!.text = providedGst.toStringAsFixed(0);
@@ -1591,7 +1700,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             : qty.toString();
 
         entries[targetIdx]['price']?.text = incomingPrice > 0
-            ? incomingPrice.toStringAsFixed(0)
+            ? formatMoney(incomingPrice)
             : '';
 
         if (providedGst != null && entries[targetIdx]['gst'] != null) {
@@ -1610,40 +1719,43 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (mounted) setState(() => _isVoiceProcessing = false);
     });
 
-    // 🚀 100/100 REAL-TIME STOCK PULSE: Alert if merchant adds an item that is low in stock
-    InventoryManagementService.checkStockRealtime(name).then((data) {
-      if (data != null &&
-          (data['isLow'] == true || (data['stock'] as num) <= 2) &&
-          mounted) {
-        final stockQty = (data['stock'] as num).toInt();
-        final pName = data['productName'];
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.orange[800],
-            content: Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: LiveTranslatedText(
-                    '⚠️ LOW STOCK: $pName (Only $stockQty left)',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+    // Only query stock status for a real inventory item. A custom line
+    // should not trigger another catalog read in the background.
+    if (shouldCheckStock) {
+      InventoryManagementService.checkStockRealtime(name).then((data) {
+        if (data != null &&
+            (data['isLow'] == true || (data['stock'] as num) <= 2) &&
+            mounted) {
+          final stockQty = (data['stock'] as num).toInt();
+          final pName = data['productName'];
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.orange[800],
+              content: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: LiveTranslatedText(
+                      '⚠️ LOW STOCK: $pName (Only $stockQty left)',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    });
+          );
+        }
+      });
+    }
   }
 
   void _showQuickAddCustomer() {
@@ -1986,6 +2098,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
   List<Map<String, dynamic>> _knownProducts = [];
   List<Map<String, dynamic>> _knownCustomers = [];
+  Future<void>? _productCatalogLoadFuture;
 
   String _normalizeBarcode(String value) {
     return value.trim().replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
@@ -2082,12 +2195,18 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             '';
         final pBarcode = _normalizeBarcode(rawBarcode.toString());
         final pData = {
-          'id': (p['id'] ?? p['product_id'] ?? '').toString(),
+          'id': (p['id'] ?? p['product_id'] ?? p['backend_id'] ?? '').toString(),
+          'product_name': p['product_name'] ?? p['name'] ?? '',
           'name': p['product_name'] ?? p['name'] ?? '',
-          'price': (p['price'] ?? p['unit_price'] ?? '0').toString(),
-          'gst': (p['gst_percent'] ?? p['gst'] ?? '18').toString(),
+          'price': (p['price'] ?? p['unit_price'] ?? p['selling_price'] ?? '0').toString(),
+          'unit_price': (p['unit_price'] ?? p['price'] ?? p['selling_price'] ?? '0').toString(),
+          'gst': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18').toString(),
+          'gst_percent': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18').toString(),
           'barcode': pBarcode,
           'sku': p['sku']?.toString() ?? pBarcode,
+          'current_stock': p['current_stock'] ?? p['stock'] ?? p['stock_quantity'],
+          'stock': p['stock'] ?? p['current_stock'] ?? p['stock_quantity'],
+          'min_stock': p['min_stock'] ?? p['minimum_stock'] ?? 0,
           'category': p['category'] ?? p['category_name'] ?? '',
           'source': 'Backend Catalog',
         };
@@ -2126,7 +2245,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
 
       _localProducts = mergedProducts;
-      known.addAll(localMap.values.map((v) => Map<String, dynamic>.from(v)));
+      known.addAll(
+        localMap.values.map((v) => <String, dynamic>{
+          ...Map<String, dynamic>.from(v),
+          'source': 'Local Catalog',
+        }),
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading local products: $e');
     }
@@ -2156,6 +2280,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               'price': item['price']?.toString() ?? '0',
               'gst': item['gst_percent']?.toString() ?? '18',
               'barcode': item['barcode'] ?? '',
+              // History is useful for autocomplete, but it must never be
+              // mistaken for a current stock-bearing inventory product.
+              'source': 'Sales History',
             });
           }
         }
@@ -2728,8 +2855,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
 
       // Validate numeric values
-      final quantity = int.tryParse(qtyText);
-      if (quantity == null || quantity <= 0) {
+      // Weight/volume products can be billed fractionally (for example 0.5 kg).
+      final quantity = double.tryParse(qtyText);
+      if (quantity == null || !quantity.isFinite || quantity <= 0) {
         if (mounted)
           setState(
             () => message = 'Item ${i + 1} has invalid quantity: $qtyText',
@@ -2738,7 +2866,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
 
       final price = double.tryParse(priceText);
-      if (price == null || price < 0) {
+      if (price == null || !price.isFinite || price < 0) {
         if (mounted)
           setState(
             () => message = 'Item ${i + 1} has invalid price: $priceText',
@@ -2779,38 +2907,77 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
   // 🔒 STOCK VALIDATION: Check stock availability before sale
   Future<bool> _validateStockAvailability() async {
-    final checks = entries.map((entry) async {
-      final itemName = entry['item']?.text.trim();
-      final qtyText = entry['qty']?.text.trim();
+    // The active product list is already loaded for search/voice billing.
+    // Check known stock from that snapshot instead of doing one HTTP request
+    // per invoice line. Unlisted custom lines are sellable and have no stock
+    // identity, so they must never block checkout.
+    String normalize(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
 
-      if (itemName == null ||
-          itemName.isEmpty ||
-          qtyText == null ||
-          qtyText.isEmpty) {
-        return null;
+    for (final entry in entries) {
+      final itemName = entry['item']?.text.trim() ?? '';
+      final quantity = double.tryParse(entry['qty']?.text.trim() ?? '') ?? 0;
+      if (itemName.isEmpty || !quantity.isFinite || quantity <= 0) continue;
+
+      final barcode = entry['barcode']?.text.trim() ?? '';
+      Map<String, dynamic>? matched;
+      for (final product in _knownProducts) {
+        if (product['source'] == 'Sales History') continue;
+        final productName = (product['product_name'] ??
+                product['name'] ??
+                product['productName'] ??
+                '')
+            .toString();
+        final productCodes = <String>{
+          (product['barcode'] ??
+                  product['bar_code'] ??
+                  product['sku'] ??
+                  product['product_code'] ??
+                  '')
+              .toString()
+              .trim(),
+          (product['id'] ?? product['product_id'] ?? product['productId'] ?? '')
+              .toString()
+              .trim(),
+        }..removeWhere((code) => code.isEmpty);
+        if (normalize(productName) == normalize(itemName) ||
+            (barcode.isNotEmpty && productCodes.contains(barcode))) {
+          matched = product;
+          break;
+        }
       }
 
-      final quantity = int.tryParse(qtyText) ?? 0;
-      if (quantity <= 0) return null;
+      // No current inventory match means a custom bill line; leave it alone.
+      if (matched == null) continue;
 
-      return StockValidationService.instance.validateItemStock(
-        itemName: itemName,
-        requestedQuantity: quantity,
-      );
-    }).toList();
+      final stockRaw = matched['current_stock'] ??
+          matched['stock'] ??
+          matched['stock_quantity'] ??
+          matched['available_stock'] ??
+          matched['quantity'];
+      final stock = stockRaw is num
+          ? stockRaw.toDouble()
+          : double.tryParse(stockRaw?.toString() ?? '');
+      // Missing/stale cache stock is not treated as zero. The invoice sync
+      // path remains responsible for authoritative server-side reconciliation.
+      if (stock == null || !stock.isFinite) continue;
 
-    final validations = await Future.wait(checks);
-    for (final validation in validations) {
-      if (validation == null) continue;
-      if (!validation.isValid) {
-        if (mounted) setState(() => message = validation.message);
+      if (quantity > stock) {
+        if (mounted) {
+          setState(() {
+            message = 'Insufficient stock for ' +
+                itemName +
+                '. Available: ' +
+                stock.toStringAsFixed(stock % 1 == 0 ? 0 : 3) +
+                ', requested: ' +
+                quantity.toStringAsFixed(quantity % 1 == 0 ? 0 : 3) +
+                '.';
+          });
+        }
         return false;
-      }
-
-      if (validation.requiresManualConfirmation && kDebugMode) {
-        debugPrint(
-          '⚠️ Stock validation requires manual confirmation: ${validation.message}',
-        );
       }
     }
 
@@ -2968,7 +3135,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     WidgetsBinding.instance.addObserver(this); // Add lifecycle observer
     PrinterService.autoConnect();
     addEntry();
-    _loadLocalProducts();
+    _productCatalogLoadFuture = _loadLocalProducts();
     _loadLocalCustomers();
     unawaited(_primeBillNumberSequence());
     unawaited(_refreshActiveFlashSaleFromBackend());
@@ -4208,7 +4375,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     for (var entry in nonEmpty) {
       final price = double.tryParse(entry['price']?.text.trim() ?? '0') ?? 0;
       final qty = double.tryParse(entry['qty']?.text.trim() ?? '0') ?? 0;
-      if (price <= 0) {
+      if (!price.isFinite || price <= 0) {
         if (mounted) {
           setState(
             () => message =
@@ -4217,7 +4384,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         }
         return false;
       }
-      if (qty <= 0) {
+      if (!qty.isFinite || qty <= 0) {
         if (mounted) {
           setState(
             () =>
@@ -4272,6 +4439,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       // field aliases while retaining exact matching (not fuzzy guessing).
       final nameLower = rawName.trim().toLowerCase();
       final match = _knownProducts.firstWhere((p) {
+        // Old sales history seeds autocomplete only. It does not prove
+        // that a currently stock-tracked product exists in inventory.
+        if (p['source'] == 'Sales History') return false;
         final productName =
             (p['product_name'] ?? p['name'] ?? p['productName'] ?? '')
                 .toString()
@@ -4293,16 +4463,20 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             (barcode.isNotEmpty &&
                 (productCode == barcode || productId == barcode));
       }, orElse: () => <String, dynamic>{});
+      // A supplied barcode is not proof of a product in this shop. Only
+      // a match in the current inventory catalog receives stock identity.
+      final stockTracked = match.isNotEmpty;
       final realProductId = match.isNotEmpty
           ? (match['id'] ??
                 match['product_id'] ??
-                match['productId'] ??
-                barcode)
-          : barcode;
+                match['productId'])
+          : null;
 
       return {
         'product_name': rawName,
         'product_id': realProductId,
+        'stock_tracked': stockTracked,
+        'is_custom_item': !stockTracked,
         'barcode': barcode,
         'price': price.toString(),
         'qty': qty,

@@ -42,6 +42,8 @@ class VoiceBillingLine {
         'total': quantity * price,
         'confidence': confidence,
         'catalog_matched': catalogMatched,
+        'stock_tracked': catalogMatched,
+        'is_custom_item': !catalogMatched,
         'price_source': priceSource,
         'price_missing': price <= 0,
         if (barcode != null && barcode!.isNotEmpty) 'barcode': barcode,
@@ -140,33 +142,19 @@ class ProductionVoiceBillingService {
         item.name,
       );
 
-      final learnedMatch = shopProduct == null
-          ? catalogService.findBest(
-              item.name,
-              minScore: 0.72,
-            )
-          : null;
-
+      // Only this shop's actual inventory is allowed to assign stock identity
+      // or a saved catalog price. Learned/global aliases are hints, not proof
+      // that the merchant has registered the product. Unknown items remain
+      // custom bill lines even if another shop or training catalog knows them.
+      final product = shopProduct;
       final canonicalName = shopProduct?['name']?.toString() ??
           shopProduct?['product_name']?.toString() ??
-          learnedMatch?.canonicalName ??
-          ((item.catalogMatchName?.trim().isNotEmpty ?? false)
-              ? item.catalogMatchName!.trim()
-              : item.name.trim());
-
-      final product = shopProduct ??
-          _findKnownProduct(
-            knownProducts,
-            canonicalName,
-            learnedMatch?.canonicalName,
-          );
+          item.name.trim();
 
       final catalogPrice = _firstPositiveDouble([
         product?['price'],
         product?['selling_price'],
         product?['sale_price'],
-        learnedMatch?.defaultPrice,
-        item.catalogPrice,
       ]);
 
       final spokenPrice = item.priceWasSpoken && item.price > 0 ? item.price : null;
@@ -176,7 +164,6 @@ class ProductionVoiceBillingService {
         item.unit,
         fallback: product?['unit']?.toString() ??
             product?['uom']?.toString() ??
-            learnedMatch?.defaultUnit ??
             '',
       );
 
@@ -197,8 +184,7 @@ class ProductionVoiceBillingService {
           unit: unit,
           price: finalPrice,
           confidence: item.confidenceScore,
-          catalogMatched:
-              product != null || learnedMatch != null || item.catalogMatchName != null,
+          catalogMatched: shopProduct != null,
           priceSource: spokenPrice != null
               ? 'spoken'
               : catalogPrice != null && catalogPrice > 0
@@ -239,12 +225,17 @@ class ProductionVoiceBillingService {
 
     String normalize(String value) => value
         .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\\u0900-\\u0d7f\\u0980-\\u09ff\\u0a00-\\u0aff\\u0b80-\\u0bff\\u0c00-\\u0c7f\\u0c80-\\u0cff\\u0d00-\\u0d7f\\s]'), ' ')
-        .replaceAll(RegExp(r'\\s+'), ' ')
+        .replaceAll(
+          RegExp(
+            r'[^a-z0-9\u0900-\u0d7f\u0980-\u09ff\u0a00-\u0aff\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\s]',
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
     Set<String> tokens(String value) => normalize(value)
-        .split(RegExp(r'\\s+'))
+        .split(RegExp(r'\s+'))
         .where((token) => token.length >= 3)
         .toSet();
 
@@ -252,6 +243,7 @@ class ProductionVoiceBillingService {
 
     // Exact shop-product name first.
     for (final product in products) {
+      if (product['source'] == 'Sales History') continue;
       final names = [
         product['name'],
         product['product_name'],
@@ -267,6 +259,7 @@ class ProductionVoiceBillingService {
     final scored = <MapEntry<Map<String, dynamic>, double>>[];
 
     for (final product in products) {
+      if (product['source'] == 'Sales History') continue;
       final names = [
         product['name'],
         product['product_name'],
