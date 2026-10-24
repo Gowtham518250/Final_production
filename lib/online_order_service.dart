@@ -93,7 +93,7 @@ class OnlineOrderService {
     // invoice-number formats. Match that reference even after local cloud
     // restore has replaced the original source label.
     final orderNote = RegExp(
-      r'(^|\\b)Online Order #' + escapedOrderId + r'(\\b|$)',
+      r'(^|\b)Online Order #' + escapedOrderId + r'(\b|$)',
       caseSensitive: false,
     );
     if ([
