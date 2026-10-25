@@ -4273,10 +4273,9 @@ class PaymentDetectionService {
     final sameReferenceDuplicate =
         previousReferenceAmount != null && !referenceAmountConflict;
 
-    // A UTR repeat with the same amount is a duplicate. The same UTR with a
-    // different amount is not suppressed: it must reach the merchant-review
-    // path and the payment-history conflict guard. Without a reference, use
-    // the per-event fingerprint and require merchant confirmation.
+    // Do not persist identity before validation/emission: a fraud/promo/score
+    // rejection must not poison the same transaction arriving from SMS or
+    // Truecaller later. We still serialize concurrent work with active FP.
     final canUseSmsAsCorroboration =
         sameReferenceDuplicate &&
         source == 'sms' &&
@@ -4284,33 +4283,22 @@ class PaymentDetectionService {
         _pendingBuffer.hasUnconfirmedReference(normalizedReference);
 
     if (sameReferenceDuplicate && !canUseSmsAsCorroboration) {
-      PdsLogger.d('L4.5', 'DUPLICATE REFERENCE BLOCKED: fp=$fp');
+      PdsLogger.d('L4.5', 'DUPLICATE REFERENCE BLOCKED');
       _stats.recordDupe();
       return;
     }
     if (canUseSmsAsCorroboration) {
-      // A bank/PSP SMS with the same UTR can strengthen the earlier PhonePe
-      // candidate via TCM. It remains one transaction: the SMS path is muted
-      // when the original candidate already announced it.
-      PdsLogger.i('L4.5', 'SAME UTR SMS CORROBORATION allowed silently: ref=$normalizedReference');
+      PdsLogger.i('L4.5', 'SMS_CORROBORATION_ALLOWED');
     }
     if (referenceAmountConflict) {
       PdsLogger.w(
         'L4.5',
-        'REFERENCE AMOUNT CONFLICT: ref=$normalizedReference '
-            'stored=₹$previousReferenceAmount incoming=₹$amount; routing for review',
+        'REFERENCE_AMOUNT_CONFLICT; routing for merchant review',
       );
-    } else if (normalizedReference != null &&
-        previousReferenceAmount == null) {
-      _dedupReferenceAmounts[normalizedReference] = amount;
     }
 
     final registeredActiveFingerprint = !referenceAmountConflict;
     if (registeredActiveFingerprint) _activeFingerprints.add(fp);
-    _dedupStore[fp] = DateTime.now().add(
-      isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
-    );
-    if (isUtrFp) _dedupDirty = true;
 
     try {
       // Layer 4.7: TCM Matching
