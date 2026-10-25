@@ -69,9 +69,10 @@ public class NotificationListener extends NotificationListenerService {
             Action action = notification == null ? null : NotificationUtils.getQuickReplyAction(notification, sbn.getPackageName());
             if (action != null) ActionCache.cachedNotifications.put(sbn.getId(), action);
 
-            Intent intent = new Intent(NotificationConstants.INTENT);
-            // Restrict delivery to this app; do not send a system-wide implicit broadcast.
-            intent.setPackage(getPackageName());
+            // App-scoped, explicit broadcast: restrict delivery to this app and
+            // avoid implicit-broadcast restrictions on Android 8+.
+            Intent intent = new Intent(this, NotificationRelayReceiver.class);
+            intent.setAction(NotificationConstants.INTENT);
             intent.putExtra(NotificationConstants.PACKAGE_NAME, sbn.getPackageName());
             intent.putExtra(NotificationConstants.ID, sbn.getId());
             intent.putExtra(NotificationConstants.CAN_REPLY, action != null);
