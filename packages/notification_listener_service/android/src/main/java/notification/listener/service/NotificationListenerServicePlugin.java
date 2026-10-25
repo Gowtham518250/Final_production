@@ -2,7 +2,6 @@ package notification.listener.service;
 
 import static notification.listener.service.NotificationUtils.isPermissionGranted;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -26,8 +25,6 @@ import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry;
 import notification.listener.service.models.Action;
 import notification.listener.service.models.ActionCache;
-import android.annotation.SuppressLint;
-import android.os.Build;
 
 import java.util.List;
 import java.util.Map;
