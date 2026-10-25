@@ -6136,7 +6136,7 @@ abstract class _Extractor {
     // Capture only transaction-like labels followed by an identifier beginning
     // with a digit. This accepts Ref No / Transaction ID variants without
     // turning words such as "successful" into fake references.
-    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*(\d[A-Za-z0-9]{9,21})\b',
+    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*([A-Za-z0-9]{10,22})\b',
     caseSensitive: false,
   );
   static final _utrI = RegExp(r'\b([0-9]{12})\b');
