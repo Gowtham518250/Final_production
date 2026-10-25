@@ -4299,6 +4299,10 @@ class PaymentDetectionService {
 
     final registeredActiveFingerprint = !referenceAmountConflict;
     if (registeredActiveFingerprint) _activeFingerprints.add(fp);
+    _dedupStore[fp] = DateTime.now().add(
+      isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
+    );
+    if (isUtrFp) _dedupDirty = true;
 
     try {
       // Layer 4.7: TCM Matching
