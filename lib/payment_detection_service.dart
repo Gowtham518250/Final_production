@@ -265,7 +265,7 @@ abstract class VoiceBuilder {
     // Keep native-script matches free of \b because regex word boundaries can
     // be ASCII-oriented in Dart.
     final englishCredit = RegExp(
-      r'\b(credited|credit|received|payment received|money received|deposited|added to|sent to your|sent to you|sent you|paid to your|paid to you|paid you|transferred to your|made to your|has sent|you got)\b',
+      r'\b(credited|credit|received|payment received|money received|deposited|added to|sent to your|sent to you|sent you|paid to your|paid to you|paid you|transferred to your|made to your|has sent|you got)\b|\b(?:sent|paid)\s+(?:(?:₹|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?:your|you)\b',
     ).hasMatch(t);
     final romanizedCredit = RegExp(
       r'\b(jama(?:\s+hua|\s+ho gaya)?|prapt|paise\s+aaye|paisa\s+aaya|mil\s+gaya|credit\s+hua)\b',
@@ -286,10 +286,13 @@ abstract class VoiceBuilder {
       r'\b(?:debited|debit\s+(?:from|to|for|of)\b|deducted|withdrawn|'
       r'withdrawal|spent|you\s+(?:have\s+)?sent|you\s+(?:have\s+)?paid|'
       r'sent\s+to\s+(?!your\b|you\b)|paid\s+to\s+(?!your\b|you\b)|'
-      r'payment\s+to\b|transferred\s+to\s+(?!your\b|you\b))',
+      r'payment\s+to\b|transferred\s+to\s+(?!your\b|you\b)|'
+      // UPI apps put the amount between the verb and "to":
+      // "Paid ₹100 to Ramesh", "Sent ₹100 to Shop".
+      r'(?:paid|sent|transferred)\s+(?:(?:₹|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?!your\b|you\b))',
     ).hasMatch(t);
     final incomingTransfer = RegExp(
-      r'\b(?:sent|paid)\s+to\s+(?:your|you)\b|\b(?:sent|paid)\s+you\b|\bhas\s+sent\b',
+      r'\b(?:sent|paid)\s+(?:(?:₹|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?:your|you)\b|\b(?:sent|paid)\s+you\b|\bhas\s+sent\b',
     ).hasMatch(t);
     final romanizedDebit = RegExp(
       r'\b(kata(?:\s+gaya)?|kat gaya|nikala|bheja gaya|paise bheje|debit hua|paise kate)\b',
@@ -4030,16 +4033,21 @@ class PaymentDetectionService {
         // review-only credit candidate when the message has payment context
         // and an independent account/reference anchor; the registered-bank
         // list is intentionally not the gate for which banks can be detected.
+        final paymentLikePackage = _AppRegistry.looksLikePaymentPackage(pkg);
         final looksLikeIncomingPayment =
             classification == _ClassifyResult.passed &&
             _Classifier.isIncomingCreditText(fields) &&
             _Classifier.hasPaymentContext(fields) &&
-            (referenceId != null || accountSuffix != null);
+            (referenceId != null ||
+                accountSuffix != null ||
+                paymentLikePackage);
         // Unknown-app debits use the same structural guard. They are emitted
         // as LIKELY and can never settle or mutate invoice accounting.
         final looksLikeDebit =
             classification == _ClassifyResult.debit &&
-            (referenceId != null || accountSuffix != null);
+            (referenceId != null ||
+                accountSuffix != null ||
+                paymentLikePackage);
         if (amount == null ||
             (!looksLikeIncomingPayment && !looksLikeDebit)) {
           PdsLogger.t(
@@ -5631,6 +5639,24 @@ abstract class _AppRegistry {
   };
 
   static PaymentApp identify(String p) => _pkgs[p] ?? PaymentApp.unknown;
+
+  // Package-name hints for payment / banking apps that are not in the static
+  // list above (new apps, merchant/soundbox variants, regional banks). A match
+  // only relaxes the "needs UTR/account anchor" rule; such events are still
+  // unverified, kept LIKELY and require merchant confirmation.
+  static const _paymentPackageHints = <String>[
+    'phonepe', 'paytm', 'paisa', 'gpay', 'googlepay', 'bhim', 'upi',
+    'bharatpe', 'mobikwik', 'freecharge', 'payzapp', 'airtel', 'naviapp',
+    'wallet', 'bank', 'pay',
+  ];
+
+  static bool looksLikePaymentPackage(String pkg) {
+    final p = pkg.toLowerCase();
+    for (final h in _paymentPackageHints) {
+      if (p.contains(h)) return true;
+    }
+    return false;
+  }
   static void addPackage(String p, PaymentApp a) => _pkgs[p] = a;
 
   static PaymentApp resolve(String source, String? sender, String text) {
@@ -5822,7 +5848,8 @@ abstract class _Classifier {
     // "transferred to your account" must NOT be treated as outgoing debit.
     r'|payment\s+made\s+to(?!\s+your)'
     r'|transferred\s+to(?!\s+(?:your|you)\b)'
-    r'|you\s+sent|you\s+have\s+sent)\b'
+    r'|you\s+sent|you\s+have\s+sent'
+    r'|(?:paid|sent)\s+(?:(?:\u20b9|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?!your\b|you\b))\b'
     r'|काटा\s+गया)',
     caseSensitive: false,
   );
@@ -5899,6 +5926,7 @@ abstract class _Classifier {
     r'(?:\b(?:credited|received|deposited|you\s+got|you\s+have\s+received'
     r'|money\s+received|paid\s+to\s+your|paid\s+to\s+you|made\s+to\s+your'
     r'|sent\s+to\s+your|sent\s+to\s+you|sent\s+you|paid\s+you|has\s+sent|amount\s+credited'
+    r'|(?:sent|paid)\s+(?:(?:\u20b9|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?:your|you)'
     r'|amount\s+received|payment\s+received)\b'
     r'|प्राप्त|जमा\s+हो|जमा\s+हुआ|खाते\s+में\s+जमा'
     r'|வரவு|பெறப்பட்டது|జమ\s+అయింది|ಜಮಾ\s+ಆಗಿದೆ|मिळाले)',

@@ -42,4 +42,26 @@ void main() {
       );
     });
   });
+
+  group('payment-app notification direction', () {
+    String c(String t) => PaymentDetectionService.debugClassify(t);
+
+    test('incoming credits from UPI apps are classified as passed', () {
+      expect(c('Received ₹250 from Gowtham'), 'passed');
+      expect(c('Gowtham paid you ₹120'), 'passed');
+      expect(c('₹75 sent to you by Ramesh'), 'passed');
+      expect(c('Payment received ₹500'), 'passed');
+    });
+
+    test('outgoing payments with the amount before "to" are debits', () {
+      expect(c('Paid ₹100 to Ramesh'), 'debit');
+      expect(c('Sent ₹1,250 to Shop'), 'debit');
+      expect(c('You paid ₹40 to Canteen'), 'debit');
+    });
+
+    test('plain "payment successful" is not announced as a credit', () {
+      expect(c('Payment successful'), isNot('passed'));
+    });
+  });
 }
+
