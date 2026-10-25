@@ -1,189 +1,135 @@
 package notification.listener.service;
 
-import static notification.listener.service.NotificationUtils.getBitmapFromDrawable;
-import static notification.listener.service.models.ActionCache.cachedNotifications;
-
 import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.Icon;
 import android.os.Build;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
-import java.util.List;
-import java.util.Map;
+import androidx.annotation.RequiresApi;
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
-
-import androidx.annotation.RequiresApi;
-
-import java.io.ByteArrayOutputStream;
-
+import java.util.List;
+import java.util.Map;
 import notification.listener.service.models.Action;
+import notification.listener.service.models.ActionCache;
 
-
+/**
+ * Relays notification text to the in-process plugin receiver.
+ * Keep this Intent text-only: icon/picture blobs can exceed Binder's
+ * transaction limit and crash delivery before Dart sees the payment.
+ */
 @SuppressLint("OverrideAbstract")
-@RequiresApi(api = VERSION_CODES.JELLY_BEAN_MR2)
+@RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
 public class NotificationListener extends NotificationListenerService {
+    private static final String TAG = "NotificationListener";
     private static NotificationListener instance;
 
-    public static NotificationListener getInstance() {
-        return instance;
-    }
+    public static NotificationListener getInstance() { return instance; }
 
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
         instance = this;
+        Log.i(TAG, "Notification listener connected");
     }
 
-    @RequiresApi(api = VERSION_CODES.KITKAT)
     @Override
-    public void onNotificationPosted(StatusBarNotification notification) {
-        handleNotification(notification, false);
+    public void onListenerDisconnected() {
+        super.onListenerDisconnected();
+        instance = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            requestRebind(new android.content.ComponentName(this, NotificationListener.class));
+        }
+        Log.w(TAG, "Notification listener disconnected; rebind requested");
     }
 
-    @RequiresApi(api = VERSION_CODES.KITKAT)
+    @Override
+    public void onNotificationPosted(StatusBarNotification sbn) {
+        handleNotificationSafely(sbn, false);
+    }
+
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        handleNotification(sbn, true);
+        handleNotificationSafely(sbn, true);
     }
 
-    @RequiresApi(api = VERSION_CODES.KITKAT)
-    private void handleNotification(StatusBarNotification notification, boolean isRemoved) {
-        String packageName = notification.getPackageName();
-        Bundle extras = notification.getNotification().extras;
-        boolean isOngoing = (notification.getNotification().flags & Notification.FLAG_ONGOING_EVENT) != 0;
-        byte[] appIcon = getAppIcon(packageName);
-        byte[] largeIcon = null;
-        Action action = NotificationUtils.getQuickReplyAction(notification.getNotification(), packageName);
+    private void handleNotificationSafely(StatusBarNotification sbn, boolean removed) {
+        try {
+            if (sbn == null) return;
+            // Ignore our own app/service notifications to avoid feedback loops.
+            if (getPackageName().equals(sbn.getPackageName())) return;
 
-        if (Build.VERSION.SDK_INT >= VERSION_CODES.M) {
-            largeIcon = getNotificationLargeIcon(getApplicationContext(), notification.getNotification());
-        }
+            Notification notification = sbn.getNotification();
+            Bundle extras = notification == null ? null : notification.extras;
+            boolean ongoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+            Action action = NotificationUtils.getQuickReplyAction(notification, sbn.getPackageName());
+            if (action != null) ActionCache.cachedNotifications.put(sbn.getId(), action);
 
-        Intent intent = new Intent(NotificationConstants.INTENT);
-        intent.putExtra(NotificationConstants.PACKAGE_NAME, packageName);
-        intent.putExtra(NotificationConstants.ID, notification.getId());
-        intent.putExtra(NotificationConstants.CAN_REPLY, action != null);
-        intent.putExtra(NotificationConstants.IS_ONGOING, isOngoing);
+            Intent intent = new Intent(NotificationConstants.INTENT);
+            // Restrict delivery to this app; do not send a system-wide implicit broadcast.
+            intent.setPackage(getPackageName());
+            intent.putExtra(NotificationConstants.PACKAGE_NAME, sbn.getPackageName());
+            intent.putExtra(NotificationConstants.ID, sbn.getId());
+            intent.putExtra(NotificationConstants.CAN_REPLY, action != null);
+            intent.putExtra(NotificationConstants.IS_ONGOING, ongoing);
+            intent.putExtra(NotificationConstants.IS_REMOVED, removed);
 
-        if (NotificationUtils.getQuickReplyAction(notification.getNotification(), packageName) != null) {
-            cachedNotifications.put(notification.getId(), action);
-        }
-
-        intent.putExtra(NotificationConstants.NOTIFICATIONS_ICON, appIcon);
-        intent.putExtra(NotificationConstants.NOTIFICATIONS_LARGE_ICON, largeIcon);
-
-        if (extras != null) {
-            CharSequence title = extras.getCharSequence(Notification.EXTRA_TITLE);
-            CharSequence text = extras.getCharSequence(Notification.EXTRA_TEXT);
-            CharSequence bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
-            CharSequence subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT);
-            CharSequence summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT);
-            Object textLinesValue = extras.get("android.textLines");
-            CharSequence[] textLines = textLinesValue instanceof CharSequence[]
-                    ? (CharSequence[]) textLinesValue
-                    : null;
-
-            intent.putExtra(NotificationConstants.NOTIFICATION_TITLE, title == null ? null : title.toString());
-            intent.putExtra(NotificationConstants.NOTIFICATION_CONTENT, text == null ? null : text.toString());
-            intent.putExtra(NotificationConstants.NOTIFICATION_BIG_TEXT, bigText == null ? null : bigText.toString());
-            intent.putExtra(NotificationConstants.NOTIFICATION_SUB_TEXT, subText == null ? null : subText.toString());
-            intent.putExtra(NotificationConstants.NOTIFICATION_SUMMARY_TEXT, summaryText == null ? null : summaryText.toString());
-            intent.putExtra(
-                    NotificationConstants.NOTIFICATION_TEXT_LINES,
-                    textLines == null ? null : android.text.TextUtils.join("\n", textLines)
-            );
-            intent.putExtra(
-                    NotificationConstants.NOTIFICATION_TICKER,
-                    notification.getNotification().tickerText == null
-                            ? null
-                            : notification.getNotification().tickerText.toString()
-            );
-            intent.putExtra(NotificationConstants.IS_REMOVED, isRemoved);
-            intent.putExtra(NotificationConstants.HAVE_EXTRA_PICTURE, extras.containsKey(Notification.EXTRA_PICTURE));
-
-            if (extras.containsKey(Notification.EXTRA_PICTURE)) {
-                Bitmap bmp = (Bitmap) extras.get(Notification.EXTRA_PICTURE);
-                if (bmp != null) {
-                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                    bmp.compress(Bitmap.CompressFormat.PNG, 100, stream);
-                    intent.putExtra(NotificationConstants.EXTRAS_PICTURE, stream.toByteArray());
-                } else {
-                    Log.w("NotificationListener", "Notification.EXTRA_PICTURE exists but is null.");
+            if (extras != null) {
+                putText(intent, NotificationConstants.NOTIFICATION_TITLE,
+                        extras.getCharSequence(Notification.EXTRA_TITLE));
+                putText(intent, NotificationConstants.NOTIFICATION_CONTENT,
+                        extras.getCharSequence(Notification.EXTRA_TEXT));
+                putText(intent, NotificationConstants.NOTIFICATION_BIG_TEXT,
+                        extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
+                putText(intent, NotificationConstants.NOTIFICATION_SUB_TEXT,
+                        extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
+                putText(intent, NotificationConstants.NOTIFICATION_SUMMARY_TEXT,
+                        extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT));
+                Object lines = extras.get("android.textLines");
+                if (lines instanceof CharSequence[]) {
+                    intent.putExtra(NotificationConstants.NOTIFICATION_TEXT_LINES,
+                            android.text.TextUtils.join("\n", (CharSequence[]) lines));
                 }
+                putText(intent, NotificationConstants.NOTIFICATION_TICKER, notification.tickerText);
             }
-        }
-        sendBroadcast(intent);
-    }
 
-
-    public byte[] getAppIcon(String packageName) {
-        try {
-            PackageManager manager = getBaseContext().getPackageManager();
-            Drawable icon = manager.getApplicationIcon(packageName);
-            ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            getBitmapFromDrawable(icon).compress(Bitmap.CompressFormat.PNG, 100, stream);
-            return stream.toByteArray();
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
-            return null;
+            sendBroadcast(intent);
+        } catch (Throwable error) {
+            // Never allow an unsupported vendor Notification/Drawable to kill the listener.
+            Log.e(TAG, "Failed to relay notification event", error);
         }
     }
 
-    @RequiresApi(api = VERSION_CODES.M)
-    private byte[] getNotificationLargeIcon(Context context, Notification notification) {
-        try {
-            Icon largeIcon = notification.getLargeIcon();
-            if (largeIcon == null) {
-                return null;
-            }
-            Drawable iconDrawable = largeIcon.loadDrawable(context);
-            Bitmap iconBitmap = ((BitmapDrawable) iconDrawable).getBitmap();
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            iconBitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
-
-            return outputStream.toByteArray();
-        } catch (Exception e) {
-            e.printStackTrace();
-            Log.d("ERROR LARGE ICON", "getNotificationLargeIcon: " + e.getMessage());
-            return null;
-        }
+    private static void putText(Intent intent, String key, CharSequence value) {
+        if (value != null) intent.putExtra(key, value.toString());
     }
 
     @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     public List<Map<String, Object>> getActiveNotificationData() {
-        List<Map<String, Object>> notificationList = new ArrayList<>();
-        StatusBarNotification[] activeNotifications = getActiveNotifications();
-
-        for (StatusBarNotification sbn : activeNotifications) {
-            Map<String, Object> notifData = new HashMap<>();
-            Notification notification = sbn.getNotification();
-            Bundle extras = notification.extras;
-
-            notifData.put("id", sbn.getId());
-            notifData.put("packageName", sbn.getPackageName());
-            notifData.put("title", extras.getCharSequence(Notification.EXTRA_TITLE) != null
-                    ? extras.getCharSequence(Notification.EXTRA_TITLE).toString()
-                    : null);
-            notifData.put("content", extras.getCharSequence(Notification.EXTRA_TEXT) != null
-                    ? extras.getCharSequence(Notification.EXTRA_TEXT).toString()
-                    : null);
-            boolean isOngoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
-            notifData.put("onGoing", isOngoing);
-
-            notificationList.add(notifData);
+        List<Map<String, Object>> result = new ArrayList<>();
+        StatusBarNotification[] active = getActiveNotifications();
+        if (active == null) return result;
+        for (StatusBarNotification sbn : active) {
+            Map<String, Object> item = new HashMap<>();
+            Notification n = sbn.getNotification();
+            Bundle extras = n == null ? null : n.extras;
+            item.put("id", sbn.getId());
+            item.put("packageName", sbn.getPackageName());
+            item.put("title", extras == null || extras.getCharSequence(Notification.EXTRA_TITLE) == null
+                    ? null : extras.getCharSequence(Notification.EXTRA_TITLE).toString());
+            item.put("content", extras == null || extras.getCharSequence(Notification.EXTRA_TEXT) == null
+                    ? null : extras.getCharSequence(Notification.EXTRA_TEXT).toString());
+            item.put("onGoing", n != null && (n.flags & Notification.FLAG_ONGOING_EVENT) != 0);
+            result.add(item);
         }
-        return notificationList;
+        return result;
     }
-
 }
