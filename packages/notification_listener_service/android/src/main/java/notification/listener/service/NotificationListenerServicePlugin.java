@@ -6,14 +6,18 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ActivityNotFoundException;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.provider.Settings;
 import android.util.Log;
+
 import androidx.annotation.NonNull;
-import java.util.HashMap;
 import androidx.annotation.RequiresApi;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
