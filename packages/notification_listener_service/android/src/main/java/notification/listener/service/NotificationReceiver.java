@@ -5,12 +5,8 @@ import static notification.listener.service.NotificationConstants.*;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
-import android.os.Bundle;
-import android.service.notification.StatusBarNotification;
-import android.util.Log;
-import androidx.annotation.RequiresApi;
 import io.flutter.plugin.common.EventChannel.EventSink;
+import android.util.Log;
 import java.util.HashMap;
 
 /** Converts the service's text-only intent into the plugin event payload. */
