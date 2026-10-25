@@ -3,11 +3,14 @@ package notification.listener.service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.service.notification.StatusBarNotification;
+import android.util.Log;
+import android.os.Build;
 
 /**
- * App-scoped relay target for text-only notification events emitted by
- * NotificationListener. The Flutter EventChannel receiver is registered
- * separately by the plugin when Dart is actively listening.
+ * Receives the explicit in-app notification relay and forwards it to Flutter's
+ * temporary EventChannel receiver when one exists. There is no process-wide
+ * receiver registration here; events aren't buffered across a missing engine.
  */
 public final class NotificationRelayReceiver extends BroadcastReceiver {
     @Override
