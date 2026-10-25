@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -3669,7 +3670,18 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        _handleNotification,
+        (event) {
+          try {
+            _handleNotification(event);
+          } finally {
+            // The native queue is durable until acknowledged. This executes
+            // only after the synchronous classifier/dedup/announcement routing
+            // has completed, including ordinary non-payment notifications.
+            unawaited(
+              NotificationListenerService.acknowledgeNotification(event.eventKey),
+            );
+          }
+        },
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
