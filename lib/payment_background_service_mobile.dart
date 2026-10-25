@@ -48,8 +48,11 @@ void _listenForBackgroundPayments(FlutterBackgroundService service) {
   _paymentEventSubscription = service.on('payment_detected').listen((payload) {
     if (payload == null) return;
     try {
+      final eventPayload = Map<String, dynamic>.from(payload);
+      final historyHandled = eventPayload.remove('history_handled') == true;
       PaymentDetectionService().forwardPaymentEvent(
-        PaymentEvent.fromJson(Map<String, dynamic>.from(payload)),
+        PaymentEvent.fromJson(eventPayload),
+        historyHandled: historyHandled,
       );
     } catch (error, stackTrace) {
       debugPrint('⚠️ Invalid background payment event: $error\n$stackTrace');
@@ -63,6 +66,7 @@ Future<void> _persistPaymentHistoryThenForward(
   PaymentEvent event,
 ) async {
   var forwardedEvent = event;
+  var historyHandled = false;
   try {
     forwardedEvent =
         await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
@@ -75,6 +79,9 @@ Future<void> _persistPaymentHistoryThenForward(
         !forwardedEvent.hasReferenceConflict) {
       await OnlinePaymentHistoryService.recordIncomingPayment(forwardedEvent);
     }
+    // Even when this exact reference is already present or conflicted, this
+    // isolate has checked persistent history; don't repeat the same I/O in UI.
+    historyHandled = true;
   } catch (error, stackTrace) {
     debugPrint('⚠️ Could not save background payment receipt: $error');
     debugPrint(stackTrace.toString());
@@ -96,7 +103,9 @@ Future<void> _persistPaymentHistoryThenForward(
       verificationStatus: PaymentVerificationStatus.unverified,
     );
   }
-  service.invoke('payment_detected', forwardedEvent.toJson());
+  final payload = forwardedEvent.toJson();
+  payload['history_handled'] = historyHandled;
+  service.invoke('payment_detected', payload);
 }
 
 Future<void> _ensurePaymentNotificationChannel() async {
@@ -156,7 +165,7 @@ Future<bool> onStart(ServiceInstance service) async {
 
     final pds = PaymentDetectionService();
     // The foreground app and service isolates have separate voice settings.
-    PdsConfig.isVoiceEnabled = true;
+    PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
     pds.onSpeak = (text) async {
@@ -364,7 +373,7 @@ Future<void> _initializeFallback() async {
 
     final pds = PaymentDetectionService();
     // Keep announcements enabled in fallback mode as well.
-    PdsConfig.isVoiceEnabled = true;
+    PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
     pds.onSpeak = (text) async {

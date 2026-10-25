@@ -629,18 +629,25 @@ class _DashboardPageState extends State<DashboardPage>
     _paymentSubscription = PaymentDetectionService().onPaymentDetected.listen((
       event,
     ) {
-      unawaited(
-        OnlinePaymentHistoryService.recordIncomingPayment(event).catchError((
-          Object error,
-          StackTrace stackTrace,
-        ) {
-          if (kDebugMode) {
-            debugPrint('Could not save confirmed online payment: $error');
-            debugPrint(stackTrace.toString());
-          }
-          return false;
-        }),
-      );
+      // The background isolate persists detection history before forwarding.
+      // Skip a second preferences read/write for that event; keep the fallback
+      // for events emitted locally when background history was not handled.
+      final historyAlreadyHandled = PaymentDetectionService()
+          .consumeHistoryHandledEvent(event.id);
+      if (!historyAlreadyHandled) {
+        unawaited(
+          OnlinePaymentHistoryService.recordIncomingPayment(event).catchError((
+            Object error,
+            StackTrace stackTrace,
+          ) {
+            if (kDebugMode) {
+              debugPrint('Could not save payment history: $error');
+              debugPrint(stackTrace.toString());
+            }
+            return false;
+          }),
+        );
+      }
       if (mounted) {
         final direction = event.direction != PaymentTransactionDirection.unknown
             ? event.direction
@@ -675,6 +682,10 @@ class _DashboardPageState extends State<DashboardPage>
               ? '$activity — verify before recording.'
               : activity,
           isIncomingCredit && !needsMerchantConfirmation,
+          localOnly: true,
+          // The payment TTS queue is the single audible output when enabled.
+          // Otherwise the local Android/iOS notification can make the sound.
+          silent: PdsConfig.isVoiceEnabled,
         );
         try {
           context.read<PaymentStateNotifier>().addPayment(event);
@@ -3580,38 +3591,49 @@ class _DashboardPageState extends State<DashboardPage>
   void _showRealtimeNotification(
     String title,
     String body,
-    bool isPositive,
-  ) async {
-    // Show local notification
+    bool isPositive, {
+    bool localOnly = false,
+    bool silent = false,
+  }) async {
+    if (localOnly) {
+      // Payment events must not launch WhatsApp or create a second sound
+      // channel alongside the single TTS announcement.
+      await NotificationService.showPaymentDetectionNotification(
+        title: title,
+        body: body,
+        payload: 'realtime',
+        silent: silent,
+      );
+      return;
+    }
+
     await NotificationService.showNotification(
       title: title,
       body: body,
       payload: 'realtime',
     );
 
-    // Play sound if enabled
     if (_paymentSoundEnabled) {
+      AudioPlayer? player;
       try {
-        final player = AudioPlayer();
+        player = AudioPlayer();
         if (isPositive) {
           if (_successAudioPath != null) {
             await player.play(DeviceFileSource(_successAudioPath!));
           } else {
-            await player.play(
-              AssetSource('sounds/success.mp3'),
-            ); // Assume asset exists
+            await player.play(AssetSource('sounds/success.mp3'));
           }
         } else {
           if (_warningAudioPath != null) {
             await player.play(DeviceFileSource(_warningAudioPath!));
           } else {
-            await player.play(
-              AssetSource('sounds/warning.mp3'),
-            ); // Assume asset exists
+            await player.play(AssetSource('sounds/warning.mp3'));
           }
         }
       } catch (e) {
         debugPrint('Sound play failed: $e');
+      } finally {
+        await player?.dispose();
       }
     }
   }
