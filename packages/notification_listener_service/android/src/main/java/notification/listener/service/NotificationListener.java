@@ -15,8 +15,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import notification.listener.service.models.Action;
-import notification.listener.service.models.Action;
-import notification.listener.service.models.Action;
 import notification.listener.service.models.ActionCache;
 
 /**
@@ -67,8 +65,8 @@ public class NotificationListener extends NotificationListenerService {
 
             Notification notification = sbn.getNotification();
             Bundle extras = notification == null ? null : notification.extras;
-            boolean ongoing = (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
-            Action action = NotificationUtils.getQuickReplyAction(notification, sbn.getPackageName());
+            boolean ongoing = notification != null && (notification.flags & Notification.FLAG_ONGOING_EVENT) != 0;
+            Action action = notification == null ? null : NotificationUtils.getQuickReplyAction(notification, sbn.getPackageName());
             if (action != null) ActionCache.cachedNotifications.put(sbn.getId(), action);
 
             Intent intent = new Intent(NotificationConstants.INTENT);
