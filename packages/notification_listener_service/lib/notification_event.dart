@@ -6,6 +6,9 @@ class ServiceNotificationEvent {
   /// the notification id
   int? id;
 
+  /// Stable native identity used to acknowledge durable notification delivery.
+  String? eventKey;
+
   /// check if we can reply the Notification
   bool? canReply;
 
@@ -63,6 +66,7 @@ class ServiceNotificationEvent {
 
   ServiceNotificationEvent({
     this.id,
+    this.eventKey,
     this.canReply,
     this.haveExtraPicture,
     this.hasRemoved,
@@ -82,6 +86,7 @@ class ServiceNotificationEvent {
 
   ServiceNotificationEvent.fromMap(Map<dynamic, dynamic> map) {
     id = map['id'];
+    eventKey = map['eventKey'] as String?;
     canReply = map['canReply'];
     haveExtraPicture = map['haveExtraPicture'];
     hasRemoved = map['hasRemoved'];
