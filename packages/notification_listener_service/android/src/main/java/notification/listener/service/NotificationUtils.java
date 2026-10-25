@@ -22,10 +22,11 @@ public final class NotificationUtils {
     private static final CharSequence INPUT_KEYWORD = "input";
 
     public static Bitmap getBitmapFromDrawable(Drawable drawable) {
-        final Bitmap bmp = Bitmap.createBitmap(
-                drawable.getIntrinsicWidth(),
-                drawable.getIntrinsicHeight(),
-                Bitmap.Config.ARGB_8888);
+        // Adaptive/vector drawables may report no intrinsic size (-1), which
+        // makes Bitmap.createBitmap throw. Fall back to a sane size.
+        final int w = drawable.getIntrinsicWidth() > 0 ? drawable.getIntrinsicWidth() : 96;
+        final int h = drawable.getIntrinsicHeight() > 0 ? drawable.getIntrinsicHeight() : 96;
+        final Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
 
         final Canvas canvas = new Canvas(bmp);
         drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());

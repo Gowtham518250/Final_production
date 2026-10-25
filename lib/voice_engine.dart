@@ -351,13 +351,28 @@ class VoiceEngine {
       return;
     }
 
-    if (!await _safeSetLocale(job.locale)) {
-      _log.w('Skipping announcement because locale ${job.locale} is unavailable');
-      return;
+    var effectiveLocale = job.locale;
+    if (!await _safeSetLocale(effectiveLocale)) {
+      // Never stay silent for a payment: fall back to an installed English
+      // voice (digits and amounts are still understandable).
+      _log.w('Locale ${job.locale} unavailable; trying English fallback');
+      var fellBack = false;
+      for (final fallback in const ['en-IN', 'en-US', 'en-GB']) {
+        if (fallback == job.locale) continue;
+        if (await _safeSetLocale(fallback)) {
+          effectiveLocale = fallback;
+          fellBack = true;
+          break;
+        }
+      }
+      if (!fellBack) {
+        _log.w('No TTS locale available; announcement skipped');
+        return;
+      }
     }
 
     // Apply locale-aware rate/pitch modifiers
-    final profile = _localeProfiles[job.locale] ?? const _LocaleProfile(1.0, 0.0);
+    final profile = _localeProfiles[effectiveLocale] ?? const _LocaleProfile(1.0, 0.0);
     final finalRate  = (job.result.rate  * profile.rateMultiplier).clamp(0.1, 1.0);
     final finalPitch = (job.result.pitch + profile.pitchOffset).clamp(0.5, 2.0);
 

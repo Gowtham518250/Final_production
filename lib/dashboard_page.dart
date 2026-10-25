@@ -1001,6 +1001,20 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  /// Starts (or restarts) the payment-detection service and tells it to attach
+  /// the channels whose permission is already granted.
+  Future<void> _attachGrantedPaymentChannels() async {
+    try {
+      final service = FlutterBackgroundService();
+      if (!await service.isRunning()) {
+        await initializeBackgroundService();
+      }
+      service.invoke('restart_payment_detection');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Partial channel attach failed: $e');
+    }
+  }
+
   Future<void> _checkPermissions({bool showReminderIfMissing = true}) async {
     // IMPORTANT:
     // This method ONLY CHECKS permission state.
@@ -1037,6 +1051,12 @@ class _DashboardPageState extends State<DashboardPage>
       }
       // Intentionally do not open a blocking dialog here. The Dashboard card
       // is the single persistent reminder and remains usable for billing.
+      //
+      // One missing permission must not disable the other channel: attach
+      // whichever of SMS / notification access is already granted.
+      if (notifGranted || smsGranted) {
+        unawaited(_attachGrantedPaymentChannels());
+      }
       return;
     }
 
@@ -17799,27 +17819,12 @@ class _MotionCharts extends StatefulWidget {
   State<_MotionCharts> createState() => _MotionChartsState();
 }
 
-class _MotionChartsState extends State<_MotionCharts>
-    with TickerProviderStateMixin {
-  late AnimationController _ctrl;
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
+class _MotionChartsState extends State<_MotionCharts> {
+  // The pulse animation was removed for performance, so no AnimationController
+  // is needed. A repeating controller with no listeners still forces the
+  // engine to schedule a frame on every vsync and keeps the CPU awake.
   @override
   Widget build(BuildContext context) {
-    // Pulse animation removed for maximum performance on small phones
     return RepaintBoundary(child: widget.child);
   }
 }
