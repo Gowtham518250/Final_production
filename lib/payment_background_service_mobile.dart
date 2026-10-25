@@ -161,6 +161,9 @@ Future<bool> onStart(ServiceInstance service) async {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    // SharedPreferences caches are isolate-local. Refresh from disk before
+    // initializing voice and payment detection so recent UI settings apply.
+    await prefs.reload();
     final langCode = prefs.getString('payment_sound_lang') ?? 'en-US';
 
     final pds = PaymentDetectionService();
@@ -379,6 +382,9 @@ Future<void> _initializeFallback() async {
     );
 
     final prefs = await SharedPreferences.getInstance();
+    // SharedPreferences caches are isolate-local. Refresh from disk before
+    // initializing voice and payment detection so recent UI settings apply.
+    await prefs.reload();
     final langCode = prefs.getString('payment_sound_lang') ?? 'en-US';
 
     final pds = PaymentDetectionService();
