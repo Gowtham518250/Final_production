@@ -4776,6 +4776,109 @@ class PaymentDetectionService {
   // EMIT
   // ==========================================================================
 
+  static String _eventOrigin(String source) {
+    final value = source.toLowerCase();
+    if (value.startsWith('notification+sms')) return 'notification+sms';
+    if (value.startsWith('notification')) return 'notification';
+    if (value.startsWith('sms')) return 'sms';
+    if (value.startsWith('accessibility')) return 'accessibility';
+    return value.split(':').first;
+  }
+
+  static PaymentDirection _eventPaymentDirection(PaymentEvent event) {
+    if (event.direction == PaymentTransactionDirection.incomingCredit) {
+      return PaymentDirection.credited;
+    }
+    if (event.direction == PaymentTransactionDirection.outgoingDebit) {
+      return PaymentDirection.debited;
+    }
+    return VoiceBuilder.detectDirection(event.rawText);
+  }
+
+  bool _isRecentCrossSourceDuplicate(PaymentEvent event) {
+    // Never discard explicit merchant confirmations, failures, reference
+    // conflicts, or events that were already marked as duplicates.
+    if (event.isMerchantConfirmed ||
+        event.isDuplicate ||
+        event.hasReferenceConflict ||
+        event.isFailed) {
+      return false;
+    }
+
+    final direction = _eventPaymentDirection(event);
+    if (direction == PaymentDirection.unknown) return false;
+
+    final now = DateTime.now();
+    _recentEmittedPayments.removeWhere(
+      (old) => now.difference(old.timestamp).abs() > _crossSourceEventWindow,
+    );
+
+    final currentOrigin = _eventOrigin(event.detectionSource);
+    final currentReference = event.normalizedReferenceId;
+    final currentText = event.rawText.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    for (final old in _recentEmittedPayments.reversed) {
+      if (old.isMerchantConfirmed ||
+          old.isDuplicate ||
+          old.hasReferenceConflict ||
+          old.isFailed) {
+        continue;
+      }
+      if ((event.amount - old.amount).abs() >= 0.01 ||
+          direction != _eventPaymentDirection(old)) {
+        continue;
+      }
+
+      final oldReference = old.normalizedReferenceId;
+      if (currentReference != null && oldReference != null) {
+        // Different references mean different transfers; never merge those.
+        if (currentReference != oldReference) continue;
+        if (event.hasReferenceConflictWith(old)) continue;
+        return true;
+      }
+
+      final oldOrigin = _eventOrigin(old.detectionSource);
+      final sameAccount =
+          event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix == old.accountSuffix;
+      // With missing UTRs, use an equal parsed account suffix and cross-source
+      // timing to correlate a notification with its bank SMS. This is only a
+      // presentation/event dedup guard; it never settles financial records.
+      if ((currentReference == null || oldReference == null) &&
+          sameAccount &&
+          currentOrigin != oldOrigin) {
+        return true;
+      }
+
+      final oldText = old.rawText.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final samePayloadReplay =
+          currentOrigin == oldOrigin &&
+          event.app == old.app &&
+          currentText == oldText;
+      if (samePayloadReplay) return true;
+    }
+    return false;
+  }
+
+  void _rememberEmittedPayment(PaymentEvent event) {
+    if (event.isMerchantConfirmed ||
+        event.isDuplicate ||
+        event.hasReferenceConflict ||
+        event.isFailed ||
+        _eventPaymentDirection(event) == PaymentDirection.unknown) {
+      return;
+    }
+    final now = DateTime.now();
+    _recentEmittedPayments.removeWhere(
+      (old) => now.difference(old.timestamp).abs() > _crossSourceEventWindow,
+    );
+    _recentEmittedPayments.add(event);
+    if (_recentEmittedPayments.length > 100) {
+      _recentEmittedPayments.removeAt(0);
+    }
+  }
+
   Future<void> _emit(
     PaymentEvent event, {
     bool isBillSettlement = false,
@@ -4783,6 +4886,18 @@ class PaymentDetectionService {
   }) async {
     event = requireMerchantConfirmation(event);
     if (event.decision == PaymentDecision.rejected) return;
+
+    if (_isRecentCrossSourceDuplicate(event)) {
+      _stats.recordDupe();
+      PdsLogger.i(
+        'EMIT',
+        'Cross-source echo suppressed: amount=' + event.amount.toString() +
+            ', origin=' + _eventOrigin(event.detectionSource) +
+            ', account=' + (event.accountSuffix ?? 'unknown'),
+      );
+      return;
+    }
+    _rememberEmittedPayment(event);
 
     // Cross-device UTR check happens before UI/voice emission. Serialize
     // concurrent same-UTR events on this device, and await the registration
