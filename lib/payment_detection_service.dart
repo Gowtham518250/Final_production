@@ -6006,7 +6006,7 @@ abstract class _Extractor {
     return _utrI.firstMatch(t)?.group(1) ?? _utrN.firstMatch(t)?.group(1);
   }
 
-  static final _name =c final _name = RegExp(
+  static final _name = RegExp(
     r'(?:from|by|received\s+from|sent\s+by|paid\s+by)\s+'
     r'([A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+){0,3})'
     r'(?=\s+(?:on|via|to|using|for|upi|ref|utr|vpa|\d|$))',
