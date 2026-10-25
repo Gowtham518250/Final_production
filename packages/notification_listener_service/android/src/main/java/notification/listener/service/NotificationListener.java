@@ -78,7 +78,10 @@ public class NotificationListener extends NotificationListenerService {
             if (sbn == null || sbn.getNotification() == null) return;
             // Never forward our own foreground-service notification.
             if (getPackageName().equals(sbn.getPackageName())) return;
-            handleNotification(sbn, isRemoved);
+            // Removal callbacks are not payment events. Keep the posted event
+            // queued until Dart acknowledges it, even if the notification is dismissed.
+            if (isRemoved) return;
+            handleNotification(sbn, false);
         } catch (Throwable t) {
             // A crash here kills the listener binding and every later payment.
             Log.e("NotificationListener", "handleNotification failed", t);
@@ -95,10 +98,13 @@ public class NotificationListener extends NotificationListenerService {
         // Deliver only to our own app, and never ship icons/pictures: PNG
         // bytes in a broadcast risk the Binder transaction size limit and the
         // app does not need them for payment detection.
-        Intent intent = new Intent(NotificationConstants.INTENT);
-        intent.setPackage(getPackageName());
+        Intent intent = new Intent(this, NotificationRelayReceiver.class);
+        intent.setAction(NotificationConstants.INTENT);
         intent.putExtra(NotificationConstants.PACKAGE_NAME, packageName);
         intent.putExtra(NotificationConstants.ID, notification.getId());
+        intent.putExtra(
+                NotificationConstants.EVENT_KEY,
+                packageName + "|" + notification.getId() + "|" + notification.getPostTime());
         intent.putExtra(NotificationConstants.CAN_REPLY, action != null);
         intent.putExtra(NotificationConstants.IS_ONGOING, isOngoing);
 
@@ -176,13 +182,16 @@ public class NotificationListener extends NotificationListenerService {
     public List<Map<String, Object>> getActiveNotificationData() {
         List<Map<String, Object>> notificationList = new ArrayList<>();
         StatusBarNotification[] activeNotifications = getActiveNotifications();
+        if (activeNotifications == null) return notificationList;
 
         for (StatusBarNotification sbn : activeNotifications) {
+            if (getPackageName().equals(sbn.getPackageName())) continue;
             Map<String, Object> notifData = new HashMap<>();
             Notification notification = sbn.getNotification();
             Bundle extras = notification.extras;
 
             notifData.put("id", sbn.getId());
+            notifData.put("eventKey", sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getPostTime());
             notifData.put("packageName", sbn.getPackageName());
             notifData.put("title", extras.getCharSequence(Notification.EXTRA_TITLE) != null
                     ? extras.getCharSequence(Notification.EXTRA_TITLE).toString()
