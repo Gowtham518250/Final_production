@@ -9,6 +9,7 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
       - "android/**"
+      - "packages/**"
       - ".github/workflows/flutter-android-build-smoke.yml"
   workflow_dispatch:
 
