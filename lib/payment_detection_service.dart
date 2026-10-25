@@ -4280,6 +4280,7 @@ class PaymentDetectionService {
     // rejection must not poison the same transaction arriving from SMS or
     // Truecaller later. We still serialize concurrent work with active FP.
     final canUseSmsAsCorroboration =
+        !isDebit &&
         sameReferenceDuplicate &&
         source == 'sms' &&
         normalizedReference != null &&
@@ -4348,6 +4349,21 @@ class PaymentDetectionService {
 
       if (isDebit) {
         if (isFailed) return;
+
+        // Debit candidates return before the credit-scoring path below, so
+        // they must commit their fingerprint here. Otherwise a matching SMS
+        // and Truecaller/payment-app notification could announce the same
+        // debit multiple times.
+        _dedupStore[fp] = DateTime.now().add(
+          isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
+        );
+        if (isUtrFp) {
+          if (normalizedReference != null && !referenceAmountConflict) {
+            _dedupReferenceAmounts[normalizedReference] = amount;
+          }
+          _dedupDirty = true;
+        }
+
         unawaited(_emit(tempEvent.copyWith(decision: PaymentDecision.likely)));
         return;
       }
