@@ -8,6 +8,57 @@ import 'package:notification_listener_service/notification_event.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('Payment reference extraction regressions', () {
+    test('does not mistake ordinary words for transaction references', () {
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Transaction successful. Payment received ₹250',
+        ),
+        isNull,
+      );
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Transaction confirmation: amount ₹250 credited',
+        ),
+        isNull,
+      );
+    });
+
+    test('recognizes numeric UTR and Ref No labels', () {
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Transaction ID: 123456789012',
+        ),
+        '123456789012',
+      );
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Ref No 987654321098',
+        ),
+        '987654321098',
+      );
+    });
+  });
+
+  group('Durable notification identity', () {
+    test('retains native event key when decoding queued notification', () {
+      final event = ServiceNotificationEvent.fromMap({
+        'id': 42,
+        'eventKey': 'com.example.payment|42|1792939200000',
+        'packageName': 'com.example.payment',
+        'title': 'Payment received',
+        'content': 'Payment received ₹250',
+        'hasRemoved': false,
+        'canReply': false,
+        'onGoing': false,
+      });
+
+      expect(event.id, 42);
+      expect(event.eventKey, 'com.example.payment|42|1792939200000');
+      expect(event.packageName, 'com.example.payment');
+    });
+  });
+
   group('Bill payment tracking', () {
     test(
       'trusted PhonePe credit with a short notification updates a ten-rupee bill',
