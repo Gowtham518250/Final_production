@@ -46,6 +46,22 @@ class NotificationListenerService {
     }
   }
 
+  /// Acknowledge a durable native notification after the detector processed it.
+  static Future<void> acknowledgeNotification(String? eventKey) async {
+    if (!Platform.isAndroid || eventKey == null || eventKey.trim().isEmpty) {
+      return;
+    }
+    try {
+      await methodeChannel.invokeMethod<bool>('acknowledgeNotification', {
+        'eventKey': eventKey,
+      });
+    } on PlatformException catch (error) {
+      log('Notification acknowledgement failed: $error');
+    } on MissingPluginException catch (error) {
+      log('Notification acknowledgement unavailable: $error');
+    }
+  }
+
   /// get currently active notifications
   static Future<List<ServiceNotificationEvent>> getActiveNotifications() async {
     try {
