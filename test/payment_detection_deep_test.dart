@@ -40,6 +40,25 @@ void main() {
     });
   });
 
+  group('Durable notification identity', () {
+    test('retains native event key across replay payload decoding', () {
+      final event = ServiceNotificationEvent.fromMap({
+        'id': 42,
+        'eventKey': 'com.example.payment|42|1792939200000',
+        'packageName': 'com.example.payment',
+        'title': 'Payment received',
+        'content': 'Payment received ₹250',
+        'hasRemoved': false,
+        'canReply': false,
+        'onGoing': false,
+      });
+
+      expect(event.id, 42);
+      expect(event.eventKey, 'com.example.payment|42|1792939200000');
+      expect(event.packageName, 'com.example.payment');
+    });
+  });
+
   group('Bill payment tracking', () {
     test(
       'trusted PhonePe credit with a short notification updates a ten-rupee bill',
