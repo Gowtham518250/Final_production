@@ -483,6 +483,68 @@ void main() {
     );
 
     test(
+      'voice queue announces both APGB incoming transfers and outgoing debits',
+      () async {
+        final oldVoiceEnabled = PdsConfig.isVoiceEnabled;
+        PdsConfig.isVoiceEnabled = true;
+
+        Future<String> spokenFor(PaymentEvent event) async {
+          final queue = PriorityVoiceQueue();
+          final spoken = <String>[];
+          queue.getLanguage = () => VoiceLanguage.english;
+          queue.onSpeak = spoken.add;
+          queue.enqueue(
+            event,
+            PaymentUiState(
+              id: event.id,
+              decision: PaymentDecision.likely,
+              amount: event.amount,
+              isFailed: false,
+              isPartial: false,
+              isBillMatch: false,
+              detectedAt: event.timestamp,
+              rawText: event.rawText,
+              direction: event.direction,
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          queue.dispose();
+          expect(spoken, hasLength(1));
+          return spoken.single.toLowerCase();
+        }
+
+        try {
+          final creditText =
+              'APGB Verified Business + ₹5 UPI transfer from Apgbank to Account 4222';
+          final credit = PaymentEvent(
+            id: 'apgb-credit-voice',
+            amount: 5,
+            timestamp: DateTime.now(),
+            app: PaymentApp.bankApp,
+            rawText: creditText,
+            decision: PaymentDecision.likely,
+            direction: PaymentTransactionDirection.incomingCredit,
+          );
+          expect(await spokenFor(credit), contains('credited'));
+
+          final debitText = 'INR 5 debited from your account XXXX4222';
+          final debit = PaymentEvent(
+            id: 'apgb-debit-voice',
+            amount: 5,
+            timestamp: DateTime.now(),
+            app: PaymentApp.bankApp,
+            rawText: debitText,
+            decision: PaymentDecision.likely,
+            direction: PaymentTransactionDirection.outgoingDebit,
+          );
+          expect(await spokenFor(debit), contains('debited'));
+        } finally {
+          PdsConfig.isVoiceEnabled = oldVoiceEnabled;
+        }
+      },
+    );
+
+    test(
       'partial incoming alerts produce a partial-payment voice prompt',
       () async {
         final queue = PriorityVoiceQueue();
