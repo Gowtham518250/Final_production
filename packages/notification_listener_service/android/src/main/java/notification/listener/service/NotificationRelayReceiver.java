@@ -3,9 +3,6 @@ package notification.listener.service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.service.notification.StatusBarNotification;
-import android.util.Log;
-import android.os.Build;
 
 /**
  * Receives the explicit in-app notification relay and forwards it to Flutter's
