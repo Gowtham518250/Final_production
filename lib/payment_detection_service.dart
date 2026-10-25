@@ -5990,11 +5990,11 @@ abstract class _Extractor {
     // Only capture values that begin with a digit. Matching any 10–22
     // alphanumeric token after "transaction"/"ref" turns words such as
     // "successful" or "confirmation" into fake UTRs and poisons dedup.
-    r'\\b(?:utr|rrn|ref(?:erence)?(?:\\s*(?:no|number|id))?|txn(?:\\s*(?:id|no|number))?|transaction(?:\\s*(?:id|no|number))?|id)[:\\s#.-]*(\\d[A-Za-z0-9]{9,21})\\b',
+    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*(\d[A-Za-z0-9]{9,21})\b',
     caseSensitive: false,
   );
-  static final _utrI = RegExp(r'\\b(\\d{12})\\b');
-  static final _utrN = RegExp(r'\\b(\\d{16,22})\\b');
+  static final _utrI = RegExp(r'\b(\d{12})\b');
+  static final _utrN = RegExp(r'\b(\d{16,22})\b');
 
   static String? referenceId(String t) {
     final labelled = _utrL.firstMatch(t)?.group(1);
