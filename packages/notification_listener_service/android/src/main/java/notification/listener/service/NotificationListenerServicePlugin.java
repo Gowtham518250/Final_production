@@ -18,8 +18,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -158,7 +160,10 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
         // Replay the durable queue first. Dart acknowledges each event after
         // synchronous processing, so a process/engine restart cannot silently
         // lose notifications that arrived while the stream was detached.
+        Set<String> pendingEventKeys = new HashSet<>();
         for (Map<String, Object> pending : NotificationRelayReceiver.getPendingEvents(context)) {
+            Object key = pending.get("eventKey");
+            if (key != null) pendingEventKeys.add(String.valueOf(key));
             events.success(pending);
         }
 
@@ -167,6 +172,10 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
         NotificationListener service = NotificationListener.getInstance();
         if (service != null) {
             for (Map<String, Object> item : service.getActiveNotificationData()) {
+                Object key = item.get("eventKey");
+                if (key != null && pendingEventKeys.contains(String.valueOf(key))) {
+                    continue; // already replayed from the durable queue above
+                }
                 HashMap<String, Object> replay = new HashMap<>(item);
                 replay.put("hasRemoved", false);
                 replay.put("canReply", false);
