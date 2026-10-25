@@ -4308,10 +4308,6 @@ class PaymentDetectionService {
 
     final registeredActiveFingerprint = !referenceAmountConflict;
     if (registeredActiveFingerprint) _activeFingerprints.add(fp);
-    _dedupStore[fp] = DateTime.now().add(
-      isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
-    );
-    if (isUtrFp) _dedupDirty = true;
 
     try {
       // Layer 4.7: TCM Matching
@@ -4353,6 +4349,18 @@ class PaymentDetectionService {
           app == PaymentApp.unknown) {
         PdsLogger.w('L5', 'ACC_HARD_REJECT: unknown pkg + no valid UTR');
         return;
+      }
+
+      // Commit the dedup identity only after the hard-block gates pass. A
+      // rejected first channel must not suppress a later valid SMS/Truecaller copy.
+      _dedupStore[fp] = DateTime.now().add(
+        isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
+      );
+      if (isUtrFp) {
+        if (normalizedReference != null && !referenceAmountConflict) {
+          _dedupReferenceAmounts[normalizedReference] = amount;
+        }
+        _dedupDirty = true;
       }
 
       if (isDebit) {
@@ -5988,9 +5996,8 @@ abstract class _Extractor {
   }
 
   static final _utrL = RegExp(
-    // Only capture values that begin with a digit. Matching any 10–22
-    // alphanumeric token after "transaction"/"ref" turns words such as
-    // "successful" or "confirmation" into fake UTRs and poisons dedup.
+    // Reference labels must be followed by an identifier that starts with a
+    // digit. Otherwise "Transaction successful" becomes fake UTR "successful".
     r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*(\d[A-Za-z0-9]{9,21})\b',
     caseSensitive: false,
   );
