@@ -9,7 +9,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ActivityNotFoundException;
-import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
 import android.os.Build;
 import android.provider.Settings;
@@ -34,8 +33,6 @@ import io.flutter.plugin.common.PluginRegistry;
 import notification.listener.service.models.Action;
 import notification.listener.service.models.ActionCache;
 
-import java.util.List;
-import java.util.Map;
 
 public class NotificationListenerServicePlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, PluginRegistry.ActivityResultListener, EventChannel.StreamHandler {
 
@@ -45,7 +42,6 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     private MethodChannel channel;
     private EventChannel eventChannel;
     private NotificationReceiver notificationReceiver;
-    private BroadcastReceiver relayReceiver;
     private Context context;
     private Activity mActivity;
 
@@ -91,6 +87,13 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
                 result.success(false);
                 Log.w("NotificationPlugin", "Notification reply action was cancelled", e);
             }
+        } else if (call.method.equals("acknowledgeNotification")) {
+            final String eventKey = call.argument("eventKey");
+            if (eventKey == null || eventKey.trim().isEmpty()) {
+                result.error("InvalidEventKey", "eventKey is required", null);
+                return;
+            }
+            result.success(NotificationRelayReceiver.acknowledge(context, eventKey));
         } else if (call.method.equals("getActiveNotifications")) {
             NotificationListener service = NotificationListener.getInstance();
             if (service != null) {
@@ -152,8 +155,15 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
             context.registerReceiver(notificationReceiver, intentFilter);
         }
 
-        // Recover still-active notifications that arrived while this Dart
-        // engine was reconnecting. Exact recent replays are filtered in Dart.
+        // Replay the durable queue first. Dart acknowledges each event after
+        // synchronous processing, so a process/engine restart cannot silently
+        // lose notifications that arrived while the stream was detached.
+        for (Map<String, Object> pending : NotificationRelayReceiver.getPendingEvents(context)) {
+            events.success(pending);
+        }
+
+        // Also recover notifications that were already active before the
+        // durable queue existed (for example immediately after app upgrade).
         NotificationListener service = NotificationListener.getInstance();
         if (service != null) {
             for (Map<String, Object> item : service.getActiveNotificationData()) {
