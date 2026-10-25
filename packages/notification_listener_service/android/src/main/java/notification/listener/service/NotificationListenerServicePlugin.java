@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.BroadcastReceiver;
 import android.os.Build;
 import android.provider.Settings;
 import android.util.Log;
@@ -37,6 +38,7 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     private MethodChannel channel;
     private EventChannel eventChannel;
     private NotificationReceiver notificationReceiver;
+    private BroadcastReceiver relayReceiver;
     private Context context;
     private Activity mActivity;
 
@@ -100,6 +102,11 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
         channel.setMethodCallHandler(null);
         eventChannel.setStreamHandler(null);
+        if (notificationReceiver != null) {
+            try { context.unregisterReceiver(notificationReceiver); }
+            catch (IllegalArgumentException ignored) {}
+            notificationReceiver = null;
+        }
     }
 
     @Override
