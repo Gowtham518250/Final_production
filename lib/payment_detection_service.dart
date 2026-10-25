@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -3699,7 +3700,17 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        _handleNotification,
+        (event) {
+          try {
+            _handleNotification(event);
+          } finally {
+            // Keep the native queue until payment classification and emission
+            // routing has synchronously completed, even across engine restarts.
+            unawaited(
+              NotificationListenerService.acknowledgeNotification(event.eventKey),
+            );
+          }
+        },
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
@@ -6125,7 +6136,7 @@ abstract class _Extractor {
   }
 
   static final _utrL = RegExp(
-    r'\b(?:utr|ref(?:erence)?|txn|transaction|id)[:\s#no.]*([A-Za-z0-9]{10,22})\b',
+    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*([A-Za-z0-9]{10,22})\b',
     caseSensitive: false,
   );
   static final _utrI = RegExp(r'\b([0-9]{12})\b');
