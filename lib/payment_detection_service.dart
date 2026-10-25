@@ -966,9 +966,8 @@ class PdsConfig {
 enum _LogLevel { debug, info, warn, error }
 
 abstract class PdsLogger {
-  // Release traces are disabled by default because the full pipeline contains
-  // legacy messages with transaction details. Enable only in a local test build
-  // after sanitizing the relevant call sites.
+  // Release traces are disabled by default because legacy diagnostic call sites
+  // may include transaction details. Debug builds retain the existing trace.
   static const bool traceInRelease = false;
 
   static void d(String tag, String msg) {
