@@ -351,9 +351,22 @@ class VoiceEngine {
       return;
     }
 
-    if (!await _safeSetLocale(job.locale)) {
-      _log.w('Skipping announcement because locale ${job.locale} is unavailable');
-      return;
+    // A missing regional TTS voice must not silence payment alerts. Try the
+    // requested locale first, then the Indian English system voice, and finally
+    // plain English before giving up.
+    var speechLocale = job.locale;
+    if (!await _safeSetLocale(speechLocale)) {
+      _log.w('Requested payment voice unavailable; falling back to en-IN');
+      speechLocale = 'en-IN';
+      if (!await _safeSetLocale(speechLocale)) {
+        _log.w('en-IN TTS unavailable; trying en-US');
+        speechLocale = 'en-US';
+        if (!await _safeSetLocale(speechLocale)) {
+          _log.e('No supported TTS locale; payment announcement cannot be spoken');
+          onSpeakError?.call();
+          return;
+        }
+      }
     }
 
     // Apply locale-aware rate/pitch modifiers
