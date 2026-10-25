@@ -200,6 +200,68 @@ class NotificationService {
     }
   }
 
+  /// Show a payment-detection alert locally without launching WhatsApp.
+  /// When speech/TTS is enabled, use a silent notification so the same transfer
+  /// does not cause both a system chime and a spoken announcement.
+  static Future<void> showPaymentDetectionNotification({
+    required String title,
+    required String body,
+    String? payload,
+    required bool silent,
+  }) async {
+    try {
+      final plugin = NotificationService()._notificationsPlugin;
+      final channelId = silent
+          ? 'payment_detection_alerts_silent'
+          : 'payment_detection_alerts_audible';
+
+      if (!kIsWeb && Platform.isAndroid) {
+        final android = plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+        await android?.createNotificationChannel(
+          AndroidNotificationChannel(
+            channelId,
+            silent ? 'Payment Alerts (Silent)' : 'Payment Alerts',
+            description: 'Local payment-detection alerts from Retail Mind.',
+            importance: Importance.high,
+            playSound: !silent,
+            enableVibration: !silent,
+            showBadge: false,
+          ),
+        );
+      }
+
+      final androidDetails = AndroidNotificationDetails(
+        channelId,
+        silent ? 'Payment Alerts (Silent)' : 'Payment Alerts',
+        channelDescription: 'Local payment-detection alerts from Retail Mind.',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: !silent,
+        enableVibration: !silent,
+        showWhen: true,
+        styleInformation: BigTextStyleInformation(body),
+      );
+      final iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: false,
+        presentSound: !silent,
+      );
+      await plugin.show(
+        _nextLocalNotificationId(),
+        title,
+        body,
+        NotificationDetails(android: androidDetails, iOS: iosDetails),
+        payload: payload,
+      );
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('Payment notification display failed: $e\\n$st');
+      }
+    }
+  }
+
   static Future<void> showNotification({required String title, required String body, String? payload}) async {
     try {
       await show(title, body, payload: payload);
