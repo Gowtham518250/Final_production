@@ -1459,5 +1459,89 @@ void main() {
     expect(spoken, isEmpty);
   });
 
+    test('one transfer arriving as notification and SMS emits one event', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      final timestamp = DateTime.now();
+
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'apgb-notification-credit',
+          amount: 5,
+          timestamp: timestamp,
+          app: PaymentApp.bankApp,
+          accountSuffix: '4222',
+          rawText: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        ),
+      );
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'apgb-sms-credit',
+          amount: 5,
+          timestamp: timestamp.add(const Duration(seconds: 5)),
+          app: PaymentApp.bankSms,
+          accountSuffix: '4222',
+          rawText: 'An amount of Rs.5 credited to A/c XXXX4222',
+          detectionSource: 'sms',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        ),
+      );
+
+      expect(events, hasLength(1));
+      expect(events.single.amount, 5);
+      expect(events.single.isMerchantConfirmed, isFalse);
+      await subscription.cancel();
+    });
+
+    test('different UTRs are not merged even when amount and account match', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      final timestamp = DateTime.now();
+
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'transfer-utr-1',
+          amount: 5,
+          timestamp: timestamp,
+          app: PaymentApp.bankApp,
+          referenceId: '123456789012',
+          accountSuffix: '4222',
+          rawText: '₹5 credited to A/c XXXX4222 UTR 123456789012',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        ),
+      );
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'transfer-utr-2',
+          amount: 5,
+          timestamp: timestamp.add(const Duration(seconds: 5)),
+          app: PaymentApp.bankSms,
+          referenceId: '123456789013',
+          accountSuffix: '4222',
+          rawText: '₹5 credited to A/c XXXX4222 UTR 123456789013',
+          detectionSource: 'sms',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        ),
+      );
+
+      expect(events, hasLength(2));
+      expect(
+        events.map((event) => event.normalizedReferenceId).toSet(),
+        {'123456789012', '123456789013'},
+      );
+      await subscription.cancel();
+    });
+
   });
 }
