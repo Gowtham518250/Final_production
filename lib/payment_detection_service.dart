@@ -6133,9 +6133,9 @@ abstract class _Extractor {
   }
 
   static final _utrL = RegExp(
-    // Capture only transaction-like labels followed by an identifier beginning
-    // with a digit. This accepts Ref No / Transaction ID variants without
-    // turning words such as "successful" into fake references.
+    // Capture transaction-like labels, then require at least one digit in
+    // the captured token below. This accepts letter-prefixed bank UTRs while
+    // preventing words such as "successful" becoming fake references.
     r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*([A-Za-z0-9]{10,22})\b',
     caseSensitive: false,
   );
