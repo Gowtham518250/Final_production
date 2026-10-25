@@ -5,10 +5,12 @@ on:
     branches:
       - clean-retailmind-20261023
     paths:
-      - "**.dart"
+      - "**/*.dart"
+      - "test/**"
       - "pubspec.yaml"
       - "pubspec.lock"
       - "android/**"
+      - "packages/**"
       - ".github/workflows/flutter-android-build-smoke.yml"
   workflow_dispatch:
 
@@ -23,7 +25,7 @@ jobs:
   android-debug-build:
     name: Clean Android compile smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
