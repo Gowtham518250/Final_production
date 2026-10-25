@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' show DartPluginRegistrant;
 
 /// Prefix used to identify SMS queue keys in SharedPreferences.
 /// Each incoming SMS is stored under a unique key to avoid race conditions.
@@ -21,6 +22,9 @@ const MethodChannel _nativeChannel = MethodChannel('com.retail_mind/sms_receiver
 /// Telephony requires: void backgroundMessageHandler(SmsMessage message)
 @pragma('vm:entry-point')
 Future<void> smsBackgroundHandler(SmsMessage message) async {
+  // Background callbacks run in a separate isolate. Register platform plugins
+  // before SharedPreferences/MethodChannel-backed work.
+  DartPluginRegistrant.ensureInitialized();
   final sender = message.address ?? 'Unknown';
   final body   = message.body    ?? '';
   
