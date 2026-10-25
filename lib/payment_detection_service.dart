@@ -2682,6 +2682,9 @@ class PaymentDetectionService {
     'com.truecaller',
   };
 
+  // A bank alert often arrives once as a notification and again as an SMS.
+  static const Duration _crossSourceEventWindow = Duration(seconds: 90);
+
   // ==========================================================================
   // TEST + HEALTH-INDICATOR PUBLIC API
   // ==========================================================================
@@ -2743,9 +2746,14 @@ class PaymentDetectionService {
       _handleNotification(event);
 
   @visibleForTesting
+  Future<void> debugEmitForTesting(PaymentEvent event) => _emit(event);
+
+  @visibleForTesting
   void debugResetTransientDetectionState() {
     _processedSmsCache.clear();
     _recentNotificationPayloads.clear();
+    _recentEmittedPayments.clear();
+    _historyHandledEventIds.clear();
     _dedupStore.clear();
     _dedupReferenceAmounts.clear();
     _activeFingerprints.clear();
@@ -3119,6 +3127,10 @@ class PaymentDetectionService {
   // once by the listener. Transport replay protection is separate from UTR
   // identity and never upgrades an event to a confirmed payment.
   final Map<String, DateTime> _recentNotificationPayloads = {};
+  // Unified event guard prevents notification/SMS echoes from repeating UI,
+  // history writes, confirmation prompts, notifications, or voice work.
+  final List<PaymentEvent> _recentEmittedPayments = [];
+  final Set<String> _historyHandledEventIds = <String>{};
   // In-memory amounts let duplicate detection distinguish a genuine repeat
   // from a reused UTR with a conflicting amount. The dedup key itself is UTR-only.
   final Map<String, double> _dedupReferenceAmounts = {};
@@ -3196,10 +3208,23 @@ class PaymentDetectionService {
   }
 
   /// Delivers a payment detected by the background isolate to UI-isolate
-  /// listeners without replaying its voice announcement.
-  void forwardPaymentEvent(PaymentEvent event) {
+  /// listeners without replaying its voice announcement. Background events
+  /// can mark history as already persisted to avoid a second UI-isolate write.
+  void forwardPaymentEvent(
+    PaymentEvent event, {
+    bool historyHandled = false,
+  }) {
+    if (historyHandled) {
+      _historyHandledEventIds.add(event.id);
+      if (_historyHandledEventIds.length > 500) {
+        _historyHandledEventIds.remove(_historyHandledEventIds.first);
+      }
+    }
     _eventCtrl.add(requireMerchantConfirmation(event));
   }
+
+  bool consumeHistoryHandledEvent(String eventId) =>
+      _historyHandledEventIds.remove(eventId);
 
   Future<bool> confirmDetectedPayment(PaymentEvent event) async {
     if (event.decision != PaymentDecision.likely ||
@@ -3926,6 +3951,7 @@ class PaymentDetectionService {
           fields,
           PaymentApp.bankSms,
           source: 'sms',
+          eventSource: 'notification',
           sender: notificationSender,
         );
         return;
@@ -4121,6 +4147,7 @@ class PaymentDetectionService {
     String rawText,
     PaymentApp app, {
     required String source,
+    String? eventSource,
     String? sender,
     bool isUnverifiedApp = false,
     bool allowUnverifiedIncomingCandidate = false,
@@ -4137,6 +4164,7 @@ class PaymentDetectionService {
         text: text,
         app: app,
         source: source,
+        eventSource: eventSource,
         sender: sender,
         isUnverifiedApp: isUnverifiedApp,
         allowUnverifiedIncomingCandidate: allowUnverifiedIncomingCandidate,
@@ -4149,6 +4177,7 @@ class PaymentDetectionService {
     required String text,
     required PaymentApp app,
     required String source,
+    String? eventSource,
     String? sender,
     bool isUnverifiedApp = false,
     bool allowUnverifiedIncomingCandidate = false,
@@ -4212,7 +4241,7 @@ class PaymentDetectionService {
       bankName: bank,
       isFailed: isFailed,
       rawText: text,
-      detectionSource: source,
+      detectionSource: eventSource ?? source,
       direction: isDebit
           ? PaymentTransactionDirection.outgoingDebit
           : _Classifier.isIncomingCreditText(text)
