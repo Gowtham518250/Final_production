@@ -369,8 +369,10 @@ class VoiceEngine {
       }
     }
 
-    // Apply locale-aware rate/pitch modifiers
-    final profile = _localeProfiles[job.locale] ?? const _LocaleProfile(1.0, 0.0);
+    // Use the locale that actually initialized successfully. A regional voice
+    // fallback must also switch the profile so language-specific settings from
+    // the unavailable locale are not applied to English.
+    final profile = _localeProfiles[speechLocale] ?? const _LocaleProfile(1.0, 0.0);
     final finalRate  = (job.result.rate  * profile.rateMultiplier).clamp(0.1, 1.0);
     final finalPitch = (job.result.pitch + profile.pitchOffset).clamp(0.5, 2.0);
 
