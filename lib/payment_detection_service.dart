@@ -966,9 +966,10 @@ class PdsConfig {
 enum _LogLevel { debug, info, warn, error }
 
 abstract class PdsLogger {
-  // Set to true only when diagnosing a release build. Keep logs metadata-only:
-  // never print notification bodies, payer names, bank-account data, or amounts.
-  static const bool traceInRelease = true;
+  // Release traces are disabled by default because the full pipeline contains
+  // legacy messages with transaction details. Enable only in a local test build
+  // after sanitizing the relevant call sites.
+  static const bool traceInRelease = false;
 
   static void d(String tag, String msg) {
     if (kDebugMode || traceInRelease) _emit(_LogLevel.debug, tag, msg);
