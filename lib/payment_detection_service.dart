@@ -4352,17 +4352,6 @@ class PaymentDetectionService {
         return;
       }
 
-      // Commit the dedup identity only after the hard-block gates pass. A
-      // rejected first channel must not suppress a later valid SMS/Truecaller copy.
-      _dedupStore[fp] = DateTime.now().add(
-        isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
-      );
-      if (isUtrFp) {
-        if (normalizedReference != null && !referenceAmountConflict) {
-          _dedupReferenceAmounts[normalizedReference] = amount;
-        }
-        _dedupDirty = true;
-      }
 
       if (isDebit) {
         if (isFailed) return;
@@ -4729,6 +4718,19 @@ class PaymentDetectionService {
 
       final isPartial = billResult == BillMatchResult.partial && !isBillSettled;
       final finalDecision = decision;
+
+      // Only now that classification, fraud checks, and confidence gates have
+      // accepted this candidate do we persist its fingerprint. This means a
+      // rejected first channel cannot poison an arriving SMS/Truecaller copy.
+      _dedupStore[fp] = DateTime.now().add(
+        isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
+      );
+      if (isUtrFp) {
+        if (normalizedReference != null && !referenceAmountConflict) {
+          _dedupReferenceAmounts[normalizedReference] = amount;
+        }
+        _dedupDirty = true;
+      }
 
       final event = requireMerchantConfirmation(
         tempEvent.copyWith(
