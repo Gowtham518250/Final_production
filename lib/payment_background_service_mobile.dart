@@ -201,6 +201,16 @@ Future<bool> onStart(ServiceInstance service) async {
       }
       pds.recordBillPayment(amount);
     });
+    service.on('sync_payment_sound_enabled').listen((event) {
+      final enabled = event?['enabled'] as bool?;
+      if (enabled == null) return;
+      PdsConfig.isVoiceEnabled = enabled;
+      debugPrint(
+        enabled
+            ? '🔊 Background payment announcements enabled'
+            : '🔇 Background payment announcements disabled',
+      );
+    });
 
     // Subscribe before startup: the Dashboard can signal that permissions
     // were granted while the service isolate is still initializing. Queue
