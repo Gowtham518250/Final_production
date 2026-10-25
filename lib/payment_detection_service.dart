@@ -417,48 +417,48 @@ abstract class VoiceBuilder {
       case PaymentDirection.credited:
         switch (lang) {
           case VoiceLanguage.hindi:
-            return '$a खाते में जमा हुआ। पुष्टि करें।';
+            return '$a का संभावित क्रेडिट है। भुगतान की पुष्टि करें।';
           case VoiceLanguage.tamil:
-            return '$a வரவு வைக்கப்பட்டது. சரிபார்க்கவும்.';
+            return '$a வரவு வந்திருக்கலாம். பணம் கிடைத்ததை சரிபார்க்கவும்.';
           case VoiceLanguage.telugu:
-            return '$a జమ అయింది. దయచేసి నిర్ధారించండి.';
+            return '$a క్రెడిట్ అయి ఉండవచ్చు. చెల్లింపు వచ్చిందో నిర్ధారించండి.';
           case VoiceLanguage.kannada:
-            return '$a ಜಮಾ ಆಗಿದೆ. ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ.';
+            return '$a ಕ್ರೆಡಿಟ್ ಆಗಿರಬಹುದು. ಪಾವತಿ ಬಂದಿರುವುದನ್ನು ಪರಿಶೀಲಿಸಿ.';
           case VoiceLanguage.marathi:
-            return '$a जमा झाले. कृपया तपासा.';
+            return '$a जमा झाले असू शकते. पैसे आल्याची खात्री करा.';
           case VoiceLanguage.gujarati:
-            return '$a જમા થયું. કૃપા કરીને તપાસો.';
+            return '$a જમા થયું હોઈ શકે છે. ચુકવણીની ખાતરી કરો.';
           case VoiceLanguage.bengali:
-            return '$a জমা হয়েছে। যাচাই করুন।';
+            return '$a জমা হয়ে থাকতে পারে। টাকা এসেছে কি না যাচাই করুন।';
           case VoiceLanguage.punjabi:
-            return '$a ਜਮ੍ਹਾਂ ਹੋਈ। ਕਿਰਪਾ ਕਰਕੇ ਜਾਂਚੋ।';
+            return '$a ਜਮ੍ਹਾਂ ਹੋਈ ਹੋ ਸਕਦੀ ਹੈ। ਭੁਗਤਾਨ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ।';
           case VoiceLanguage.malayalam:
-            return '$a ക്രെഡിറ്റ് ചെയ്തു. ദയവായി പരിശോധിക്കുക.';
+            return '$a ക്രെഡിറ്റ് ആയിരിക്കാം. പണം ലഭിച്ചതായി ഉറപ്പാക്കുക.';
           default:
-            return '$a credited. Please verify.';
+            return '$a may have been credited. Please verify before marking paid.';
         }
       case PaymentDirection.debited:
         switch (lang) {
           case VoiceLanguage.hindi:
-            return '$a खाते से कट गया। पुष्टि करें।';
+            return '$a से संभावित कटौती हुई हो सकती है। लेनदेन की पुष्टि करें।';
           case VoiceLanguage.tamil:
-            return '$a கழிக்கப்பட்டது. சரிபார்க்கவும்.';
+            return '$a கழிக்கப்பட்டிருக்கலாம். பரிவர்த்தனையை சரிபார்க்கவும்.';
           case VoiceLanguage.telugu:
-            return '$a డెబిట్ అయింది. దయచేసి నిర్ధారించండి.';
+            return '$a డెబిట్ అయి ఉండవచ్చు. లావాదేవీని నిర్ధారించండి.';
           case VoiceLanguage.kannada:
-            return '$a ಕಡಿತವಾಗಿದೆ. ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ.';
+            return '$a ಡೆಬಿಟ್ ಆಗಿರಬಹುದು. ವ್ಯವಹಾರವನ್ನು ಪರಿಶೀಲಿಸಿ.';
           case VoiceLanguage.marathi:
-            return '$a वजा झाले. कृपया तपासा.';
+            return '$a वजा झाले असू शकते. व्यवहाराची खात्री करा.';
           case VoiceLanguage.gujarati:
-            return '$a કપાઈ. કૃપા કરીને તપાસો.';
+            return '$a કપાયું હોઈ શકે છે. વ્યવહારની ખાતરી કરો.';
           case VoiceLanguage.bengali:
-            return '$a কেটে নেওয়া হয়েছে। যাচাই করুন।';
+            return '$a কাটা হয়ে থাকতে পারে। লেনদেন যাচাই করুন।';
           case VoiceLanguage.punjabi:
-            return '$a ਕੱਟੀ ਗਈ। ਕਿਰਪਾ ਕਰਕੇ ਜਾਂਚੋ।';
+            return '$a ਕੱਟੀ ਗਈ ਹੋ ਸਕਦੀ ਹੈ। ਲੈਣ-ਦੇਣ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ।';
           case VoiceLanguage.malayalam:
-            return '$a ഡെബിറ്റ് ചെയ്തു. ദയവായി പരിശോധിക്കുക.';
+            return '$a ഡെബിറ്റ് ആയിരിക്കാം. ഇടപാട് പരിശോധിക്കുക.';
           default:
-            return '$a debited. Please verify.';
+            return '$a may have been debited. Please verify the transaction.';
         }
       case PaymentDirection.unknown:
         return detected(amount, lang);
@@ -3094,7 +3094,8 @@ class PaymentDetectionService {
         event.isFailed ||
         event.isDuplicate ||
         event.hasReferenceConflict ||
-        event.direction == PaymentTransactionDirection.outgoingDebit) {
+        event.direction == PaymentTransactionDirection.outgoingDebit ||
+        _Classifier.isNonSaleIncomingPaymentText(event.rawText)) {
       return false;
     }
     // Events emitted by our classifier may contain valid inbound wording that
@@ -4033,21 +4034,19 @@ class PaymentDetectionService {
         // review-only credit candidate when the message has payment context
         // and an independent account/reference anchor; the registered-bank
         // list is intentionally not the gate for which banks can be detected.
-        final paymentLikePackage = _AppRegistry.looksLikePaymentPackage(pkg);
+        final hasIndependentTransactionAnchor =
+            referenceId != null || accountSuffix != null;
         final looksLikeIncomingPayment =
             classification == _ClassifyResult.passed &&
             _Classifier.isIncomingCreditText(fields) &&
             _Classifier.hasPaymentContext(fields) &&
-            (referenceId != null ||
-                accountSuffix != null ||
-                paymentLikePackage);
-        // Unknown-app debits use the same structural guard. They are emitted
-        // as LIKELY and can never settle or mutate invoice accounting.
+            hasIndependentTransactionAnchor;
+        // Unknown-app debits use the same structural guard. The package name
+        // is never an identity or transaction anchor: only message content
+        // tied to a reference/account can qualify for review.
         final looksLikeDebit =
             classification == _ClassifyResult.debit &&
-            (referenceId != null ||
-                accountSuffix != null ||
-                paymentLikePackage);
+            hasIndependentTransactionAnchor;
         if (amount == null ||
             (!looksLikeIncomingPayment && !looksLikeDebit)) {
           PdsLogger.t(
@@ -5651,23 +5650,8 @@ abstract class _AppRegistry {
 
   static PaymentApp identify(String p) => _pkgs[p] ?? PaymentApp.unknown;
 
-  // Package-name hints for payment / banking apps that are not in the static
-  // list above (new apps, merchant/soundbox variants, regional banks). A match
-  // only relaxes the "needs UTR/account anchor" rule; such events are still
-  // unverified, kept LIKELY and require merchant confirmation.
-  static const _paymentPackageHints = <String>[
-    'phonepe', 'paytm', 'paisa', 'gpay', 'googlepay', 'bhim', 'upi',
-    'bharatpe', 'mobikwik', 'freecharge', 'payzapp', 'airtel', 'naviapp',
-    'wallet', 'bank', 'pay',
-  ];
-
-  static bool looksLikePaymentPackage(String pkg) {
-    final p = pkg.toLowerCase();
-    for (final h in _paymentPackageHints) {
-      if (p.contains(h)) return true;
-    }
-    return false;
-  }
+  // Only explicitly registered packages receive a known payment-app identity.
+  // Unregistered package names never relax transaction-evidence requirements.
   static void addPackage(String p, PaymentApp a) => _pkgs[p] = a;
 
   static PaymentApp resolve(String source, String? sender, String text) {
@@ -5953,8 +5937,28 @@ abstract class _Classifier {
   static bool isIncomingAccountTransfer(String text) =>
       _incomingAccountTransfer.hasMatch(text);
 
+  static final _nonSaleIncomingStatus = RegExp(
+    r'\b(?:refund(?:s|ed)?|reversed|reversal|reverted|chargeback|pending'
+    r'|processing|initiated|on\s+hold)\b'
+    r'|\b(?:collect|pay|payment)\s+request\b|\brequest\s+sent\b',
+    caseSensitive: false,
+  );
+
+  /// A credit verb alone is not sufficient when the same message describes
+  /// a refund, reversal, collect request, or non-final transaction state.
+  static bool isNonSaleIncomingPaymentText(String text) {
+    if (!_nonSaleIncomingStatus.hasMatch(text)) return false;
+    return VoiceBuilder.detectDirection(text) == PaymentDirection.credited ||
+        _incomingCredit.hasMatch(text) ||
+        _incomingAccountTransfer.hasMatch(text);
+  }
+
   static _ClassifyResult classify(String t) {
     if (_fraudStrict.hasMatch(t)) return _ClassifyResult.fraud;
+    // Incoming language must not override refund/reversal/pending states.
+    // These describe money movement or non-final states, not customer payment
+    // proof for the current sale.
+    if (isNonSaleIncomingPaymentText(t)) return _ClassifyResult.fraud;
     // FIX-A: conditional check
     if (_fraudConditional.hasMatch(t) && !_creditContext.hasMatch(t)) {
       return _ClassifyResult.fraud;
