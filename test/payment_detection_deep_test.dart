@@ -8,6 +8,39 @@ import 'package:notification_listener_service/notification_event.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('Payment reference extraction regressions', () {
+    test('does not mistake words for transaction references', () {
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Transaction successful. Payment received ₹250',
+        ),
+        isNull,
+      );
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Transaction confirmation: amount ₹250 credited',
+        ),
+        isNull,
+      );
+    });
+
+    test('extracts a labelled numeric UTR and Ref No formats', () {
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Transaction ID: 123456789012',
+        ),
+        '123456789012',
+      );
+      expect(
+        PaymentDetectionService.debugExtractReferenceId(
+          'Ref No 987654321098',
+        ),
+        '987654321098',
+      );
+    });
+  });
+;
+
   group('Bill payment tracking', () {
     test(
       'trusted PhonePe credit with a short notification updates a ten-rupee bill',
