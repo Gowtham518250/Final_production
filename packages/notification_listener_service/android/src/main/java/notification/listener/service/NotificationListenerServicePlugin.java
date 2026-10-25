@@ -26,11 +26,11 @@ import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry;
 import notification.listener.service.models.Action;
 import notification.listener.service.models.ActionCache;
-import android.annotation.SuppressLint;
-import android.os.Build;
-
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class NotificationListenerServicePlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, PluginRegistry.ActivityResultListener, EventChannel.StreamHandler {
 
@@ -76,6 +76,7 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
             final Action action = ActionCache.cachedNotifications.get(notificationId);
             if (action == null) {
                 result.error("Notification", "Can't find this cached notification", null);
+                return;
             }
             try {
                 action.sendReply(context, message);
@@ -84,6 +85,13 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
                 result.success(false);
                 e.printStackTrace();
             }
+        } else if (call.method.equals("acknowledgeNotification")) {
+            final String eventKey = call.argument("eventKey");
+            if (eventKey == null || eventKey.trim().isEmpty()) {
+                result.error("InvalidEventKey", "eventKey is required", null);
+                return;
+            }
+            result.success(NotificationRelayReceiver.acknowledge(context, eventKey));
         } else if (call.method.equals("getActiveNotifications")) {
             NotificationListener service = NotificationListener.getInstance();
             if (service != null) {
@@ -102,6 +110,11 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
         channel.setMethodCallHandler(null);
         eventChannel.setStreamHandler(null);
+        if (notificationReceiver != null) {
+            try { context.unregisterReceiver(notificationReceiver); }
+            catch (IllegalArgumentException ignored) {}
+            notificationReceiver = null;
+        }
     }
 
     @Override
@@ -127,23 +140,57 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     @SuppressLint("WrongConstant")
     @Override
     public void onListen(Object arguments, EventChannel.EventSink events) {
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(NotificationConstants.INTENT);
+        if (notificationReceiver != null) {
+            try { context.unregisterReceiver(notificationReceiver); }
+            catch (IllegalArgumentException ignored) {}
+            notificationReceiver = null;
+        }
+
+        IntentFilter intentFilter = new IntentFilter(NotificationConstants.INTENT);
         notificationReceiver = new NotificationReceiver(events);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            context.registerReceiver(notificationReceiver, intentFilter, Context.RECEIVER_EXPORTED);
-        }else{
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(notificationReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
             context.registerReceiver(notificationReceiver, intentFilter);
         }
-        Intent listenerIntent = new Intent(context, NotificationReceiver.class);
-        context.startService(listenerIntent);
-        Log.i("NotificationPlugin", "Started the notifications tracking service.");
+
+        // Replay unacknowledged notification events first. They remain in
+        // private SharedPreferences until Dart acknowledges processing them.
+        Set<String> pendingEventKeys = new HashSet<>();
+        for (Map<String, Object> pending : NotificationRelayReceiver.getPendingEvents(context)) {
+            Object key = pending.get("eventKey");
+            if (key != null) pendingEventKeys.add(String.valueOf(key));
+            events.success(pending);
+        }
+
+        // Recover notifications already active before the durable queue existed,
+        // without replaying an event already returned from the pending queue.
+        NotificationListener service = NotificationListener.getInstance();
+        if (service != null) {
+            for (Map<String, Object> item : service.getActiveNotificationData()) {
+                Object key = item.get("eventKey");
+                if (key != null && pendingEventKeys.contains(String.valueOf(key))) continue;
+                HashMap<String, Object> replay = new HashMap<>(item);
+                replay.put("hasRemoved", false);
+                replay.put("canReply", false);
+                replay.put("bigText", null);
+                replay.put("subText", null);
+                replay.put("summaryText", null);
+                replay.put("textLines", null);
+                replay.put("ticker", null);
+                events.success(replay);
+            }
+        }
+        Log.i("NotificationPlugin", "Notification event stream subscribed.");
     }
 
     @Override
     public void onCancel(Object arguments) {
-        context.unregisterReceiver(notificationReceiver);
-        notificationReceiver = null;
+        if (notificationReceiver != null) {
+            try { context.unregisterReceiver(notificationReceiver); }
+            catch (IllegalArgumentException ignored) {}
+            notificationReceiver = null;
+        }
     }
 
     @Override
