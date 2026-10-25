@@ -132,10 +132,9 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     @SuppressLint("WrongConstant")
     @Override
     public void onListen(Object arguments, EventChannel.EventSink events) {
-        // The native listener should only relay events while Dart is subscribed.
-        // Register once per stream listen; make delivery app-scoped.
         if (notificationReceiver != null) {
-            try { context.unregisterReceiver(notificationReceiver); } catch (IllegalArgumentException ignored) {}
+            try { context.unregisterReceiver(notificationReceiver); }
+            catch (IllegalArgumentException ignored) {}
             notificationReceiver = null;
         }
         IntentFilter intentFilter = new IntentFilter(NotificationConstants.INTENT);
@@ -145,17 +144,32 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
         } else {
             context.registerReceiver(notificationReceiver, intentFilter);
         }
+
+        // Recover still-active notifications that arrived while this Dart
+        // engine was reconnecting. Exact recent replays are filtered in Dart.
+        NotificationListener service = NotificationListener.getInstance();
+        if (service != null) {
+            for (Map<String, Object> item : service.getActiveNotificationData()) {
+                HashMap<String, Object> replay = new HashMap<>(item);
+                replay.put("hasRemoved", false);
+                replay.put("canReply", false);
+                replay.put("bigText", null);
+                replay.put("subText", null);
+                replay.put("summaryText", null);
+                replay.put("textLines", null);
+                replay.put("ticker", null);
+                replay.put("onGoing", item.get("onGoing"));
+                events.success(replay);
+            }
+        }
         Log.i("NotificationPlugin", "Notification event stream subscribed.");
     }
 
     @Override
     public void onCancel(Object arguments) {
         if (notificationReceiver != null) {
-            try {
-                context.unregisterReceiver(notificationReceiver);
-            } catch (IllegalArgumentException ignored) {
-                // Already unregistered during engine/stream teardown.
-            }
+            try { context.unregisterReceiver(notificationReceiver); }
+            catch (IllegalArgumentException ignored) {}
             notificationReceiver = null;
         }
     }
