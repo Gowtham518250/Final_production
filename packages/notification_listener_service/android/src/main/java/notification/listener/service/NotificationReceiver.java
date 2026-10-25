@@ -30,6 +30,7 @@ public class NotificationReceiver extends BroadcastReceiver {
         try {
             HashMap<String, Object> data = new HashMap<>();
             data.put("id", intent.getIntExtra(ID, -1));
+            data.put("eventKey", intent.getStringExtra(EVENT_KEY));
             data.put("packageName", intent.getStringExtra(PACKAGE_NAME));
             data.put("title", intent.getStringExtra(NOTIFICATION_TITLE));
             data.put("content", intent.getStringExtra(NOTIFICATION_CONTENT));
