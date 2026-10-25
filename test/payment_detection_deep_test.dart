@@ -1605,5 +1605,88 @@ void main() {
       await subscription.cancel();
     });
 
+    test('refund, reversal, pending and collect-request alerts cannot classify as incoming sale payments', () {
+      expect(
+        PaymentDetectionService.debugClassify(
+          'Refund of Rs.500 credited to your account',
+        ),
+        'fraud',
+      );
+      expect(
+        PaymentDetectionService.debugClassify(
+          '₹500 payment received but transaction reversed',
+        ),
+        'fraud',
+      );
+      expect(
+        PaymentDetectionService.debugClassify(
+          'Payment received ₹500, status pending',
+        ),
+        'fraud',
+      );
+      expect(
+        PaymentDetectionService.debugClassify(
+          'Collect request for ₹500. Please approve the request.',
+        ),
+        'fraud',
+      );
+      // The non-income guard must not break real debit direction detection.
+      expect(
+        PaymentDetectionService.debugClassify('₹200 debited from your account'),
+        'debit',
+      );
+    });
+
+    test('sale confirmation gate rejects refund-credit wording', () {
+      final refundEvent = PaymentEvent(
+        amount: 500,
+        timestamp: DateTime.now(),
+        app: PaymentApp.phonePe,
+        rawText: 'Refund of Rs.500 credited to your account',
+        detectionSource: 'notification',
+        direction: PaymentTransactionDirection.incomingCredit,
+        decision: PaymentDecision.likely,
+      );
+
+      expect(PaymentDetectionService.isSafeIncomingCredit(refundEvent), isFalse);
+    });
+
+    test('unknown app named like a UPI app cannot bypass reference/account anchor', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.fake.upi',
+          title: 'UPI Pay',
+          content: 'Payment received ₹5000 from Rahul',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(events, isEmpty);
+      await subscription.cancel();
+      service.debugResetTransientDetectionState();
+    });
+
+    test('likely voice wording describes a possible transaction, not confirmed settlement', () {
+      final credit = VoiceBuilder.detectedDirectional(
+        500,
+        VoiceLanguage.english,
+        PaymentDirection.credited,
+      );
+      final debit = VoiceBuilder.detectedDirectional(
+        500,
+        VoiceLanguage.english,
+        PaymentDirection.debited,
+      );
+
+      expect(credit, contains('may have been credited'));
+      expect(credit, contains('verify before marking paid'));
+      expect(debit, contains('may have been debited'));
+    });
+
   });
 }
