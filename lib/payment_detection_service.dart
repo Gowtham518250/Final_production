@@ -265,7 +265,7 @@ abstract class VoiceBuilder {
     // Keep native-script matches free of \b because regex word boundaries can
     // be ASCII-oriented in Dart.
     final englishCredit = RegExp(
-      r'\b(credited|credit|received|payment received|money received|deposited|added to|sent to your|sent to you|sent you|paid to your|paid to you|paid you|transferred to your|made to your|has sent|you got)\b',
+      r'\b(credited|credit|received|payment received|money received|deposited|added to|sent to your|sent to you|sent you|paid to your|paid to you|paid you|transferred to your|made to your|has sent|you got)\b|\b(?:sent|paid)\s+(?:(?:₹|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?:your|you)\b',
     ).hasMatch(t);
     final romanizedCredit = RegExp(
       r'\b(jama(?:\s+hua|\s+ho gaya)?|prapt|paise\s+aaye|paisa\s+aaya|mil\s+gaya|credit\s+hua)\b',
@@ -286,10 +286,13 @@ abstract class VoiceBuilder {
       r'\b(?:debited|debit\s+(?:from|to|for|of)\b|deducted|withdrawn|'
       r'withdrawal|spent|you\s+(?:have\s+)?sent|you\s+(?:have\s+)?paid|'
       r'sent\s+to\s+(?!your\b|you\b)|paid\s+to\s+(?!your\b|you\b)|'
-      r'payment\s+to\b|transferred\s+to\s+(?!your\b|you\b))',
+      r'payment\s+to\b|transferred\s+to\s+(?!your\b|you\b)|'
+      // UPI apps put the amount between the verb and "to":
+      // "Paid ₹100 to Ramesh", "Sent ₹100 to Shop".
+      r'(?:paid|sent|transferred)\s+(?:(?:₹|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?!your\b|you\b))',
     ).hasMatch(t);
     final incomingTransfer = RegExp(
-      r'\b(?:sent|paid)\s+to\s+(?:your|you)\b|\b(?:sent|paid)\s+you\b|\bhas\s+sent\b',
+      r'\b(?:sent|paid)\s+(?:(?:₹|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?:your|you)\b|\b(?:sent|paid)\s+you\b|\bhas\s+sent\b',
     ).hasMatch(t);
     final romanizedDebit = RegExp(
       r'\b(kata(?:\s+gaya)?|kat gaya|nikala|bheja gaya|paise bheje|debit hua|paise kate)\b',
@@ -851,6 +854,9 @@ class PaymentHistoryBuffer {
 // =============================================================================
 
 class PdsConfig {
+  /// Enables PdsLogger.t(...) traces in release builds (no sensitive data).
+  static const bool traceInRelease = true;
+
   // FIX-F: TCM threshold ₹2000
   static const double tcmSmallThreshold = 2000.0;
 
@@ -966,6 +972,15 @@ class PdsConfig {
 enum _LogLevel { debug, info, warn, error }
 
 abstract class PdsLogger {
+  /// Release-safe trace for silent drops. Never pass message text, names,
+  /// amounts or UTRs here. Read with:
+  ///   adb logcat -s flutter | grep PDS-TRACE
+  static void t(String stage, [String detail = '']) {
+    if (kDebugMode || PdsConfig.traceInRelease) {
+      debugPrint('[PDS-TRACE] $stage${detail.isEmpty ? '' : ' $detail'}');
+    }
+  }
+
   static void d(String tag, String msg) {
     if (kDebugMode) {
       _emit(_LogLevel.debug, tag, msg);
@@ -2050,6 +2065,10 @@ class PriorityVoiceQueue {
         'VOICE',
         'DUPLICATE/CONFLICT ANNOUNCEMENT BLOCKED: ${e.fingerprint}',
       );
+      PdsLogger.t(
+        'DROP',
+        'reason=voice_duplicate_or_conflict dup=${e.isDuplicate} conflict=${e.hasReferenceConflict}',
+      );
       return;
     }
 
@@ -2066,6 +2085,10 @@ class PriorityVoiceQueue {
         'DUPLICATE ANNOUNCEMENT BLOCKED: fp=$fingerprint '
             'crossSource=$crossSourceEcho',
       );
+      PdsLogger.t(
+        'DROP',
+        'reason=voice_echo repeatedFp=$repeatedFingerprint crossSource=$crossSourceEcho',
+      );
       _rememberPayment(e);
       return;
     }
@@ -2073,7 +2096,10 @@ class PriorityVoiceQueue {
     _rememberPayment(e);
 
     final text = ui.voiceText(_lang);
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      PdsLogger.t('DROP', 'reason=voice_text_empty');
+      return;
+    }
     final priority = e.isFailed
         ? _VP.high
         : e.decision == PaymentDecision.likely
@@ -2145,6 +2171,7 @@ class PriorityVoiceQueue {
   void _speak(String t) {
     _lastAt = DateTime.now();
     PdsLogger.i('VOICE', 'SPEAK "$t"');
+    PdsLogger.t('SPEAK', 'handler=${onSpeak != null}');
     onSpeak?.call(t);
   }
 
@@ -3682,6 +3709,7 @@ class PaymentDetectionService {
         },
       );
       PdsLogger.i('L1', 'Notification ONLINE');
+      PdsLogger.t('ATTACHED', 'channel=notification');
       _emitStatus(ChannelType.notification, ChannelStatus.online);
     } catch (e, st) {
       PdsLogger.e('L1', 'Start error', e, st);
@@ -3705,6 +3733,7 @@ class PaymentDetectionService {
         return;
       }
 
+      PdsLogger.t('ATTACHED', 'channel=sms');
       Telephony.instance.listenIncomingSms(
         onNewMessage: (m) => handleSms(m.address ?? '', m.body ?? ''),
         onBackgroundMessage: smsBackgroundHandler,
@@ -3880,10 +3909,19 @@ class PaymentDetectionService {
   // HANDLERS
   // ==========================================================================
 
+  bool _firstNotificationTraced = false;
+
   void _handleNotification(ServiceNotificationEvent event) {
     try {
       final pkg = event.packageName ?? '';
-      if (_TrustGate.isBlockedPackage(pkg)) return;
+      if (!_firstNotificationTraced) {
+        _firstNotificationTraced = true;
+        PdsLogger.t('FIRST notification event');
+      }
+      if (_TrustGate.isBlockedPackage(pkg)) {
+        PdsLogger.t('DROP', 'reason=blocked_package pkg=$pkg');
+        return;
+      }
 
       bool isRemoved = false;
       try {
@@ -3913,7 +3951,10 @@ class PaymentDetectionService {
         _safeValue(() => (event as dynamic).messages),
         _safeValue(() => (event as dynamic).summaryText),
       ]);
-      if (fields.isEmpty) return;
+      if (fields.isEmpty) {
+        PdsLogger.t('DROP', 'reason=empty_notification pkg=$pkg');
+        return;
+      }
 
       final notificationSender = event.title?.trim();
       final now = DateTime.now();
@@ -3992,18 +4033,28 @@ class PaymentDetectionService {
         // review-only credit candidate when the message has payment context
         // and an independent account/reference anchor; the registered-bank
         // list is intentionally not the gate for which banks can be detected.
+        final paymentLikePackage = _AppRegistry.looksLikePaymentPackage(pkg);
         final looksLikeIncomingPayment =
             classification == _ClassifyResult.passed &&
             _Classifier.isIncomingCreditText(fields) &&
             _Classifier.hasPaymentContext(fields) &&
-            (referenceId != null || accountSuffix != null);
+            (referenceId != null ||
+                accountSuffix != null ||
+                paymentLikePackage);
         // Unknown-app debits use the same structural guard. They are emitted
         // as LIKELY and can never settle or mutate invoice accounting.
         final looksLikeDebit =
             classification == _ClassifyResult.debit &&
-            (referenceId != null || accountSuffix != null);
+            (referenceId != null ||
+                accountSuffix != null ||
+                paymentLikePackage);
         if (amount == null ||
             (!looksLikeIncomingPayment && !looksLikeDebit)) {
+          PdsLogger.t(
+            'DROP',
+            'reason=unknown_pkg_no_anchor pkg=$pkg amount=${amount != null} '
+                'class=${classification.name} ref=${referenceId != null} acc=${accountSuffix != null}',
+          );
           return;
         }
         app = PaymentApp.bankApp;
@@ -4157,8 +4208,10 @@ class PaymentDetectionService {
 
     // FIX-A: two-stage classifier
     final cls = _Classifier.classify(text);
+    PdsLogger.t('RECV', 'source=$source class=${cls.name}');
     if (cls != _ClassifyResult.passed && cls != _ClassifyResult.debit) {
       PdsLogger.d('L3', 'REJECTED ${cls.name}');
+      PdsLogger.t('DROP', 'reason=classifier_${cls.name} source=$source');
     } else {
       _runPipeline(
         text: text,
@@ -4193,10 +4246,12 @@ class PaymentDetectionService {
     // Now: tracked for visibility, shopkeeper aware via stats
     if (amount == null) {
       PdsLogger.d('L4-REJECT', 'No amount detected in: "$text"');
+      PdsLogger.t('DROP', 'reason=no_amount source=$source');
       return;
     }
 
     if (amount < PdsConfig.minAmount) {
+      PdsLogger.t('DROP', 'reason=below_min_amount source=$source');
       _stats.recordDecision(PaymentDecision.rejected, amount);
       PdsLogger.w(
         'FIX-58',
@@ -4287,6 +4342,7 @@ class PaymentDetectionService {
 
     if (sameReferenceDuplicate && !canUseSmsAsCorroboration) {
       PdsLogger.d('L4.5', 'DUPLICATE REFERENCE BLOCKED: fp=$fp');
+      PdsLogger.t('DROP', 'reason=duplicate_reference source=$source');
       _stats.recordDupe();
       return;
     }
@@ -4308,6 +4364,15 @@ class PaymentDetectionService {
     }
 
     final registeredActiveFingerprint = !referenceAmountConflict;
+    // Remember what we changed so a message that is rejected later (fraud,
+    // score, TCM...) does not leave a dedup entry behind that would block the
+    // genuine copy of the same payment arriving via another channel.
+    final previousStoreExpiry = storedExpiry;
+    final addedReferenceAmount =
+        normalizedReference != null &&
+        !referenceAmountConflict &&
+        previousReferenceAmount == null;
+    bool consumedByUser = false; // true once emitted / handled as a real event
     if (registeredActiveFingerprint) _activeFingerprints.add(fp);
     _dedupStore[fp] = DateTime.now().add(
       isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
@@ -4338,6 +4403,7 @@ class PaymentDetectionService {
       if (fraud.isHardBlock) {
         PdsLogger.w('L5', 'HARD_BLOCK ${fraud.verdict.name}: ${fraud.reason}');
         _stats.recordFraud();
+        PdsLogger.t('DROP', 'reason=hard_block:${fraud.verdict.name} source=$source');
         _emitFraud(
           fraud.verdict,
           fraud.reason,
@@ -4353,11 +4419,17 @@ class PaymentDetectionService {
           !validNumericUtr &&
           app == PaymentApp.unknown) {
         PdsLogger.w('L5', 'ACC_HARD_REJECT: unknown pkg + no valid UTR');
+        PdsLogger.t('DROP', 'reason=accessibility_unknown_no_utr');
         return;
       }
 
       if (isDebit) {
-        if (isFailed) return;
+        if (isFailed) {
+          PdsLogger.t('DROP', 'reason=debit_failed source=$source');
+          return;
+        }
+        consumedByUser = true;
+        PdsLogger.t('EMIT', 'kind=debit source=$source');
         unawaited(_emit(tempEvent.copyWith(decision: PaymentDecision.likely)));
         return;
       }
@@ -4439,7 +4511,10 @@ class PaymentDetectionService {
       if (utrCapApplied || billMismatchCap) {
         score = math.min(score, PdsConfig.confirmedThreshold - 0.01);
       }
-      if (isFailed) return;
+      if (isFailed) {
+        PdsLogger.t('DROP', 'reason=failed_payment source=$source');
+        return;
+      }
 
       final minThreshold = _minThreshold(source, sender);
       final isTrustedApp = const {
@@ -4466,6 +4541,11 @@ class PaymentDetectionService {
         } else {
           _stats.recordDecision(PaymentDecision.rejected, amount);
           PdsLogger.d('L7', 'REJECTED score=$score < threshold=$minThreshold');
+          PdsLogger.t(
+            'DROP',
+            'reason=score_below_threshold source=$source '
+                'score=${score.toStringAsFixed(2)} min=${minThreshold.toStringAsFixed(2)}',
+          );
           return;
         }
       }
@@ -4481,6 +4561,7 @@ class PaymentDetectionService {
       // blocks above, and never allow this candidate path to auto-confirm it.
       if (fraud.riskScore > 0.5 && !allowUnverifiedIncomingCandidate) {
         PdsLogger.w('FIX-29', 'FRAUD_RISK ${fraud.riskScore} > 0.5 → REJECT');
+        PdsLogger.t('DROP', 'reason=fraud_risk_gt_0.5 source=$source');
         _stats.recordDecision(PaymentDecision.rejected, amount);
         return;
       }
@@ -4738,6 +4819,8 @@ class PaymentDetectionService {
 
       // Layer 9: TCM & Emission
       if (source == 'notification' || source == 'accessibility') {
+        consumedByUser = true;
+        PdsLogger.t('EMIT', 'source=$source decision=${event.decision.name}');
         _pendingBuffer.add(event, voiceSpoken: false);
         unawaited(_emit(event, isBillSettlement: isBillSettled));
         _pendingBuffer.markVoiceSpoken(event.id);
@@ -4746,6 +4829,9 @@ class PaymentDetectionService {
 
       if (source == 'sms') {
         if (matched != null && (matched.emitted || matched.voiceSpoken)) {
+          // Genuine duplicate of an already-announced payment: keep dedup.
+          consumedByUser = true;
+          PdsLogger.t('DROP', 'reason=sms_matched_already_announced');
           PdsLogger.d(
             'TCM',
             'SMS matched emitted notification — duplicate UI/voice event suppressed',
@@ -4765,10 +4851,25 @@ class PaymentDetectionService {
             : event;
 
         if (matched != null) matched.emitted = true;
+        consumedByUser = true;
+        PdsLogger.t('EMIT', 'source=sms decision=${eventToEmit.decision.name}');
         unawaited(_emit(eventToEmit, isBillSettlement: isBillSettled));
       }
     } finally {
       if (registeredActiveFingerprint) _activeFingerprints.remove(fp);
+      if (!consumedByUser) {
+        // Rejected before emission: undo the dedup bookkeeping so the genuine
+        // copy of this payment (other channel / retry) is not dropped as a
+        // "duplicate" of something that was never announced.
+        if (previousStoreExpiry == null) {
+          _dedupStore.remove(fp);
+        } else {
+          _dedupStore[fp] = previousStoreExpiry;
+        }
+        if (addedReferenceAmount) {
+          _dedupReferenceAmounts.remove(normalizedReference);
+        }
+      }
     }
   }
 
@@ -5538,6 +5639,24 @@ abstract class _AppRegistry {
   };
 
   static PaymentApp identify(String p) => _pkgs[p] ?? PaymentApp.unknown;
+
+  // Package-name hints for payment / banking apps that are not in the static
+  // list above (new apps, merchant/soundbox variants, regional banks). A match
+  // only relaxes the "needs UTR/account anchor" rule; such events are still
+  // unverified, kept LIKELY and require merchant confirmation.
+  static const _paymentPackageHints = <String>[
+    'phonepe', 'paytm', 'paisa', 'gpay', 'googlepay', 'bhim', 'upi',
+    'bharatpe', 'mobikwik', 'freecharge', 'payzapp', 'airtel', 'naviapp',
+    'wallet', 'bank', 'pay',
+  ];
+
+  static bool looksLikePaymentPackage(String pkg) {
+    final p = pkg.toLowerCase();
+    for (final h in _paymentPackageHints) {
+      if (p.contains(h)) return true;
+    }
+    return false;
+  }
   static void addPackage(String p, PaymentApp a) => _pkgs[p] = a;
 
   static PaymentApp resolve(String source, String? sender, String text) {
@@ -5729,7 +5848,8 @@ abstract class _Classifier {
     // "transferred to your account" must NOT be treated as outgoing debit.
     r'|payment\s+made\s+to(?!\s+your)'
     r'|transferred\s+to(?!\s+(?:your|you)\b)'
-    r'|you\s+sent|you\s+have\s+sent)\b'
+    r'|you\s+sent|you\s+have\s+sent'
+    r'|(?:paid|sent)\s+(?:(?:\u20b9|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?!your\b|you\b))\b'
     r'|काटा\s+गया)',
     caseSensitive: false,
   );
@@ -5806,6 +5926,7 @@ abstract class _Classifier {
     r'(?:\b(?:credited|received|deposited|you\s+got|you\s+have\s+received'
     r'|money\s+received|paid\s+to\s+your|paid\s+to\s+you|made\s+to\s+your'
     r'|sent\s+to\s+your|sent\s+to\s+you|sent\s+you|paid\s+you|has\s+sent|amount\s+credited'
+    r'|(?:sent|paid)\s+(?:(?:\u20b9|rs\.?|inr\.?)\s*[\d,]+(?:\.\d{1,2})?\s+)?to\s+(?:your|you)'
     r'|amount\s+received|payment\s+received)\b'
     r'|प्राप्त|जमा\s+हो|जमा\s+हुआ|खाते\s+में\s+जमा'
     r'|வரவு|பெறப்பட்டது|జమ\s+అయింది|ಜಮಾ\s+ಆಗಿದೆ|मिळाले)',
@@ -5995,10 +6116,18 @@ abstract class _Extractor {
   static final _utrI = RegExp(r'\b([0-9]{12})\b');
   static final _utrN = RegExp(r'\b([0-9]{16,22})\b');
 
-  static String? referenceId(String t) =>
-      _utrL.firstMatch(t)?.group(1) ??
-      _utrI.firstMatch(t)?.group(1) ??
-      _utrN.firstMatch(t)?.group(1);
+  static final _hasDigit = RegExp(r'\d');
+
+  /// A real UTR/reference always contains at least one digit. Without this
+  /// check ordinary words such as "Transaction successful" produced the fake
+  /// reference "successful", which then poisoned dedup for 24 hours.
+  static String? referenceId(String t) {
+    for (final m in _utrL.allMatches(t)) {
+      final candidate = m.group(1);
+      if (candidate != null && _hasDigit.hasMatch(candidate)) return candidate;
+    }
+    return _utrI.firstMatch(t)?.group(1) ?? _utrN.firstMatch(t)?.group(1);
+  }
 
   static final _name = RegExp(
     r'(?:from|by|received\s+from|sent\s+by|paid\s+by)\s+'

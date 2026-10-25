@@ -3,6 +3,7 @@
 // Native SMS receiver that survives OEM app kill on Xiaomi/Vivo/OPPO/Realme
 // ============================================================================
 
+import 'dart:ui' show DartPluginRegistrant;
 import 'package:flutter/services.dart';
 import 'package:telephony/telephony.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,10 @@ const MethodChannel _nativeChannel = MethodChannel('com.retail_mind/sms_receiver
 /// Telephony requires: void backgroundMessageHandler(SmsMessage message)
 @pragma('vm:entry-point')
 Future<void> smsBackgroundHandler(SmsMessage message) async {
+  // Background isolates do not auto-register plugins on every Flutter version;
+  // without this the SharedPreferences write below can fail silently.
+  DartPluginRegistrant.ensureInitialized();
+
   final sender = message.address ?? 'Unknown';
   final body   = message.body    ?? '';
   

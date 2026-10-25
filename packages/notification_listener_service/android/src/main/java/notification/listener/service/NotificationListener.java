@@ -45,16 +45,44 @@ public class NotificationListener extends NotificationListenerService {
         instance = this;
     }
 
+    @Override
+    public void onListenerDisconnected() {
+        super.onListenerDisconnected();
+        if (instance == this) instance = null;
+        // Ask Android to reconnect us; otherwise payment notifications stop
+        // silently until the app is reopened.
+        if (Build.VERSION.SDK_INT >= VERSION_CODES.N) {
+            try {
+                requestRebind(new android.content.ComponentName(this, NotificationListener.class));
+            } catch (Throwable t) {
+                Log.w("NotificationListener", "requestRebind failed", t);
+            }
+        }
+    }
+
     @RequiresApi(api = VERSION_CODES.KITKAT)
     @Override
     public void onNotificationPosted(StatusBarNotification notification) {
-        handleNotification(notification, false);
+        safeHandle(notification, false);
     }
 
     @RequiresApi(api = VERSION_CODES.KITKAT)
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        handleNotification(sbn, true);
+        safeHandle(sbn, true);
+    }
+
+    @RequiresApi(api = VERSION_CODES.KITKAT)
+    private void safeHandle(StatusBarNotification sbn, boolean isRemoved) {
+        try {
+            if (sbn == null || sbn.getNotification() == null) return;
+            // Never forward our own foreground-service notification.
+            if (getPackageName().equals(sbn.getPackageName())) return;
+            handleNotification(sbn, isRemoved);
+        } catch (Throwable t) {
+            // A crash here kills the listener binding and every later payment.
+            Log.e("NotificationListener", "handleNotification failed", t);
+        }
     }
 
     @RequiresApi(api = VERSION_CODES.KITKAT)
@@ -62,26 +90,21 @@ public class NotificationListener extends NotificationListenerService {
         String packageName = notification.getPackageName();
         Bundle extras = notification.getNotification().extras;
         boolean isOngoing = (notification.getNotification().flags & Notification.FLAG_ONGOING_EVENT) != 0;
-        byte[] appIcon = getAppIcon(packageName);
-        byte[] largeIcon = null;
         Action action = NotificationUtils.getQuickReplyAction(notification.getNotification(), packageName);
 
-        if (Build.VERSION.SDK_INT >= VERSION_CODES.M) {
-            largeIcon = getNotificationLargeIcon(getApplicationContext(), notification.getNotification());
-        }
-
+        // Deliver only to our own app, and never ship icons/pictures: PNG
+        // bytes in a broadcast risk the Binder transaction size limit and the
+        // app does not need them for payment detection.
         Intent intent = new Intent(NotificationConstants.INTENT);
+        intent.setPackage(getPackageName());
         intent.putExtra(NotificationConstants.PACKAGE_NAME, packageName);
         intent.putExtra(NotificationConstants.ID, notification.getId());
         intent.putExtra(NotificationConstants.CAN_REPLY, action != null);
         intent.putExtra(NotificationConstants.IS_ONGOING, isOngoing);
 
-        if (NotificationUtils.getQuickReplyAction(notification.getNotification(), packageName) != null) {
+        if (action != null) {
             cachedNotifications.put(notification.getId(), action);
         }
-
-        intent.putExtra(NotificationConstants.NOTIFICATIONS_ICON, appIcon);
-        intent.putExtra(NotificationConstants.NOTIFICATIONS_LARGE_ICON, largeIcon);
 
         if (extras != null) {
             CharSequence title = extras.getCharSequence(Notification.EXTRA_TITLE);
@@ -110,18 +133,7 @@ public class NotificationListener extends NotificationListenerService {
                             : notification.getNotification().tickerText.toString()
             );
             intent.putExtra(NotificationConstants.IS_REMOVED, isRemoved);
-            intent.putExtra(NotificationConstants.HAVE_EXTRA_PICTURE, extras.containsKey(Notification.EXTRA_PICTURE));
-
-            if (extras.containsKey(Notification.EXTRA_PICTURE)) {
-                Bitmap bmp = (Bitmap) extras.get(Notification.EXTRA_PICTURE);
-                if (bmp != null) {
-                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                    bmp.compress(Bitmap.CompressFormat.PNG, 100, stream);
-                    intent.putExtra(NotificationConstants.EXTRAS_PICTURE, stream.toByteArray());
-                } else {
-                    Log.w("NotificationListener", "Notification.EXTRA_PICTURE exists but is null.");
-                }
-            }
+            intent.putExtra(NotificationConstants.HAVE_EXTRA_PICTURE, false);
         }
         sendBroadcast(intent);
     }
@@ -134,8 +146,8 @@ public class NotificationListener extends NotificationListenerService {
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
             getBitmapFromDrawable(icon).compress(Bitmap.CompressFormat.PNG, 100, stream);
             return stream.toByteArray();
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
+        } catch (Throwable e) {
+            Log.w("NotificationListener", "getAppIcon failed", e);
             return null;
         }
     }

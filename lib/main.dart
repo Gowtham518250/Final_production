@@ -255,15 +255,19 @@ void main() async {
           }
         }
 
-        // Initialize Push Notifications only if Firebase is initialized
-        try {
-          await PushNotificationService.initialize();
-          debugPrint('✅ Push Notification Service initialized');
-        } catch (e) {
-          debugPrint('⚠️ Push Notification init error: $e');
-          // Don't disable Firebase entirely - push notifications might fail while other features work
-          await prefs.setBool('push_notifications_enabled', false);
-        }
+        // Initialize Push Notifications only if Firebase is initialized.
+        // Deliberately NOT awaited: FCM token/permission work is network-bound
+        // and must not delay the first frame on 2GB devices.
+        Future<void>(() async {
+          try {
+            await PushNotificationService.initialize();
+            debugPrint('✅ Push Notification Service initialized');
+          } catch (e) {
+            debugPrint('⚠️ Push Notification init error: $e');
+            // Don't disable Firebase entirely - push notifications might fail while other features work
+            await prefs.setBool('push_notifications_enabled', false);
+          }
+        });
 
         debugPrint('✅ Firebase & Crashlytics initialized');
       } catch (firebaseError) {
