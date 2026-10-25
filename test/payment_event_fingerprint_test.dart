@@ -3,6 +3,20 @@ import '../lib/payment_event.dart';
 
 void main() {
   group('PaymentEvent fingerprint', () {
+    test('generates unique IDs for many events created in the same clock tick', () {
+      final ids = List.generate(
+        100,
+        (index) => PaymentEvent(
+          amount: 500,
+          timestamp: DateTime(2026, 10, 9, 10, 11),
+          app: PaymentApp.googlePay,
+          rawText: '₹500 credited to your account #$index',
+        ).id,
+      );
+
+      expect(ids.toSet(), hasLength(ids.length));
+    });
+
     test('does not merge no-reference events into an accounting identity', () {
       final first = PaymentEvent(
         amount: 500,
