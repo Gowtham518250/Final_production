@@ -73,13 +73,14 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
             final Action action = ActionCache.cachedNotifications.get(notificationId);
             if (action == null) {
                 result.error("Notification", "Can't find this cached notification", null);
+                return;
             }
             try {
                 action.sendReply(context, message);
                 result.success(true);
             } catch (PendingIntent.CanceledException e) {
                 result.success(false);
-                e.printStackTrace();
+                Log.w("NotificationPlugin", "Notification reply action was cancelled", e);
             }
         } else if (call.method.equals("getActiveNotifications")) {
             NotificationListener service = NotificationListener.getInstance();
