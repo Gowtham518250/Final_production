@@ -62,6 +62,9 @@ public class NotificationListener extends NotificationListenerService {
             if (sbn == null) return;
             // Ignore our own app/service notifications to avoid feedback loops.
             if (getPackageName().equals(sbn.getPackageName())) return;
+            // Removed notifications are not payment events. The posted version
+            // remains in the durable queue until Dart acknowledges processing.
+            if (removed) return;
 
             Notification notification = sbn.getNotification();
             Bundle extras = notification == null ? null : notification.extras;
@@ -75,6 +78,9 @@ public class NotificationListener extends NotificationListenerService {
             intent.setAction(NotificationConstants.INTENT);
             intent.putExtra(NotificationConstants.PACKAGE_NAME, sbn.getPackageName());
             intent.putExtra(NotificationConstants.ID, sbn.getId());
+            intent.putExtra(
+                    NotificationConstants.EVENT_KEY,
+                    sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getPostTime());
             intent.putExtra(NotificationConstants.CAN_REPLY, action != null);
             intent.putExtra(NotificationConstants.IS_ONGOING, ongoing);
             intent.putExtra(NotificationConstants.IS_REMOVED, removed);
@@ -120,6 +126,7 @@ public class NotificationListener extends NotificationListenerService {
             Bundle extras = n == null ? null : n.extras;
             item.put("id", sbn.getId());
             item.put("packageName", sbn.getPackageName());
+            item.put("eventKey", sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getPostTime());
             item.put("title", extras == null || extras.getCharSequence(Notification.EXTRA_TITLE) == null
                     ? null : extras.getCharSequence(Notification.EXTRA_TITLE).toString());
             item.put("content", extras == null || extras.getCharSequence(Notification.EXTRA_TEXT) == null
