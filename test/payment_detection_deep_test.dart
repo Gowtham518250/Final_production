@@ -39,7 +39,6 @@ void main() {
       );
     });
   });
-;
 
   group('Bill payment tracking', () {
     test(
