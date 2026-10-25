@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -3698,7 +3699,18 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        _handleNotification,
+        (event) {
+          try {
+            _handleNotification(event);
+          } finally {
+            // Native keeps this notification in a private durable queue until
+            // the detector has processed it; this prevents engine-start gaps
+            // from silently dropping credited/debited payment events.
+            unawaited(
+              NotificationListenerService.acknowledgeNotification(event.eventKey),
+            );
+          }
+        },
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
@@ -6121,7 +6133,10 @@ abstract class _Extractor {
   }
 
   static final _utrL = RegExp(
-    r'\b(?:utr|ref(?:erence)?|txn|transaction|id)[:\s#no.]*([A-Za-z0-9]{10,22})\b',
+    // Capture only transaction-like labels followed by an identifier beginning
+    // with a digit. This accepts Ref No / Transaction ID variants without
+    // turning words such as "successful" into fake references.
+    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*(\d[A-Za-z0-9]{9,21})\b',
     caseSensitive: false,
   );
   static final _utrI = RegExp(r'\b([0-9]{12})\b');
