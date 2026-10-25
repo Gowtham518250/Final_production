@@ -966,27 +966,25 @@ class PdsConfig {
 enum _LogLevel { debug, info, warn, error }
 
 abstract class PdsLogger {
+  // Set to true only when diagnosing a release build. Keep logs metadata-only:
+  // never print notification bodies, payer names, bank-account data, or amounts.
+  static const bool traceInRelease = true;
+
   static void d(String tag, String msg) {
-    if (kDebugMode) {
-      _emit(_LogLevel.debug, tag, msg);
-    }
+    if (kDebugMode || traceInRelease) _emit(_LogLevel.debug, tag, msg);
   }
 
   static void i(String tag, String msg) => _emit(_LogLevel.info, tag, msg);
   static void w(String tag, String msg) => _emit(_LogLevel.warn, tag, msg);
   static void e(String tag, String msg, [Object? err, StackTrace? st]) {
     _emit(_LogLevel.error, tag, msg);
-    if (err != null) {
-      debugPrint('  ↳ $err');
-    }
-    if (st != null && kDebugMode) {
-      debugPrint('  ↳ $st');
-    }
+    if (err != null && kDebugMode) debugPrint('  ↳ $err');
+    if (st != null && kDebugMode) debugPrint('  ↳ $st');
   }
 
   static void _emit(_LogLevel lvl, String tag, String msg) {
-    if (kDebugMode) {
-      debugPrint('[PDS][${lvl.name.toUpperCase().padRight(5)}][$tag] $msg');
+    if (kDebugMode || traceInRelease) {
+      debugPrint('[PDS-TRACE][${lvl.name.toUpperCase()}][$tag] $msg');
     }
   }
 }
@@ -5989,18 +5987,22 @@ abstract class _Extractor {
   }
 
   static final _utrL = RegExp(
-    r'\b(?:utr|ref(?:erence)?|txn|transaction|id)[:\s#no.]*([A-Za-z0-9]{10,22})\b',
+    // Only capture values that begin with a digit. Matching any 10–22
+    // alphanumeric token after "transaction"/"ref" turns words such as
+    // "successful" or "confirmation" into fake UTRs and poisons dedup.
+    r'\\b(?:utr|rrn|ref(?:erence)?(?:\\s*(?:no|number|id))?|txn(?:\\s*(?:id|no|number))?|transaction(?:\\s*(?:id|no|number))?|id)[:\\s#.-]*(\\d[A-Za-z0-9]{9,21})\\b',
     caseSensitive: false,
   );
-  static final _utrI = RegExp(r'\b([0-9]{12})\b');
-  static final _utrN = RegExp(r'\b([0-9]{16,22})\b');
+  static final _utrI = RegExp(r'\\b(\\d{12})\\b');
+  static final _utrN = RegExp(r'\\b(\\d{16,22})\\b');
 
-  static String? referenceId(String t) =>
-      _utrL.firstMatch(t)?.group(1) ??
-      _utrI.firstMatch(t)?.group(1) ??
-      _utrN.firstMatch(t)?.group(1);
+  static String? referenceId(String t) {
+    final labelled = _utrL.firstMatch(t)?.group(1);
+    if (labelled != null && labelled.length >= 10) return labelled;
+    return _utrI.firstMatch(t)?.group(1) ?? _utrN.firstMatch(t)?.group(1);
+  }
 
-  static final _name = RegExp(
+  static final _name =c final _name = RegExp(
     r'(?:from|by|received\s+from|sent\s+by|paid\s+by)\s+'
     r'([A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+){0,3})'
     r'(?=\s+(?:on|via|to|using|for|upi|ref|utr|vpa|\d|$))',
