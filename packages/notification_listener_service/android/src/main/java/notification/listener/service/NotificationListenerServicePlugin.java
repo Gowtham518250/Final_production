@@ -2,11 +2,14 @@ package notification.listener.service;
 
 import static notification.listener.service.NotificationUtils.isPermissionGranted;
 
+import android.annotation.SuppressLint;
+
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.IntentFilter;
 import android.os.Build;
 import android.provider.Settings;
