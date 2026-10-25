@@ -3935,12 +3935,21 @@ class PaymentDetectionService {
         PdsLogger.d('L1', 'Duplicate notification replay suppressed');
         return;
       }
-      _recentNotificationPayloads[notificationFingerprint] =
-          now.add(const Duration(seconds: 3));
-      if (_recentNotificationPayloads.length > 100) {
-        _recentNotificationPayloads.remove(
-          _recentNotificationPayloads.keys.first,
-        );
+      // Only cache exact replays of non-payment notification noise here.
+      // For payment-shaped messages, downstream validation/dedup owns identity:
+      // caching before classification can let a rejected payload suppress a
+      // valid copy arriving via another notification source.
+      final notificationLooksPaymentShaped =
+          _Classifier.classify(fields) == _ClassifyResult.passed ||
+          _Classifier.classify(fields) == _ClassifyResult.debit;
+      if (!notificationLooksPaymentShaped) {
+        _recentNotificationPayloads[notificationFingerprint] =
+            now.add(const Duration(seconds: 3));
+        if (_recentNotificationPayloads.length > 100) {
+          _recentNotificationPayloads.remove(
+            _recentNotificationPayloads.keys.first,
+          );
+        }
       }
       if (_isTrustedBankSmsNotification(pkg, notificationSender) &&
           _Extractor.amount(fields) != null &&
