@@ -161,6 +161,9 @@ Future<bool> onStart(ServiceInstance service) async {
     }
 
     final prefs = await SharedPreferences.getInstance();
+    // SharedPreferences caches are isolate-local. Refresh from disk before
+    // initializing voice and payment detection so recent UI settings apply.
+    await prefs.reload();
     final langCode = prefs.getString('payment_sound_lang') ?? 'en-US';
 
     final pds = PaymentDetectionService();
@@ -200,6 +203,16 @@ Future<bool> onStart(ServiceInstance service) async {
         return;
       }
       pds.recordBillPayment(amount);
+    });
+    service.on('sync_payment_sound_enabled').listen((event) {
+      final enabled = event?['enabled'] as bool?;
+      if (enabled == null) return;
+      PdsConfig.isVoiceEnabled = enabled;
+      debugPrint(
+        enabled
+            ? '🔊 Background payment announcements enabled'
+            : '🔇 Background payment announcements disabled',
+      );
     });
 
     // Subscribe before startup: the Dashboard can signal that permissions
@@ -369,6 +382,9 @@ Future<void> _initializeFallback() async {
     );
 
     final prefs = await SharedPreferences.getInstance();
+    // SharedPreferences caches are isolate-local. Refresh from disk before
+    // initializing voice and payment detection so recent UI settings apply.
+    await prefs.reload();
     final langCode = prefs.getString('payment_sound_lang') ?? 'en-US';
 
     final pds = PaymentDetectionService();

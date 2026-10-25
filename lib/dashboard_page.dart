@@ -14081,6 +14081,12 @@ class _DashboardPageState extends State<DashboardPage>
                                 final prefs =
                                     await SharedPreferences.getInstance();
                                 await prefs.setBool('payment_sound_enabled', v);
+                                // The payment engine that announces alerts runs in a separate
+                                // background-service isolate; sync the toggle there too.
+                                FlutterBackgroundService().invoke(
+                                  'sync_payment_sound_enabled',
+                                  {'enabled': v},
+                                );
                                 PdsConfig.isVoiceEnabled = v;
                                 setState(() => _paymentSoundEnabled = v);
                                 setDlgState(() {});
