@@ -165,7 +165,7 @@ Future<bool> onStart(ServiceInstance service) async {
 
     final pds = PaymentDetectionService();
     // The foreground app and service isolates have separate voice settings.
-    PdsConfig.isVoiceEnabled = true;
+    PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
     pds.onSpeak = (text) async {
@@ -373,7 +373,7 @@ Future<void> _initializeFallback() async {
 
     final pds = PaymentDetectionService();
     // Keep announcements enabled in fallback mode as well.
-    PdsConfig.isVoiceEnabled = true;
+    PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
     pds.onSpeak = (text) async {
