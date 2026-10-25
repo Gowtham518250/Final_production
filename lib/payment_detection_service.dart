@@ -5485,8 +5485,19 @@ class PaymentDetectionService {
     if (!_isSupportedTruecallerIncomingTransfer(packageName, text)) return;
     if (!_floodGuard.isAllowed('notif:$packageName')) return;
     _watchdog.recordNotification();
+
+    // Truecaller Business Chat uses wording like:
+    // "UPI transfer from Apgbank to Account 4222" with a separate "+ ₹5"
+    // amount. It has no "credited/received" verb, so the general classifier
+    // previously marked the otherwise supported transfer as junk and the
+    // voice engine never received an event. This narrow path has already
+    // verified the Truecaller package, UPI transfer wording, amount, and
+    // destination account suffix; add explicit inbound wording only for
+    // classification. The event remains unverified and merchant-confirmation
+    // gated; this must never auto-settle an invoice.
+    final normalizedIncomingText = 'Payment received. ${text.trim()}';
     _processText(
-      text.trim(),
+      normalizedIncomingText,
       PaymentApp.bankApp,
       source: 'notification',
       isUnverifiedApp: true,
