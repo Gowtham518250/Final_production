@@ -127,23 +127,32 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     @SuppressLint("WrongConstant")
     @Override
     public void onListen(Object arguments, EventChannel.EventSink events) {
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(NotificationConstants.INTENT);
+        // The native listener should only relay events while Dart is subscribed.
+        // Register once per stream listen; make delivery app-scoped.
+        if (notificationReceiver != null) {
+            try { context.unregisterReceiver(notificationReceiver); } catch (IllegalArgumentException ignored) {}
+            notificationReceiver = null;
+        }
+        IntentFilter intentFilter = new IntentFilter(NotificationConstants.INTENT);
         notificationReceiver = new NotificationReceiver(events);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            context.registerReceiver(notificationReceiver, intentFilter, Context.RECEIVER_EXPORTED);
-        }else{
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(notificationReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
             context.registerReceiver(notificationReceiver, intentFilter);
         }
-        Intent listenerIntent = new Intent(context, NotificationReceiver.class);
-        context.startService(listenerIntent);
-        Log.i("NotificationPlugin", "Started the notifications tracking service.");
+        Log.i("NotificationPlugin", "Notification event stream subscribed.");
     }
 
     @Override
     public void onCancel(Object arguments) {
-        context.unregisterReceiver(notificationReceiver);
-        notificationReceiver = null;
+        if (notificationReceiver != null) {
+            try {
+                context.unregisterReceiver(notificationReceiver);
+            } catch (IllegalArgumentException ignored) {
+                // Already unregistered during engine/stream teardown.
+            }
+            notificationReceiver = null;
+        }
     }
 
     @Override
