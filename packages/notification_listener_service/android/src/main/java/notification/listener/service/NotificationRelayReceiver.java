@@ -92,13 +92,19 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
                 SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
                 JSONArray current = new JSONArray(preferences.getString(PENDING, "[]"));
                 String eventKey = String.valueOf(event.get("eventKey"));
+                JSONObject item = new JSONObject();
+                for (Map.Entry<String, Object> entry : event.entrySet()) {
+                    item.put(entry.getKey(), entry.getValue() == null ? JSONObject.NULL : entry.getValue());
+                }
 
-                // A notification can be delivered more than once by Android. Keep
-                // one pending record per posted notification instance.
+                // Android may update the same notification instance from
+                // "processing" to its final status. Replace the queued snapshot
+                // for the same stable event key instead of keeping stale text.
                 for (int i = 0; i < current.length(); i++) {
                     JSONObject old = current.optJSONObject(i);
                     if (old != null && eventKey.equals(old.optString("eventKey"))) {
-                        return true;
+                        current.put(i, item);
+                        return preferences.edit().putString(PENDING, current.toString()).commit();
                     }
                 }
 
@@ -107,10 +113,6 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
                 for (int i = start; i < current.length(); i++) {
                     JSONObject old = current.optJSONObject(i);
                     if (old != null) next.put(old);
-                }
-                JSONObject item = new JSONObject();
-                for (Map.Entry<String, Object> entry : event.entrySet()) {
-                    item.put(entry.getKey(), entry.getValue() == null ? JSONObject.NULL : entry.getValue());
                 }
                 next.put(item);
                 return preferences.edit().putString(PENDING, next.toString()).commit();
