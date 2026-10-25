@@ -1002,9 +1002,9 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _checkPermissions({bool showReminderIfMissing = true}) async {
-    // IMPORTANT:
-    // This method ONLY CHECKS permission state.
-    // It must never block billing by automatically opening Android permission dialogs.
+    // Permission channels are independent: one grant must still activate the
+    // other available listener. Requiring both here caused a granted channel
+    // to remain detached whenever the other permission was denied.
     bool notifGranted = false;
     bool smsGranted = false;
 
@@ -1023,88 +1023,64 @@ class _DashboardPageState extends State<DashboardPage>
     if (!mounted) return;
 
     final missing = !(notifGranted && smsGranted);
-
     setState(() {
       _isPermissionsMissing = missing;
       _paymentPermissionCheckComplete = true;
     });
 
     if (missing) {
-      // Keep the persistent Dashboard CTA animated until Android reports that
-      // every required permission is actually enabled.
       if (!_paymentDetectionPulseController.isAnimating) {
         _paymentDetectionPulseController.repeat(reverse: true);
       }
-      // Intentionally do not open a blocking dialog here. The Dashboard card
-      // is the single persistent reminder and remains usable for billing.
-      return;
+    } else {
+      _paymentDetectionPulseController.stop();
+      _paymentDetectionPulseController.value = 1.0;
     }
 
-    // All required permissions are now enabled. Stop the reminder animation
-    // and start the payment-detection channels.
-    _paymentDetectionPulseController.stop();
-    _paymentDetectionPulseController.value = 1.0;
-
+    // Always start/restart the service; its internal listeners independently
+    // check notification/SMS permission and attach whichever channels are
+    // permitted. Do not return early just because a different channel is off.
     try {
       final backgroundService = FlutterBackgroundService();
       final isRunning = await backgroundService.isRunning();
       if (!isRunning) {
-        // Configure and start again if Android/OEM battery management stopped
-        // the service (or if startup had not completed yet).
         await initializeBackgroundService();
         debugPrint('🔁 Reconfigured/restarted stopped payment-detection service');
       }
 
-      // Only the background isolate owns the live listeners. Signal it after
-      // ensuring the service is running; its startup handler queues this
-      // request if listener initialization is still in progress.
       backgroundService.invoke('restart_payment_detection');
+      backgroundService.invoke('setAsForeground');
       if (kDebugMode) {
         debugPrint(
-          '🔁 Signaled background isolate to attach payment channels',
+          '🔁 Payment service signalled (notification=$notifGranted, sms=$smsGranted)',
         );
       }
-      backgroundService.invoke('setAsForeground');
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ Payment detection service startup/restart failed: $e');
       }
     }
 
-    // FIX (critical): the restart signal above only re-attaches listeners —
-    // it does nothing to stop Android from killing the background isolate
-    // once the app is backgrounded, because the service was never promoted
-    // to a real foreground service. Request POST_NOTIFICATIONS (required
-    // for foreground mode on Android 13+) and battery-optimization
-    // exemption (OEMs like Xiaomi/Oppo/Vivo/Samsung kill background
-    // processes even in foreground mode unless whitelisted) here, then
-    // promote the service now that both should be granted.
+    // POST_NOTIFICATIONS is separate from Notification Listener access.
     try {
       final notifStatus = await Permission.notification.status;
-      if (!notifStatus.isGranted) {
-        await Permission.notification.request();
-      }
+      if (!notifStatus.isGranted) await Permission.notification.request();
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ POST_NOTIFICATIONS request failed: $e');
     }
 
+    // Request battery exemption so Android/OEM power management is less likely
+    // to kill the long-running detection service.
     try {
       final batteryOk =
           await PaymentDetectionService.isBatteryOptimizationIgnored();
-      if (!batteryOk) {
-        await PaymentDetectionService.requestBatteryExemption();
-      }
+      if (!batteryOk) await PaymentDetectionService.requestBatteryExemption();
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Battery exemption request failed: $e');
     }
 
     try {
       FlutterBackgroundService().invoke('setAsForeground');
-      if (kDebugMode) {
-        debugPrint(
-          '⬆️ Signaled background isolate to promote to foreground service',
-        );
-      }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ Failed to signal foreground promotion: $e');
