@@ -9,7 +9,8 @@ void main() {
       itemBuilder: (context, index) => Text('Item $index'),
     );
 
-    expect(list.addAutomaticKeepAlives, isTrue);
+    final delegate = list.childrenDelegate as SliverChildBuilderDelegate;
+    expect(delegate.addAutomaticKeepAlives, isTrue);
   });
 
   test('large lists recycle off-screen children to reduce retained memory', () {
@@ -18,7 +19,8 @@ void main() {
       itemBuilder: (context, index) => Text('Item $index'),
     );
 
-    expect(list.addAutomaticKeepAlives, isFalse);
+    final delegate = list.childrenDelegate as SliverChildBuilderDelegate;
+    expect(delegate.addAutomaticKeepAlives, isFalse);
     expect(list.cacheExtent, 220.0);
   });
 }
