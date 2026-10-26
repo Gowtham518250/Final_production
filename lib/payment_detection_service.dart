@@ -3548,7 +3548,9 @@ class PaymentDetectionService {
   // LIFECYCLE
   // ==========================================================================
 
-  Future<void> start() async {
+  Future<void> start({
+    List<Map<String, dynamic>> persistedPaymentHistory = const [],
+  }) async {
     if (_isStarted) return;
 
     // 1. Cancel old subscription FIRST to stop stale events
@@ -3574,6 +3576,9 @@ class PaymentDetectionService {
     _voice.getLanguage = () => _voiceLanguage;
 
     await PdsStateStore.loadDedup(_dedupStore);
+    if (persistedPaymentHistory.isNotEmpty) {
+      await syncDedupWindowsFromPaymentHistory(persistedPaymentHistory);
+    }
     await TrustedSenderStore.preload(); // FIX-B
 
     await _ensureDetectionPermissions();
@@ -3591,6 +3596,97 @@ class PaymentDetectionService {
     _watchdog.start();
 
     PdsLogger.i('SVC', 'All channels ready');
+  }
+
+  /// Reconcile the in-memory replay cache with durable merchant-review
+  /// state. Confirmed references keep a 24-hour suppress window; unresolved
+  /// pending/conflict records become eligible again six hours after detection.
+  /// This lets a pending transfer be reviewed in the morning without weakening
+  /// protection for already-confirmed references.
+  Future<void> syncDedupWindowsFromPaymentHistory(
+    List<Map<String, dynamic>> records,
+  ) async {
+    final now = DateTime.now();
+    var changed = false;
+
+    for (final record in records) {
+      final reference = (record['reference_id'] ?? '').toString().trim();
+      if (reference.isEmpty) continue;
+
+      final referenceEvent = PaymentEvent(
+        amount: 1,
+        timestamp: now,
+        app: PaymentApp.unknown,
+        referenceId: reference,
+      );
+      final normalizedReference = referenceEvent.normalizedReferenceId;
+      if (normalizedReference == null) continue;
+      final fingerprint = referenceEvent.fingerprint;
+      final status = (record['status'] ?? '').toString().toUpperCase();
+
+      if (status == 'PENDING_CONFIRMATION' || status == 'CONFLICT_REVIEW') {
+        DateTime? detectedAt;
+        try {
+          final value = record['timestamp']?.toString();
+          if (value != null && value.isNotEmpty) {
+            detectedAt = DateTime.parse(value);
+          }
+        } on FormatException {
+          detectedAt = null;
+        }
+        final reminderAt = (detectedAt ?? now)
+            .add(PdsConfig.dedupNativeNotificationTtl);
+        if (reminderAt.isAfter(now)) {
+          _dedupStore[fingerprint] = reminderAt;
+        } else {
+          _dedupStore.remove(fingerprint);
+        }
+
+        // Native notification replay keys include their reference when one
+        // could be extracted. Apply the same pending-review deadline to that
+        // exact notification, not to every notification for the app.
+        final nativeKeys = _dedupStore.keys
+            .where(
+              (key) =>
+                  key.startsWith('notification-event:') &&
+                  key.endsWith(':$normalizedReference'),
+            )
+            .toList();
+        for (final nativeKey in nativeKeys) {
+          if (reminderAt.isAfter(now)) {
+            _dedupStore[nativeKey] = reminderAt;
+          } else {
+            _dedupStore.remove(nativeKey);
+          }
+        }
+      } else {
+        // Confirmed or rejected transactions remain suppressed for a full day.
+        // Unknown legacy statuses fail closed in the same way.
+        _dedupStore[fingerprint] = now.add(PdsConfig.dedupUtrTtl);
+      }
+      changed = true;
+    }
+
+    if (changed) {
+      _dedupDirty = true;
+      await PdsStateStore.saveDedup(_dedupStore);
+    }
+  }
+
+  void markReferenceResolved(String? referenceId) {
+    final reference = (referenceId ?? '').trim();
+    if (reference.isEmpty) return;
+    final referenceEvent = PaymentEvent(
+      amount: 1,
+      timestamp: DateTime.now(),
+      app: PaymentApp.unknown,
+      referenceId: reference,
+    );
+    if (referenceEvent.normalizedReferenceId == null) return;
+    _dedupStore[referenceEvent.fingerprint] =
+        DateTime.now().add(PdsConfig.dedupUtrTtl);
+    _dedupDirty = true;
+    unawaited(PdsStateStore.saveDedup(_dedupStore));
   }
 
   void setBackgroundMode(bool isBg) {
