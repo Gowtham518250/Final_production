@@ -592,9 +592,15 @@ void main() async {
   final soundEnabled = appPrefs.getBool('payment_sound_enabled') ?? true;
   PdsConfig.isVoiceEnabled = soundEnabled;
 
-  // Background heavy initializations (Run asynchronously to drastically speed up app launch)
-  // DEFERRED BY 2 SECONDS TO PREVENT SPLASH SCREEN HANG ON 2GB RAM DEVICES
-  Future.delayed(const Duration(seconds: 2), () async {
+  // Defer storage cleanup, initial full sync and background-service setup
+  // until the first interactive screen has settled. On low-RAM devices the
+  // extra grace period avoids a second burst of disk/network work just after
+  // the splash screen disappears.
+  final backgroundInitializationDelay =
+      DeviceCapabilityService.instance.isLowEndDevice
+          ? const Duration(seconds: 8)
+          : const Duration(seconds: 3);
+  Future.delayed(backgroundInitializationDelay, () async {
     try {
       // 1. Move the heavy DB purging here so it doesn't block the UI thread
       await LocalStorageService.validateAndMigrateSchema();
