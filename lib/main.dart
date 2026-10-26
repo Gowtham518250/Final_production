@@ -147,8 +147,11 @@ import 'low_memory_performance.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Bound decoded image memory before any screen can start loading images.
+  // Apply conservative memory limits before the first frame. Detect the
+  // actual hardware in parallel; until detection completes, low-memory mode is
+  // assumed so translation/list workloads do not spike on 2GB-class phones.
   LowMemoryPerformance.configure();
+  unawaited(DeviceCapabilityService.instance.initialize());
 
   // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
   bool firebaseInitialized = false;
