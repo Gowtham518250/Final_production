@@ -147,8 +147,11 @@ import 'low_memory_performance.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Bound decoded image memory before any screen can start loading images.
+  // Apply conservative memory limits before the first frame. Detect the
+  // actual hardware in parallel; until detection completes, low-memory mode is
+  // assumed so translation/list workloads do not spike on 2GB-class phones.
   LowMemoryPerformance.configure();
+  unawaited(DeviceCapabilityService.instance.initialize());
 
   // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
   bool firebaseInitialized = false;
@@ -589,9 +592,15 @@ void main() async {
   final soundEnabled = appPrefs.getBool('payment_sound_enabled') ?? true;
   PdsConfig.isVoiceEnabled = soundEnabled;
 
-  // Background heavy initializations (Run asynchronously to drastically speed up app launch)
-  // DEFERRED BY 2 SECONDS TO PREVENT SPLASH SCREEN HANG ON 2GB RAM DEVICES
-  Future.delayed(const Duration(seconds: 2), () async {
+  // Defer storage cleanup, initial full sync and background-service setup
+  // until the first interactive screen has settled. On low-RAM devices the
+  // extra grace period avoids a second burst of disk/network work just after
+  // the splash screen disappears.
+  final backgroundInitializationDelay =
+      DeviceCapabilityService.instance.isLowEndDevice
+          ? const Duration(seconds: 8)
+          : const Duration(seconds: 3);
+  Future.delayed(backgroundInitializationDelay, () async {
     try {
       // 1. Move the heavy DB purging here so it doesn't block the UI thread
       await LocalStorageService.validateAndMigrateSchema();
