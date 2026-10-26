@@ -2672,8 +2672,41 @@ class PaymentDetectionService {
   /// Two different apps (e.g. PhonePe + Truecaller mirror) reporting one payment.
   static const Duration _crossAppEchoWindow = Duration(minutes: 10);
 
-  /// Bank SMS can arrive long after the payment-app notification (20+ min).
-  static const Duration _smsEchoWindow = Duration(minutes: 45);
+  /// Bank SMS can arrive long after the payment-app notification (20+ min,
+  /// sometimes over an hour when the operator queues DLT messages).
+  static const Duration _smsEchoWindow = Duration(hours: 3);
+
+  /// Merchant-confirmed payments kept so the confirmation dialog can warn when
+  /// a new alert may be the late SMS of a payment that was already confirmed.
+  final List<PaymentEvent> _recentConfirmed = [];
+  static const Duration _confirmedMemory = Duration(hours: 3);
+
+  /// Returns an earlier merchant-confirmed credit that [event] may duplicate
+  /// (same amount, compatible payer, no different reference), or null.
+  PaymentEvent? similarRecentlyConfirmed(PaymentEvent event) {
+    final now = DateTime.now();
+    _recentConfirmed.removeWhere(
+      (c) => now.difference(c.timestamp).abs() > _confirmedMemory,
+    );
+    final ref = event.normalizedReferenceId;
+    for (final c in _recentConfirmed.reversed) {
+      if (c.id == event.id) continue;
+      if ((c.amount - event.amount).abs() >= 0.01) continue;
+      final cRef = c.normalizedReferenceId;
+      if (ref != null && cRef != null) {
+        if (ref == cRef) return c;
+        continue; // different references = different payments
+      }
+      if (!_payersCompatible(event.payerName, c.payerName)) continue;
+      return c;
+    }
+    return null;
+  }
+
+  void _rememberConfirmed(PaymentEvent confirmed) {
+    _recentConfirmed.add(confirmed);
+    if (_recentConfirmed.length > 50) _recentConfirmed.removeAt(0);
+  }
 
   /// Event id -> channels that already echoed it (one echo per channel).
   final Map<String, Set<String>> _echoClaims = {};
@@ -2759,6 +2792,7 @@ class PaymentDetectionService {
     _recentNotificationPayloads.clear();
     _recentEmittedPayments.clear();
     _echoClaims.clear();
+    _recentConfirmed.clear();
     _historyHandledEventIds.clear();
     _dedupStore.clear();
     _dedupReferenceAmounts.clear();
@@ -3265,6 +3299,7 @@ class PaymentDetectionService {
           : event.remainingAmount,
     );
     _recordConfirmedBillPayment(confirmed);
+    _rememberConfirmed(confirmed);
     _emitFinal(confirmed);
     return true;
   }
@@ -3285,6 +3320,7 @@ class PaymentDetectionService {
       }
       _likelyTimers.remove(id)?.cancel();
       _recordConfirmedBillPayment(confirmed);
+      _rememberConfirmed(confirmed);
       _emitFinal(confirmed);
       return confirmed;
     }

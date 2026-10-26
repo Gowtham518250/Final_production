@@ -153,5 +153,49 @@ void main() {
       ]);
       expect(events, hasLength(1));
     });
+
+    test('SMS 90 minutes later still pairs with its notification', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(
+          id: 'n1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now.subtract(const Duration(minutes: 90)),
+        ),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now),
+      ]);
+      expect(events, hasLength(1));
+    });
+
+    test('confirmation dialog can warn about a likely late duplicate', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final now = DateTime.now();
+      final first = _credit(
+        id: 'c1',
+        app: PaymentApp.phonePe,
+        source: 'notification',
+        at: now.subtract(const Duration(minutes: 100)),
+        payer: 'Anna Devi',
+      );
+      expect(await service.confirmDetectedPayment(first), isTrue);
+      final late = _credit(
+        id: 'c2',
+        app: PaymentApp.bankSms,
+        source: 'sms',
+        at: now,
+        payer: 'Anna Devi',
+      );
+      expect(service.similarRecentlyConfirmed(late)?.id, 'c1');
+      final other = _credit(
+        id: 'c3',
+        app: PaymentApp.bankSms,
+        source: 'sms',
+        at: now,
+        payer: 'Ravi Kumar',
+      );
+      expect(service.similarRecentlyConfirmed(other), isNull);
+    });
   });
 }
