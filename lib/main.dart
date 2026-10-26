@@ -59,6 +59,7 @@ import 'providers/setup.dart';
 import 'session_management.dart';
 import 'scoped_shared_preferences.dart';
 import 'startup_route_policy.dart';
+import 'worker_verification_policy.dart';
 // Conditional import: use the real scanner on native, stub on web to avoid web plugin errors
 import 'qr_scanner_page_stub.dart' if (dart.library.io) 'qr_scanner_page.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
@@ -1515,8 +1516,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             role: identityRole,
           );
 
-      // A stored token alone is not enough: this user and role must have a
-      // saved verification record from OTP, biometric, or staff PIN success.
+      // Query the shop's authoritative worker roster only for an owner-mode
+      // session. A confirmed empty roster skips the extra Owner-vs-Staff
+      // verification screen; an offline/unknown roster still keeps the gate.
+      final hasActiveWorkers = role == 'OWNER' && !staffMode
+          ? await WorkerVerificationPolicy.hasActiveWorkersForShop(
+              userId: userId,
+            )
+          : null;
+
+      // A stored token alone is not enough when staff access may be selected.
+      // A confirmed zero-worker owner shop can proceed directly to its normal
+      // dashboard, while any active or unknown roster preserves verification.
       return resolveStartupRoute(
         booting: booting,
         authenticated: authenticated,
@@ -1524,6 +1535,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         shopDetailsRequired: shopDetailsRequired,
         identityVerified: identityVerified,
         staffMode: staffMode,
+        hasActiveWorkers: hasActiveWorkers,
       );
     });
   }
