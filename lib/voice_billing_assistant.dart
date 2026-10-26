@@ -579,19 +579,9 @@ class MultiLangVoiceParser {
       }
     }
 
-    if (bestScore > 0.5 && bestMatch != null && langCode != 'en-IN') {
-      // Translate matched product back to the UI language so it appears native!
-      final matchedName = (bestMatch['name'] ?? bestMatch['product_name'] ?? '').toString();
-      try {
-         final codePart = langCode.split('-').first;
-         final localizedName = await FreeTranslatorService.translate(matchedName, from: 'en', to: codePart);
-         // Mutate a copy so we return the translated name
-         return {...bestMatch, 'name': localizedName, 'product_name': localizedName};
-      } catch (e) {
-         // Fallback
-      }
-    }
-
+    // Return the untouched catalogue record. Product names are inventory identity
+    // data here; translating and replacing them breaks exact matching at save time.
+    // Localize the detected-item label in the widget layer instead.
     return bestScore > 0.5 ? bestMatch : null;
   }
   
@@ -2275,6 +2265,50 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     );
   }
 
+  Future<void> _editDetectedItemName(int index) async {
+    if (index < 0 || index >= ParsedItems.length) return;
+    final nameController = _editControllers[index]?['name'];
+    if (nameController == null) return;
+
+    // The edit control intentionally edits the original/catalogue spelling.
+    // The card itself shows LiveTranslatedText, so display localization never
+    // changes the product name used for catalogue matching or stock deduction.
+    final editor = TextEditingController(text: nameController.text);
+    final updatedName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const LiveTranslatedText('Edit product name'),
+        content: TextField(
+          controller: editor,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            hintText: 'Original catalogue name',
+            helperText: 'Keep the catalogue name to deduct stock correctly.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const LiveTranslatedText('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(editor.text.trim()),
+            child: const LiveTranslatedText('Save name'),
+          ),
+        ],
+      ),
+    );
+    editor.dispose();
+
+    if (!mounted || updatedName == null || updatedName.trim().isEmpty) return;
+    setState(() {
+      final controller = _editControllers[index]?['name'];
+      if (controller != null) controller.text = updatedName.trim();
+    });
+  }
+
   Widget _buildItemCard(int idx, ParsedItem item) {
     _editControllers.putIfAbsent(idx, () => {
       'name':  TextEditingController(text: item.name),
@@ -2335,14 +2369,38 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   : null,
             ),
           ),
-          title: TextField(
-            controller: _editControllers[idx]!['name'],
-            style: GoogleFonts.inter(color: const Color(0xFF111827), fontSize: 13, fontWeight: FontWeight.w800),
-            decoration: const InputDecoration(
-              isDense: true,
-              contentPadding: EdgeInsets.zero,
-              border: InputBorder.none,
-            ),
+          title: Row(
+            children: [
+              Expanded(
+                child: LiveTranslatedText(
+                  _editControllers[idx]!['name']!.text.trim().isEmpty
+                      ? item.name
+                      : _editControllers[idx]!['name']!.text.trim(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF111827),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Edit original product name',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(
+                  minWidth: 30,
+                  minHeight: 30,
+                ),
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  color: Color(0xFF6366F1),
+                  size: 16,
+                ),
+                onPressed: () => _editDetectedItemName(idx),
+              ),
+            ],
           ),
           subtitle: Row(
             children: [
