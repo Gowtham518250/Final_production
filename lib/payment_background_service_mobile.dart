@@ -43,6 +43,10 @@ Future<void> restartBackgroundPaymentDetection() async {
   FlutterBackgroundService().invoke('restart_payment_detection');
 }
 
+Future<void> refreshPaymentDetectionDedupState() async {
+  FlutterBackgroundService().invoke('refresh_payment_dedup_state');
+}
+
 void _listenForBackgroundPayments(FlutterBackgroundService service) {
   _paymentEventSubscription?.cancel();
   _paymentEventSubscription = service.on('payment_detected').listen((payload) {
