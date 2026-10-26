@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_accessibility_service/flutter_accessibility_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'payment_announcement_service.dart';
+import 'payment_alert_deduplicator.dart';
 import 'payment_detection_service.dart';
 import 'payment_event.dart';
 import 'online_payment_history_service.dart';
@@ -15,6 +16,12 @@ import 'sms_background_receiver.dart';
 
 StreamSubscription<Map<String, dynamic>?>? _paymentEventSubscription;
 StreamSubscription<PaymentEvent>? _paymentForwardSubscription;
+
+final FlutterLocalNotificationsPlugin _backgroundAlertPlugin =
+    FlutterLocalNotificationsPlugin();
+bool _alertPluginReady = false;
+final PaymentAlertDeduplicator _backgroundAlertDeduplicator =
+    PaymentAlertDeduplicator();
 
 Future<void> syncExpectedPaymentBill(double? amount) async {
   final service = FlutterBackgroundService();
@@ -68,6 +75,7 @@ void _listenForBackgroundPayments(FlutterBackgroundService service) {
 Future<void> _persistPaymentHistoryThenForward(
   ServiceInstance service,
   PaymentEvent event,
+  PaymentDetectionService pds,
 ) async {
   var forwardedEvent = event;
   var historyHandled = false;
@@ -118,9 +126,188 @@ Future<void> _persistPaymentHistoryThenForward(
       verificationStatus: PaymentVerificationStatus.unverified,
     );
   }
+  // Persist the alert after history has classified this event, so a replay
+  // marked duplicate by durable history never creates a fresh background alert.
+  await _postBackgroundPaymentAlert(pds, forwardedEvent);
   final payload = forwardedEvent.toJson();
   payload['history_handled'] = historyHandled;
   service.invoke('payment_detected', payload);
+}
+
+// ───────────────────────── Background alert + outage tracking ───────────────
+
+const String _kHeartbeatMs = 'pds_service_heartbeat_ms';
+const String _kOutageNotice = 'pds_service_outage_notice';
+const Duration _heartbeatEvery = Duration(minutes: 5);
+const Duration _outageThreshold = Duration(minutes: 20);
+
+Future<void> _ensureAlertPlugin() async {
+  if (_alertPluginReady) return;
+  await _backgroundAlertPlugin.initialize(
+    const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    ),
+  );
+  _alertPluginReady = true;
+}
+
+String _clock(DateTime time) {
+  final hour12 = time.hour % 12 == 0 ? 12 : time.hour % 12;
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '$hour12:$minute ${time.hour >= 12 ? 'PM' : 'AM'}';
+}
+
+/// The long-lived isolate must alert even when DashboardPage is not mounted.
+/// A late recovered event always gets an audible OS alert; live events rely on
+/// TTS when it is enabled and use a sounding notification when voice is off.
+Future<void> _postBackgroundPaymentAlert(
+  PaymentDetectionService pds,
+  PaymentEvent event,
+) async {
+  if (!Platform.isAndroid || event.isDuplicate || event.isFailed) return;
+  if (_backgroundAlertDeduplicator.shouldSuppress(event)) return;
+
+  try {
+    final lateAt = pds.originalTimeIfLate(event.id);
+    final isDebit =
+        event.direction == PaymentTransactionDirection.outgoingDebit;
+    final isCredit =
+        event.direction == PaymentTransactionDirection.incomingCredit;
+    final merchantVerifiedCredit =
+        isCredit && event.isMerchantConfirmed;
+    final needsVerify = isCredit && !merchantVerifiedCredit;
+    final conflict = event.hasReferenceConflict;
+
+    final title = isDebit
+        ? 'Debit detected'
+        : conflict
+        ? 'Payment review required'
+        : merchantVerifiedCredit
+        ? 'Payment received'
+        : 'Payment detected — please verify';
+    final amountText = event.amount == event.amount.truncateToDouble()
+        ? event.amount.toStringAsFixed(0)
+        : event.amount.toStringAsFixed(2);
+    var body = '₹$amountText '
+        '${isDebit ? 'debited' : 'credited'} via ${event.appDisplayName}';
+    if (lateAt != null) {
+      body += ' — notification received at ${_clock(lateAt)} while '
+          'detection was stopped. Check your bank/UPI app.';
+    } else if (conflict) {
+      body += ' — transaction details conflict; check your bank history.';
+    } else if (needsVerify) {
+      body += ' — verify before recording.';
+    }
+
+    final audible = lateAt != null ||
+        !PdsConfig.isVoiceEnabled ||
+        conflict;
+    final channelId = audible
+        ? 'payment_detection_alerts_audible'
+        : 'payment_detection_alerts_silent';
+    final channelName = audible ? 'Payment Alerts' : 'Payment Alerts (Silent)';
+
+    await _ensureAlertPlugin();
+    final android = _backgroundAlertPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    await android?.createNotificationChannel(
+      AndroidNotificationChannel(
+        channelId,
+        channelName,
+        description: 'Local payment-detection alerts from Retail Mind.',
+        importance: Importance.high,
+        playSound: audible,
+        enableVibration: audible,
+        showBadge: false,
+      ),
+    );
+    await _backgroundAlertPlugin.show(
+      event.id.hashCode & 0x7fffffff,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          channelDescription: 'Local payment-detection alerts from Retail Mind.',
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: audible,
+          enableVibration: audible,
+          showWhen: true,
+          when: (lateAt ?? DateTime.now()).millisecondsSinceEpoch,
+          styleInformation: BigTextStyleInformation(body),
+        ),
+      ),
+      payload: 'realtime',
+    );
+    debugPrint(
+      '🔔 Background payment alert posted (late=${lateAt != null}, audible=$audible)',
+    );
+  } catch (error, stackTrace) {
+    debugPrint('⚠️ Background payment alert failed: $error\n$stackTrace');
+  }
+}
+
+/// Compare the last five-minute heartbeat to startup time. A long gap means
+/// the Android/OEM stopped the service; retain a one-shot notice for Dashboard.
+Future<void> _recordServiceStartAndOutage() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final previousHeartbeat = prefs.getInt(_kHeartbeatMs);
+    final now = DateTime.now();
+    if (previousHeartbeat != null) {
+      final from = DateTime.fromMillisecondsSinceEpoch(previousHeartbeat);
+      if (now.difference(from) > _outageThreshold) {
+        await prefs.setString(
+          _kOutageNotice,
+          '${from.millisecondsSinceEpoch}|${now.millisecondsSinceEpoch}',
+        );
+        debugPrint(
+          '⚠️ Payment detection service outage: '
+          '${now.difference(from).inMinutes} minutes',
+        );
+      }
+    }
+    await prefs.setInt(_kHeartbeatMs, now.millisecondsSinceEpoch);
+  } catch (error) {
+    debugPrint('⚠️ Could not record payment service startup: $error');
+  }
+}
+
+void _startServiceHeartbeat(ServiceInstance service) {
+  final timer = Timer.periodic(_heartbeatEvery, (_) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kHeartbeatMs, DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
+  });
+  service.on('stop').listen((_) => timer.cancel());
+}
+
+/// Returns and consumes the outage interval once, for the next visible Dashboard.
+Future<(DateTime, DateTime)?> takeServiceOutageNotice() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final raw = prefs.getString(_kOutageNotice);
+    if (raw == null) return null;
+    await prefs.remove(_kOutageNotice);
+    final parts = raw.split('|');
+    if (parts.length != 2) return null;
+    final fromMillis = int.tryParse(parts[0]);
+    final toMillis = int.tryParse(parts[1]);
+    if (fromMillis == null || toMillis == null) return null;
+    return (
+      DateTime.fromMillisecondsSinceEpoch(fromMillis),
+      DateTime.fromMillisecondsSinceEpoch(toMillis),
+    );
+  } catch (_) {
+    return null;
+  }
 }
 
 Future<void> _ensurePaymentNotificationChannel() async {
@@ -197,7 +384,7 @@ Future<bool> onStart(ServiceInstance service) async {
       // Preserve ordering: finish the local history write (or log its failure)
       // before forwarding the event to the UI isolate. A background shutdown
       // must not silently lose the history write after the event was forwarded.
-      unawaited(_persistPaymentHistoryThenForward(service, event));
+      unawaited(_persistPaymentHistoryThenForward(service, event, pds));
     });
 
     service.on('sync_expected_payment_bill').listen((event) {
@@ -279,7 +466,11 @@ Future<bool> onStart(ServiceInstance service) async {
       debugPrint('ℹ️ Payment history cache not available during service startup: $error');
     }
     await pds.start(persistedPaymentHistory: persistedPaymentHistory);
+    // Only update the heartbeat after detection channels started successfully;
+    // a failed startup must remain visible as an outage on the next restart.
+    await _recordServiceStartAndOutage();
     pdsReady = true;
+    _startServiceHeartbeat(service);
     if (restartRequestedBeforeReady) {
       restartRequestedBeforeReady = false;
       await pds.ensureChannelsRunning();
@@ -299,7 +490,14 @@ Future<bool> onStart(ServiceInstance service) async {
           final sender = (message['sender'] ?? '').trim();
           final body = (message['body'] ?? '').trim();
           if (sender.isEmpty || body.isEmpty) continue;
-          pds.handleSms(sender, body);
+          final receivedAtMillis = int.tryParse(message['time'] ?? '');
+          pds.handleSms(
+            sender,
+            body,
+            receivedAt: receivedAtMillis == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(receivedAtMillis),
+          );
         }
         if (pendingMessages.isNotEmpty) {
           debugPrint(

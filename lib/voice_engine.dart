@@ -346,6 +346,11 @@ class VoiceEngine {
       await _playAudioFile(job.audioPath!);
     }
 
+    // After Android/OEM restarts, platform TTS can bind after the first queued
+    // payment announcement. Wait for a bounded readiness query before locale
+    // checks so the first event of the morning is not silently skipped.
+    await _ensureEngineReady();
+
     if (_useStitchedVoice) {
       await _playStitchedSequence(job.result.text, job.locale);
       return;
@@ -366,8 +371,11 @@ class VoiceEngine {
         }
       }
       if (!fellBack) {
-        _log.w('No TTS locale available; announcement skipped');
-        return;
+        // Last resort: speak with the engine's current/default voice rather
+        // than silently discarding a payment announcement when locale queries
+        // are unavailable during cold start.
+        _log.w('No TTS locale confirmed; speaking with engine default voice');
+        effectiveLocale = _currentLocale ?? job.locale;
       }
     }
 
@@ -434,6 +442,29 @@ class VoiceEngine {
   }
 
   // ── Private: locale management ─────────────────────────────────────────────
+
+  bool _engineWarm = false;
+
+  /// Wait for a bounded response from the native TTS service. Don't hold a
+  /// payment announcement forever if the device's speech engine is unavailable.
+  Future<void> _ensureEngineReady() async {
+    if (_engineWarm) return;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        final engines = await _tts.getEngines.timeout(
+          const Duration(seconds: 3),
+        );
+        if (engines is List && engines.isNotEmpty) {
+          _engineWarm = true;
+          return;
+        }
+      } catch (_) {
+        // Platform TTS may still be binding; retry below.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    _log.w('TTS engine did not answer in time; continuing with default voice');
+  }
 
   Future<bool> _safeSetLocale(String locale) async {
     for (int attempt = 0; attempt < 2; attempt++) {
