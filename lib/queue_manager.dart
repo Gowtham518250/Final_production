@@ -29,12 +29,14 @@ class QueueItem {
   final AnnouncementPriority    priority;
   final String                  ttsText;
   final int                     timeoutSec;
+  final Future<void> Function()? onTimeout;
 
   QueueItem({
     required this.task,
     required this.priority,
     required this.ttsText,
     required this.timeoutSec,
+    this.onTimeout,
   });
 }
 
@@ -69,35 +71,48 @@ class QueueManager {
       final item = _queue.removeAt(0);
 
       _speaking = true;
-      bool completed = false;
+      var success = false;
+      var timedOut = false;
 
-      final stuckTimer = Timer(Duration(seconds: item.timeoutSec), () {
-        if (!completed) {
-          _log.w('Stuck timeout (${item.timeoutSec}s) for: '
-              '"${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"');
-          _speaking = false;
-        }
-      });
-
-      bool success = false;
-      for (int attempt = 1; attempt <= 3 && !success; attempt++) {
+      // Use Future.timeout rather than only a Timer. A Timer cannot release
+      // this await: on some Android/OEM builds TTS completion callbacks pause
+      // while the screen is locked, leaving the entire queue blocked until the
+      // shopkeeper unlocks the phone. Expire and cancel stale speech explicitly.
+      for (var attempt = 1; attempt <= 3 && !success; attempt++) {
         try {
-          await item.task();
+          await item.task().timeout(
+            Duration(seconds: item.timeoutSec.clamp(1, 60).toInt()),
+            onTimeout: () async {
+              timedOut = true;
+              _log.w(
+                'TTS timeout (${item.timeoutSec}s); dropping stale queued speech: '
+                '"${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"',
+              );
+              try {
+                await item.onTimeout?.call();
+              } catch (error, stackTrace) {
+                _log.e('Timeout cleanup failed', error: error, stackTrace: stackTrace);
+              }
+            },
+          );
+          if (timedOut) break;
           success = true;
-        } catch (e, st) {
-          _log.e('Task attempt $attempt/3 failed', error: e, stackTrace: st);
+        } catch (error, stackTrace) {
+          _log.e('Task attempt $attempt/3 failed', error: error, stackTrace: stackTrace);
           if (attempt < 3) {
             await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
           }
         }
       }
 
-      completed = true;
-      stuckTimer.cancel();
       _speaking = false;
 
       if (!success) {
-        _log.e('Item dropped after 3 failed attempts: "${item.ttsText.substring(0, item.ttsText.length.clamp(0,40))}"');
+        _log.e(
+          timedOut
+              ? 'Item dropped after TTS timeout: "${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"'
+              : 'Item dropped after 3 failed attempts: "${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"',
+        );
       }
     }
 
