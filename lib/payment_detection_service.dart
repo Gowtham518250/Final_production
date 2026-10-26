@@ -1214,6 +1214,7 @@ class PdsStateStore {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_kDedup);
+      await prefs.remove(_kLegacyDedup);
       await TrustedSenderStore._clearPrefs();
     } catch (_) {}
   }
