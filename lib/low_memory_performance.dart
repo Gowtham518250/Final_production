@@ -11,8 +11,8 @@ import 'package:flutter/widgets.dart';
 class LowMemoryPerformance {
   LowMemoryPerformance._();
 
-  static const int maximumCachedImages = 80;
-  static const int maximumDecodedImageCacheBytes = 40 * 1024 * 1024;
+  static const int maximumCachedImages = 48;
+  static const int maximumDecodedImageCacheBytes = 24 * 1024 * 1024;
 
   /// Convert a widget's logical size to a bounded decode size in physical
   /// pixels. This avoids decoding multi-megapixel product photos for small
@@ -21,7 +21,7 @@ class LowMemoryPerformance {
     double logicalPixels,
     double devicePixelRatio, {
     int minPixels = 64,
-    int maxPixels = 1280,
+    int maxPixels = 960,
   }) {
     if (!logicalPixels.isFinite ||
         !devicePixelRatio.isFinite ||
