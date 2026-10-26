@@ -139,6 +139,7 @@ Future<List<Map<String, String>>> getPendingBackgroundSms() async {
           result.add({
             'sender': (decoded['sender'] ?? '').toString(),
             'body': (decoded['body'] ?? '').toString(),
+            'time': (decoded['time'] ?? '').toString(),
           });
           keysToRemove.add(key);
         }
