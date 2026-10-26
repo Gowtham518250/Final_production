@@ -1344,7 +1344,8 @@ void main() {
 
       queue.enqueue(first, stateFor(first));
       queue.enqueue(separate, stateFor(separate));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      // The queue intentionally spaces announcements by voiceMinGap (2s).
+      await Future<void>.delayed(PdsConfig.voiceMinGap + const Duration(milliseconds: 150));
       queue.dispose();
 
       expect(spoken, hasLength(2));
@@ -1723,7 +1724,7 @@ void main() {
 
     queue.enqueue(first, stateFor(first));
     queue.enqueue(second, stateFor(second));
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    await Future<void>.delayed(PdsConfig.voiceMinGap + const Duration(milliseconds: 150));
     queue.dispose();
 
     expect(spoken, hasLength(2));
