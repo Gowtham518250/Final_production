@@ -36,6 +36,7 @@ import 'language_detector.dart';
 import 'product_catalog_service.dart';
 import 'production_voice_billing_service.dart';
 import 'stt_accuracy_config.dart';
+import 'speech_locale_policy.dart';
 
 // ─── Language Config ──────────────────────────────────────────────────────────
 
@@ -1334,6 +1335,43 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     });
 
     final cfg = getConfig(_selectedLang.code);
+
+    // Android/iOS speech recognition only uses languages installed in the
+    // device recognizer. Do not silently let an unavailable Telugu/Tamil/etc.
+    // locale fall back to the system default (often English).
+    try {
+      final availableLocales = await _speech.locales();
+      final localeIds = availableLocales
+          .map((locale) => locale.localeId)
+          .toList(growable: false);
+      if (localeIds.isNotEmpty &&
+          !SpeechLocalePolicy.isAvailable(cfg.localeId, localeIds)) {
+        if (mounted) setState(() => _isListening = false);
+        _showSnack(
+          'Speech recognition for ${_selectedLang.label} is not installed on this device. Enable or download that language in your phone speech settings, then try again. No items were added.',
+          isError: true,
+        );
+        if (kDebugMode) {
+          debugPrint(
+            '🎙️ [VoiceBilling] requested locale ${cfg.localeId} is unavailable; '
+            'installed locales: ${localeIds.take(30).join(', ')}',
+          );
+        }
+        return;
+      }
+      if (kDebugMode) {
+        debugPrint(
+          '🎙️ [VoiceBilling] listening with ${cfg.localeId}; '
+          'locale list returned ${localeIds.length} entries',
+        );
+      }
+    } catch (error) {
+      // Some platform implementations cannot enumerate locales. Continue with
+      // the explicit localeId; never replace it with the device default.
+      if (kDebugMode) {
+        debugPrint('🎙️ [VoiceBilling] locale enumeration unavailable: $error');
+      }
+    }
 
     try {
       await _speech.listen(
