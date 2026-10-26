@@ -62,7 +62,7 @@ class OnlinePaymentHistoryService {
     }
 
     if (existing != null) {
-      final oldStatus = existing['status']?.toString();
+      final oldStatus = (existing['status'] ?? '').toString().toUpperCase();
       final oldAmount = (existing['amount'] as num?)?.toDouble();
 
       // Once a reference is conflicted, never automatically restore it to a
@@ -115,6 +115,12 @@ class OnlinePaymentHistoryService {
         return false;
       }
 
+      // A merchant explicitly rejected this candidate. Do not silently
+      // re-create it as pending on a later replay of the same reference.
+      if (oldStatus == 'REJECTED' && !event.isMerchantConfirmed) {
+        return false;
+      }
+
       // Don't overwrite a good record with a duplicate callback or downgrade a
       // receipt that was already merchant-confirmed back to pending.
       if (event.isDuplicate ||
@@ -143,6 +149,59 @@ class OnlinePaymentHistoryService {
     return true;
   }
 
+
+  /// Persist the merchant's explicit "Not received" choice so the same
+  /// transaction is not repeatedly offered as a fresh payment review.
+  static Future<bool> rejectPendingPayment(PaymentEvent event) async {
+    if (!event.amount.isFinite || event.amount <= 0) return false;
+    final isIncomingCredit =
+        event.direction == PaymentTransactionDirection.incomingCredit ||
+        (event.direction == PaymentTransactionDirection.unknown &&
+            VoiceBuilder.detectDirection(event.rawText) ==
+                PaymentDirection.credited);
+    if (!isIncomingCredit || event.hasReferenceConflict) return false;
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await _currentUserId(prefs);
+    final fingerprint = sha256
+        .convert(utf8.encode(event.fingerprint))
+        .toString();
+    final key = '${_userPrefix(userId)}$fingerprint';
+    final raw = prefs.getString(key);
+    Map<String, dynamic> existing = <String, dynamic>{};
+    if (raw != null) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) existing = Map<String, dynamic>.from(decoded);
+      } on FormatException {
+        // Replace corrupt pending state with an explicit rejection record.
+      }
+    }
+
+    final oldStatus = (existing['status'] ?? '').toString().toUpperCase();
+    if (oldStatus == 'CONFIRMED' || oldStatus == 'CONFLICT_REVIEW') {
+      return false;
+    }
+
+    await prefs.setString(
+      key,
+      jsonEncode(<String, dynamic>{
+        ...existing,
+        'amount': event.amount,
+        'timestamp': event.timestamp.toIso8601String(),
+        'app': event.appDisplayName,
+        'status': 'REJECTED',
+        'merchant_confirmed': false,
+        'verified': false,
+        if (event.normalizedReferenceId != null)
+          'reference_id': event.normalizedReferenceId,
+        'direction': event.direction.name,
+        'rejected_at': DateTime.now().toIso8601String(),
+      }),
+    );
+    await _trimHistory(prefs, _userPrefix(userId));
+    return true;
+  }
 
   /// Mark repeated references before forwarding an event from the background
   /// isolate. The stored history key survives process restarts, unlike the
