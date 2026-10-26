@@ -688,22 +688,36 @@ class _DashboardPageState extends State<DashboardPage>
         final merchantVerifiedCredit =
             isIncomingCredit && event.isMerchantConfirmed;
         final needsMerchantConfirmation =
-            isIncomingCredit && !event.isMerchantConfirmed;
+            isIncomingCredit &&
+            !event.isMerchantConfirmed &&
+            !event.isDuplicate &&
+            !event.hasReferenceConflict;
         if (!suppressRepeatedPaymentAlert) {
+          final needsConflictReview = event.hasReferenceConflict;
+          final audibleFallback =
+              PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+                event,
+                voiceEnabled: PdsConfig.isVoiceEnabled,
+              );
           _showRealtimeNotification(
             isOutgoingDebit
                 ? 'Debit Detected'
+                : needsConflictReview
+                ? 'Payment Review Required'
                 : merchantVerifiedCredit
                 ? 'Payment Received'
                 : 'Payment Detected',
             merchantVerifiedCredit
                 ? activity
+                : needsConflictReview
+                ? '$activity — conflicting details; verify in your bank history.'
                 : '$activity — verify before recording.',
             merchantVerifiedCredit,
             localOnly: true,
-            // The payment TTS queue is the single audible output when enabled.
-            // Otherwise the local Android/iOS notification can make the sound.
-            silent: PdsConfig.isVoiceEnabled,
+            // The voice queue intentionally rejects duplicate/conflict events.
+            // Also sound the OS notification for a pending-review reminder after
+            // the overnight cooldown, so it is not silent when TTS is muted.
+            silent: !audibleFallback,
           );
         }
         try {
@@ -855,6 +869,10 @@ class _DashboardPageState extends State<DashboardPage>
       }
     } finally {
       _paymentConfirmationDialogShowing = false;
+      // Do not retain a stale queue-lock for an event after its review dialog
+      // closes. The six-hour alert policy and persistent transaction status,
+      // not this UI set, decide whether a later reminder is due.
+      _queuedPaymentConfirmationIds.remove(event.id);
       if (mounted && _pendingPaymentConfirmations.isNotEmpty) {
         unawaited(_showNextPaymentConfirmation());
       }
