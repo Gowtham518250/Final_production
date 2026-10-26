@@ -846,6 +846,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   late stt.SpeechToText _speech;
   late audio.Record _audioRecorder;
   bool _usingCloudAudioFallback = false;
+  bool _startingCloudAudioFallback = false;
   String? _cloudRecordingPath;
   Timer? _cloudRecordingLimitTimer;
   bool _isListening = false;
@@ -1323,6 +1324,25 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         },
         onError: (error) {
           if (!mounted) return;
+          final errorMessage = error.toString().toLowerCase();
+          final languageUnsupported =
+              errorMessage.contains('language') &&
+              (errorMessage.contains('not supported') ||
+                  errorMessage.contains('not_supported') ||
+                  errorMessage.contains('unavailable') ||
+                  errorMessage.contains('not installed') ||
+                  errorMessage.contains('not available'));
+          if (languageUnsupported) {
+            setState(() => _isListening = false);
+            if (kDebugMode) {
+              debugPrint(
+                '🎙️ [VoiceBilling] native recognizer rejected selected language; switching to cloud audio: $error',
+              );
+            }
+            unawaited(_fallbackAfterSpeechLanguageError());
+            return;
+          }
+
           setState(() => _isListening = false);
           _showSnack(
             'Voice recognition error. Please try again.',
@@ -1439,7 +1459,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     }
   }
 
+  Future<void> _fallbackAfterSpeechLanguageError() async {
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    if (!mounted) return;
+    await _startCloudAudioFallback();
+  }
+
   Future<void> _startCloudAudioFallback() async {
+    if (_startingCloudAudioFallback ||
+        _usingCloudAudioFallback ||
+        _isProcessing) {
+      return;
+    }
+    _startingCloudAudioFallback = true;
     String? pendingPath;
     try {
       final hasPermission = await _audioRecorder.hasPermission();
@@ -1520,6 +1554,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       if (kDebugMode) {
         debugPrint('🎙️ [VoiceBilling] cloud fallback recording failed: $error');
       }
+    } finally {
+      _startingCloudAudioFallback = false;
     }
   }
 
