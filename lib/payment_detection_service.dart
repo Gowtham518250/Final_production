@@ -2009,6 +2009,8 @@ class PriorityVoiceQueue {
       (entry) =>
           now.difference(entry.recordedAt).abs() > _crossSourceEchoWindow,
     );
+    final liveVoiceEventIds = _recentPayments.map((e) => e.event.id).toSet();
+    _echoClaims.removeWhere((id, _) => !liveVoiceEventIds.contains(id));
     final currentReference = event.normalizedReferenceId;
     final currentChannel = PaymentDetectionService._channelKey(event);
 
