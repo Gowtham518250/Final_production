@@ -5319,8 +5319,16 @@ class PaymentDetectionService {
           event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-      if (!sameAccount && !_payersCompatible(event.payerName, old.payerName)) {
-        continue; // clearly different payers
+      final currentPayer = _normalizedPayer(event.payerName);
+      final previousPayer = _normalizedPayer(old.payerName);
+      final sameKnownPayer = currentPayer != null &&
+          previousPayer != null &&
+          _payersCompatible(event.payerName, old.payerName);
+      if (!sameAccount && !sameKnownPayer) {
+        // Do not turn amount + direction alone into transaction identity.
+        // When neither source exposes a shared account or payer, leave the
+        // event for merchant review rather than risking a false duplicate.
+        continue;
       }
 
       (_echoClaims[old.id] ??= <String>{}).add(channel);
