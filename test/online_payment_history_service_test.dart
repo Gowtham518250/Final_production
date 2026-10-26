@@ -135,6 +135,58 @@ void main() {
     expect(records.single['status'], 'CONFIRMED');
   });
 
+  test('unresolved pending reference resurfaces as a review reminder after six hours', () async {
+    final detectedAt = DateTime.now().subtract(const Duration(hours: 7));
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(
+        id: 'night-payment',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: detectedAt,
+      ),
+    );
+
+    final morning = await OnlinePaymentHistoryService.annotateKnownReferenceState(
+      event(
+        id: 'morning-payment',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: DateTime.now(),
+      ),
+    );
+
+    expect(morning.isDuplicate, isFalse);
+    expect(morning.decision, PaymentDecision.likely);
+    expect(morning.verificationStatus, PaymentVerificationStatus.unverified);
+    expect(
+      morning.detectionSource,
+      contains(':pending_review_reminder'),
+    );
+  });
+
+  test('unresolved pending reference is coalesced during six-hour cooldown', () async {
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(
+        id: 'night-payment',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
+      ),
+    );
+
+    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
+      event(
+        id: 'same-morning-replay',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: DateTime.now(),
+      ),
+    );
+
+    expect(replay.isDuplicate, isTrue);
+    expect(replay.detectionSource, isNot(contains(':pending_review_reminder')));
+  });
+
   test('delayed same-reference different amount is flagged for review', () async {
     await OnlinePaymentHistoryService.recordIncomingPayment(
       event(id: 'phonepe-first', amount: 125.50),
