@@ -313,19 +313,24 @@ void main() {
       expect(saved.keys, isNot(contains('event_transient')));
     });
 
-    test('migrates the old 24-hour cache to the six-hour reminder window', () async {
+    test('migrates only native replay keys to the six-hour window', () async {
       final oldExpiry = DateTime.now().add(const Duration(hours: 22));
       SharedPreferences.setMockInitialValues({
         'pds_dedup_v1': jsonEncode({
           'utr_legacy-payment': oldExpiry.toIso8601String(),
+          'notification-event:legacy-native': oldExpiry.toIso8601String(),
         }),
       });
 
       final restored = <String, DateTime>{};
       await PdsStateStore.loadDedup(restored);
 
+      // Confirmed UTR suppression retains its full 24-hour deadline.
+      expect(restored['utr_legacy-payment'], oldExpiry);
+      // Native replay keys are shortened so a pending notification can be
+      // re-evaluated after the review cooldown.
       expect(
-        restored['utr_legacy-payment'],
+        restored['notification-event:legacy-native'],
         oldExpiry.subtract(const Duration(hours: 18)),
       );
       final prefs = await SharedPreferences.getInstance();
