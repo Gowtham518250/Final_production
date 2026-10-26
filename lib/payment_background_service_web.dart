@@ -10,4 +10,6 @@ Future<void> syncRecordedBillPayment(double amount) async {}
 
 Future<void> restartBackgroundPaymentDetection() async {}
 
+Future<(DateTime, DateTime)?> takeServiceOutageNotice() async => null;
+
 Future<void> refreshPaymentDetectionDedupState() async {}
