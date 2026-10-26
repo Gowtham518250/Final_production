@@ -57,6 +57,46 @@ void main() {
       expect(event.eventKey, 'com.example.payment|42|1792939200000|9a76');
       expect(event.packageName, 'com.example.payment');
     });
+
+    test('replayed native notification event key is suppressed after payload extras change', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      service.clearBill();
+      service.setBillExpected(10);
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      const nativeKey = 'com.phonepe.app|7|1792939200000|payload-sha';
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          id: 7,
+          eventKey: nativeKey,
+          title: 'PhonePe',
+          content: 'You received ₹5 from Rahul',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // Native event identity stays stable for the same posted notification,
+      // even if a delivery path attaches extra textLines not part of that key.
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          id: 7,
+          eventKey: nativeKey,
+          title: 'PhonePe',
+          content: 'You received ₹5 from Rahul',
+          textLines: 'Delivery replay marker',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(events, hasLength(1));
+      await subscription.cancel();
+      service.clearBill();
+      service.debugResetTransientDetectionState();
+    });
   });
 
   group('Bill payment tracking', () {
