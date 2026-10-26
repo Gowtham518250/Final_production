@@ -1,6 +1,5 @@
 import 'live_translated_text.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,8 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'otp_service.dart';
 import 'visual_widgets.dart';
 import 'customer_login_page.dart';
-import 'api_client.dart';
-import 'secure_token_storage.dart';
 import 'widgets/otp_code_input.dart';
 import 'scoped_shared_preferences.dart';
 import 'security_service.dart';
