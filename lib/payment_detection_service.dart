@@ -4127,8 +4127,18 @@ class PaymentDetectionService {
       if (isPaymentNotification &&
           nativeEventKey != null &&
           nativeEventKey.isNotEmpty) {
+        final parsedNativeReference = _Extractor.referenceId(fields);
+        final nativeReference = parsedNativeReference == null
+            ? null
+            : PaymentEvent(
+                amount: 1,
+                timestamp: now,
+                app: PaymentApp.unknown,
+                referenceId: parsedNativeReference,
+              ).normalizedReferenceId;
         final nativeFingerprint =
-            'notification-event:${sha256.convert(utf8.encode(nativeEventKey))}';
+            'notification-event:${sha256.convert(utf8.encode(nativeEventKey))}'
+            '${nativeReference == null ? '' : ':$nativeReference'}';
         final nativeExpiry = _dedupStore[nativeFingerprint];
         if (nativeExpiry != null && nativeExpiry.isAfter(now)) {
           PdsLogger.d('L1', 'Durable native notification replay suppressed');
