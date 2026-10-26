@@ -168,6 +168,60 @@ void main() {
       expect(events, hasLength(1));
     });
 
+    test(
+      'Truecaller text updates suppress a repeat sound but keep both review candidates',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        final emitted = <PaymentEvent>[];
+        final spoken = <String>[];
+        final sub = service.onPaymentDetected.listen(emitted.add);
+        service.onSpeak = spoken.add;
+        final now = DateTime.now();
+
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'tc-first',
+            amount: 500,
+            timestamp: now,
+            app: PaymentApp.bankApp,
+            payerName: 'Rahul Kumar',
+            accountSuffix: '4222',
+            rawText: 'UPI transfer from Rahul Kumar to Account 4222 + ₹500',
+            detectionSource: 'truecaller_notification',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+          ),
+        );
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'tc-updated',
+            amount: 500,
+            timestamp: now.add(const Duration(seconds: 2)),
+            app: PaymentApp.bankApp,
+            payerName: 'Rahul Kumar',
+            accountSuffix: '4222',
+            rawText: 'Rahul Kumar sent ₹500 to your bank account 4222',
+            detectionSource: 'truecaller_notification',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+
+        // A heuristic must not delete an unreferenced candidate from review:
+        // merchant confirmation is still required to make an accounting entry.
+        expect(emitted, hasLength(2));
+        expect(emitted.every((event) => !event.isMerchantConfirmed), isTrue);
+        expect(spoken, hasLength(1));
+
+        await sub.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+      },
+    );
+
     test('confirmation dialog can warn about a likely late duplicate', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();
