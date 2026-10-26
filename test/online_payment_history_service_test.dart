@@ -135,6 +135,40 @@ void main() {
     expect(records.single['status'], 'CONFIRMED');
   });
 
+  test('merchant rejection persists and prevents the same reference reopening review', () async {
+    final candidate = event(
+      id: 'rejected-candidate',
+      decision: PaymentDecision.likely,
+      verification: PaymentVerificationStatus.unverified,
+      timestamp: DateTime.now(),
+    );
+    await OnlinePaymentHistoryService.recordIncomingPayment(candidate);
+
+    expect(
+      await OnlinePaymentHistoryService.rejectPendingPayment(candidate),
+      isTrue,
+    );
+
+    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
+      event(
+        id: 'same-reference-replay',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: DateTime.now().add(const Duration(hours: 8)),
+      ),
+    );
+    expect(replay.isDuplicate, isTrue);
+    expect(
+      await OnlinePaymentHistoryService.recordIncomingPayment(replay),
+      isFalse,
+    );
+
+    final records = await OnlinePaymentHistoryService.load();
+    expect(records, hasLength(1));
+    expect(records.single['status'], 'REJECTED');
+    expect(records.single['merchant_confirmed'], isFalse);
+  });
+
   test('unresolved pending reference resurfaces as a review reminder after six hours', () async {
     final detectedAt = DateTime.now().subtract(const Duration(hours: 7));
     await OnlinePaymentHistoryService.recordIncomingPayment(
