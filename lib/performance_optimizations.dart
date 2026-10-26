@@ -30,8 +30,10 @@ class PerformanceOptimizations {
       shrinkWrap: shrinkWrap,
       padding: padding,
       itemCount: itemCount,
-      // Add automatic keep alive for better scrolling performance
-      addAutomaticKeepAlives: true,
+      // Keeping every off-screen row alive raises memory use on catalog,
+      // sales-history and inventory lists. Small forms keep their stateful
+      // children; larger lists recycle off-screen rows for low-RAM devices.
+      addAutomaticKeepAlives: itemCount <= 20,
       // Add semantic child cache for accessibility performance
       addRepaintBoundaries: true,
       cacheExtent: itemCount > 50 ? 220.0 : null, // Smaller prefetch window for low-memory devices
