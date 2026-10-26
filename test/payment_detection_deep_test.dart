@@ -1652,6 +1652,47 @@ void main() {
       await subscription.cancel();
     });
 
+    test('equal-amount cross-source alerts without payer, reference or account are not paired', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      final timestamp = DateTime.now();
+
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'night-upi-credit',
+          amount: 500,
+          timestamp: timestamp,
+          app: PaymentApp.phonePe,
+          rawText: 'PhonePe payment received ₹500 credited',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+          verificationStatus: PaymentVerificationStatus.unverified,
+        ),
+      );
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'morning-bank-credit',
+          amount: 500,
+          timestamp: timestamp.add(const Duration(seconds: 3)),
+          app: PaymentApp.bankSms,
+          rawText: '₹500 credited to your account',
+          detectionSource: 'sms',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+          verificationStatus: PaymentVerificationStatus.unverified,
+        ),
+      );
+
+      // Same amount and direction are not enough to conclude these reports
+      // are the same transfer if neither has a reference, account suffix,
+      // nor a comparable payer name.
+      expect(events, hasLength(2));
+      await subscription.cancel();
+    });
+
     test('different UTRs are not merged even when amount and account match', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();
