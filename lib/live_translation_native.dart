@@ -112,7 +112,6 @@ Future<List<String>> translateTexts(
   final result = List<String>.of(texts);
   final localIndexes = <int>[];
   final remoteIndexes = <int>[];
-  final remoteAttemptedIndexes = <int>{};
 
   // On low-RAM devices, prefer the server's batched IndicTrans2 translation
   // while online. This avoids loading English + target-language ML Kit models
@@ -129,32 +128,14 @@ Future<List<String>> translateTexts(
       // remote service is reachable.
     }
     if (online) {
-      final remotelyTranslated = await translateTextBatchRemotely(
+      // Keep dynamic translation off the app's memory/CPU budget when online.
+      // Low-RAM devices use the authenticated server batch path and never load
+      // two ML Kit models into the app process during screen rendering.
+      return translateTextBatchRemotely(
         texts,
         targetLanguageCode,
         timeout: const Duration(seconds: 8),
       );
-      remoteAttemptedIndexes.addAll(
-        List<int>.generate(texts.length, (index) => index),
-      );
-      for (var index = 0; index < texts.length; index++) {
-        if (!TranslationFallbackPolicy.needsRemoteFallback(
-          texts[index],
-          remotelyTranslated[index],
-        )) {
-          result[index] = remotelyTranslated[index];
-        }
-      }
-      // If the remote service translated the batch, do not load local models
-      // at all. Only unresolved strings reach the conservative local fallback.
-      if (texts.asMap().entries.every(
-        (entry) => !TranslationFallbackPolicy.needsRemoteFallback(
-          entry.value,
-          result[entry.key],
-        ),
-      )) {
-        return result;
-      }
     }
   }
 
@@ -175,13 +156,6 @@ Future<List<String>> translateTexts(
   for (var index = 0; index < texts.length; index++) {
     final text = texts[index];
     if (text.trim().isEmpty) continue;
-    if (!TranslationFallbackPolicy.needsRemoteFallback(
-      text,
-      result[index],
-    )) {
-      // The server already translated this string; leave it out of local work.
-      continue;
-    }
     final hasLatin = latinLetters.hasMatch(text);
     final hasIndic = anyIndicScript.hasMatch(text);
     if (!hasLatin && targetScriptRegex.hasMatch(text)) {
@@ -253,12 +227,7 @@ Future<List<String>> translateTexts(
   }
 
   if (remoteIndexes.isNotEmpty) {
-    // Avoid issuing the same failed remote request twice in low-memory mode.
-    final uniqueRemoteIndexes = remoteIndexes
-        .toSet()
-        .where((index) => !remoteAttemptedIndexes.contains(index))
-        .toList(growable: false);
-    if (uniqueRemoteIndexes.isEmpty) return result;
+    final uniqueRemoteIndexes = remoteIndexes.toSet().toList(growable: false);
     final remoteTexts =
         uniqueRemoteIndexes.map((index) => texts[index]).toList();
     final translated = await translateTextBatchRemotely(
