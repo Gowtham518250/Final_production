@@ -171,6 +171,10 @@ void main() {
     test(
       'Truecaller text updates suppress a repeat sound but keep both review candidates',
       () async {
+        final originalVoiceEnabled = PdsConfig.isVoiceEnabled;
+        final originalVoiceMinGap = PdsConfig.voiceMinGap;
+        PdsConfig.isVoiceEnabled = true;
+        PdsConfig.voiceMinGap = Duration.zero;
         final service = PaymentDetectionService();
         service.debugResetTransientDetectionState();
         service.clearBill();
@@ -219,6 +223,8 @@ void main() {
         await sub.cancel();
         service.clearBill();
         service.debugResetTransientDetectionState();
+        PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+        PdsConfig.voiceMinGap = originalVoiceMinGap;
       },
     );
 
