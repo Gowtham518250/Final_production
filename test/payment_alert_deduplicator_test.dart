@@ -303,7 +303,7 @@ void main() {
       });
 
       final prefs = await SharedPreferences.getInstance();
-      final serialized = prefs.getString('pds_dedup_v1');
+      final serialized = prefs.getString('pds_dedup_v2');
       expect(serialized, isNotNull);
       final saved = jsonDecode(serialized!) as Map<String, dynamic>;
 
