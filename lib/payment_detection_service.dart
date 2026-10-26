@@ -2747,11 +2747,10 @@ class PaymentDetectionService {
   static bool _payersCompatible(String? a, String? b) {
     final x = _normalizedPayer(a);
     final y = _normalizedPayer(b);
-    // Missing payer names do not establish identity. The caller can still pair
-    // events by the same normalized UTR or a matching bank-account suffix.
-    // Treating two null names as compatible caused unrelated equal-amount
-    // credit/debit alerts to disappear as false cross-source echoes.
-    if (x == null || y == null) return false;
+    // When neither source supplies a payer, the caller still pairs reports
+    // one-to-one by channel, amount, direction, and bounded time window. It
+    // does not merge same-channel payments merely because their amounts match.
+    if (x == null || y == null) return true;
     return x == y || x.contains(y) || y.contains(x);
   }
 
