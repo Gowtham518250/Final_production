@@ -151,7 +151,10 @@ Future<List<String>> translateTexts(
 
   if (target != null && localIndexes.isNotEmpty) {
     try {
-      final translator = await _translatorFor(targetLanguageCode, target);
+      final translator = await _translatorFor(
+        targetLanguageCode,
+        target,
+      ).timeout(const Duration(seconds: 8));
       final translated = await Future.wait(
         localIndexes.map((index) => translator.translateText(texts[index])),
       );
@@ -183,8 +186,16 @@ Future<List<String>> translateTexts(
     final uniqueRemoteIndexes = remoteIndexes.toSet().toList(growable: false);
     final remoteTexts =
         uniqueRemoteIndexes.map((index) => texts[index]).toList();
-    final translated =
-        await translateTextBatchRemotely(remoteTexts, targetLanguageCode);
+    final translated = await translateTextBatchRemotely(
+      remoteTexts,
+      targetLanguageCode,
+      // Supported locales only use the remote route when the on-device model
+      // is unavailable/unhelpful, so keep that recovery bounded. Unsupported
+      // locales retain the remote provider's normal timeout.
+      timeout: target == null
+          ? const Duration(seconds: 30)
+          : const Duration(seconds: 12),
+    );
     for (var index = 0; index < uniqueRemoteIndexes.length; index++) {
       final sourceIndex = uniqueRemoteIndexes[index];
       final translatedText = translated[index];
