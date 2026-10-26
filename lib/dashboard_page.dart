@@ -842,6 +842,12 @@ class _DashboardPageState extends State<DashboardPage>
       if (shouldRecord == true) {
         final confirmed = await PaymentDetectionService()
             .confirmDetectedPayment(event);
+        if (confirmed) {
+          // The background isolate owns a separate replay cache. Refresh it
+          // from the persisted CONFIRMED status so a next-morning replay cannot
+          // announce or prompt for a payment the merchant already resolved.
+          await refreshPaymentDetectionDedupState();
+        }
         if (!confirmed && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -853,6 +859,14 @@ class _DashboardPageState extends State<DashboardPage>
         }
       } else {
         PaymentDetectionService().rejectDetectedPayment(event);
+        try {
+          await OnlinePaymentHistoryService.rejectPendingPayment(event);
+          await refreshPaymentDetectionDedupState();
+        } catch (rejectError) {
+          if (kDebugMode) {
+            debugPrint('Could not persist rejected payment review: $rejectError');
+          }
+        }
       }
     } catch (error, stackTrace) {
       if (kDebugMode) {
