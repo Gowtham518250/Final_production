@@ -3744,7 +3744,11 @@ class PaymentDetectionService {
       if (status == 'PENDING_CONFIRMATION' || status == 'CONFLICT_REVIEW') {
         DateTime? detectedAt;
         try {
-          final value = record['timestamp']?.toString();
+          // History timestamps now reflect when the source notification/SMS
+          // was posted. Review cooldowns must instead start from processing
+          // time, otherwise a delayed event may immediately re-alert on unlock.
+          final value =
+              (record['detected_at'] ?? record['timestamp'])?.toString();
           if (value != null && value.isNotEmpty) {
             detectedAt = DateTime.parse(value);
           }
@@ -4645,10 +4649,10 @@ class PaymentDetectionService {
     );
 
     // Layer 4.5: Immediate Deduplication
-    final isUtrFp = validNumericUtr;
     final tempEvent = PaymentEvent(
       amount: amount,
       timestamp: DateTime.now(),
+      sourceTimestamp: _sourcePostedAt,
       app: app,
       payerName: name,
       referenceId: refId,
@@ -4736,10 +4740,17 @@ class PaymentDetectionService {
         previousReferenceAmount == null;
     bool consumedByUser = false; // true once emitted / handled as a real event
     if (registeredActiveFingerprint) _activeFingerprints.add(fp);
+    // Stable app transaction IDs can be longer than the numeric UTR
+    // length used for scoring. If the normalized reference exists, persist its
+    // replay key for the full reference window; otherwise a 23+ char PhonePe
+    // ID expires after only 30 seconds and can create the same receipt again
+    // the next time the locked notification is replayed.
     _dedupStore[fp] = DateTime.now().add(
-      isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
+      normalizedReference != null
+          ? PdsConfig.dedupUtrTtl
+          : PdsConfig.dedupHashTtl,
     );
-    if (isUtrFp) _dedupDirty = true;
+    if (normalizedReference != null) _dedupDirty = true;
 
     try {
       // Layer 4.7: TCM Matching
@@ -6554,8 +6565,16 @@ abstract class _Extractor {
     return null;
   }
 
+  // Prefer the bank/UPI's stable UTR/RRN over an app-specific transaction
+  // ID when both appear in the same notification. PhonePe can expose a long
+  // transaction ID first and the bank UTR later; using the first generic ID
+  // splits one transfer into separate history rows across source notifications.
+  static final _preferredUtr = RegExp(
+    r'\b(?:utr|rrn|upi\s*(?:reference|ref)|bank\s*reference)\s*[:#.-]*\s*([A-Za-z0-9]{10,32})\b',
+    caseSensitive: false,
+  );
   static final _utrL = RegExp(
-    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*([A-Za-z0-9]{10,22})\b',
+    r'\b(?:utr|rrn|ref(?:erence)?(?:\s*(?:no|number|id))?|txn(?:\s*(?:id|no|number))?|transaction(?:\s*(?:id|no|number))?|id)[:\s#.-]*([A-Za-z0-9]{10,32})\b',
     caseSensitive: false,
   );
   static final _utrI = RegExp(r'\b([0-9]{12})\b');
@@ -6563,10 +6582,15 @@ abstract class _Extractor {
 
   static final _hasDigit = RegExp(r'\d');
 
-  /// A real UTR/reference always contains at least one digit. Without this
-  /// check ordinary words such as "Transaction successful" produced the fake
-  /// reference "successful", which then poisoned dedup for 24 hours.
+  /// A real UTR/reference always contains at least one digit. Prefer explicitly
+  /// labelled UTR/RRN values first so an earlier app-specific transaction ID
+  /// does not fragment the durable identity across PhonePe, bank SMS and
+  /// Truecaller. Longer app transaction IDs remain a fallback when no UTR exists.
   static String? referenceId(String t) {
+    for (final m in _preferredUtr.allMatches(t)) {
+      final candidate = m.group(1);
+      if (candidate != null && _hasDigit.hasMatch(candidate)) return candidate;
+    }
     for (final m in _utrL.allMatches(t)) {
       final candidate = m.group(1);
       if (candidate != null && _hasDigit.hasMatch(candidate)) return candidate;

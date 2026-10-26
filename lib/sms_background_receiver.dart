@@ -17,6 +17,33 @@ const String _kSmsQueuePrefix = 'bg_sms_';
 
 const MethodChannel _nativeChannel = MethodChannel('com.retail_mind/sms_receiver');
 
+DateTime _smsSourceTimestamp(SmsMessage message) {
+  try {
+    // The date field is exposed by Telephony's SmsMessage on Android. Use
+    // dynamic access so an older plugin build without this optional field
+    // safely falls back to the actual callback time.
+    final value = (message as dynamic).date;
+    if (value is int && value > 0) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is num && value > 0) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+    if (value is String) {
+      final numeric = int.tryParse(value.trim());
+      if (numeric != null && numeric > 0) {
+        return DateTime.fromMillisecondsSinceEpoch(numeric);
+      }
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    if (value is DateTime) return value;
+  } catch (_) {
+    // Optional on some telephony versions.
+  }
+  return DateTime.now();
+}
+
 /// This handler is invoked when SMS is received in the background
 /// The @pragma annotation ensures this stays available even if app is killed
 /// Telephony requires: void backgroundMessageHandler(SmsMessage message)
@@ -27,8 +54,12 @@ Future<void> smsBackgroundHandler(SmsMessage message) async {
   DartPluginRegistrant.ensureInitialized();
 
   final sender = message.address ?? 'Unknown';
-  final body   = message.body    ?? '';
-  
+  final body = message.body ?? '';
+  // Telephony's background callback may replay this SMS after Retail Mind's
+  // detector restarts. Preserve the SMS's own receive timestamp when the
+  // platform exposes it, rather than stamping the replay time on history.
+  final sourceReceivedAt = _smsSourceTimestamp(message);
+
   developer.log(
     'SMS received in background: from=$sender, length=${body.length}',
     name: 'sms_receiver',
@@ -40,14 +71,15 @@ Future<void> smsBackgroundHandler(SmsMessage message) async {
     // and the main isolate (reader/deleter).
     final prefs = await SharedPreferences.getInstance();
     
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final queuedAtMillis = DateTime.now().millisecondsSinceEpoch;
     final randomSuffix = math.Random().nextInt(999999).toString().padLeft(6, '0');
-    final uniqueKey = '$_kSmsQueuePrefix${timestamp}_$randomSuffix';
-    
+    final uniqueKey = '$_kSmsQueuePrefix${queuedAtMillis}_$randomSuffix';
+
     final payload = jsonEncode({
       'sender': sender,
       'body': body,
-      'time': timestamp,
+      'time': sourceReceivedAt.millisecondsSinceEpoch,
+      'queued_at': queuedAtMillis,
     });
     
     await prefs.setString(uniqueKey, payload);

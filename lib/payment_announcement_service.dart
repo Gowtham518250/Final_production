@@ -256,11 +256,26 @@ class PaymentAnnouncementService {
   void speakSimple(String message, String language) {
     if (_config.volume <= 0) return;
     final lang = _lang.resolve(language);
-    final timeout = _voice.calculateTimeout(message, _config.budgetDeviceTimeoutMultiplier);
+    final calculatedTimeout =
+        _voice.calculateTimeout(message, _config.budgetDeviceTimeoutMultiplier);
+    // Payment messages are short. Bound background TTS wait so a locked-screen
+    // callback cannot leave hours of announcements queued until the user opens
+    // Retail Mind. The audible Android notification is the immediate fallback.
+    final timeout = calculatedTimeout.clamp(6, 12).toInt();
     _queue.enqueue(QueueItem(
-      priority:   AnnouncementPriority.low,
-      ttsText:    message,
+      priority: AnnouncementPriority.low,
+      ttsText: message,
       timeoutSec: timeout,
+      onTimeout: () async {
+        // Stop any native TTS call that was waiting on a completion callback
+        // and discard old low-priority payment speech. Do not replay a backlog
+        // of stale payments after the phone unlocks.
+        // Do not let a broken platform stop callback block timeout recovery.
+        await _voice
+            .stop()
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
+        _queue.clearLowPriority();
+      },
       task: () => _voice.speakRaw(message, lang.locale),
     ));
   }

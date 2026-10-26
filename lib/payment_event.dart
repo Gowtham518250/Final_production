@@ -37,6 +37,10 @@ enum ConfidenceTier { high, medium, low, rejected }
 class PaymentEvent {
   // ── Core Fields ─────────────────────────────────────────────────────────────
   final double amount;
+  /// Time attached to the source notification/SMS, when available.
+  /// Keep this separate from [timestamp], which records when Retail Mind
+  /// processed the event and is used for live deduplication windows.
+  final DateTime? sourceTimestamp;
   final DateTime timestamp;
   final PaymentApp app;
 
@@ -75,6 +79,7 @@ class PaymentEvent {
   PaymentEvent({
     required this.amount,
     required this.timestamp,
+    this.sourceTimestamp,
     required this.app,
     this.payerName,
     this.referenceId,
@@ -326,6 +331,7 @@ class PaymentEvent {
   PaymentEvent copyWith({
     double? amount,
     DateTime? timestamp,
+    DateTime? sourceTimestamp,
     PaymentApp? app,
     String? payerName,
     String? referenceId,
@@ -352,6 +358,7 @@ class PaymentEvent {
     return PaymentEvent(
       amount: amount ?? this.amount,
       timestamp: timestamp ?? this.timestamp,
+      sourceTimestamp: sourceTimestamp ?? this.sourceTimestamp,
       app: app ?? this.app,
       payerName: payerName ?? this.payerName,
       referenceId: referenceId ?? this.referenceId,
@@ -384,6 +391,8 @@ class PaymentEvent {
     'id': id,
     'amount': amount,
     'timestamp': timestamp.toIso8601String(),
+    if (sourceTimestamp != null)
+      'sourceTimestamp': sourceTimestamp!.toIso8601String(),
     'app': app.name,
     'payerName': payerName,
     'referenceId': referenceId,
@@ -413,6 +422,9 @@ class PaymentEvent {
     id: json['id'],
     amount: (json['amount'] as num).toDouble(),
     timestamp: DateTime.parse(json['timestamp']),
+    sourceTimestamp: json['sourceTimestamp'] == null
+        ? null
+        : DateTime.tryParse(json['sourceTimestamp'].toString()),
     app: PaymentApp.values.firstWhere(
       (e) => e.name == json['app'],
       orElse: () => PaymentApp.unknown,
