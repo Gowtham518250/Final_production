@@ -692,7 +692,11 @@ class _DashboardPageState extends State<DashboardPage>
             !event.isMerchantConfirmed &&
             !event.isDuplicate &&
             !event.hasReferenceConflict;
-        if (!suppressRepeatedPaymentAlert) {
+        // The Android background isolate owns notification delivery for
+        // events it has already persisted. Avoid showing a second OS alert
+        // here; keep the in-app review dialog/activity feed below.
+        if (!suppressRepeatedPaymentAlert &&
+            (!historyAlreadyHandled || !Platform.isAndroid)) {
           final needsConflictReview = event.hasReferenceConflict;
           final audibleFallback =
               PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
@@ -1099,7 +1103,35 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  /// If Android/OEM battery management stopped the background service,
+  /// inform the merchant once on next app open. We cannot recover transfers
+  /// without a durable source event, so the notice explicitly says detection
+  /// may have been delayed during that interval.
+  Future<void> _showServiceOutageNoticeIfAny() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    final outage = await takeServiceOutageNotice();
+    if (outage == null || !mounted) return;
+    final (from, to) = outage;
+    final fromText = TimeOfDay.fromDateTime(from).format(context);
+    final toText = TimeOfDay.fromDateTime(to).format(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 15),
+        content: Text(
+          'Payment detection may have stopped from $fromText to $toText. '
+          'Payments during that time may be announced late. '
+          'Set Battery to Unrestricted and allow Autostart to reduce interruptions.',
+        ),
+        action: SnackBarAction(
+          label: 'FIX',
+          onPressed: () => PaymentDetectionService.openBatteryOptimizationSettings(),
+        ),
+      ),
+    );
+  }
+
   Future<void> _checkPermissions({bool showReminderIfMissing = true}) async {
+    unawaited(_showServiceOutageNoticeIfAny());
     // IMPORTANT:
     // This method ONLY CHECKS permission state.
     // It must never block billing by automatically opening Android permission dialogs.
