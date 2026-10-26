@@ -113,6 +113,7 @@ import 'daily_summary_notification_service.dart';
 import 'screens/owner/online_store_hub_page.dart';
 import 'online_store_manager_page.dart';
 import 'widgets/online_analytics_card.dart';
+import 'widgets/dashboard/daily_business_summary_card.dart';
 import 'widgets/error_boundary.dart'; // Phase 3: Dashboard crash protection
 import 'performance_optimizations.dart'; // 🚀 Advanced performance optimizations
 import 'low_memory_performance.dart';
@@ -16026,6 +16027,13 @@ class _DashboardPageState extends State<DashboardPage>
 
                 // 0.0 Daily Health Score (single owner signal)
                 if (!_isStaffMode) _buildDailyHealthScoreCard(),
+
+                // Owner-facing source-of-truth summary from the daily report API.
+                if (!_isStaffMode) ...[
+                  const SizedBox(height: 12),
+                  const DailyBusinessSummaryCard(),
+                  const SizedBox(height: 12),
+                ],
 
                 // 0.2 PERFORMANCE OVERVIEW
                 if (_hasDailyInsight && !_isStaffMode) ...[
