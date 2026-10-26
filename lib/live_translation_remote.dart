@@ -15,8 +15,9 @@ const int _maxRemoteBatchChars = 4000;
 /// inside Flutter. On auth/network errors the original text stays visible.
 Future<List<String>> translateTextBatchRemotely(
   List<String> texts,
-  String targetLanguageCode,
-) async {
+  String targetLanguageCode, {
+  Duration timeout = const Duration(seconds: 30),
+}) async {
   if (texts.isEmpty || targetLanguageCode == 'en') return texts;
 
   String? token;
@@ -102,7 +103,7 @@ Future<List<String>> translateTextBatchRemotely(
               'texts': batch.map((item) => item.text).toList(),
             }),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(timeout);
 
       if (response.statusCode != 200) continue;
       final decoded = jsonDecode(response.body);
