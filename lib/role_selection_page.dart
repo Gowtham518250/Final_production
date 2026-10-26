@@ -1,6 +1,5 @@
 import 'live_translated_text.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,8 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'otp_service.dart';
 import 'visual_widgets.dart';
 import 'customer_login_page.dart';
-import 'api_client.dart';
-import 'secure_token_storage.dart';
 import 'widgets/otp_code_input.dart';
 import 'scoped_shared_preferences.dart';
 import 'security_service.dart';
@@ -19,6 +16,7 @@ import 'language_provider.dart';
 import 'guided_voice_service.dart';
 import 'guided_field_controls.dart';
 import 'guided_dictation_overlay.dart';
+import 'worker_verification_policy.dart';
 
 class RoleSelectionPage extends StatefulWidget {
   final String email;
@@ -125,43 +123,25 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
       return;
     }
 
-    List<dynamic> workers = [];
-    try {
-      final token = await SecureTokenStorage.getToken() ?? '';
-      final response = await ApiClient.getJson(
-        '/api/attendance/workers?user_id=$userId',
-        headers: token.isNotEmpty ? {'Authorization': 'Bearer $token'} : null,
-      ).timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          workers = decoded;
-          await ScopedSharedPreferences.setString(
-            'workers_json',
-            jsonEncode(decoded),
-          );
-        }
-      }
-    } catch (e) {
-      final cached = await ScopedSharedPreferences.getString('workers_json');
-      if (cached != null && cached.trim().isNotEmpty) {
-        try {
-          final decoded = jsonDecode(cached);
-          if (decoded is List) workers = decoded;
-        } catch (_) {}
-      }
-    }
+    final roster = await WorkerVerificationPolicy.loadRoster(userId: userId);
+    final allWorkers = roster.workers ?? const <Map<String, dynamic>>[];
+    final workers = allWorkers
+        .where(WorkerVerificationPolicy.isActiveWorker)
+        .toList(growable: false);
 
     if (workers.isEmpty) {
       if (!mounted) return;
+      final title = roster.isAuthoritative
+          ? 'No Active Staff Accounts'
+          : 'Unable to Verify Staff Roster';
+      final message = roster.isAuthoritative
+          ? 'No active worker with a staff account is configured for this shop.'
+          : 'Retail Mind could not confirm the current worker list. Connect to the internet and try again.';
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const LiveTranslatedText('No Staff Accounts'),
-          content: const LiveTranslatedText(
-            'No staff account is configured for this shop. The owner must create a worker with a staff PIN before Staff Mode can be used.',
-          ),
+          title: LiveTranslatedText(title),
+          content: LiveTranslatedText(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),

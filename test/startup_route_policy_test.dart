@@ -154,6 +154,66 @@ void main() {
       );
     });
 
+    test('owner with a confirmed empty roster skips the worker verification gate', () {
+      expect(
+        resolveStartupRoute(
+          booting: false,
+          authenticated: true,
+          role: 'OWNER',
+          shopDetailsRequired: false,
+          identityVerified: false,
+          staffMode: false,
+          hasActiveWorkers: false,
+        ),
+        '/dashboard',
+      );
+    });
+
+    test('owner with active workers must pass verification when not verified', () {
+      expect(
+        resolveStartupRoute(
+          booting: false,
+          authenticated: true,
+          role: 'OWNER',
+          shopDetailsRequired: false,
+          identityVerified: false,
+          staffMode: false,
+          hasActiveWorkers: true,
+        ),
+        '/identity-verification',
+      );
+    });
+
+    test('unknown worker roster keeps the verification gate fail-closed', () {
+      expect(
+        resolveStartupRoute(
+          booting: false,
+          authenticated: true,
+          role: 'OWNER',
+          shopDetailsRequired: false,
+          identityVerified: false,
+          staffMode: false,
+          hasActiveWorkers: null,
+        ),
+        '/identity-verification',
+      );
+    });
+
+    test('worker account cannot bypass verification just because no active workers exist', () {
+      expect(
+        resolveStartupRoute(
+          booting: false,
+          authenticated: true,
+          role: 'WORKER',
+          shopDetailsRequired: false,
+          identityVerified: false,
+          staffMode: false,
+          hasActiveWorkers: false,
+        ),
+        '/identity-verification',
+      );
+    });
+
     test('unknown role fails closed to verification instead of dashboard', () {
       expect(
         resolveStartupRoute(

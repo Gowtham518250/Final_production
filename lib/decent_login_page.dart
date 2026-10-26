@@ -28,6 +28,7 @@ import 'online_orders_listener.dart';
 import 'inventory_sync_service.dart';
 import 'sales_restore_service.dart';
 import 'shop_profile_persistence_service.dart';
+import 'worker_verification_policy.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 class _C {
@@ -89,6 +90,43 @@ class _DecentLoginPageState extends State<DecentLoginPage>
     });
   }
 
+  /// Owners in shops without active workers do not need the extra
+  /// Owner-vs-Staff gate. Only a server-confirmed empty roster skips it;
+  /// unknown/offline rosters keep the verification flow enabled.
+  Future<void> _routeAfterOwnerLogin({
+    required int userId,
+    required String email,
+  }) async {
+    final hasActiveWorkers =
+        await WorkerVerificationPolicy.hasActiveWorkersForShop(userId: userId);
+    if (!mounted) return;
+
+    if (hasActiveWorkers == false) {
+      // Prevent a stale Staff Mode preference from surviving after the
+      // authoritative roster confirms that the shop no longer has staff.
+      await ScopedSharedPreferences.setBool('is_staff_mode', false);
+      await ScopedSharedPreferences.remove('active_staff_name');
+      await ScopedSharedPreferences.remove('active_staff_worker_id');
+
+      // Preserve the existing shop-setup requirement; bypass only the
+      // extra Owner-vs-Staff verification screen.
+      final prefs = await SharedPreferences.getInstance();
+      final shopDetailsRequired =
+          prefs.getBool('shop_details_required_$userId') ?? false;
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(
+        shopDetailsRequired ? '/shop-details' : '/dashboard',
+      );
+      return;
+    }
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (ctx) => RoleSelectionPage(email: email),
+      ),
+    );
+  }
+
   // ─── Google Sign-In (logic unchanged) ──────────────────────────────────────
   Future<void> _signInWithGoogle() async {
     setState(() => _isGoogleLoading = true);
@@ -139,10 +177,12 @@ class _DecentLoginPageState extends State<DecentLoginPage>
           return;
         }
 
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (ctx) => RoleSelectionPage(email: result.email ?? ''),
-          ),
+        final prefs = await SharedPreferences.getInstance();
+        final userId =
+            prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
+        await _routeAfterOwnerLogin(
+          userId: userId,
+          email: result.email ?? prefs.getString('user_email') ?? '',
         );
         return;
       }
@@ -379,11 +419,18 @@ class _DecentLoginPageState extends State<DecentLoginPage>
           debugPrint('   User ID: $userId');
         }
 
+        unawaited(_runPostLoginSyncInBackground(userId));
         if (!mounted) return;
         final normalizedRole = role.trim().toUpperCase();
         if (normalizedRole == 'CUSTOMER') {
           Navigator.of(context).pushReplacementNamed('/customer-verification');
+        } else if (normalizedRole == 'OWNER') {
+          await _routeAfterOwnerLogin(
+            userId: userId,
+            email: emailController.text.trim(),
+          );
         } else {
+          // Worker/unknown roles must not use the owner-with-no-workers bypass.
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (ctx) =>
@@ -391,8 +438,6 @@ class _DecentLoginPageState extends State<DecentLoginPage>
             ),
           );
         }
-
-        unawaited(_runPostLoginSyncInBackground(userId));
       } else {
         setState(() {
           errorMessage = _extractErrorMessage(response);

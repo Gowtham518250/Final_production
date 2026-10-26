@@ -10,6 +10,7 @@ String resolveStartupRoute({
   required bool shopDetailsRequired,
   required bool identityVerified,
   required bool staffMode,
+  bool? hasActiveWorkers,
 }) {
   if (booting) return '/_boot';
 
@@ -22,8 +23,17 @@ String resolveStartupRoute({
   }
   if (normalizedRole == 'CUSTOMER') return '/customer-marketplace';
 
+  // Worker verification is only needed when this owner account has active
+  // staff to switch into. A confirmed empty roster skips the extra role/PIN
+  // gate; an unavailable/unknown roster must fail closed and keep verification.
+  // A current staff-mode session or a WORKER role never receives this bypass.
+  final canSkipWorkerGate = normalizedRole == 'OWNER' &&
+      !staffMode &&
+      hasActiveWorkers == false;
   // Never infer OWNER from a missing role or a persisted token alone.
-  if (!identityVerified) return '/identity-verification';
+  if (!identityVerified && !canSkipWorkerGate) {
+    return '/identity-verification';
+  }
 
   if (shopDetailsRequired) return '/shop-details';
   if (staffMode) return '/dashboard';
