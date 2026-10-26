@@ -465,8 +465,10 @@ Future<bool> onStart(ServiceInstance service) async {
       // App may not have a signed-in owner profile during early startup.
       debugPrint('ℹ️ Payment history cache not available during service startup: $error');
     }
-    await _recordServiceStartAndOutage();
     await pds.start(persistedPaymentHistory: persistedPaymentHistory);
+    // Only update the heartbeat after detection channels started successfully;
+    // a failed startup must remain visible as an outage on the next restart.
+    await _recordServiceStartAndOutage();
     pdsReady = true;
     _startServiceHeartbeat(service);
     if (restartRequestedBeforeReady) {
