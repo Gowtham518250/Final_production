@@ -92,6 +92,7 @@ import 'package:local_auth/local_auth.dart';
 import 'format_helper.dart';
 import 'user_data_clear_service.dart';
 import 'payment_event.dart';
+import 'payment_alert_deduplicator.dart';
 import 'notification_service.dart';
 import 'inventory_management_service.dart';
 import 'inventory_sync_service.dart';
@@ -224,6 +225,8 @@ class _DashboardPageState extends State<DashboardPage>
   bool _paymentConfirmationDialogShowing = false;
   final List<PaymentEvent> _pendingPaymentConfirmations = [];
   final Set<String> _queuedPaymentConfirmationIds = {};
+  final PaymentAlertDeduplicator _paymentAlertDeduplicator =
+      PaymentAlertDeduplicator();
   String _upiId = '';
   String _shopType = '';
   String _location = '';
@@ -669,30 +672,47 @@ class _DashboardPageState extends State<DashboardPage>
                 ? 'Credit'
                 : 'Payment'}: '
             '₹${event.amount.toStringAsFixed(0)} via ${event.appDisplayName}';
-        _addToActivityFeed(activity);
+
+        // Notification/accessibility/SMS paths can report the same transfer
+        // with different event IDs and app labels. Coalesce only the user-facing
+        // alert (not accounting history) when a strong identity matches.
+        final suppressRepeatedPaymentAlert =
+            _paymentAlertDeduplicator.shouldSuppress(event);
+        if (!suppressRepeatedPaymentAlert) {
+          _addToActivityFeed(activity);
+        }
+
+        // "Payment Received" is reserved for a credit the merchant explicitly
+        // verified. A classifier score alone must not turn a phone notification
+        // into a statement that money was received.
+        final merchantVerifiedCredit =
+            isIncomingCredit && event.isMerchantConfirmed;
         final needsMerchantConfirmation =
-            isIncomingCredit && event.decision == PaymentDecision.likely;
-        _showRealtimeNotification(
-          isOutgoingDebit
-              ? 'Debit Detected'
-              : needsMerchantConfirmation
-              ? 'Payment Detected'
-              : 'Payment Received',
-          needsMerchantConfirmation
-              ? '$activity — verify before recording.'
-              : activity,
-          isIncomingCredit && !needsMerchantConfirmation,
-          localOnly: true,
-          // The payment TTS queue is the single audible output when enabled.
-          // Otherwise the local Android/iOS notification can make the sound.
-          silent: PdsConfig.isVoiceEnabled,
-        );
+            isIncomingCredit && !event.isMerchantConfirmed;
+        if (!suppressRepeatedPaymentAlert) {
+          _showRealtimeNotification(
+            isOutgoingDebit
+                ? 'Debit Detected'
+                : merchantVerifiedCredit
+                ? 'Payment Received'
+                : 'Payment Detected',
+            merchantVerifiedCredit
+                ? activity
+                : '$activity — verify before recording.',
+            merchantVerifiedCredit,
+            localOnly: true,
+            // The payment TTS queue is the single audible output when enabled.
+            // Otherwise the local Android/iOS notification can make the sound.
+            silent: PdsConfig.isVoiceEnabled,
+          );
+        }
         try {
           context.read<PaymentStateNotifier>().addPayment(event);
         } catch (e) {
           if (kDebugMode) debugPrint('Provider error: $e');
         }
         if (needsMerchantConfirmation &&
+            !suppressRepeatedPaymentAlert &&
             !PaymentDetectionService.isActiveSalesBill) {
           _queuePaymentConfirmation(event);
         }
