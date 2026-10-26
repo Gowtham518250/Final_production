@@ -313,6 +313,61 @@ void main() {
       expect(saved.keys, isNot(contains('event_transient')));
     });
 
+    test('persistent cache gives pending references six hours and confirmed references 24 hours', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final now = DateTime.now();
+      final pendingAt = now.subtract(const Duration(hours: 2));
+      const pendingReference = 'UTR-PENDING-5555';
+      const confirmedReference = 'UTR-CONFIRMED-6666';
+
+      final pendingKey = PaymentEvent(
+        amount: 1,
+        timestamp: pendingAt,
+        app: PaymentApp.unknown,
+        referenceId: pendingReference,
+      ).fingerprint;
+      final confirmedKey = PaymentEvent(
+        amount: 1,
+        timestamp: pendingAt,
+        app: PaymentApp.unknown,
+        referenceId: confirmedReference,
+      ).fingerprint;
+
+      await service.syncDedupWindowsFromPaymentHistory([
+        {
+          'reference_id': pendingReference,
+          'status': 'PENDING_CONFIRMATION',
+          'timestamp': pendingAt.toIso8601String(),
+        },
+        {
+          'reference_id': confirmedReference,
+          'status': 'CONFIRMED',
+          'timestamp': pendingAt.toIso8601String(),
+        },
+      ]);
+
+      final prefs = await SharedPreferences.getInstance();
+      final saved = jsonDecode(prefs.getString('pds_dedup_v2')!)
+          as Map<String, dynamic>;
+      final pendingExpiry = DateTime.parse(saved[pendingKey] as String);
+      final confirmedExpiry = DateTime.parse(saved[confirmedKey] as String);
+
+      expect(
+        pendingExpiry.difference(
+          pendingAt.add(const Duration(hours: 6)),
+        ).inSeconds.abs(),
+        lessThan(2),
+      );
+      expect(
+        confirmedExpiry.difference(
+          DateTime.now().add(const Duration(hours: 24)),
+        ).inSeconds.abs(),
+        lessThan(2),
+      );
+    });
+
     test('migrates only native replay keys to the six-hour window', () async {
       final oldExpiry = DateTime.now().add(const Duration(hours: 22));
       SharedPreferences.setMockInitialValues({
