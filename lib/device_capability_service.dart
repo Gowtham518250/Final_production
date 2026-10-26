@@ -11,7 +11,7 @@ class DeviceCapabilityService {
   static DeviceCapabilityService? _instance;
   
   DeviceCapabilities? _capabilities;
-  bool _isLowEndDevice = false;
+  bool _isLowEndDevice = true; // Conservative until hardware detection completes.
   bool _isHighEndDevice = false;
   
   DeviceCapabilityService._();
@@ -58,7 +58,7 @@ class DeviceCapabilityService {
       if (Platform.isAndroid) {
         final androidInfo = await deviceInfo.androidInfo;
         capabilities.totalRAM = await _getAndroidTotalRAM();
-        capabilities.cpuCores = androidInfo.supportedAbis.length;
+        capabilities.cpuCores = Platform.numberOfProcessors;
         capabilities.androidSdkVersion = androidInfo.version.sdkInt;
         capabilities.deviceModel = '${androidInfo.brand} ${androidInfo.model}';
       } else if (Platform.isIOS) {
