@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retail_mind/payment_detection_service.dart';
 import 'package:retail_mind/payment_alert_deduplicator.dart';
 import 'package:retail_mind/payment_event.dart';
 
@@ -196,6 +199,27 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('native notification and SHA-based UTR keys survive process restart storage', () async {
+      SharedPreferences.setMockInitialValues({});
+      final expiry = DateTime.now().add(const Duration(hours: 24));
+      await PdsStateStore.saveDedup({
+        'notification-event:native-hash': expiry,
+        'utr_utr-hash': expiry,
+        'utr:legacy-utr-hash': expiry,
+        'event_transient': expiry,
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      final serialized = prefs.getString('pds_dedup_v1');
+      expect(serialized, isNotNull);
+      final saved = jsonDecode(serialized!) as Map<String, dynamic>;
+
+      expect(saved.keys, contains('notification-event:native-hash'));
+      expect(saved.keys, contains('utr_utr-hash'));
+      expect(saved.keys, contains('utr:legacy-utr-hash'));
+      expect(saved.keys, isNot(contains('event_transient')));
     });
   });
 }
