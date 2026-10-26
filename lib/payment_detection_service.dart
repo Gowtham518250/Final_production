@@ -1962,7 +1962,6 @@ class _RecentVoicePayment {
 
 class PriorityVoiceQueue {
   static const Duration _crossSourceEchoWindow = Duration(minutes: 12);
-  static const Duration _sameChannelReplayWindow = Duration(seconds: 10);
 
   final _queue = SplayTreeSet<_VI>(
     (a, b) =>
@@ -2004,10 +2003,10 @@ class PriorityVoiceQueue {
         PaymentDetectionService._eventPaymentDirection(event);
     if (currentDirection == PaymentDirection.unknown) return false;
 
-    final now = DateTime.now();
+    final now = event.timestamp;
     _recentPayments.removeWhere(
       (entry) =>
-          now.difference(entry.recordedAt).abs() > _crossSourceEchoWindow,
+          now.difference(entry.event.timestamp).abs() > _crossSourceEchoWindow,
     );
     final liveVoiceEventIds = _recentPayments.map((e) => e.event.id).toSet();
     _echoClaims.removeWhere((id, _) => !liveVoiceEventIds.contains(id));
@@ -2029,25 +2028,24 @@ class PriorityVoiceQueue {
         return true;
       }
 
-      final age = now.difference(previous.recordedAt).abs();
+      final age = now.difference(old.timestamp).abs();
       if (age > _crossSourceEchoWindow) continue;
 
       final oldChannel = PaymentDetectionService._channelKey(old);
       if (oldChannel == currentChannel) {
-        final sameImmediateReplay =
+        final sameUnreferencedPayload =
             currentReference == null &&
             priorReference == null &&
-            age <= _sameChannelReplayWindow &&
             (event.amount - old.amount).abs() < 0.01 &&
             currentDirection ==
                 PaymentDetectionService._eventPaymentDirection(old) &&
             PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
             PaymentDetectionService._echoText(event.rawText) ==
                 PaymentDetectionService._echoText(old.rawText);
-        if (sameImmediateReplay) {
+        if (sameUnreferencedPayload) {
           PdsLogger.d(
             'VOICE',
-            'Immediate same-channel no-reference payment replay suppressed',
+            'Exact same-channel no-reference payment replay suppressed',
           );
           return true;
         }
