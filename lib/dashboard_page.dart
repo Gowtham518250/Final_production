@@ -13634,6 +13634,8 @@ class _DashboardPageState extends State<DashboardPage>
                         ),
                       )
                     : ListView.separated(
+                        // Product analytics rows do not own edit state.
+                        addAutomaticKeepAlives: uniqueProducts.length <= 20,
                         itemCount: uniqueProducts.length,
                         separatorBuilder: (_, __) =>
                             Divider(color: Colors.grey[200], height: 1),
