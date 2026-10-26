@@ -942,13 +942,13 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                     const SizedBox(height: 2),
                     Text(
                       hasCoordinates
-                          ? 'Store coordinates saved: \${_shopLatitude!.toStringAsFixed(6)}, \${_shopLongitude!.toStringAsFixed(6)}'
+                          ? 'Store coordinates saved: ${_shopLatitude!.toStringAsFixed(6)}, ${_shopLongitude!.toStringAsFixed(6)}'
                           : 'Set your storefront location so customers can navigate to you.',
                       style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
                     ),
                     if (accuracy != null)
                       Text(
-                        'GPS accuracy: ±\${accuracy.toStringAsFixed(0)} m\${accuracy > 50 ? ' — retry outdoors for better accuracy' : ''}',
+                        'GPS accuracy: ±${accuracy.toStringAsFixed(0)} m${accuracy > 50 ? ' — retry outdoors for better accuracy' : ''}',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           color: accuracy > 50 ? Colors.deepOrange : Colors.green.shade700,
