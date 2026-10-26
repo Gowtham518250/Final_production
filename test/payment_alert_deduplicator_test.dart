@@ -312,5 +312,25 @@ void main() {
       expect(saved.keys, contains('utr:legacy-utr-hash'));
       expect(saved.keys, isNot(contains('event_transient')));
     });
+
+    test('migrates the old 24-hour cache to the six-hour reminder window', () async {
+      final oldExpiry = DateTime.now().add(const Duration(hours: 22));
+      SharedPreferences.setMockInitialValues({
+        'pds_dedup_v1': jsonEncode({
+          'utr_legacy-payment': oldExpiry.toIso8601String(),
+        }),
+      });
+
+      final restored = <String, DateTime>{};
+      await PdsStateStore.loadDedup(restored);
+
+      expect(
+        restored['utr_legacy-payment'],
+        oldExpiry.subtract(const Duration(hours: 18)),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('pds_dedup_v1'), isNull);
+      expect(prefs.getString('pds_dedup_v2'), isNotNull);
+    });
   });
 }
