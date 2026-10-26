@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:crypto/crypto.dart';
 import 'backup_service.dart';
@@ -67,6 +68,9 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
   String? successMessage;
   String? errorMessage;
   String? _scannedStateCode;
+  double? _shopLatitude;
+  double? _shopLongitude;
+  double? _locationAccuracyMeters;
 
   @override
   void initState() {
@@ -85,6 +89,12 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
         await ScopedSharedPreferences.getString('shop_name') ?? '';
     final scopedLocation =
         await ScopedSharedPreferences.getString('location') ?? '';
+    final scopedLatitude = double.tryParse(
+      await ScopedSharedPreferences.getString('shop_latitude') ?? '',
+    );
+    final scopedLongitude = double.tryParse(
+      await ScopedSharedPreferences.getString('shop_longitude') ?? '',
+    );
     final scopedShopType =
         await ScopedSharedPreferences.getString('shop_type') ?? '';
     final scopedPhone =
@@ -136,6 +146,8 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
           ? scopedContactPerson
           : (prefs.getString('user_name') ?? '');
       locationController.text = scopedLocation;
+      _shopLatitude = scopedLatitude;
+      _shopLongitude = scopedLongitude;
       shopTypeController.text = scopedShopType;
       phoneController.text = scopedPhone;
       emailController.text = scopedEmail.isNotEmpty
@@ -191,6 +203,8 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
       'shop_name': shopNameController.text.trim(),
       'contact_person_name': contactPersonController.text.trim(),
       'location': locationController.text.trim(),
+      'latitude': _shopLatitude,
+      'longitude': _shopLongitude,
       'shop_type': shopTypeController.text.trim(),
       // Backend ShopProfileCreate/Update accept `phone` and `upi_id`.
       // Keep legacy aliases for older clients, but send the canonical API keys too.
@@ -257,7 +271,11 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
         'play_store_link',
         'app_link',
       ]);
+      final latitude = double.tryParse(_pick(['latitude', 'shop_latitude']));
+      final longitude = double.tryParse(_pick(['longitude', 'shop_longitude']));
 
+      _shopLatitude = latitude;
+      _shopLongitude = longitude;
       if (shopName.isNotEmpty) shopNameController.text = shopName;
       if (location.isNotEmpty) locationController.text = location;
       if (shopType.isNotEmpty) shopTypeController.text = shopType;
@@ -297,6 +315,14 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     await ScopedSharedPreferences.setString(
       'location',
       locationController.text.trim(),
+    );
+    await ScopedSharedPreferences.setString(
+      'shop_latitude',
+      _shopLatitude?.toString() ?? '',
+    );
+    await ScopedSharedPreferences.setString(
+      'shop_longitude',
+      _shopLongitude?.toString() ?? '',
     );
     await ScopedSharedPreferences.setString(
       'shop_type',
@@ -801,8 +827,182 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     }
   }
 
+  Future<void> _openGoogleMapsSearch() async {
+    final name = shopNameController.text.trim();
+    final address = locationController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Enter your shop name first.')),
+      );
+      return;
+    }
+    final query = [name, address].where((part) => part.isNotEmpty).join(', ');
+    final uri = Uri.https('www.google.com', '/maps/search/', {
+      'api': '1',
+      'query': query,
+    });
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Could not open Google Maps.')),
+      );
+    }
+  }
+
+  Future<void> _openGoogleBusinessProfile() async {
+    final name = shopNameController.text.trim();
+    final address = locationController.text.trim();
+    if (name.isEmpty || address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText(
+          'Add your shop name and address before registering on Google Maps.',
+        )),
+      );
+      return;
+    }
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Show your shop on Google Maps'),
+        content: const Text(
+          'First search for an existing listing to avoid duplicates. If it is missing, use Google Business Profile to add or claim your shop. Google may ask you to verify ownership before the listing is published.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'cancel'),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, 'search'),
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Check existing listing'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, 'register'),
+            icon: const Icon(Icons.add_business_outlined),
+            label: const Text('Register / claim'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action == null || action == 'cancel') return;
+    final uri = action == 'search'
+        ? Uri.https('www.google.com', '/maps/search/', {
+            'api': '1',
+            'query': [name, address].where((part) => part.isNotEmpty).join(', '),
+          })
+        : Uri.parse('https://business.google.com/add');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Could not open the Google Maps registration page.')),
+      );
+    }
+  }
+
+  Widget _buildGoogleMapsSetupCard() {
+    final hasCoordinates = _shopLatitude != null && _shopLongitude != null;
+    final accuracy = _locationAccuracyMeters;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F1FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.location_on_rounded, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Google Maps listing',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _primaryTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hasCoordinates
+                          ? 'Store coordinates saved: \${_shopLatitude!.toStringAsFixed(6)}, \${_shopLongitude!.toStringAsFixed(6)}'
+                          : 'Set your storefront location so customers can navigate to you.',
+                      style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
+                    ),
+                    if (accuracy != null)
+                      Text(
+                        'GPS accuracy: ±\${accuracy.toStringAsFixed(0)} m\${accuracy > 50 ? ' — retry outdoors for better accuracy' : ''}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: accuracy > 50 ? Colors.deepOrange : Colors.green.shade700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Stand at your shop entrance and tap the location pin above. Then check whether your shop already exists on Google Maps.',
+            style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _fetchLocation,
+                icon: const Icon(Icons.my_location_rounded, size: 18),
+                label: const Text('Capture location'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _openGoogleMapsSearch,
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: const Text('Find on Maps'),
+              ),
+              FilledButton.icon(
+                onPressed: _openGoogleBusinessProfile,
+                icon: const Icon(Icons.add_business_outlined, size: 18),
+                label: const Text('Register / claim'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _fetchLocation() async {
     try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: LiveTranslatedText(
+              'Turn on location services, then stand at your shop and try again.',
+            )),
+          );
+        }
+        return;
+      }
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -820,7 +1020,28 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
         return;
       }
 
-      final position = await Geolocator.getCurrentPosition();
+      // Capture the storefront coordinates as well as a readable address.
+      // Ask the owner to stand at the shop entrance before using this action.
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _shopLatitude = position.latitude;
+        _shopLongitude = position.longitude;
+        _locationAccuracyMeters = position.accuracy;
+      });
+      await ScopedSharedPreferences.setString(
+        'shop_latitude',
+        position.latitude.toString(),
+      );
+      await ScopedSharedPreferences.setString(
+        'shop_longitude',
+        position.longitude.toString(),
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1644,10 +1865,13 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
               hint: 'Street, area, city',
               suffixIcon: IconButton(
                 icon: const Icon(Icons.my_location, color: _secondaryTextColor),
+                tooltip: 'Capture storefront location',
                 onPressed: _fetchLocation,
               ),
               validator: (v) => v!.isEmpty ? 'Please enter location' : null,
             ),
+            const SizedBox(height: 8),
+            _buildGoogleMapsSetupCard(),
             const SizedBox(height: 11),
             _StyledField(
               controller: shopTypeController,
