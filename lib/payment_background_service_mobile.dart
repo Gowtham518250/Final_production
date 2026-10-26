@@ -79,6 +79,17 @@ Future<void> _persistPaymentHistoryThenForward(
         !forwardedEvent.hasReferenceConflict) {
       await OnlinePaymentHistoryService.recordIncomingPayment(forwardedEvent);
     }
+    // Reconcile the replay cache against durable payment status. Pending
+    // references get a six-hour review cooldown; confirmed/rejected references
+    // keep the longer suppression window, including across service restarts.
+    try {
+      final savedHistory = await OnlinePaymentHistoryService.load();
+      await PaymentDetectionService()
+          .syncDedupWindowsFromPaymentHistory(savedHistory);
+    } catch (syncError) {
+      debugPrint('⚠️ Could not refresh payment review cooldowns: $syncError');
+    }
+
     // Even when this exact reference is already present or conflicted, this
     // isolate has checked persistent history; don't repeat the same I/O in UI.
     historyHandled = true;
