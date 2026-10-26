@@ -1929,7 +1929,6 @@ class _RecentVoicePayment {
 
 class PriorityVoiceQueue {
   static const Duration _crossSourceEchoWindow = Duration(minutes: 12);
-  static const Duration _sameNotificationReplayWindow = Duration(seconds: 90);
 
   final _queue = SplayTreeSet<_VI>(
     (a, b) =>
@@ -1952,38 +1951,9 @@ class PriorityVoiceQueue {
   final Map<String, DateTime> _spokenFps = {};
   final List<_RecentVoicePayment> _recentPayments = [];
 
-  static bool _isBankRelay(PaymentApp app) => const {
-    PaymentApp.bankSms,
-    PaymentApp.bankApp,
-    PaymentApp.icici,
-    PaymentApp.sbiYono,
-    PaymentApp.axis,
-    PaymentApp.hdfc,
-    PaymentApp.payzapp,
-  }.contains(app);
-
-  static bool _isUpiApp(PaymentApp app) => const {
-    PaymentApp.googlePay,
-    PaymentApp.phonePe,
-    PaymentApp.paytm,
-    PaymentApp.amazonPay,
-    PaymentApp.bhim,
-    PaymentApp.whatsappPay,
-    PaymentApp.cred,
-  }.contains(app);
-
-  static PaymentDirection _directionOf(PaymentEvent event) {
-    if (event.direction == PaymentTransactionDirection.incomingCredit) {
-      return PaymentDirection.credited;
-    }
-    if (event.direction == PaymentTransactionDirection.outgoingDebit) {
-      return PaymentDirection.debited;
-    }
-    return VoiceBuilder.detectDirection(event.rawText);
-  }
-
-  static String _normalizedText(String text) => text.toLowerCase().trim();
-
+  /// Only the same event or the same authoritative reference is an echo here.
+  /// Amount-based matching was removed: it silenced genuine repeat payments
+  /// (same customer, same amount) and is now handled one-to-one upstream.
   bool _isRecentCrossSourceEcho(PaymentEvent event) {
     if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
     final now = event.timestamp;
@@ -1992,40 +1962,18 @@ class PriorityVoiceQueue {
           now.difference(entry.event.timestamp).abs() >
           _crossSourceEchoWindow,
     );
-    final direction = _directionOf(event);
     for (final previous in _recentPayments) {
       final old = previous.event;
       if (old.isMerchantConfirmed || old.hasReferenceConflict) continue;
       if (event.id == old.id) return true;
-
       final currentReference = event.normalizedReferenceId;
       final priorReference = old.normalizedReferenceId;
-      if (currentReference != null && priorReference != null) {
-        // A conflicting reference must reach review; it is not a duplicate.
-        if (event.hasReferenceConflictWith(old)) continue;
-        if (currentReference == priorReference) return true;
-        // Two different authoritative references represent different transfers.
-        continue;
+      if (currentReference != null &&
+          priorReference != null &&
+          !event.hasReferenceConflictWith(old) &&
+          currentReference == priorReference) {
+        return true;
       }
-
-      if ((event.amount - old.amount).abs() >= 0.01 ||
-          direction == PaymentDirection.unknown ||
-          direction != _directionOf(old)) {
-        continue;
-      }
-
-      final age = now.difference(old.timestamp).abs();
-      final crossChannel =
-          event.app != old.app &&
-          ((_isBankRelay(event.app) && (_isUpiApp(old.app) || _isBankRelay(old.app))) ||
-              (_isBankRelay(old.app) && (_isUpiApp(event.app) || _isBankRelay(event.app))));
-      if (crossChannel && age <= _crossSourceEchoWindow) return true;
-
-      final samePayloadReplay =
-          event.app == old.app &&
-          _normalizedText(event.rawText) == _normalizedText(old.rawText) &&
-          age <= _sameNotificationReplayWindow;
-      if (samePayloadReplay) return true;
     }
     return false;
   }
@@ -2074,9 +2022,16 @@ class PriorityVoiceQueue {
 
     // Use the transaction fingerprint so alternate notification wording for
     // the same payment cannot produce a second announcement.
+    // Payments with a reference are identified by it. Payments WITHOUT one are
+    // identified per event: the detection layer (_emit) already pairs echoes
+    // one-to-one, so a second Rs 5 from the same customer must still be
+    // announced instead of being swallowed by an amount+5-minute-slot bucket.
+    final baseFingerprint = e.normalizedReferenceId != null
+        ? e.voiceFingerprint
+        : 'voice_event_${e.id}';
     final fingerprint = e.isMerchantConfirmed
-        ? '${e.voiceFingerprint}_merchant_confirmed'
-        : e.voiceFingerprint;
+        ? '${baseFingerprint}_merchant_confirmed'
+        : baseFingerprint;
     final repeatedFingerprint = _isAlreadySpoken(fingerprint);
     final crossSourceEcho = _isRecentCrossSourceEcho(e);
     if (repeatedFingerprint || crossSourceEcho) {
@@ -2710,12 +2665,18 @@ class PaymentDetectionService {
   };
 
   // A bank alert often arrives once as a notification and again as an SMS.
-  /// One real payment is commonly reported by several channels at once (the
-  /// payment app, Truecaller's mirrored UPI alert, the bank SMS) and most of
-  /// those carry no UTR. Within this window, same-direction same-amount events
-  /// are treated as one payment unless they carry different references or
-  /// clearly different payer names.
-  static const Duration _noReferenceEchoWindow = Duration(seconds: 120);
+  /// A near-instant identical re-post by the same app is a replay, not a new
+  /// payment. Anything later from the same channel is treated as a new payment.
+  static const Duration _sameChannelReplayWindow = Duration(seconds: 10);
+
+  /// Two different apps (e.g. PhonePe + Truecaller mirror) reporting one payment.
+  static const Duration _crossAppEchoWindow = Duration(minutes: 10);
+
+  /// Bank SMS can arrive long after the payment-app notification (20+ min).
+  static const Duration _smsEchoWindow = Duration(minutes: 45);
+
+  /// Event id -> channels that already echoed it (one echo per channel).
+  final Map<String, Set<String>> _echoClaims = {};
 
   static String? _normalizedPayer(String? name) {
     final n = name?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
@@ -2797,6 +2758,7 @@ class PaymentDetectionService {
     _processedSmsCache.clear();
     _recentNotificationPayloads.clear();
     _recentEmittedPayments.clear();
+    _echoClaims.clear();
     _historyHandledEventIds.clear();
     _dedupStore.clear();
     _dedupReferenceAmounts.clear();
@@ -4913,6 +4875,19 @@ class PaymentDetectionService {
     return VoiceBuilder.detectDirection(event.rawText);
   }
 
+  /// Decides whether [event] is just another report of a payment we already
+  /// announced.
+  ///
+  /// Rules (a "channel" is origin + app, e.g. notification|phonePe, sms|bankSms):
+  ///  * Different references are always different payments; same reference is
+  ///    always the same payment.
+  ///  * Same channel: only an immediate identical re-post (a few seconds) is a
+  ///    duplicate. A second PhonePe notification for the same amount a bit
+  ///    later is a NEW payment (the same customer can pay Rs 5 twice).
+  ///  * Different channel: it is an echo only if it can be paired one-to-one
+  ///    with an earlier event that has not yet been echoed by that channel.
+  ///    Two Rs 5 payments therefore need two SMS to be fully paired; an SMS
+  ///    arriving 20+ minutes after the notification still pairs with it.
   bool _isRecentCrossSourceDuplicate(PaymentEvent event) {
     // Never discard explicit merchant confirmations, failures, reference
     // conflicts, or events that were already marked as duplicates.
@@ -4927,15 +4902,15 @@ class PaymentDetectionService {
     if (direction == PaymentDirection.unknown) return false;
 
     final now = DateTime.now();
-    _recentEmittedPayments.removeWhere(
-      (old) => now.difference(old.timestamp).abs() > _noReferenceEchoWindow,
-    );
+    _pruneEchoState(now);
 
-    final currentOrigin = _eventOrigin(event.detectionSource);
+    final channel = _channelKey(event);
     final currentReference = event.normalizedReferenceId;
-    final currentText = event.rawText.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+    final currentText = _echoText(event.rawText);
+    final currentIsSms = _eventOrigin(event.detectionSource).contains('sms');
 
-    for (final old in _recentEmittedPayments.reversed) {
+    // Oldest first so each echo pairs with the earliest unmatched payment.
+    for (final old in _recentEmittedPayments) {
       if (old.isMerchantConfirmed ||
           old.isDuplicate ||
           old.hasReferenceConflict ||
@@ -4955,43 +4930,61 @@ class PaymentDetectionService {
         return true;
       }
 
-      // At least one side has no reference: this is the common case for
-      // payment-app notifications. Same amount + direction within the echo
-      // window with compatible payer names is the same payment reported by
-      // another channel (or re-posted by the same app).
-      final withinEchoWindow =
-          now.difference(old.timestamp).abs() <= _noReferenceEchoWindow;
-      if (withinEchoWindow && _payersCompatible(event.payerName, old.payerName)) {
-        PdsLogger.t(
-          'DROP',
-          'reason=echo_same_amount_no_reference '
-              'origin=$currentOrigin prevOrigin=${_eventOrigin(old.detectionSource)}',
-        );
-        return true;
+      final age = now.difference(old.timestamp).abs();
+      final oldChannel = _channelKey(old);
+
+      if (oldChannel == channel) {
+        // Same app/channel: only a near-instant identical re-post is a replay.
+        if (age <= _sameChannelReplayWindow &&
+            currentText == _echoText(old.rawText)) {
+          PdsLogger.t('DROP', 'reason=same_channel_repost');
+          return true;
+        }
+        continue;
       }
 
-      final oldOrigin = _eventOrigin(old.detectionSource);
+      final oldIsSms = _eventOrigin(old.detectionSource).contains('sms');
+      final window = (currentIsSms || oldIsSms)
+          ? _smsEchoWindow
+          : _crossAppEchoWindow;
+      if (age > window) continue;
+
+      // One echo per channel per payment: a channel that already echoed this
+      // payment cannot also be the report of a second, separate payment.
+      final claimed = _echoClaims[old.id];
+      if (claimed != null && claimed.contains(channel)) continue;
+
       final sameAccount =
           event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-      // With missing UTRs, use an equal parsed account suffix and cross-source
-      // timing to correlate a notification with its bank SMS. This is only a
-      // presentation/event dedup guard; it never settles financial records.
-      if ((currentReference == null || oldReference == null) &&
-          sameAccount &&
-          currentOrigin != oldOrigin) {
-        return true;
+      if (!sameAccount && !_payersCompatible(event.payerName, old.payerName)) {
+        continue; // clearly different payers
       }
 
-      final oldText = old.rawText.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
-      final samePayloadReplay =
-          currentOrigin == oldOrigin &&
-          event.app == old.app &&
-          currentText == oldText;
-      if (samePayloadReplay) return true;
+      (_echoClaims[old.id] ??= <String>{}).add(channel);
+      PdsLogger.t(
+        'DROP',
+        'reason=echo_paired channel=${_eventOrigin(event.detectionSource)} '
+            'prev=${_eventOrigin(old.detectionSource)} ageSec=${age.inSeconds}',
+      );
+      return true;
     }
     return false;
+  }
+
+  static String _channelKey(PaymentEvent e) =>
+      '${_eventOrigin(e.detectionSource)}|${e.app.name}';
+
+  static String _echoText(String t) =>
+      t.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  void _pruneEchoState(DateTime now) {
+    _recentEmittedPayments.removeWhere(
+      (old) => now.difference(old.timestamp).abs() > _smsEchoWindow,
+    );
+    final liveIds = _recentEmittedPayments.map((e) => e.id).toSet();
+    _echoClaims.removeWhere((id, _) => !liveIds.contains(id));
   }
 
   void _rememberEmittedPayment(PaymentEvent event) {
@@ -5002,10 +4995,7 @@ class PaymentDetectionService {
         _eventPaymentDirection(event) == PaymentDirection.unknown) {
       return;
     }
-    final now = DateTime.now();
-    _recentEmittedPayments.removeWhere(
-      (old) => now.difference(old.timestamp).abs() > _noReferenceEchoWindow,
-    );
+    _pruneEchoState(DateTime.now());
     _recentEmittedPayments.add(event);
     if (_recentEmittedPayments.length > 100) {
       _recentEmittedPayments.removeAt(0);

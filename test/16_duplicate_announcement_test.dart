@@ -3,72 +3,155 @@ import 'package:notification_listener_service/notification_event.dart';
 import 'package:retail_mind/payment_detection_service.dart';
 import 'package:retail_mind/payment_event.dart';
 
+PaymentEvent _credit({
+  required String id,
+  required PaymentApp app,
+  required String source,
+  required DateTime at,
+  double amount = 5,
+  String? payer,
+  String? ref,
+  String text = 'sent to you',
+}) => PaymentEvent(
+  id: id,
+  amount: amount,
+  timestamp: at,
+  app: app,
+  payerName: payer,
+  referenceId: ref,
+  rawText: '$id $text',
+  detectionSource: source,
+  direction: PaymentTransactionDirection.incomingCredit,
+  decision: PaymentDecision.likely,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<List<PaymentEvent>> run(List<ServiceNotificationEvent> inputs) async {
+  Future<List<PaymentEvent>> emitAll(List<PaymentEvent> inputs) async {
     final service = PaymentDetectionService();
     service.debugResetTransientDetectionState();
     service.clearBill();
     final events = <PaymentEvent>[];
     final sub = service.onPaymentDetected.listen(events.add);
     for (final e in inputs) {
-      service.debugHandleNotification(e);
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await service.debugEmitForTesting(e);
     }
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     await sub.cancel();
     return events;
   }
 
-  group('one payment must produce one alert', () {
+  group('one payment -> one alert; two payments -> two alerts', () {
     test('our own notifications are never re-read as payments', () async {
-      final events = await run([
-        ServiceNotificationEvent(
-          packageName: 'com.retailmind.app',
-          title: 'Payment Received',
-          content: 'Credit: ₹500 via PhonePe',
-        ),
-        ServiceNotificationEvent(
-          packageName: 'com.retailmind.app',
-          title: 'Payment Detected',
-          content: 'Credit: ₹500 via PhonePe — verify before recording.',
-        ),
-      ]);
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final sub = service.onPaymentDetected.listen(events.add);
+      for (final content in const [
+        'Credit: ₹500 via PhonePe',
+        'Credit: ₹500 via PhonePe — verify before recording.',
+      ]) {
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.retailmind.app',
+            title: 'Payment Received',
+            content: content,
+          ),
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      await sub.cancel();
       expect(events, isEmpty);
     });
 
-    test('same credit reported twice by different wording is one event', () async {
-      final events = await run([
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'Payment received ₹500 credited to your account',
-        ),
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'Money received ₹500 in your account',
-        ),
+    test('PhonePe notification + Truecaller mirror of the same payment = 1',
+        () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now),
+        _credit(id: 't1', app: PaymentApp.bankApp, source: 'notification', at: now),
       ]);
       expect(events, hasLength(1));
-      expect(events.single.amount, 500);
     });
 
-    test('different payers with the same amount stay separate', () async {
-      final events = await run([
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'Anna Devi has sent ₹500 to you',
+    test('same customer pays Rs 5 twice via PhonePe = 2 payments', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(
+          id: 'n1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now.subtract(const Duration(seconds: 40)),
+          payer: 'Anna Devi',
+          text: 'Anna Devi sent Rs 5 to you',
         ),
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'Ravi Kumar has sent ₹500 to you',
+        _credit(
+          id: 'n2',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now,
+          payer: 'Anna Devi',
+          text: 'Anna Devi sent Rs 5 to you',
         ),
       ]);
       expect(events, hasLength(2));
+    });
+
+    test('SMS arriving 20 minutes later pairs with its notification', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(
+          id: 'n1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now.subtract(const Duration(minutes: 20)),
+        ),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now),
+      ]);
+      expect(events, hasLength(1));
+    });
+
+    test('two payments + two late SMS = 2, a third unmatched SMS = 3', () async {
+      final now = DateTime.now();
+      PaymentEvent n(String id, int minsAgo) => _credit(
+        id: id,
+        app: PaymentApp.phonePe,
+        source: 'notification',
+        at: now.subtract(Duration(minutes: minsAgo)),
+      );
+      PaymentEvent s(String id) =>
+          _credit(id: id, app: PaymentApp.bankSms, source: 'sms', at: now);
+
+      final two = await emitAll([n('n1', 21), n('n2', 20), s('s1'), s('s2')]);
+      expect(two, hasLength(2));
+
+      final three = await emitAll([
+        n('n1', 21),
+        n('n2', 20),
+        s('s1'),
+        s('s2'),
+        s('s3'),
+      ]);
+      expect(three, hasLength(3));
+    });
+
+    test('different references are always different payments', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, ref: '412345678901'),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, ref: '412345678902'),
+      ]);
+      expect(events, hasLength(2));
+    });
+
+    test('same reference on two channels is one payment', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, ref: '412345678901'),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, ref: '412345678901'),
+      ]);
+      expect(events, hasLength(1));
     });
   });
 }
