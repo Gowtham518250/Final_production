@@ -100,9 +100,18 @@ class PaymentEvent {
   }) : id = id ?? _genId(),
        updatedAt = updatedAt ?? DateTime.now();
 
+  // Dart/OS clocks may return the same microsecond for several rapid
+  // constructions. Make fallback event IDs strictly monotonic within this
+  // isolate so unrelated no-UTR payments never share an accounting fingerprint.
+  static int _lastGeneratedIdMicros = 0;
+
   static String _genId() {
-    final ts = DateTime.now().microsecondsSinceEpoch;
-    return 'pmt_$ts';
+    final nowMicros = DateTime.now().microsecondsSinceEpoch;
+    final nextMicros = nowMicros > _lastGeneratedIdMicros
+        ? nowMicros
+        : _lastGeneratedIdMicros + 1;
+    _lastGeneratedIdMicros = nextMicros;
+    return 'pmt_$nextMicros';
   }
 
   bool get isMerchantConfirmed =>
