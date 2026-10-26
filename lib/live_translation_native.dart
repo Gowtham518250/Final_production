@@ -1,6 +1,7 @@
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 
 import 'live_translation_remote.dart';
+import 'translation_fallback_policy.dart';
 
 final OnDeviceTranslatorModelManager _modelManager =
     OnDeviceTranslatorModelManager();
@@ -150,25 +151,60 @@ Future<List<String>> translateTexts(
 
   if (target != null && localIndexes.isNotEmpty) {
     try {
-      final translator = await _translatorFor(targetLanguageCode, target);
+      final translator = await _translatorFor(
+        targetLanguageCode,
+        target,
+      ).timeout(const Duration(seconds: 8));
       final translated = await Future.wait(
         localIndexes.map((index) => translator.translateText(texts[index])),
       );
       for (var index = 0; index < localIndexes.length; index++) {
-        result[localIndexes[index]] = translated[index];
+        final sourceIndex = localIndexes[index];
+        final translatedText = translated[index];
+        if (TranslationFallbackPolicy.needsRemoteFallback(
+          texts[sourceIndex],
+          translatedText,
+        )) {
+          // Some proper nouns (for example, restaurant/product names) can be
+          // passed through unchanged by the on-device model. Retry those via
+          // the authenticated batch endpoint instead of leaving them English
+          // indefinitely in the user's selected-language UI.
+          remoteIndexes.add(sourceIndex);
+        } else {
+          result[sourceIndex] = translatedText;
+        }
       }
     } catch (_) {
-      // Keep source text visible when the on-device model is unavailable.
-      // Do not silently burn the shared remote API quota as a fallback.
+      // Model download/translation failures use the authenticated backend batch
+      // endpoint as a fallback. If that is also unavailable, the original text
+      // remains visible; no provider key is shipped in the Flutter app.
+      remoteIndexes.addAll(localIndexes);
     }
   }
 
   if (remoteIndexes.isNotEmpty) {
-    final remoteTexts = remoteIndexes.map((index) => texts[index]).toList();
-    final translated =
-        await translateTextBatchRemotely(remoteTexts, targetLanguageCode);
-    for (var index = 0; index < remoteIndexes.length; index++) {
-      result[remoteIndexes[index]] = translated[index];
+    final uniqueRemoteIndexes = remoteIndexes.toSet().toList(growable: false);
+    final remoteTexts =
+        uniqueRemoteIndexes.map((index) => texts[index]).toList();
+    final translated = await translateTextBatchRemotely(
+      remoteTexts,
+      targetLanguageCode,
+      // Supported locales only use the remote route when the on-device model
+      // is unavailable/unhelpful, so keep that recovery bounded. Unsupported
+      // locales retain the remote provider's normal timeout.
+      timeout: target == null
+          ? const Duration(seconds: 30)
+          : const Duration(seconds: 12),
+    );
+    for (var index = 0; index < uniqueRemoteIndexes.length; index++) {
+      final sourceIndex = uniqueRemoteIndexes[index];
+      final translatedText = translated[index];
+      if (!TranslationFallbackPolicy.needsRemoteFallback(
+        texts[sourceIndex],
+        translatedText,
+      )) {
+        result[sourceIndex] = translatedText;
+      }
     }
   }
   return result;
