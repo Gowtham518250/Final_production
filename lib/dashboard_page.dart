@@ -843,9 +843,19 @@ class _DashboardPageState extends State<DashboardPage>
         final confirmed = await PaymentDetectionService()
             .confirmDetectedPayment(event);
         if (confirmed) {
-          // The background isolate owns a separate replay cache. Refresh it
-          // from the persisted CONFIRMED status so a next-morning replay cannot
-          // announce or prompt for a payment the merchant already resolved.
+          // Persist this decision synchronously before asking the background
+          // isolate to refresh its separate replay cache. The stream listener's
+          // history write is intentionally async and could otherwise race this
+          // refresh, leaving a just-confirmed payment on the pending cooldown.
+          await OnlinePaymentHistoryService.recordIncomingPayment(
+            event.copyWith(
+              decision: PaymentDecision.confirmed,
+              verificationStatus:
+                  PaymentVerificationStatus.merchantConfirmed,
+              detectionSource:
+                  '${event.detectionSource}:merchant_confirmed',
+            ),
+          );
           await refreshPaymentDetectionDedupState();
         }
         if (!confirmed && mounted) {
