@@ -9,6 +9,7 @@ import 'payment_event.dart';
 class OnlinePaymentHistoryService {
   static const _keyPrefix = 'confirmed_online_payment';
   static const _maxEntries = 500;
+  static const Duration pendingReviewReminderInterval = Duration(hours: 6);
 
   static String _userPrefix(int userId) => '${_keyPrefix}_${userId}_';
 
@@ -194,8 +195,37 @@ class OnlinePaymentHistoryService {
       );
     }
 
-    // Same reference and amount already observed: do not prompt or announce it
-    // again after the app/service restarts. This is not bank verification.
+    final oldStatus = (existing['status'] ?? '').toString().toUpperCase();
+    if (oldStatus == 'PENDING_CONFIRMATION') {
+      // A candidate left unresolved overnight is not a resolved duplicate.
+      // Suppress ordinary replays for six hours, then surface the same
+      // reference again as a review reminder. This does not record/confirm it.
+      DateTime? lastPendingAt;
+      try {
+        final rawTimestamp = existing['timestamp']?.toString();
+        if (rawTimestamp != null && rawTimestamp.isNotEmpty) {
+          lastPendingAt = DateTime.parse(rawTimestamp);
+        }
+      } on FormatException {
+        lastPendingAt = null;
+      }
+      final reminderDue = lastPendingAt == null ||
+          !DateTime.now().isBefore(
+            lastPendingAt.add(pendingReviewReminderInterval),
+          );
+      if (reminderDue) {
+        return event.copyWith(
+          isDuplicate: false,
+          decision: PaymentDecision.likely,
+          verificationStatus: PaymentVerificationStatus.unverified,
+          detectionSource: '${event.detectionSource}:pending_review_reminder',
+        );
+      }
+    }
+
+    // Confirmed references and pending replays inside the reminder cooldown
+    // are duplicates. The Dashboard suppresses their alert and confirmation UI.
+    // Pending records become reviewable again only after the reminder interval.
     return event.copyWith(
       isDuplicate: true,
       decision: PaymentDecision.likely,
