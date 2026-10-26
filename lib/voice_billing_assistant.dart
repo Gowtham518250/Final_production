@@ -16,12 +16,19 @@ import 'guided_dictation_overlay.dart';
 //  • Retry partial failures without re-recording
 // =============================================================================
 
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'language_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart' as audio;
 import 'utils/free_translator_service.dart';
 import 'api_client.dart';
 
@@ -837,6 +844,10 @@ class VoiceBillingAssistant extends StatefulWidget {
 class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     with TickerProviderStateMixin {
   late stt.SpeechToText _speech;
+  late audio.Record _audioRecorder;
+  bool _usingCloudAudioFallback = false;
+  String? _cloudRecordingPath;
+  Timer? _cloudRecordingLimitTimer;
   bool _isListening = false;
   bool _isProcessing = false;
   String _transcript = '';
@@ -957,14 +968,19 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     } catch (_) {
       responseBody = null;
     }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+    return _parseGroqResponseBody(response.statusCode, responseBody);
+  }
+
+  ({List<ParsedItem> items, List<String> warnings, String interpretedText})
+      _parseGroqResponseBody(int statusCode, dynamic responseBody) {
+    if (statusCode < 200 || statusCode >= 300) {
       final detail = responseBody is Map
           ? (responseBody['detail'] ?? responseBody['message'])?.toString()
           : null;
       throw StateError(
         detail?.trim().isNotEmpty == true
             ? detail!.trim()
-            : 'Groq voice billing returned HTTP ${response.statusCode}.',
+            : 'Groq voice billing returned HTTP $statusCode.',
       );
     }
     if (responseBody is! Map) {
@@ -1187,6 +1203,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
+    _audioRecorder = audio.Record();
     _transcriptCtrl = TextEditingController();
     _selectedLang = _languageForCode(widget.initialLocale);
 
@@ -1226,6 +1243,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
   @override
   void dispose() {
+    _cloudRecordingLimitTimer?.cancel();
+    unawaited(_cleanupCloudRecorder());
     _transcriptCtrl.dispose();
     _pulseCtrl.dispose();
     _waveCtrl.dispose();
@@ -1258,6 +1277,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
     if (_isListening) {
       _shouldRestartListening = false;
+      if (_usingCloudAudioFallback) {
+        await _stopAndTranscribeCloudRecording();
+        return;
+      }
       await _speech.stop();
       await Future<void>.delayed(const Duration(milliseconds: 250));
 
@@ -1312,10 +1335,12 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       );
 
       if (!available) {
-        _showSnack(
-          'Microphone or speech recognition is unavailable on this device.',
-          isError: true,
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '🎙️ [VoiceBilling] on-device speech recognizer unavailable; using cloud audio fallback',
+          );
+        }
+        await _startCloudAudioFallback();
         return;
       }
 
@@ -1346,17 +1371,13 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           .toList(growable: false);
       if (localeIds.isNotEmpty &&
           !SpeechLocalePolicy.isAvailable(cfg.localeId, localeIds)) {
-        if (mounted) setState(() => _isListening = false);
-        _showSnack(
-          'Speech recognition for ${_selectedLang.label} is not installed on this device. Enable or download that language in your phone speech settings, then try again. No items were added.',
-          isError: true,
-        );
         if (kDebugMode) {
           debugPrint(
             '🎙️ [VoiceBilling] requested locale ${cfg.localeId} is unavailable; '
-            'installed locales: ${localeIds.take(30).join(', ')}',
+            'installed locales: ${localeIds.take(30).join(', ')}. Falling back to cloud transcription.',
           );
         }
+        await _startCloudAudioFallback();
         return;
       }
       if (kDebugMode) {
@@ -1408,14 +1429,252 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         listenMode: cfg.listenMode,
       );
     } catch (e) {
-      if (mounted) {
-        setState(() => _isListening = false);
-        _showSnack('Could not start the microphone. Please try again.', isError: true);
-      }
       if (kDebugMode) {
-        debugPrint('🎙️ [VoiceBilling] listen failed: $e');
+        debugPrint('🎙️ [VoiceBilling] on-device listen failed; trying cloud recording: $e');
+      }
+      try {
+        await _speech.stop();
+      } catch (_) {}
+      await _startCloudAudioFallback();
+    }
+  }
+
+  Future<void> _startCloudAudioFallback() async {
+    String? pendingPath;
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          setState(() {
+            _isListening = false;
+            _usingCloudAudioFallback = false;
+          });
+        }
+        _showSnack(
+          'Microphone permission is required for cloud voice billing. Enable microphone access and try again.',
+          isError: true,
+        );
+        return;
+      }
+
+      final directory = await getTemporaryDirectory();
+      pendingPath = p.join(
+        directory.path,
+        'retailmind_voice_billing_${DateTime.now().microsecondsSinceEpoch}.m4a',
+      );
+      await _audioRecorder.start(
+        path: pendingPath,
+        encoder: audio.AudioEncoder.aacLc,
+        bitRate: 96000,
+        sampleRate: 44100,
+      );
+      _cloudRecordingPath = pendingPath;
+      if (!mounted) {
+        try {
+          await _audioRecorder.stop();
+          await File(pendingPath).delete();
+        } catch (_) {}
+        _cloudRecordingPath = null;
+        return;
+      }
+
+      setState(() {
+        _usingCloudAudioFallback = true;
+        _isListening = true;
+        _finalResultHandled = false;
+        _transcript = '';
+        _lastFinalTranscript = '';
+        _lastCommittedText = '';
+        _transcriptCtrl.clear();
+        _parseWarnings = [];
+        _interpretedText = '';
+        ParsedItems = List.from(_committedItems);
+      });
+      _cloudRecordingLimitTimer?.cancel();
+      _cloudRecordingLimitTimer = Timer(const Duration(seconds: 55), () {
+        if (!mounted || !_usingCloudAudioFallback || _isProcessing) return;
+        _showSnack('Recording limit reached. Transcribing your voice billing now.');
+        unawaited(_stopAndTranscribeCloudRecording());
+      });
+      _showSnack(
+        'On-device ${_selectedLang.label} recognition is unavailable. Recording for online transcription; internet is required. Tap the microphone again when you finish.',
+      );
+    } catch (error) {
+      _cloudRecordingLimitTimer?.cancel();
+      _cloudRecordingPath = null;
+      if (pendingPath != null) {
+        try {
+          await File(pendingPath).delete();
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+          _usingCloudAudioFallback = false;
+        });
+      }
+      _showSnack(
+        'Could not start voice recording. Check microphone permission and try again.',
+        isError: true,
+      );
+      if (kDebugMode) {
+        debugPrint('🎙️ [VoiceBilling] cloud fallback recording failed: $error');
       }
     }
+  }
+
+  Future<void> _stopAndTranscribeCloudRecording() async {
+    if (!_usingCloudAudioFallback || _isProcessing) return;
+    _cloudRecordingLimitTimer?.cancel();
+    _shouldRestartListening = false;
+    final pendingPath = _cloudRecordingPath;
+    if (mounted) {
+      setState(() {
+        _isListening = false;
+        _usingCloudAudioFallback = false;
+        _isProcessing = true;
+      });
+    }
+
+    String? recordingPath = pendingPath;
+    try {
+      recordingPath = await _audioRecorder.stop() ?? pendingPath;
+      _cloudRecordingPath = null;
+      if (recordingPath == null || !await File(recordingPath).exists()) {
+        throw StateError('The voice recording could not be saved. Please try again.');
+      }
+      final recordingFile = File(recordingPath);
+      if (await recordingFile.length() == 0) {
+        throw StateError('No audio was captured. Please speak and try again.');
+      }
+
+      final audioFile = await http.MultipartFile.fromPath(
+        'audio',
+        recordingPath,
+        filename: p.basename(recordingPath),
+        contentType: http_parser.MediaType('audio', 'mp4'),
+      );
+      final response = await ApiClient.postMultipart(
+        ApiClient.voiceBillingAudioEndpoint,
+        {'language_code': _selectedLang.code},
+        files: [audioFile],
+        timeout: const Duration(seconds: 90),
+      );
+      final responseText = await response.stream.bytesToString();
+      dynamic responseBody;
+      try {
+        responseBody = jsonDecode(responseText);
+      } catch (_) {
+        responseBody = null;
+      }
+
+      final parsed = _parseGroqResponseBody(response.statusCode, responseBody);
+      if (responseBody is! Map) {
+        throw const FormatException('Invalid voice-billing audio response.');
+      }
+      final payload = Map<String, dynamic>.from(responseBody);
+      final transcript = (payload['transcript'] ?? '').toString().trim();
+      if (transcript.isEmpty) {
+        throw StateError('No clear speech was detected. Please record again.');
+      }
+
+      var cleanTranscript = PhoneticNormalizer.normalize(
+        transcript,
+        _selectedLang.code,
+      );
+      final correctedTranscript =
+          await VoiceFeedbackLearningService.applyLearnedCorrections(
+        transcript: cleanTranscript,
+        languageCode: _selectedLang.code,
+      );
+      var parsedResult = parsed;
+      if (correctedTranscript.trim().isNotEmpty &&
+          correctedTranscript != cleanTranscript) {
+        cleanTranscript = correctedTranscript;
+        parsedResult = await _parseWithGroq(cleanTranscript);
+      }
+
+      if (!mounted) return;
+      _clearEditControllers();
+      if (parsedResult.items.isEmpty) {
+        setState(() {
+          _transcript = cleanTranscript;
+          _transcriptCtrl.text = cleanTranscript;
+          _lastFinalTranscript = cleanTranscript;
+          _lastPreviewItems = const [];
+          _parseWarnings = parsedResult.warnings;
+          _interpretedText = parsedResult.interpretedText;
+          _isProcessing = false;
+        });
+        _showSnack(
+          parsedResult.warnings.isNotEmpty
+              ? parsedResult.warnings.first
+              : 'I could not confidently identify bill items. Please review the transcript.',
+          isError: true,
+        );
+      } else {
+        setState(() {
+          _lastPreviewItems = List<ParsedItem>.from(parsedResult.items);
+          _parseWarnings = parsedResult.warnings;
+          _interpretedText = parsedResult.interpretedText;
+          _committedItems = _mergeParsedItems(_committedItems, parsedResult.items);
+          ParsedItems = List<ParsedItem>.from(_committedItems);
+          _lastFinalTranscript = cleanTranscript;
+          _lastCommittedText = cleanTranscript;
+          _transcript = '';
+          _transcriptCtrl.clear();
+          _isProcessing = false;
+        });
+        _showSnack(
+          'Detected ${parsedResult.items.length} item${parsedResult.items.length == 1 ? '' : 's'}. Review before adding to the bill.',
+        );
+      }
+    } catch (error, stackTrace) {
+      final detail = error.toString().replaceFirst('Bad state: ', '').trim();
+      final message = detail.isNotEmpty &&
+              !detail.startsWith('Exception:')
+          ? detail
+          : 'Cloud voice recognition failed. Check your internet connection and try again.';
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _isListening = false;
+          _usingCloudAudioFallback = false;
+          _parseWarnings = [message];
+        });
+        _showSnack(message, isError: true);
+      }
+      if (kDebugMode) {
+        debugPrint('🎙️ [VoiceBilling] cloud transcription failed: $error');
+        debugPrint(stackTrace.toString());
+      }
+    } finally {
+      _cloudRecordingPath = null;
+      if (recordingPath != null) {
+        try {
+          await File(recordingPath).delete();
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _cleanupCloudRecorder() async {
+    _cloudRecordingLimitTimer?.cancel();
+    final path = _cloudRecordingPath;
+    _cloudRecordingPath = null;
+    try {
+      if (await _audioRecorder.isRecording()) {
+        await _audioRecorder.stop();
+      }
+    } catch (_) {}
+    if (path != null) {
+      try {
+        await File(path).delete();
+      } catch (_) {}
+    }
+    try {
+      await Future<void>.sync(() => _audioRecorder.dispose());
+    } catch (_) {}
   }
 
   Future<void> _doProcess(String text, {bool commit = false}) async {
