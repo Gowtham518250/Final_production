@@ -2018,11 +2018,14 @@ class PriorityVoiceQueue {
       final sameUnreferencedPayload =
           currentReference == null &&
           priorReference == null &&
-          _channelKey(event) == _channelKey(old) &&
+          PaymentDetectionService._channelKey(event) ==
+              PaymentDetectionService._channelKey(old) &&
           (event.amount - old.amount).abs() < 0.01 &&
-          _eventPaymentDirection(event) == _eventPaymentDirection(old) &&
-          _echoText(event.rawText).isNotEmpty &&
-          _echoText(event.rawText) == _echoText(old.rawText) &&
+          PaymentDetectionService._eventPaymentDirection(event) ==
+              PaymentDetectionService._eventPaymentDirection(old) &&
+          PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
+          PaymentDetectionService._echoText(event.rawText) ==
+              PaymentDetectionService._echoText(old.rawText) &&
           age <= _crossSourceEchoWindow;
       if (sameUnreferencedPayload) {
         PdsLogger.d(
