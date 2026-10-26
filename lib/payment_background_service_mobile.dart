@@ -258,7 +258,23 @@ Future<bool> onStart(ServiceInstance service) async {
       }
     });
 
-    await pds.start();
+    service.on('refresh_payment_dedup_state').listen((event) async {
+      try {
+        final savedHistory = await OnlinePaymentHistoryService.load();
+        await pds.syncDedupWindowsFromPaymentHistory(savedHistory);
+      } catch (error) {
+        debugPrint('⚠️ Could not refresh payment dedup state: $error');
+      }
+    });
+
+    List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
+    try {
+      persistedPaymentHistory = await OnlinePaymentHistoryService.load();
+    } catch (error) {
+      // App may not have a signed-in owner profile during early startup.
+      debugPrint('ℹ️ Payment history cache not available during service startup: $error');
+    }
+    await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     pdsReady = true;
     if (restartRequestedBeforeReady) {
       restartRequestedBeforeReady = false;
@@ -409,7 +425,13 @@ Future<void> _initializeFallback() async {
       PaymentAnnouncementService().speakSimple(text, lang);
     };
 
-    await pds.start();
+    List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
+    try {
+      persistedPaymentHistory = await OnlinePaymentHistoryService.load();
+    } catch (error) {
+      debugPrint('ℹ️ Payment history cache not available in fallback mode: $error');
+    }
+    await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     debugPrint('✅ Payment services initialized (fallback mode)');
   } catch (e) {
     debugPrint('⚠️ Failed fallback initialization: $e');
