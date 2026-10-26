@@ -419,6 +419,67 @@ void main() {
       await subscription.cancel();
     });
 
+    test('PhonePe payment echoed by Truecaller on same account emits only once', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.truecaller',
+          title: 'APGB',
+          content: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      expect(events, hasLength(1));
+      expect(events.single.amount, 5);
+      expect(events.single.accountSuffix, '4222');
+
+      await subscription.cancel();
+    });
+
+    test('same amount from Truecaller to a different account is not deduplicated', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.truecaller',
+          title: 'APGB',
+          content: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 1234',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      expect(events, hasLength(2));
+      expect(events.map((event) => event.accountSuffix).toSet(), {'4222', '1234'});
+
+      await subscription.cancel();
+    });
+
     test('bare APGB Truecaller title is not misrouted as bank SMS', () {
       expect(
         PaymentDetectionService.debugIsTrustedBankSmsNotification(
