@@ -1500,7 +1500,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         path: pendingPath,
         encoder: audio.AudioEncoder.aacLc,
         bitRate: 96000,
-        sampleRate: 44100,
       );
       _cloudRecordingPath = pendingPath;
       if (!mounted) {
