@@ -5319,17 +5319,23 @@ class PaymentDetectionService {
           event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
+      final differentAccounts =
+          event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
       final currentPayer = _normalizedPayer(event.payerName);
       final previousPayer = _normalizedPayer(old.payerName);
-      final sameKnownPayer = currentPayer != null &&
+      final differentKnownPayers = currentPayer != null &&
           previousPayer != null &&
-          _payersCompatible(event.payerName, old.payerName);
-      if (!sameAccount && !sameKnownPayer) {
-        // Do not turn amount + direction alone into transaction identity.
-        // When neither source exposes a shared account or payer, leave the
-        // event for merchant review rather than risking a false duplicate.
+          !_payersCompatible(event.payerName, old.payerName);
+      if (differentAccounts || differentKnownPayers) {
+        // Never pair transactions that contradict known account/payer clues.
         continue;
       }
+      // Android notification relays (especially Truecaller and delayed bank
+      // SMS) sometimes omit a payer or account. In that case allow a bounded,
+      // one-to-one cross-channel echo pairing based on amount and direction;
+      // explicit conflicting identities above always win.
 
       (_echoClaims[old.id] ??= <String>{}).add(channel);
       PdsLogger.t(
