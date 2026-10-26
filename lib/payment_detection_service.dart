@@ -2710,7 +2710,24 @@ class PaymentDetectionService {
   };
 
   // A bank alert often arrives once as a notification and again as an SMS.
-  static const Duration _crossSourceEventWindow = Duration(seconds: 90);
+  /// One real payment is commonly reported by several channels at once (the
+  /// payment app, Truecaller's mirrored UPI alert, the bank SMS) and most of
+  /// those carry no UTR. Within this window, same-direction same-amount events
+  /// are treated as one payment unless they carry different references or
+  /// clearly different payer names.
+  static const Duration _noReferenceEchoWindow = Duration(seconds: 120);
+
+  static String? _normalizedPayer(String? name) {
+    final n = name?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+    return (n == null || n.isEmpty) ? null : n;
+  }
+
+  static bool _payersCompatible(String? a, String? b) {
+    final x = _normalizedPayer(a);
+    final y = _normalizedPayer(b);
+    if (x == null || y == null) return true; // unknown name cannot disprove
+    return x == y || x.contains(y) || y.contains(x);
+  }
 
   // ==========================================================================
   // TEST + HEALTH-INDICATOR PUBLIC API
@@ -4911,7 +4928,7 @@ class PaymentDetectionService {
 
     final now = DateTime.now();
     _recentEmittedPayments.removeWhere(
-      (old) => now.difference(old.timestamp).abs() > _crossSourceEventWindow,
+      (old) => now.difference(old.timestamp).abs() > _noReferenceEchoWindow,
     );
 
     final currentOrigin = _eventOrigin(event.detectionSource);
@@ -4935,6 +4952,21 @@ class PaymentDetectionService {
         // Different references mean different transfers; never merge those.
         if (currentReference != oldReference) continue;
         if (event.hasReferenceConflictWith(old)) continue;
+        return true;
+      }
+
+      // At least one side has no reference: this is the common case for
+      // payment-app notifications. Same amount + direction within the echo
+      // window with compatible payer names is the same payment reported by
+      // another channel (or re-posted by the same app).
+      final withinEchoWindow =
+          now.difference(old.timestamp).abs() <= _noReferenceEchoWindow;
+      if (withinEchoWindow && _payersCompatible(event.payerName, old.payerName)) {
+        PdsLogger.t(
+          'DROP',
+          'reason=echo_same_amount_no_reference '
+              'origin=$currentOrigin prevOrigin=${_eventOrigin(old.detectionSource)}',
+        );
         return true;
       }
 
@@ -4972,7 +5004,7 @@ class PaymentDetectionService {
     }
     final now = DateTime.now();
     _recentEmittedPayments.removeWhere(
-      (old) => now.difference(old.timestamp).abs() > _crossSourceEventWindow,
+      (old) => now.difference(old.timestamp).abs() > _noReferenceEchoWindow,
     );
     _recentEmittedPayments.add(event);
     if (_recentEmittedPayments.length > 100) {
@@ -5553,6 +5585,11 @@ abstract class _TrustGate {
   // ordinary chats that mention an amount, e.g. "sent you ₹500 for lunch"),
   // and removed the dead/contradictory registry entry below instead.
   static const _blocked = <String>{
+    // Our own app: its "Payment Received" / "Payment Detected" / foreground
+    // "Listening for payments" notifications must never be re-read as new
+    // payments (feedback loop that multiplies one credit into many alerts).
+    'com.retailmind.app',
+    'com.example.retail_mind',
     'com.whatsapp',
     'com.whatsapp.w4b',
     'org.telegram.messenger',
