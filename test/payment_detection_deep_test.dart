@@ -1283,7 +1283,11 @@ void main() {
 
       queue.enqueue(first, stateFor(first));
       queue.enqueue(separate, stateFor(separate));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      // PriorityVoiceQueue deliberately enforces a 2-second minimum gap
+      // between announcements. Wait long enough for both queued items to drain
+      // before asserting that a distinct same-amount payment is not suppressed.
+      await Future<void>.delayed(const Duration(milliseconds: 2300));
       queue.dispose();
 
       expect(spoken, hasLength(2));
