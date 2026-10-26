@@ -1519,7 +1519,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // Query the shop's authoritative worker roster only for an owner-mode
       // session. A confirmed empty roster skips the extra Owner-vs-Staff
       // verification screen; an offline/unknown roster still keeps the gate.
-      final hasActiveWorkers = role == 'OWNER' && !staffMode
+      final hasActiveWorkers =
+          !booting &&
+              authenticated &&
+              role == 'OWNER' &&
+              !staffMode
           ? await WorkerVerificationPolicy.hasActiveWorkersForShop(
               userId: userId,
             )
