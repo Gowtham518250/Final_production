@@ -168,6 +168,79 @@ void main() {
       expect(events, hasLength(1));
     });
 
+    test(
+      'Truecaller text updates suppress a repeat sound but keep both review candidates',
+      () async {
+        final originalVoiceEnabled = PdsConfig.isVoiceEnabled;
+        PdsConfig.isVoiceEnabled = true;
+
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        final emitted = <PaymentEvent>[];
+        final sub = service.onPaymentDetected.listen(emitted.add);
+        final spoken = <String>[];
+        final queue = PriorityVoiceQueue()..onSpeak = spoken.add;
+        final now = DateTime.now();
+
+        final first = PaymentEvent(
+          id: 'tc-first',
+          amount: 500,
+          timestamp: now,
+          app: PaymentApp.bankApp,
+          payerName: 'Rahul Kumar',
+          accountSuffix: '4222',
+          rawText: 'UPI transfer from Rahul Kumar to Account 4222 + ₹500',
+          detectionSource: 'truecaller_notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
+        final updated = PaymentEvent(
+          id: 'tc-updated',
+          amount: 500,
+          timestamp: now.add(const Duration(seconds: 2)),
+          app: PaymentApp.bankApp,
+          payerName: 'Rahul Kumar',
+          accountSuffix: '4222',
+          rawText: 'Rahul Kumar sent ₹500 to your bank account 4222',
+          detectionSource: 'truecaller_notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
+        PaymentUiState ui(PaymentEvent event) => PaymentUiState(
+          id: event.id,
+          decision: event.decision,
+          amount: event.amount,
+          payerName: event.payerName,
+          bankName: event.bankName,
+          isFailed: event.isFailed,
+          detectedAt: event.timestamp,
+          rawText: event.rawText,
+          direction: event.direction,
+        );
+
+        await service.debugEmitForTesting(first);
+        await service.debugEmitForTesting(updated);
+
+        // Exercise the public queue directly so this assertion tests the
+        // repeat-suppression policy rather than the service's platform TTS
+        // adapter, which is intentionally absent in Flutter unit tests.
+        queue.enqueue(first, ui(first));
+        queue.enqueue(updated, ui(updated));
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+
+        expect(emitted, hasLength(2));
+        expect(emitted.every((event) => !event.isMerchantConfirmed), isTrue);
+        expect(spoken, hasLength(1));
+
+        queue.dispose();
+        await sub.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+        PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+      },
+    );
+
     test('confirmation dialog can warn about a likely late duplicate', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();

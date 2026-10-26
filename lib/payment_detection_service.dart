@@ -1962,6 +1962,11 @@ class _RecentVoicePayment {
 
 class PriorityVoiceQueue {
   static const Duration _crossSourceEchoWindow = Duration(minutes: 12);
+  // Truecaller can update one active notification's text as its service
+  // enriches it. For unreferenced candidates, suppress only the duplicate
+  // sound when the same payer or receiving account also matches. The event
+  // still remains in history for merchant review; it is not a ledger decision.
+  static const Duration _truecallerReplayAnnouncementWindow = Duration(seconds: 10);
 
   final _queue = SplayTreeSet<_VI>(
     (a, b) =>
@@ -2032,20 +2037,48 @@ class PriorityVoiceQueue {
       if (age > _crossSourceEchoWindow) continue;
 
       final oldChannel = PaymentDetectionService._channelKey(old);
+      final sameAccount = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix == old.accountSuffix;
+      final differentAccounts = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
+      final currentPayer = _normalizedVoicePayer(event.payerName);
+      final priorPayer = _normalizedVoicePayer(old.payerName);
+      final sameKnownPayer = currentPayer != null &&
+          priorPayer != null &&
+          (currentPayer == priorPayer ||
+              currentPayer.contains(priorPayer) ||
+              priorPayer.contains(currentPayer));
+
       if (oldChannel == currentChannel) {
-        final sameUnreferencedPayload =
-            currentReference == null &&
-            priorReference == null &&
+        final sameAmountAndDirection =
             (event.amount - old.amount).abs() < 0.01 &&
             currentDirection ==
-                PaymentDetectionService._eventPaymentDirection(old) &&
+                PaymentDetectionService._eventPaymentDirection(old);
+        final identicalNoReferencePayload =
+            currentReference == null &&
+            priorReference == null &&
+            sameAmountAndDirection &&
             PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
             PaymentDetectionService._echoText(event.rawText) ==
                 PaymentDetectionService._echoText(old.rawText);
-        if (sameUnreferencedPayload) {
+        final sameTruecallerPaymentClues =
+            currentReference == null &&
+            priorReference == null &&
+            sameAmountAndDirection &&
+            age <= _truecallerReplayAnnouncementWindow &&
+            PaymentDetectionService._eventOrigin(event.detectionSource) ==
+                'truecaller_notification' &&
+            PaymentDetectionService._eventOrigin(old.detectionSource) ==
+                'truecaller_notification' &&
+            (sameAccount || sameKnownPayer);
+        if (identicalNoReferencePayload || sameTruecallerPaymentClues) {
           PdsLogger.d(
             'VOICE',
-            'Exact same-channel no-reference payment replay suppressed',
+            identicalNoReferencePayload
+                ? 'Exact same-channel no-reference payment replay suppressed'
+                : 'Likely same Truecaller notification update: repeat sound suppressed; event kept for review',
           );
           return true;
         }
@@ -2067,20 +2100,6 @@ class PriorityVoiceQueue {
       if (claimedChannels != null && claimedChannels.contains(currentChannel)) {
         continue;
       }
-
-      final sameAccount = event.accountSuffix != null &&
-          old.accountSuffix != null &&
-          event.accountSuffix == old.accountSuffix;
-      final differentAccounts = event.accountSuffix != null &&
-          old.accountSuffix != null &&
-          event.accountSuffix != old.accountSuffix;
-      final currentPayer = _normalizedVoicePayer(event.payerName);
-      final priorPayer = _normalizedVoicePayer(old.payerName);
-      final sameKnownPayer = currentPayer != null &&
-          priorPayer != null &&
-          (currentPayer == priorPayer ||
-              currentPayer.contains(priorPayer) ||
-              priorPayer.contains(currentPayer));
       final differentKnownPayers = currentPayer != null &&
           priorPayer != null &&
           !sameKnownPayer;
