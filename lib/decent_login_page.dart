@@ -107,8 +107,16 @@ class _DecentLoginPageState extends State<DecentLoginPage>
       await ScopedSharedPreferences.setBool('is_staff_mode', false);
       await ScopedSharedPreferences.remove('active_staff_name');
       await ScopedSharedPreferences.remove('active_staff_worker_id');
+
+      // Preserve the existing shop-setup requirement; bypass only the
+      // extra Owner-vs-Staff verification screen.
+      final prefs = await SharedPreferences.getInstance();
+      final shopDetailsRequired =
+          prefs.getBool('shop_details_required_$userId') ?? false;
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/dashboard');
+      Navigator.of(context).pushReplacementNamed(
+        shopDetailsRequired ? '/shop-details' : '/dashboard',
+      );
       return;
     }
 
