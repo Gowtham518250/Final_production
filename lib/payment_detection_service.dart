@@ -916,11 +916,11 @@ class PdsConfig {
   // FIX-K: LIKELY re-announce timeout
   static const Duration likelyReannounceAfter = Duration(seconds: 12);
 
-  // Dedup
-  static const Duration dedupUtrTtl = Duration(hours: 24);
-  // Native Android notification keys survive service restarts and stop the same
-  // posted notification being reclassified as a new payment for one day.
-  static const Duration dedupNativeNotificationTtl = Duration(hours: 24);
+  // Duplicate notifications are suppressed during the workday, but a still-
+  // unresolved payment must be eligible for a fresh review reminder the next
+  // morning. Persistent confirmed-payment history remains the financial guard.
+  static const Duration dedupUtrTtl = Duration(hours: 6);
+  static const Duration dedupNativeNotificationTtl = Duration(hours: 6);
   static const Duration dedupHashTtl = Duration(seconds: 30);
   static const Duration dedupCleanupInterval = Duration(minutes: 5);
   // FIX-C: debounce save
@@ -1145,12 +1145,16 @@ class PdsSessionStats {
 // =============================================================================
 
 class PdsStateStore {
-  static const _kDedup = 'pds_dedup_v1';
+  static const _kDedup = 'pds_dedup_v2';
+  static const _kLegacyDedup = 'pds_dedup_v1';
+  static const _legacyExpiryReduction = Duration(hours: 18);
 
   static Future<void> loadDedup(Map<String, DateTime> store) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kDedup);
+      final currentRaw = prefs.getString(_kDedup);
+      final isLegacy = currentRaw == null;
+      final raw = currentRaw ?? prefs.getString(_kLegacyDedup);
       if (raw == null || raw.isEmpty) return;
       final Map<String, dynamic> decoded =
           jsonDecode(raw) as Map<String, dynamic>;
@@ -1158,13 +1162,26 @@ class PdsStateStore {
       int loaded = 0;
       decoded.forEach((fp, isoExpiry) {
         try {
-          final expiry = DateTime.parse(isoExpiry as String);
+          var expiry = DateTime.parse(isoExpiry as String);
+          if (isLegacy &&
+              (fp.startsWith('utr:') ||
+                  fp.startsWith('utr_') ||
+                  fp.startsWith('notification-event:'))) {
+            // v1 used a 24-hour TTL. Convert the saved expiry to the new
+            // six-hour review-reminder window once, rather than inheriting a
+            // stale all-day suppression after this app update.
+            expiry = expiry.subtract(_legacyExpiryReduction);
+          }
           if (expiry.isAfter(now)) {
             store[fp] = expiry;
             loaded++;
           }
         } catch (_) {}
       });
+      if (isLegacy) {
+        await prefs.remove(_kLegacyDedup);
+        await saveDedup(store);
+      }
       PdsLogger.i('STORE', 'Loaded $loaded dedup entries');
     } catch (e, st) {
       PdsLogger.e('STORE', 'loadDedup error', e, st);
@@ -2729,7 +2746,11 @@ class PaymentDetectionService {
   static bool _payersCompatible(String? a, String? b) {
     final x = _normalizedPayer(a);
     final y = _normalizedPayer(b);
-    if (x == null || y == null) return true; // unknown name cannot disprove
+    // Missing payer names do not establish identity. The caller can still pair
+    // events by the same normalized UTR or a matching bank-account suffix.
+    // Treating two null names as compatible caused unrelated equal-amount
+    // credit/debit alerts to disappear as false cross-source echoes.
+    if (x == null || y == null) return false;
     return x == y || x.contains(y) || y.contains(x);
   }
 
