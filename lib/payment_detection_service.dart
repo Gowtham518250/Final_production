@@ -4649,7 +4649,6 @@ class PaymentDetectionService {
     );
 
     // Layer 4.5: Immediate Deduplication
-    final isUtrFp = validNumericUtr;
     final tempEvent = PaymentEvent(
       amount: amount,
       timestamp: DateTime.now(),
@@ -4741,10 +4740,17 @@ class PaymentDetectionService {
         previousReferenceAmount == null;
     bool consumedByUser = false; // true once emitted / handled as a real event
     if (registeredActiveFingerprint) _activeFingerprints.add(fp);
+    // Stable app transaction IDs can be longer than the numeric UTR
+    // length used for scoring. If the normalized reference exists, persist its
+    // replay key for the full reference window; otherwise a 23+ char PhonePe
+    // ID expires after only 30 seconds and can create the same receipt again
+    // the next time the locked notification is replayed.
     _dedupStore[fp] = DateTime.now().add(
-      isUtrFp ? PdsConfig.dedupUtrTtl : PdsConfig.dedupHashTtl,
+      normalizedReference != null
+          ? PdsConfig.dedupUtrTtl
+          : PdsConfig.dedupHashTtl,
     );
-    if (isUtrFp) _dedupDirty = true;
+    if (normalizedReference != null) _dedupDirty = true;
 
     try {
       // Layer 4.7: TCM Matching
