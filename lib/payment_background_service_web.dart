@@ -9,3 +9,5 @@ Future<void> syncExpectedPaymentBill(double? amount) async {}
 Future<void> syncRecordedBillPayment(double amount) async {}
 
 Future<void> restartBackgroundPaymentDetection() async {}
+
+Future<void> refreshPaymentDetectionDedupState() async {}
