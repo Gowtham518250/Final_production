@@ -9,6 +9,7 @@ import 'package:flutter_accessibility_service/flutter_accessibility_service.dart
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'payment_announcement_service.dart';
 import 'payment_alert_deduplicator.dart';
+import 'payment_alert_policy.dart';
 import 'payment_detection_service.dart';
 import 'payment_event.dart';
 import 'online_payment_history_service.dart';
@@ -199,9 +200,15 @@ Future<void> _postBackgroundPaymentAlert(
       body += ' — verify before recording.';
     }
 
-    final audible = lateAt != null ||
-        !PdsConfig.isVoiceEnabled ||
-        conflict;
+    // Unverified incoming credits need an audible fallback: a background TTS
+    // engine may be unavailable even though voice is enabled in preferences.
+    // The alert remains deduplicated per payment by _backgroundAlertDeduplicator.
+    final audible = shouldUseAudiblePaymentAlert(
+      isLate: lateAt != null,
+      voiceEnabled: PdsConfig.isVoiceEnabled,
+      hasConflict: conflict,
+      needsVerification: needsVerify,
+    );
     final channelId = audible
         ? 'payment_detection_alerts_audible'
         : 'payment_detection_alerts_silent';
