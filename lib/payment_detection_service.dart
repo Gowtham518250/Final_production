@@ -924,6 +924,11 @@ class PdsConfig {
   // pending candidate can be surfaced again after the overnight review cooldown.
   // Confirmed reference identities remain protected by the 24-hour UTR cache.
   static const Duration dedupNativeNotificationTtl = Duration(hours: 6);
+
+  /// Notification/SMS candidates older than this at processing time were
+  /// recovered after a service outage. The event timestamp stays current;
+  /// display/alert metadata keeps the original source time separately.
+  static const Duration lateEventAfter = Duration(minutes: 2);
   static const Duration dedupHashTtl = Duration(seconds: 30);
   static const Duration dedupCleanupInterval = Duration(minutes: 5);
   // FIX-C: debounce save
@@ -2826,6 +2831,8 @@ class PaymentDetectionService {
     _recentConfirmed.clear();
     _historyHandledEventIds.clear();
     _dedupStore.clear();
+    _lateEventTimes.clear();
+    _sourcePostedAt = null;
     _dedupReferenceAmounts.clear();
     _activeFingerprints.clear();
     _pendingBuffer.dispose();
@@ -4064,7 +4071,49 @@ class PaymentDetectionService {
 
   bool _firstNotificationTraced = false;
 
+  // Late source times are tracked separately so echo matching still compares
+  // current detection timestamps, not hours-old timestamps from queued events.
+  DateTime? _sourcePostedAt;
+  final Map<String, DateTime> _lateEventTimes = <String, DateTime>{};
+
+  /// Original source time for an event recovered after a service interruption.
+  DateTime? originalTimeIfLate(String eventId) => _lateEventTimes[eventId];
+
+  void _markLateIfNeeded(String eventId) {
+    final postedAt = _sourcePostedAt;
+    if (postedAt == null) return;
+    if (DateTime.now().difference(postedAt) < PdsConfig.lateEventAfter) return;
+    _lateEventTimes[eventId] = postedAt;
+    while (_lateEventTimes.length > 200) {
+      _lateEventTimes.remove(_lateEventTimes.keys.first);
+    }
+  }
+
+  /// Native notification keys use package|notificationId|postTimeMillis|hash.
+  @visibleForTesting
+  static DateTime? postedAtFromEventKey(String? eventKey) {
+    if (eventKey == null) return null;
+    final parts = eventKey.split('|');
+    if (parts.length < 4) return null;
+    final millis = int.tryParse(parts[parts.length - 2]);
+    if (millis == null || millis <= 0) return null;
+    final postedAt = DateTime.fromMillisecondsSinceEpoch(millis);
+    final now = DateTime.now();
+    return postedAt.isAfter(now) ? now : postedAt;
+  }
+
   void _handleNotification(ServiceNotificationEvent event) {
+    _sourcePostedAt = postedAtFromEventKey(
+      _safe(() => (event as dynamic).eventKey as String?),
+    );
+    try {
+      _handleNotificationCore(event);
+    } finally {
+      _sourcePostedAt = null;
+    }
+  }
+
+  void _handleNotificationCore(ServiceNotificationEvent event) {
     try {
       final pkg = event.packageName ?? '';
       if (!_firstNotificationTraced) {
@@ -4309,7 +4358,18 @@ class PaymentDetectionService {
     }
   }
 
-  void handleSms(String sender, String body) {
+  /// [receivedAt] is supplied when an SMS was saved by the native receiver
+  /// while the detection service was down and is now being replayed.
+  void handleSms(String sender, String body, {DateTime? receivedAt}) {
+    _sourcePostedAt = receivedAt;
+    try {
+      _handleSmsCore(sender, body);
+    } finally {
+      _sourcePostedAt = null;
+    }
+  }
+
+  void _handleSmsCore(String sender, String body) {
     try {
       if (sender.isEmpty || body.isEmpty) return;
       final normalizedSender = sender.trim();
@@ -4495,6 +4555,7 @@ class PaymentDetectionService {
           ? PaymentTransactionDirection.outgoingDebit
           : PaymentTransactionDirection.unknown,
     );
+    _markLateIfNeeded(tempEvent.id);
     final fp = tempEvent.fingerprint;
     final normalizedReference = tempEvent.normalizedReferenceId;
     final nowForDedup = DateTime.now();
