@@ -2007,6 +2007,30 @@ class PriorityVoiceQueue {
           currentReference == priorReference) {
         return true;
       }
+
+      // A notification without a UTR can be reposted with a new event ID
+      // after the OS/app refreshes its notification. When it is the same
+      // source channel, exact amount, direction, and exact normalized message,
+      // suppress the repeated *announcement* inside the existing voice echo
+      // window. Do not use amount-only matching: another ₹5 payment with
+      // different source text remains eligible to be announced.
+      final age = now.difference(old.timestamp).abs();
+      final sameUnreferencedPayload =
+          currentReference == null &&
+          priorReference == null &&
+          _channelKey(event) == _channelKey(old) &&
+          (event.amount - old.amount).abs() < 0.01 &&
+          _eventPaymentDirection(event) == _eventPaymentDirection(old) &&
+          _echoText(event.rawText).isNotEmpty &&
+          _echoText(event.rawText) == _echoText(old.rawText) &&
+          age <= _crossSourceEchoWindow;
+      if (sameUnreferencedPayload) {
+        PdsLogger.d(
+          'VOICE',
+          'Exact same-channel no-reference payment payload replay suppressed',
+        );
+        return true;
+      }
     }
     return false;
   }
