@@ -414,7 +414,68 @@ void main() {
         PaymentTransactionDirection.incomingCredit,
       );
       expect(events.single.decision, PaymentDecision.likely);
-      expect(events.single.detectionSource, 'notification');
+      expect(events.single.detectionSource, 'truecaller_notification');
+
+      await subscription.cancel();
+    });
+
+    test('PhonePe payment echoed by Truecaller on same account emits only once', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.truecaller',
+          title: 'APGB',
+          content: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      expect(events, hasLength(1));
+      expect(events.single.amount, 5);
+      expect(events.single.accountSuffix, '4222');
+
+      await subscription.cancel();
+    });
+
+    test('same amount from Truecaller to a different account is not deduplicated', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          title: 'PhonePe',
+          content: 'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.truecaller',
+          title: 'APGB',
+          content: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 1234',
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      expect(events, hasLength(2));
+      expect(events.map((event) => event.accountSuffix).toSet(), {'4222', '1234'});
 
       await subscription.cancel();
     });
@@ -1283,7 +1344,8 @@ void main() {
 
       queue.enqueue(first, stateFor(first));
       queue.enqueue(separate, stateFor(separate));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      // The queue intentionally spaces announcements by voiceMinGap (2s).
+      await Future<void>.delayed(PdsConfig.voiceMinGap + const Duration(milliseconds: 150));
       queue.dispose();
 
       expect(spoken, hasLength(2));
@@ -1621,6 +1683,53 @@ void main() {
   });
 
 
+  test('does not suppress same-amount cross-channel payments to different accounts', () async {
+    final queue = PriorityVoiceQueue();
+    final spoken = <String>[];
+    queue.onSpeak = spoken.add;
+
+    final now = DateTime.now();
+    final first = PaymentEvent(
+      id: 'phonepe-account-1111',
+      amount: 500,
+      timestamp: now,
+      app: PaymentApp.phonePe,
+      rawText: '₹500 credited to account 1111',
+      accountSuffix: '1111',
+      detectionSource: 'notification',
+      direction: PaymentTransactionDirection.incomingCredit,
+      decision: PaymentDecision.likely,
+    );
+    final second = PaymentEvent(
+      id: 'truecaller-account-2222',
+      amount: 500,
+      timestamp: now.add(const Duration(seconds: 2)),
+      app: PaymentApp.bankApp,
+      rawText: 'UPI transfer to account 2222 +₹500',
+      accountSuffix: '2222',
+      detectionSource: 'truecaller_notification',
+      direction: PaymentTransactionDirection.incomingCredit,
+      decision: PaymentDecision.likely,
+    );
+
+    PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
+      id: event.id,
+      decision: event.decision,
+      amount: event.amount,
+      isFailed: false,
+      detectedAt: event.timestamp,
+      rawText: event.rawText,
+      direction: event.direction,
+    );
+
+    queue.enqueue(first, stateFor(first));
+    queue.enqueue(second, stateFor(second));
+    await Future<void>.delayed(PdsConfig.voiceMinGap + const Duration(milliseconds: 150));
+    queue.dispose();
+
+    expect(spoken, hasLength(2));
+  });
+
   test('suppresses a PhonePe credit replayed by Truecaller ten minutes later', () async {
     final queue = PriorityVoiceQueue();
     final spoken = <String>[];
@@ -1632,7 +1741,9 @@ void main() {
       amount: 5,
       timestamp: firstTime,
       app: PaymentApp.phonePe,
-      rawText: 'You received ₹5 from Rahul',
+      rawText: 'You received ₹5 from Rahul to account 4222',
+      accountSuffix: '4222',
+      detectionSource: 'notification',
       direction: PaymentTransactionDirection.incomingCredit,
       decision: PaymentDecision.likely,
     );
@@ -1642,6 +1753,8 @@ void main() {
       timestamp: firstTime.add(const Duration(minutes: 10)),
       app: PaymentApp.bankApp,
       rawText: 'UPI transfer from Apgbank to Account 4222 +₹5',
+      accountSuffix: '4222',
+      detectionSource: 'truecaller_notification',
       direction: PaymentTransactionDirection.incomingCredit,
       decision: PaymentDecision.likely,
     );

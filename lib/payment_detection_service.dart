@@ -1983,57 +1983,120 @@ class PriorityVoiceQueue {
   //   - Old entries expire automatically so same customer can pay again later
   final Map<String, DateTime> _spokenFps = {};
   final List<_RecentVoicePayment> _recentPayments = [];
+  // A prior payment may be paired with at most one echo from a given channel.
+  // This prevents one payment alert from swallowing a second real payment.
+  final Map<String, Set<String>> _echoClaims = {};
 
-  /// Only the same event or the same authoritative reference is an echo here.
-  /// Amount-based matching was removed: it silenced genuine repeat payments
-  /// (same customer, same amount) and is now handled one-to-one upstream.
+  static String? _normalizedVoicePayer(String? value) {
+    final normalized =
+        value?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  /// Suppresses repeat announcements only when transaction identity is
+  /// credible: same event/reference, an exact immediate same-channel replay,
+  /// or a cross-channel event with a matching account suffix or known payer.
+  /// Amount alone is never enough to merge two otherwise unrelated payments.
   bool _isRecentCrossSourceEcho(PaymentEvent event) {
     if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
+    final currentDirection =
+        PaymentDetectionService._eventPaymentDirection(event);
+    if (currentDirection == PaymentDirection.unknown) return false;
+
     final now = event.timestamp;
     _recentPayments.removeWhere(
       (entry) =>
-          now.difference(entry.event.timestamp).abs() >
-          _crossSourceEchoWindow,
+          now.difference(entry.event.timestamp).abs() > _crossSourceEchoWindow,
     );
+    final liveVoiceEventIds = _recentPayments.map((e) => e.event.id).toSet();
+    _echoClaims.removeWhere((id, _) => !liveVoiceEventIds.contains(id));
+    final currentReference = event.normalizedReferenceId;
+    final currentChannel = PaymentDetectionService._channelKey(event);
+
     for (final previous in _recentPayments) {
       final old = previous.event;
       if (old.isMerchantConfirmed || old.hasReferenceConflict) continue;
       if (event.id == old.id) return true;
-      final currentReference = event.normalizedReferenceId;
+
       final priorReference = old.normalizedReferenceId;
-      if (currentReference != null &&
-          priorReference != null &&
-          !event.hasReferenceConflictWith(old) &&
-          currentReference == priorReference) {
+      if (currentReference != null && priorReference != null) {
+        if (currentReference != priorReference ||
+            event.hasReferenceConflictWith(old)) {
+          // Different authoritative references must never be collapsed.
+          continue;
+        }
         return true;
       }
 
-      // A notification without a UTR can be reposted with a new event ID
-      // after the OS/app refreshes its notification. When it is the same
-      // source channel, exact amount, direction, and exact normalized message,
-      // suppress the repeated *announcement* inside the existing voice echo
-      // window. Do not use amount-only matching: another ₹5 payment with
-      // different source text remains eligible to be announced.
       final age = now.difference(old.timestamp).abs();
-      final sameUnreferencedPayload =
-          currentReference == null &&
-          priorReference == null &&
-          PaymentDetectionService._channelKey(event) ==
-              PaymentDetectionService._channelKey(old) &&
-          (event.amount - old.amount).abs() < 0.01 &&
-          PaymentDetectionService._eventPaymentDirection(event) ==
-              PaymentDetectionService._eventPaymentDirection(old) &&
-          PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
-          PaymentDetectionService._echoText(event.rawText) ==
-              PaymentDetectionService._echoText(old.rawText) &&
-          age <= _crossSourceEchoWindow;
-      if (sameUnreferencedPayload) {
-        PdsLogger.d(
-          'VOICE',
-          'Exact same-channel no-reference payment payload replay suppressed',
-        );
-        return true;
+      if (age > _crossSourceEchoWindow) continue;
+
+      final oldChannel = PaymentDetectionService._channelKey(old);
+      if (oldChannel == currentChannel) {
+        final sameUnreferencedPayload =
+            currentReference == null &&
+            priorReference == null &&
+            (event.amount - old.amount).abs() < 0.01 &&
+            currentDirection ==
+                PaymentDetectionService._eventPaymentDirection(old) &&
+            PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
+            PaymentDetectionService._echoText(event.rawText) ==
+                PaymentDetectionService._echoText(old.rawText);
+        if (sameUnreferencedPayload) {
+          PdsLogger.d(
+            'VOICE',
+            'Exact same-channel no-reference payment replay suppressed',
+          );
+          return true;
+        }
+        continue;
       }
+
+      if (currentReference != null &&
+          priorReference != null &&
+          currentReference != priorReference) {
+        continue;
+      }
+      if ((event.amount - old.amount).abs() >= 0.01 ||
+          currentDirection !=
+              PaymentDetectionService._eventPaymentDirection(old)) {
+        continue;
+      }
+
+      final claimedChannels = _echoClaims[old.id];
+      if (claimedChannels != null && claimedChannels.contains(currentChannel)) {
+        continue;
+      }
+
+      final sameAccount = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix == old.accountSuffix;
+      final differentAccounts = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
+      final currentPayer = _normalizedVoicePayer(event.payerName);
+      final priorPayer = _normalizedVoicePayer(old.payerName);
+      final sameKnownPayer = currentPayer != null &&
+          priorPayer != null &&
+          (currentPayer == priorPayer ||
+              currentPayer.contains(priorPayer) ||
+              priorPayer.contains(currentPayer));
+      final differentKnownPayers = currentPayer != null &&
+          priorPayer != null &&
+          !sameKnownPayer;
+      if (differentAccounts || differentKnownPayers) continue;
+      if (!sameAccount && !sameKnownPayer) {
+        // E.g. a generic PhonePe alert and a Truecaller mirror without any
+        // common transaction/account/payer evidence: leave both reviewable.
+        continue;
+      }
+
+      (_echoClaims[old.id] ??= <String>{}).add(currentChannel);
+      PdsLogger.d(
+        'VOICE',
+        'Cross-channel payment echo suppressed channel=$currentChannel',
+      );
+      return true;
     }
     return false;
   }
@@ -2104,7 +2167,8 @@ class PriorityVoiceQueue {
         'DROP',
         'reason=voice_echo repeatedFp=$repeatedFingerprint crossSource=$crossSourceEcho',
       );
-      _rememberPayment(e);
+      // Do not let a suppressed echo become a new anchor that could suppress
+      // another later transaction with the same amount.
       return;
     }
     _markSpoken(fingerprint);
@@ -2201,6 +2265,7 @@ class PriorityVoiceQueue {
     _recentTs.clear();
     _spokenFps.clear();
     _recentPayments.clear();
+    _echoClaims.clear();
   }
 }
 
@@ -5157,6 +5222,10 @@ class PaymentDetectionService {
 
   static String _eventOrigin(String source) {
     final value = source.toLowerCase();
+    // Preserve the identity of Truecaller Business Chat notifications. They
+    // must be distinguishable from the original payment-app notification for
+    // one-to-one cross-source echo suppression.
+    if (value.startsWith('truecaller_notification')) return 'truecaller_notification';
     if (value.startsWith('notification+sms')) return 'notification+sms';
     if (value.startsWith('notification')) return 'notification';
     if (value.startsWith('sms')) return 'sms';
@@ -5257,9 +5326,23 @@ class PaymentDetectionService {
           event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-      if (!sameAccount && !_payersCompatible(event.payerName, old.payerName)) {
-        continue; // clearly different payers
+      final differentAccounts =
+          event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
+      final currentPayer = _normalizedPayer(event.payerName);
+      final previousPayer = _normalizedPayer(old.payerName);
+      final differentKnownPayers = currentPayer != null &&
+          previousPayer != null &&
+          !_payersCompatible(event.payerName, old.payerName);
+      if (differentAccounts || differentKnownPayers) {
+        // Never pair transactions that contradict known account/payer clues.
+        continue;
       }
+      // Android notification relays (especially Truecaller and delayed bank
+      // SMS) sometimes omit a payer or account. In that case allow a bounded,
+      // one-to-one cross-channel echo pairing based on amount and direction;
+      // explicit conflicting identities above always win.
 
       (_echoClaims[old.id] ??= <String>{}).add(channel);
       PdsLogger.t(
@@ -5821,6 +5904,7 @@ class PaymentDetectionService {
       normalizedIncomingText,
       PaymentApp.bankApp,
       source: 'notification',
+      eventSource: 'truecaller_notification',
       isUnverifiedApp: true,
       allowUnverifiedIncomingCandidate: true,
     );
