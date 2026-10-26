@@ -10197,6 +10197,8 @@ class _DashboardPageState extends State<DashboardPage>
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
+                        // Transaction rows are read-only and can be recycled.
+                        addAutomaticKeepAlives: filteredSales.length <= 20,
                         itemCount: filteredSales.length,
                         itemBuilder: (context, index) {
                           final s = filteredSales[index];
