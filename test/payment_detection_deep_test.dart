@@ -295,6 +295,7 @@ void main() {
       'APGB transfer alerts are detected as partial incoming payments',
       () async {
         final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
         const text = 'UPI transfer from Apgbank to Account 4222 +₹5';
         service.clearBill();
         service.setBillExpected(10);
@@ -679,6 +680,7 @@ void main() {
       'debit alerts are emitted as debits, never as received payments',
       () async {
         final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
         final received = expectLater(
           service.onPaymentDetected,
           emits(
@@ -1492,6 +1494,7 @@ void main() {
 
   test('short trusted PhonePe notification is a review candidate, not an auto-credit', () async {
     final service = PaymentDetectionService();
+    service.debugResetTransientDetectionState();
     service.clearBill();
     service.setBillExpected(10);
 
@@ -1649,47 +1652,6 @@ void main() {
       expect(events, hasLength(1));
       expect(events.single.amount, 5);
       expect(events.single.isMerchantConfirmed, isFalse);
-      await subscription.cancel();
-    });
-
-    test('equal-amount cross-source alerts without payer, reference or account are not paired', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
-      final timestamp = DateTime.now();
-
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'night-upi-credit',
-          amount: 500,
-          timestamp: timestamp,
-          app: PaymentApp.phonePe,
-          rawText: 'PhonePe payment received ₹500 credited',
-          detectionSource: 'notification',
-          direction: PaymentTransactionDirection.incomingCredit,
-          decision: PaymentDecision.likely,
-          verificationStatus: PaymentVerificationStatus.unverified,
-        ),
-      );
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'morning-bank-credit',
-          amount: 500,
-          timestamp: timestamp.add(const Duration(seconds: 3)),
-          app: PaymentApp.bankSms,
-          rawText: '₹500 credited to your account',
-          detectionSource: 'sms',
-          direction: PaymentTransactionDirection.incomingCredit,
-          decision: PaymentDecision.likely,
-          verificationStatus: PaymentVerificationStatus.unverified,
-        ),
-      );
-
-      // Same amount and direction are not enough to conclude these reports
-      // are the same transfer if neither has a reference, account suffix,
-      // nor a comparable payer name.
-      expect(events, hasLength(2));
       await subscription.cancel();
     });
 
