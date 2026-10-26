@@ -1796,6 +1796,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
               : ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
+                  // Product cards are read-only rows; recycle off-screen cards
+                  // instead of retaining them all on large inventories.
+                  addAutomaticKeepAlives: filteredProducts.length <= 20,
                   itemCount: filteredProducts.length,
                   itemBuilder: (_, i) => _productCard(filteredProducts[i]),
                 ),
