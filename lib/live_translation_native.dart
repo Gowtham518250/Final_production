@@ -1,7 +1,9 @@
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'live_translation_remote.dart';
 import 'translation_fallback_policy.dart';
+import 'device_capability_service.dart';
 
 final OnDeviceTranslatorModelManager _modelManager =
     OnDeviceTranslatorModelManager();
@@ -79,10 +81,10 @@ Future<OnDeviceTranslator> _translatorFor(
   final englishCode = TranslateLanguage.english.bcpCode;
   final targetCode = target.bcpCode;
   final task = () async {
-    await Future.wait<void>([
-      _ensureModelDownloaded(englishCode),
-      _ensureModelDownloaded(targetCode),
-    ]);
+    // Sequential downloads avoid two model-download jobs competing for CPU,
+    // network and memory during the first translated screen on entry devices.
+    await _ensureModelDownloaded(englishCode);
+    await _ensureModelDownloaded(targetCode);
     return OnDeviceTranslator(
       sourceLanguage: TranslateLanguage.english,
       targetLanguage: target,
@@ -110,6 +112,29 @@ Future<List<String>> translateTexts(
   final result = List<String>.of(texts);
   final localIndexes = <int>[];
   final remoteIndexes = <int>[];
+
+  // On low-RAM devices, prefer the server's batched IndicTrans2 translation
+  // while online. This avoids loading English + target-language ML Kit models
+  // into the app process just to translate a screen full of dynamic labels.
+  // If the device is offline, keep the existing on-device path for languages
+  // supported by ML Kit, preserving offline voice-billing/shop workflows.
+  if (DeviceCapabilityService.instance.isLowEndDevice && target != null) {
+    var online = false;
+    try {
+      online =
+          await Connectivity().checkConnectivity() != ConnectivityResult.none;
+    } catch (_) {
+      // Unknown connectivity uses local translation rather than assuming the
+      // remote service is reachable.
+    }
+    if (online) {
+      return translateTextBatchRemotely(
+        texts,
+        targetLanguageCode,
+        timeout: const Duration(seconds: 8),
+      );
+    }
+  }
 
   final targetScriptRegex = switch (targetLanguageCode) {
     'te' => RegExp(r'[\u0C00-\u0C7F]'),
@@ -150,35 +175,51 @@ Future<List<String>> translateTexts(
   }
 
   if (target != null && localIndexes.isNotEmpty) {
+    OnDeviceTranslator? translator;
     try {
-      final translator = await _translatorFor(
+      translator = await _translatorFor(
         targetLanguageCode,
         target,
       ).timeout(const Duration(seconds: 8));
-      final translated = await Future.wait(
-        localIndexes.map((index) => translator.translateText(texts[index])),
-      );
-      for (var index = 0; index < localIndexes.length; index++) {
-        final sourceIndex = localIndexes[index];
-        final translatedText = translated[index];
-        if (TranslationFallbackPolicy.needsRemoteFallback(
-          texts[sourceIndex],
-          translatedText,
-        )) {
-          // Some proper nouns (for example, restaurant/product names) can be
-          // passed through unchanged by the on-device model. Retry those via
-          // the authenticated batch endpoint instead of leaving them English
-          // indefinitely in the user's selected-language UI.
-          remoteIndexes.add(sourceIndex);
-        } else {
-          result[sourceIndex] = translatedText;
+    } catch (_) {
+      // The first model initialization can take a while. Keep the UI flow
+      // responsive and move these strings to the authenticated batch fallback.
+      remoteIndexes.addAll(localIndexes);
+    }
+
+    if (translator != null) {
+      final chunkSize =
+          DeviceCapabilityService.instance.isLowEndDevice ? 2 : 4;
+      for (var offset = 0; offset < localIndexes.length; offset += chunkSize) {
+        final chunkIndexes = localIndexes
+            .skip(offset)
+            .take(chunkSize)
+            .toList(growable: false);
+        try {
+          final translated = await Future.wait(
+            chunkIndexes.map(
+              (index) => translator!.translateText(texts[index]),
+            ),
+          );
+          for (var index = 0; index < chunkIndexes.length; index++) {
+            final sourceIndex = chunkIndexes[index];
+            final translatedText = translated[index];
+            if (TranslationFallbackPolicy.needsRemoteFallback(
+              texts[sourceIndex],
+              translatedText,
+            )) {
+              // Retry proper nouns that the local model passes through.
+              remoteIndexes.add(sourceIndex);
+            } else {
+              result[sourceIndex] = translatedText;
+            }
+          }
+        } catch (_) {
+          // Only retry this small failed group; don't discard translations
+          // that already succeeded in earlier chunks.
+          remoteIndexes.addAll(chunkIndexes);
         }
       }
-    } catch (_) {
-      // Model download/translation failures use the authenticated backend batch
-      // endpoint as a fallback. If that is also unavailable, the original text
-      // remains visible; no provider key is shipped in the Flutter app.
-      remoteIndexes.addAll(localIndexes);
     }
   }
 
