@@ -783,6 +783,28 @@ class _DashboardPageState extends State<DashboardPage>
                 const SizedBox(height: 4),
                 LiveTranslatedText('Reference: ${event.referenceId}'),
               ],
+              Builder(
+                builder: (_) {
+                  final earlier = PaymentDetectionService()
+                      .similarRecentlyConfirmed(event);
+                  if (earlier == null) return const SizedBox.shrink();
+                  final t = earlier.timestamp;
+                  final hh = t.hour.toString().padLeft(2, '0');
+                  final mm = t.minute.toString().padLeft(2, '0');
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: LiveTranslatedText(
+                      '⚠ A ₹${earlier.amount.toStringAsFixed(0)} payment was '
+                      'already confirmed at $hh:$mm. This may be its late SMS or '
+                      'notification. Record it only if it is a separate payment.',
+                      style: const TextStyle(
+                        color: Color(0xFFB45309),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               const LiveTranslatedText(
                 'A phone notification is not proof that money settled. Check your bank or UPI account before confirming. This app cannot guarantee notification-based detection is always accurate.',
