@@ -131,7 +131,13 @@ class OnlinePaymentHistoryService {
 
     final record = <String, dynamic>{
       'amount': event.amount,
-      'timestamp': event.timestamp.toIso8601String(),
+      // The history card should reflect when the source notification/SMS was
+      // posted, not when a delayed background queue finally processed it.
+      'timestamp':
+          (event.sourceTimestamp ?? event.timestamp).toIso8601String(),
+      // Keep detection time separately for cooldowns/diagnostics; source time
+      // may be hours old when recovering after a service interruption.
+      'detected_at': event.timestamp.toIso8601String(),
       'app': event.appDisplayName,
       'status': event.isMerchantConfirmed
           ? 'CONFIRMED'
@@ -188,7 +194,9 @@ class OnlinePaymentHistoryService {
       jsonEncode(<String, dynamic>{
         ...existing,
         'amount': event.amount,
-        'timestamp': event.timestamp.toIso8601String(),
+        'timestamp':
+            (event.sourceTimestamp ?? event.timestamp).toIso8601String(),
+        'detected_at': event.timestamp.toIso8601String(),
         'app': event.appDisplayName,
         'status': 'REJECTED',
         'merchant_confirmed': false,
@@ -261,7 +269,8 @@ class OnlinePaymentHistoryService {
       // reference again as a review reminder. This does not record/confirm it.
       DateTime? lastPendingAt;
       try {
-        final rawTimestamp = existing['timestamp']?.toString();
+        final rawTimestamp =
+            (existing['detected_at'] ?? existing['timestamp'])?.toString();
         if (rawTimestamp != null && rawTimestamp.isNotEmpty) {
           lastPendingAt = DateTime.parse(rawTimestamp);
         }
