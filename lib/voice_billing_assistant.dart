@@ -1324,7 +1324,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         },
         onError: (error) {
           if (!mounted) return;
-          final errorMessage = error.toString().toLowerCase();
+          final errorMessage = error.errorMsg.toLowerCase();
           final languageUnsupported =
               errorMessage.contains('language') &&
               (errorMessage.contains('not supported') ||
