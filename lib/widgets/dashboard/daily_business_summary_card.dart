@@ -146,6 +146,7 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
     final returns = _asList(sources['return_ids']);
     final dueInvoices = _asList(report['outstanding_invoices']);
     final lowStock = _asList(report['low_stock_products']);
+    final expiryAlerts = _asList(report['expiry_alerts']);
 
     return ExpansionTile(
       tilePadding: EdgeInsets.zero,
@@ -176,6 +177,20 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
                   final item = _asMap(row);
                   return '${item['product_name'] ?? item['product_id']} (${item['current_stock']}/${item['minimum_stock']})';
                 }).join(' · '),
+        ),
+        _sourceLine(
+          'Expiry / batch alerts',
+          expiryAlerts.isEmpty
+              ? 'None within 30 days'
+              : expiryAlerts.take(8).map((row) {
+                  final item = _asMap(row);
+                  final state = item['expired'] == true ? 'EXPIRED' : 'expires ${item['expiry_date']}';
+                  return '${item['product_name'] ?? item['product_id']}: $state, qty ${item['quantity']}';
+                }).join(' · '),
+        ),
+        _sourceLine(
+          'Expired stock units',
+          _number(report['expired_stock_units']).toStringAsFixed(3),
         ),
         const SizedBox(height: 4),
         const Text(
@@ -375,6 +390,33 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
                   ),
                 ],
               ),
+              if (_number(report['expiry_alert_count']) > 0)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFED7AA)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.event_busy_rounded, size: 17, color: Color(0xFFB45309)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_number(report['expired_stock_units']).toStringAsFixed(3)} units expired · ${_number(report['expiring_stock_units_next_30_days']).toStringAsFixed(3)} units expire within 30 days. Review batch records before selling.',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF92400E),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 8),
               Row(
                 children: [
