@@ -918,6 +918,9 @@ class PdsConfig {
 
   // Dedup
   static const Duration dedupUtrTtl = Duration(hours: 24);
+  // Native Android notification keys survive service restarts and stop the same
+  // posted notification being reclassified as a new payment for one day.
+  static const Duration dedupNativeNotificationTtl = Duration(hours: 24);
   static const Duration dedupHashTtl = Duration(seconds: 30);
   static const Duration dedupCleanupInterval = Duration(minutes: 5);
   // FIX-C: debounce save
@@ -1174,7 +1177,13 @@ class PdsStateStore {
       final now = DateTime.now();
       final toSave = <String, String>{};
       store.forEach((fp, expiry) {
-        if (fp.startsWith('utr:') && expiry.isAfter(now)) {
+        // UTR accounting fingerprints are currently stored as utr_<sha256>.
+        // Keep both legacy formats plus native notification keys durable across
+        // Android listener/background-isolate restarts.
+        if ((fp.startsWith('utr:') ||
+                fp.startsWith('utr_') ||
+                fp.startsWith('notification-event:')) &&
+            expiry.isAfter(now)) {
           toSave[fp] = expiry.toIso8601String();
         }
       });
@@ -3968,8 +3977,37 @@ class PaymentDetectionService {
         return;
       }
 
-      final notificationSender = event.title?.trim();
       final now = DateTime.now();
+      final notificationSender = event.title?.trim();
+      final nativeEventKey = _safe(
+        () => (event as dynamic).eventKey as String?,
+      )?.trim();
+      final isPaymentNotification =
+          _Extractor.amount(fields) != null &&
+          _Classifier.hasPaymentContext(fields);
+
+      // NotificationListenerService exposes a stable key for a native Android
+      // notification version (package + notification ID + post time + payload
+      // hash). Persist that key, rather than trying to infer ledger identity
+      // from amount/time, so replaying an active notification after a service
+      // restart cannot create another alert for the same posted notification.
+      if (isPaymentNotification &&
+          nativeEventKey != null &&
+          nativeEventKey.isNotEmpty) {
+        final nativeFingerprint =
+            'notification-event:${sha256.convert(utf8.encode(nativeEventKey))}';
+        final nativeExpiry = _dedupStore[nativeFingerprint];
+        if (nativeExpiry != null && nativeExpiry.isAfter(now)) {
+          PdsLogger.d('L1', 'Durable native notification replay suppressed');
+          return;
+        }
+        _dedupStore[nativeFingerprint] =
+            now.add(PdsConfig.dedupNativeNotificationTtl);
+        _dedupDirty = true;
+        // Save immediately; the debounced save timer is a fallback only.
+        unawaited(PdsStateStore.saveDedup(_dedupStore));
+      }
+
       _recentNotificationPayloads.removeWhere(
         (_, expiresAt) => !expiresAt.isAfter(now),
       );
