@@ -295,6 +295,7 @@ void main() {
       'APGB transfer alerts are detected as partial incoming payments',
       () async {
         final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
         const text = 'UPI transfer from Apgbank to Account 4222 +₹5';
         service.clearBill();
         service.setBillExpected(10);
@@ -679,6 +680,7 @@ void main() {
       'debit alerts are emitted as debits, never as received payments',
       () async {
         final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
         final received = expectLater(
           service.onPaymentDetected,
           emits(
@@ -1492,6 +1494,7 @@ void main() {
 
   test('short trusted PhonePe notification is a review candidate, not an auto-credit', () async {
     final service = PaymentDetectionService();
+    service.debugResetTransientDetectionState();
     service.clearBill();
     service.setBillExpected(10);
 

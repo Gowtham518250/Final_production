@@ -156,9 +156,100 @@ void main() {
       expect(
         deduper.shouldSuppress(
           event(payerName: 'Anna', app: PaymentApp.unknown),
-          now: now.add(const Duration(minutes: 3)),
+          now: now.add(const Duration(minutes: 16)),
         ),
         isFalse,
+      );
+    });
+
+    test('coalesces no-reference alert bursts for fifteen minutes then allows a reminder', () {
+      final deduper = PaymentAlertDeduplicator();
+      expect(
+        deduper.shouldSuppress(event(payerName: 'Anna'), now: now),
+        isFalse,
+      );
+      expect(
+        deduper.shouldSuppress(
+          event(payerName: 'Anna', app: PaymentApp.unknown),
+          now: now.add(const Duration(minutes: 10)),
+        ),
+        isTrue,
+      );
+      expect(
+        deduper.shouldSuppress(
+          event(payerName: 'Anna', app: PaymentApp.unknown),
+          now: now.add(const Duration(minutes: 16)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('reference alert becomes eligible again after six hours', () {
+      final deduper = PaymentAlertDeduplicator();
+      final first = event(referenceId: '123456789012');
+      expect(deduper.shouldSuppress(first, now: now), isFalse);
+      expect(
+        deduper.shouldSuppress(
+          event(referenceId: '123456789012'),
+          now: now.add(const Duration(hours: 5)),
+        ),
+        isTrue,
+      );
+      expect(
+        deduper.shouldSuppress(
+          event(referenceId: '123456789012'),
+          now: now.add(const Duration(hours: 7)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('uses audible notification fallback when voice would not announce a reminder', () {
+      final duplicate = event(id: 'old-duplicate')
+          .copyWith(isDuplicate: true);
+      final conflict = event(id: 'conflicting-payment')
+          .copyWith(hasReferenceConflict: true);
+      final reminder = event(
+        id: 'morning-reminder',
+      ).copyWith(
+        detectionSource: 'notification:pending_review_reminder',
+      );
+      final ordinary = event(id: 'ordinary-payment');
+
+      expect(
+        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+          duplicate,
+          voiceEnabled: true,
+        ),
+        isTrue,
+      );
+      expect(
+        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+          conflict,
+          voiceEnabled: true,
+        ),
+        isTrue,
+      );
+      expect(
+        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+          reminder,
+          voiceEnabled: true,
+        ),
+        isTrue,
+      );
+      expect(
+        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+          ordinary,
+          voiceEnabled: true,
+        ),
+        isFalse,
+      );
+      expect(
+        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+          ordinary,
+          voiceEnabled: false,
+        ),
+        isTrue,
       );
     });
 
@@ -212,7 +303,7 @@ void main() {
       });
 
       final prefs = await SharedPreferences.getInstance();
-      final serialized = prefs.getString('pds_dedup_v1');
+      final serialized = prefs.getString('pds_dedup_v2');
       expect(serialized, isNotNull);
       final saved = jsonDecode(serialized!) as Map<String, dynamic>;
 
@@ -220,6 +311,86 @@ void main() {
       expect(saved.keys, contains('utr_utr-hash'));
       expect(saved.keys, contains('utr:legacy-utr-hash'));
       expect(saved.keys, isNot(contains('event_transient')));
+    });
+
+    test('persistent cache gives pending references six hours and confirmed references 24 hours', () async {
+      SharedPreferences.setMockInitialValues({});
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final now = DateTime.now();
+      final pendingAt = now.subtract(const Duration(hours: 2));
+      const pendingReference = 'UTR-PENDING-5555';
+      const confirmedReference = 'UTR-CONFIRMED-6666';
+
+      final pendingKey = PaymentEvent(
+        amount: 1,
+        timestamp: pendingAt,
+        app: PaymentApp.unknown,
+        referenceId: pendingReference,
+      ).fingerprint;
+      final confirmedKey = PaymentEvent(
+        amount: 1,
+        timestamp: pendingAt,
+        app: PaymentApp.unknown,
+        referenceId: confirmedReference,
+      ).fingerprint;
+
+      await service.syncDedupWindowsFromPaymentHistory([
+        {
+          'reference_id': pendingReference,
+          'status': 'PENDING_CONFIRMATION',
+          'timestamp': pendingAt.toIso8601String(),
+        },
+        {
+          'reference_id': confirmedReference,
+          'status': 'CONFIRMED',
+          'timestamp': pendingAt.toIso8601String(),
+        },
+      ]);
+
+      final prefs = await SharedPreferences.getInstance();
+      final saved = jsonDecode(prefs.getString('pds_dedup_v2')!)
+          as Map<String, dynamic>;
+      final pendingExpiry = DateTime.parse(saved[pendingKey] as String);
+      final confirmedExpiry = DateTime.parse(saved[confirmedKey] as String);
+
+      expect(
+        pendingExpiry.difference(
+          pendingAt.add(const Duration(hours: 6)),
+        ).inSeconds.abs(),
+        lessThan(2),
+      );
+      expect(
+        confirmedExpiry.difference(
+          DateTime.now().add(const Duration(hours: 24)),
+        ).inSeconds.abs(),
+        lessThan(2),
+      );
+    });
+
+    test('migrates only native replay keys to the six-hour window', () async {
+      final oldExpiry = DateTime.now().add(const Duration(hours: 22));
+      SharedPreferences.setMockInitialValues({
+        'pds_dedup_v1': jsonEncode({
+          'utr_legacy-payment': oldExpiry.toIso8601String(),
+          'notification-event:legacy-native': oldExpiry.toIso8601String(),
+        }),
+      });
+
+      final restored = <String, DateTime>{};
+      await PdsStateStore.loadDedup(restored);
+
+      // Confirmed UTR suppression retains its full 24-hour deadline.
+      expect(restored['utr_legacy-payment'], oldExpiry);
+      // Native replay keys are shortened so a pending notification can be
+      // re-evaluated after the review cooldown.
+      expect(
+        restored['notification-event:legacy-native'],
+        oldExpiry.subtract(const Duration(hours: 18)),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('pds_dedup_v1'), isNull);
+      expect(prefs.getString('pds_dedup_v2'), isNotNull);
     });
   });
 }

@@ -43,6 +43,10 @@ Future<void> restartBackgroundPaymentDetection() async {
   FlutterBackgroundService().invoke('restart_payment_detection');
 }
 
+Future<void> refreshPaymentDetectionDedupState() async {
+  FlutterBackgroundService().invoke('refresh_payment_dedup_state');
+}
+
 void _listenForBackgroundPayments(FlutterBackgroundService service) {
   _paymentEventSubscription?.cancel();
   _paymentEventSubscription = service.on('payment_detected').listen((payload) {
@@ -79,6 +83,17 @@ Future<void> _persistPaymentHistoryThenForward(
         !forwardedEvent.hasReferenceConflict) {
       await OnlinePaymentHistoryService.recordIncomingPayment(forwardedEvent);
     }
+    // Reconcile the replay cache against durable payment status. Pending
+    // references get a six-hour review cooldown; confirmed/rejected references
+    // keep the longer suppression window, including across service restarts.
+    try {
+      final savedHistory = await OnlinePaymentHistoryService.load();
+      await PaymentDetectionService()
+          .syncDedupWindowsFromPaymentHistory(savedHistory);
+    } catch (syncError) {
+      debugPrint('⚠️ Could not refresh payment review cooldowns: $syncError');
+    }
+
     // Even when this exact reference is already present or conflicted, this
     // isolate has checked persistent history; don't repeat the same I/O in UI.
     historyHandled = true;
@@ -247,7 +262,23 @@ Future<bool> onStart(ServiceInstance service) async {
       }
     });
 
-    await pds.start();
+    service.on('refresh_payment_dedup_state').listen((event) async {
+      try {
+        final savedHistory = await OnlinePaymentHistoryService.load();
+        await pds.syncDedupWindowsFromPaymentHistory(savedHistory);
+      } catch (error) {
+        debugPrint('⚠️ Could not refresh payment dedup state: $error');
+      }
+    });
+
+    List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
+    try {
+      persistedPaymentHistory = await OnlinePaymentHistoryService.load();
+    } catch (error) {
+      // App may not have a signed-in owner profile during early startup.
+      debugPrint('ℹ️ Payment history cache not available during service startup: $error');
+    }
+    await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     pdsReady = true;
     if (restartRequestedBeforeReady) {
       restartRequestedBeforeReady = false;
@@ -398,7 +429,13 @@ Future<void> _initializeFallback() async {
       PaymentAnnouncementService().speakSimple(text, lang);
     };
 
-    await pds.start();
+    List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
+    try {
+      persistedPaymentHistory = await OnlinePaymentHistoryService.load();
+    } catch (error) {
+      debugPrint('ℹ️ Payment history cache not available in fallback mode: $error');
+    }
+    await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     debugPrint('✅ Payment services initialized (fallback mode)');
   } catch (e) {
     debugPrint('⚠️ Failed fallback initialization: $e');

@@ -916,11 +916,14 @@ class PdsConfig {
   // FIX-K: LIKELY re-announce timeout
   static const Duration likelyReannounceAfter = Duration(seconds: 12);
 
-  // Dedup
+  // Duplicate notifications are suppressed during the workday, but a still-
+  // unresolved payment must be eligible for a fresh review reminder the next
+  // morning. Persistent confirmed-payment history remains the financial guard.
   static const Duration dedupUtrTtl = Duration(hours: 24);
-  // Native Android notification keys survive service restarts and stop the same
-  // posted notification being reclassified as a new payment for one day.
-  static const Duration dedupNativeNotificationTtl = Duration(hours: 24);
+  // Native notification replay keys have a shorter window so the same still-
+  // pending candidate can be surfaced again after the overnight review cooldown.
+  // Confirmed reference identities remain protected by the 24-hour UTR cache.
+  static const Duration dedupNativeNotificationTtl = Duration(hours: 6);
   static const Duration dedupHashTtl = Duration(seconds: 30);
   static const Duration dedupCleanupInterval = Duration(minutes: 5);
   // FIX-C: debounce save
@@ -1145,12 +1148,16 @@ class PdsSessionStats {
 // =============================================================================
 
 class PdsStateStore {
-  static const _kDedup = 'pds_dedup_v1';
+  static const _kDedup = 'pds_dedup_v2';
+  static const _kLegacyDedup = 'pds_dedup_v1';
+  static const _legacyExpiryReduction = Duration(hours: 18);
 
   static Future<void> loadDedup(Map<String, DateTime> store) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kDedup);
+      final currentRaw = prefs.getString(_kDedup);
+      final isLegacy = currentRaw == null;
+      final raw = currentRaw ?? prefs.getString(_kLegacyDedup);
       if (raw == null || raw.isEmpty) return;
       final Map<String, dynamic> decoded =
           jsonDecode(raw) as Map<String, dynamic>;
@@ -1158,13 +1165,23 @@ class PdsStateStore {
       int loaded = 0;
       decoded.forEach((fp, isoExpiry) {
         try {
-          final expiry = DateTime.parse(isoExpiry as String);
+          var expiry = DateTime.parse(isoExpiry as String);
+          if (isLegacy && fp.startsWith('notification-event:')) {
+            // v1 used a 24-hour native-notification TTL. Convert only native
+            // replay keys to the six-hour reminder window. UTR keys stay at
+            // 24 hours until persistent history identifies their review state.
+            expiry = expiry.subtract(_legacyExpiryReduction);
+          }
           if (expiry.isAfter(now)) {
             store[fp] = expiry;
             loaded++;
           }
         } catch (_) {}
       });
+      if (isLegacy) {
+        await prefs.remove(_kLegacyDedup);
+        await saveDedup(store);
+      }
       PdsLogger.i('STORE', 'Loaded $loaded dedup entries');
     } catch (e, st) {
       PdsLogger.e('STORE', 'loadDedup error', e, st);
@@ -1197,6 +1214,7 @@ class PdsStateStore {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_kDedup);
+      await prefs.remove(_kLegacyDedup);
       await TrustedSenderStore._clearPrefs();
     } catch (_) {}
   }
@@ -2729,7 +2747,10 @@ class PaymentDetectionService {
   static bool _payersCompatible(String? a, String? b) {
     final x = _normalizedPayer(a);
     final y = _normalizedPayer(b);
-    if (x == null || y == null) return true; // unknown name cannot disprove
+    // When neither source supplies a payer, the caller still pairs reports
+    // one-to-one by channel, amount, direction, and bounded time window. It
+    // does not merge same-channel payments merely because their amounts match.
+    if (x == null || y == null) return true;
     return x == y || x.contains(y) || y.contains(x);
   }
 
@@ -3526,7 +3547,9 @@ class PaymentDetectionService {
   // LIFECYCLE
   // ==========================================================================
 
-  Future<void> start() async {
+  Future<void> start({
+    List<Map<String, dynamic>> persistedPaymentHistory = const [],
+  }) async {
     if (_isStarted) return;
 
     // 1. Cancel old subscription FIRST to stop stale events
@@ -3552,6 +3575,9 @@ class PaymentDetectionService {
     _voice.getLanguage = () => _voiceLanguage;
 
     await PdsStateStore.loadDedup(_dedupStore);
+    if (persistedPaymentHistory.isNotEmpty) {
+      await syncDedupWindowsFromPaymentHistory(persistedPaymentHistory);
+    }
     await TrustedSenderStore.preload(); // FIX-B
 
     await _ensureDetectionPermissions();
@@ -3569,6 +3595,97 @@ class PaymentDetectionService {
     _watchdog.start();
 
     PdsLogger.i('SVC', 'All channels ready');
+  }
+
+  /// Reconcile the in-memory replay cache with durable merchant-review
+  /// state. Confirmed references keep a 24-hour suppress window; unresolved
+  /// pending/conflict records become eligible again six hours after detection.
+  /// This lets a pending transfer be reviewed in the morning without weakening
+  /// protection for already-confirmed references.
+  Future<void> syncDedupWindowsFromPaymentHistory(
+    List<Map<String, dynamic>> records,
+  ) async {
+    final now = DateTime.now();
+    var changed = false;
+
+    for (final record in records) {
+      final reference = (record['reference_id'] ?? '').toString().trim();
+      if (reference.isEmpty) continue;
+
+      final referenceEvent = PaymentEvent(
+        amount: 1,
+        timestamp: now,
+        app: PaymentApp.unknown,
+        referenceId: reference,
+      );
+      final normalizedReference = referenceEvent.normalizedReferenceId;
+      if (normalizedReference == null) continue;
+      final fingerprint = referenceEvent.fingerprint;
+      final status = (record['status'] ?? '').toString().toUpperCase();
+
+      if (status == 'PENDING_CONFIRMATION' || status == 'CONFLICT_REVIEW') {
+        DateTime? detectedAt;
+        try {
+          final value = record['timestamp']?.toString();
+          if (value != null && value.isNotEmpty) {
+            detectedAt = DateTime.parse(value);
+          }
+        } on FormatException {
+          detectedAt = null;
+        }
+        final reminderAt = (detectedAt ?? now)
+            .add(PdsConfig.dedupNativeNotificationTtl);
+        if (reminderAt.isAfter(now)) {
+          _dedupStore[fingerprint] = reminderAt;
+        } else {
+          _dedupStore.remove(fingerprint);
+        }
+
+        // Native notification replay keys include their reference when one
+        // could be extracted. Apply the same pending-review deadline to that
+        // exact notification, not to every notification for the app.
+        final nativeKeys = _dedupStore.keys
+            .where(
+              (key) =>
+                  key.startsWith('notification-event:') &&
+                  key.endsWith(':$normalizedReference'),
+            )
+            .toList();
+        for (final nativeKey in nativeKeys) {
+          if (reminderAt.isAfter(now)) {
+            _dedupStore[nativeKey] = reminderAt;
+          } else {
+            _dedupStore.remove(nativeKey);
+          }
+        }
+      } else {
+        // Confirmed or rejected transactions remain suppressed for a full day.
+        // Unknown legacy statuses fail closed in the same way.
+        _dedupStore[fingerprint] = now.add(PdsConfig.dedupUtrTtl);
+      }
+      changed = true;
+    }
+
+    if (changed) {
+      _dedupDirty = true;
+      await PdsStateStore.saveDedup(_dedupStore);
+    }
+  }
+
+  void markReferenceResolved(String? referenceId) {
+    final reference = (referenceId ?? '').trim();
+    if (reference.isEmpty) return;
+    final referenceEvent = PaymentEvent(
+      amount: 1,
+      timestamp: DateTime.now(),
+      app: PaymentApp.unknown,
+      referenceId: reference,
+    );
+    if (referenceEvent.normalizedReferenceId == null) return;
+    _dedupStore[referenceEvent.fingerprint] =
+        DateTime.now().add(PdsConfig.dedupUtrTtl);
+    _dedupDirty = true;
+    unawaited(PdsStateStore.saveDedup(_dedupStore));
   }
 
   void setBackgroundMode(bool isBg) {
@@ -4009,8 +4126,18 @@ class PaymentDetectionService {
       if (isPaymentNotification &&
           nativeEventKey != null &&
           nativeEventKey.isNotEmpty) {
+        final parsedNativeReference = _Extractor.referenceId(fields);
+        final nativeReference = parsedNativeReference == null
+            ? null
+            : PaymentEvent(
+                amount: 1,
+                timestamp: now,
+                app: PaymentApp.unknown,
+                referenceId: parsedNativeReference,
+              ).normalizedReferenceId;
         final nativeFingerprint =
-            'notification-event:${sha256.convert(utf8.encode(nativeEventKey))}';
+            'notification-event:${sha256.convert(utf8.encode(nativeEventKey))}'
+            '${nativeReference == null ? '' : ':$nativeReference'}';
         final nativeExpiry = _dedupStore[nativeFingerprint];
         if (nativeExpiry != null && nativeExpiry.isAfter(now)) {
           PdsLogger.d('L1', 'Durable native notification replay suppressed');

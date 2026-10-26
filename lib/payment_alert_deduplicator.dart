@@ -5,8 +5,10 @@ import 'package:retail_mind/payment_event.dart';
 /// confirmation prompts; payment history and the financial ledger still use
 /// their own reference/idempotency rules.
 class PaymentAlertDeduplicator {
-  static const Duration _referenceTtl = Duration(hours: 24);
-  static const Duration _fallbackTtl = Duration(minutes: 2);
+  // Allow a still-pending payment to be reminded again the next morning, but
+  // coalesce a burst of cross-source notifications during the same work period.
+  static const Duration _referenceTtl = Duration(hours: 6);
+  static const Duration _fallbackTtl = Duration(minutes: 15);
   static const int _maxEntries = 500;
 
   final Map<String, DateTime> _seenUntil = <String, DateTime>{};
@@ -15,6 +17,10 @@ class PaymentAlertDeduplicator {
     PaymentEvent event, {
     DateTime? now,
   }) {
+    // A duplicate tied to an already-known reference is not a fresh payment
+    // candidate. Unresolved candidates are deliberately marked non-duplicate
+    // by OnlinePaymentHistoryService once their reminder interval has elapsed.
+    if (event.isDuplicate && !event.hasReferenceConflict) return true;
     if (event.isMerchantConfirmed ||
         event.hasReferenceConflict ||
         event.isFailed) {
@@ -76,6 +82,18 @@ class PaymentAlertDeduplicator {
   }
 
   void clear() => _seenUntil.clear();
+
+  /// Use an audible OS notification as a fallback when TTS is disabled or the
+  /// voice queue is expected to reject this event (duplicate/conflict flags),
+  /// and for an unresolved payment resurfaced after the overnight cooldown.
+  static bool shouldUseAudibleNotificationFallback(
+    PaymentEvent event, {
+    required bool voiceEnabled,
+  }) {
+    if (!voiceEnabled) return true;
+    if (event.isDuplicate || event.hasReferenceConflict) return true;
+    return event.detectionSource.contains(':pending_review_reminder');
+  }
 
   static String _directionKey(PaymentEvent event) {
     switch (event.direction) {
