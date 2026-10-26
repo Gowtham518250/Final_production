@@ -52,6 +52,29 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
   String? _requestKey;
   int _requestVersion = 0;
 
+  // Building this reverse index once avoids scanning the entire English
+  // localization dictionary for every dynamic product/status label on a page.
+  static Map<String, String>? _englishTextToKey;
+
+  static Map<String, String> _getEnglishTextToKey() {
+    final cached = _englishTextToKey;
+    if (cached != null) return cached;
+
+    final english = AppLocalizations.translations['en'];
+    if (english == null) return _englishTextToKey = <String, String>{};
+
+    final reverse = <String, String>{};
+    for (final entry in english.entries) {
+      final normalized = entry.value.trim();
+      if (normalized.isNotEmpty) {
+        // Preserve the old linear scan's first-match behavior for duplicates.
+        reverse.putIfAbsent(normalized, () => entry.key);
+      }
+    }
+    _englishTextToKey = reverse;
+    return reverse;
+  }
+
   String? _curatedTranslation(String input, String targetCode) {
     final normalized = input.trim();
     final sharedPageCopy = SharedPageTranslations.lookup(
@@ -64,16 +87,12 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
         AppLocalizations.screenTextTranslations[targetCode]?[normalized];
     if (screenText != null) return screenText;
 
-    final english = AppLocalizations.translations['en'];
     final target = AppLocalizations.translations[targetCode];
-    if (english == null || target == null) return null;
+    if (target == null) return null;
 
-    for (final entry in english.entries) {
-      if (entry.value.trim() == normalized) {
-        return target[entry.key] ?? normalized;
-      }
-    }
-    return null;
+    final englishKey = _getEnglishTextToKey()[normalized];
+    if (englishKey == null) return null;
+    return target[englishKey] ?? normalized;
   }
 
   bool _shouldPreserve(String input) {
