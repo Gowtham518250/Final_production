@@ -3744,7 +3744,11 @@ class PaymentDetectionService {
       if (status == 'PENDING_CONFIRMATION' || status == 'CONFLICT_REVIEW') {
         DateTime? detectedAt;
         try {
-          final value = record['timestamp']?.toString();
+          // History timestamps now reflect when the source notification/SMS
+          // was posted. Review cooldowns must instead start from processing
+          // time, otherwise a delayed event may immediately re-alert on unlock.
+          final value =
+              (record['detected_at'] ?? record['timestamp'])?.toString();
           if (value != null && value.isNotEmpty) {
             detectedAt = DateTime.parse(value);
           }
