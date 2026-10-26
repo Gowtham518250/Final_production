@@ -919,7 +919,10 @@ class PdsConfig {
   // Duplicate notifications are suppressed during the workday, but a still-
   // unresolved payment must be eligible for a fresh review reminder the next
   // morning. Persistent confirmed-payment history remains the financial guard.
-  static const Duration dedupUtrTtl = Duration(hours: 6);
+  static const Duration dedupUtrTtl = Duration(hours: 24);
+  // Native notification replay keys have a shorter window so the same still-
+  // pending candidate can be surfaced again after the overnight review cooldown.
+  // Confirmed reference identities remain protected by the 24-hour UTR cache.
   static const Duration dedupNativeNotificationTtl = Duration(hours: 6);
   static const Duration dedupHashTtl = Duration(seconds: 30);
   static const Duration dedupCleanupInterval = Duration(minutes: 5);
@@ -1163,13 +1166,10 @@ class PdsStateStore {
       decoded.forEach((fp, isoExpiry) {
         try {
           var expiry = DateTime.parse(isoExpiry as String);
-          if (isLegacy &&
-              (fp.startsWith('utr:') ||
-                  fp.startsWith('utr_') ||
-                  fp.startsWith('notification-event:'))) {
-            // v1 used a 24-hour TTL. Convert the saved expiry to the new
-            // six-hour review-reminder window once, rather than inheriting a
-            // stale all-day suppression after this app update.
+          if (isLegacy && fp.startsWith('notification-event:')) {
+            // v1 used a 24-hour native-notification TTL. Convert only native
+            // replay keys to the six-hour reminder window. UTR keys stay at
+            // 24 hours until persistent history identifies their review state.
             expiry = expiry.subtract(_legacyExpiryReduction);
           }
           if (expiry.isAfter(now)) {
