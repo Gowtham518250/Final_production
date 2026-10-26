@@ -2071,6 +2071,9 @@ class PriorityVoiceQueue {
       final sameAccount = event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
+      final differentAccounts = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
       final currentPayer = _normalizedVoicePayer(event.payerName);
       final priorPayer = _normalizedVoicePayer(old.payerName);
       final sameKnownPayer = currentPayer != null &&
@@ -2078,6 +2081,10 @@ class PriorityVoiceQueue {
           (currentPayer == priorPayer ||
               currentPayer.contains(priorPayer) ||
               priorPayer.contains(currentPayer));
+      final differentKnownPayers = currentPayer != null &&
+          priorPayer != null &&
+          !sameKnownPayer;
+      if (differentAccounts || differentKnownPayers) continue;
       if (!sameAccount && !sameKnownPayer) {
         // E.g. a generic PhonePe alert and a Truecaller mirror without any
         // common transaction/account/payer evidence: leave both reviewable.
