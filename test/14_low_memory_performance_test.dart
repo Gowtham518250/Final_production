@@ -20,8 +20,8 @@ void main() {
     LowMemoryPerformance.configure();
     final cache = PaintingBinding.instance.imageCache;
 
-    expect(cache.maximumSize, 80);
-    expect(cache.maximumSizeBytes, 40 * 1024 * 1024);
+    expect(cache.maximumSize, 48);
+    expect(cache.maximumSizeBytes, 24 * 1024 * 1024);
   });
 
   test('decode dimensions respect display scale and memory bounds', () {
