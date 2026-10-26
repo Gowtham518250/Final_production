@@ -11,5 +11,5 @@ class TranslationFallbackPolicy {
   }
 
   static String _normalizeForComparison(String value) =>
-      value.trim().replaceAll(RegExp(r'\\s+'), ' ').toLowerCase();
+      value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 }
