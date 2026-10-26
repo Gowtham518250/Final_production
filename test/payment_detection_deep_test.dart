@@ -1202,6 +1202,94 @@ void main() {
     });
   });
 
+  group('Delayed same-notification payment announcement dedup', () {
+    PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
+      id: event.id,
+      decision: event.decision,
+      amount: event.amount,
+      isFailed: false,
+      detectedAt: event.timestamp,
+      rawText: event.rawText,
+      direction: event.direction,
+      isPartial: event.isPartialPayment,
+      shortfall: event.isPartialPayment ? event.remainingAmount : null,
+    );
+
+    test('same no-reference partial payment text is not spoken twice after 10 minutes', () async {
+      final queue = PriorityVoiceQueue();
+      final spoken = <String>[];
+      queue.onSpeak = spoken.add;
+      final firstTime = DateTime(2026, 10, 26, 12, 0);
+
+      final first = PaymentEvent(
+        id: 'partial-credit-first',
+        amount: 5,
+        timestamp: firstTime,
+        app: PaymentApp.phonePe,
+        rawText: 'Payment of ₹5 received from Rahul via PhonePe',
+        detectionSource: 'notification',
+        direction: PaymentTransactionDirection.incomingCredit,
+        decision: PaymentDecision.likely,
+        isPartialPayment: true,
+        remainingAmount: 5,
+      );
+      final replay = PaymentEvent(
+        id: 'partial-credit-reposted',
+        amount: 5,
+        timestamp: firstTime.add(const Duration(minutes: 10)),
+        app: PaymentApp.phonePe,
+        rawText: 'Payment of ₹5 received from Rahul via PhonePe',
+        detectionSource: 'notification',
+        direction: PaymentTransactionDirection.incomingCredit,
+        decision: PaymentDecision.likely,
+        isPartialPayment: true,
+        remainingAmount: 5,
+      );
+
+      queue.enqueue(first, stateFor(first));
+      queue.enqueue(replay, stateFor(replay));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      queue.dispose();
+
+      expect(spoken, hasLength(1));
+    });
+
+    test('different no-reference message remains eligible as a separate payment', () async {
+      final queue = PriorityVoiceQueue();
+      final spoken = <String>[];
+      queue.onSpeak = spoken.add;
+      final firstTime = DateTime(2026, 10, 26, 12, 0);
+
+      final first = PaymentEvent(
+        id: 'partial-credit-first',
+        amount: 5,
+        timestamp: firstTime,
+        app: PaymentApp.phonePe,
+        rawText: 'Payment of ₹5 received from Rahul via PhonePe',
+        detectionSource: 'notification',
+        direction: PaymentTransactionDirection.incomingCredit,
+        decision: PaymentDecision.likely,
+      );
+      final separate = PaymentEvent(
+        id: 'partial-credit-second',
+        amount: 5,
+        timestamp: firstTime.add(const Duration(minutes: 10)),
+        app: PaymentApp.phonePe,
+        rawText: 'Payment of ₹5 received from Priya via PhonePe',
+        detectionSource: 'notification',
+        direction: PaymentTransactionDirection.incomingCredit,
+        decision: PaymentDecision.likely,
+      );
+
+      queue.enqueue(first, stateFor(first));
+      queue.enqueue(separate, stateFor(separate));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      queue.dispose();
+
+      expect(spoken, hasLength(2));
+    });
+  });
+
   group('Payment voice direction', () {
     test('detects credited payment from bank/UPI text', () {
       expect(
