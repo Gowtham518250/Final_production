@@ -270,7 +270,10 @@ class PaymentAnnouncementService {
         // Stop any native TTS call that was waiting on a completion callback
         // and discard old low-priority payment speech. Do not replay a backlog
         // of stale payments after the phone unlocks.
-        await _voice.stop();
+        // Do not let a broken platform stop callback block timeout recovery.
+        await _voice
+            .stop()
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
         _queue.clearLowPriority();
       },
       task: () => _voice.speakRaw(message, lang.locale),
