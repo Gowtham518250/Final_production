@@ -35,4 +35,34 @@ void main() {
       expect(SpeechLocalePolicy.isAvailable('', ['en-IN']), isFalse);
     });
   });
+
+  group('selected billing locale mapping', () {
+    test('maps supported app languages to explicit speech locales', () {
+      const expected = <String, String>{
+        'en': 'en-IN',
+        'hi': 'hi-IN',
+        'te': 'te-IN',
+        'ta': 'ta-IN',
+        'kn': 'kn-IN',
+        'ml': 'ml-IN',
+        'mr': 'mr-IN',
+        'bn': 'bn-IN',
+        'gu': 'gu-IN',
+        'pa': 'pa-IN',
+      };
+      for (final entry in expected.entries) {
+        expect(
+          SpeechLocalePolicy.toSpeechLocaleCode(entry.key),
+          entry.value,
+          reason: entry.key,
+        );
+      }
+    });
+
+    test('preserves known explicit region locale and defaults safely', () {
+      expect(SpeechLocalePolicy.toSpeechLocaleCode('te-IN'), 'te-IN');
+      expect(SpeechLocalePolicy.toSpeechLocaleCode('en_US'), 'en-IN');
+      expect(SpeechLocalePolicy.toSpeechLocaleCode('unknown'), 'te-IN');
+    });
+  });
 }
