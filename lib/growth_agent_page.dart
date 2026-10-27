@@ -43,6 +43,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   String _message = '';
   String _goal = 'nearby';
   String _language = 'en';
+  String _template = 'bold';
+  String _adFormat = 'feed';
   String? _selectedProductKey;
   String _campaignStorageKey = 'retailmind_growth_campaigns_v1_guest';
   List<Map<String, dynamic>> _products = <Map<String, dynamic>>[];
@@ -308,6 +310,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       'shop_name': shop,
       'goal': goalText,
       'language': _language,
+      'template': _template,
+      'ad_format': _adFormat,
       'product_name': productName,
       'product_price': price,
       'headline': headline,
@@ -368,7 +372,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..['shop_name'] = shopName
       ..['headline'] = _headlineController.text.trim()
       ..['caption'] = caption
-      ..['offer'] = offer;
+      ..['offer'] = offer
+      ..['template'] = _template
+      ..['ad_format'] = _adFormat;
     _currentDraft = updated;
     await _persistCampaign(updated);
     return updated;
@@ -386,7 +392,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         throw StateError('Advertisement preview is not ready yet.');
       }
 
-      final pixelRatio = math.max(2.0, MediaQuery.of(context).devicePixelRatio).toDouble();
+      // Keep exported artwork at social-ad resolution regardless of the
+      // device's logical preview width (feed 1080×1350; Story 1080×1920).
+      final logicalWidth = renderObject.size.width;
+      final pixelRatio = logicalWidth > 0
+          ? (1080.0 / logicalWidth).clamp(2.0, 5.0).toDouble()
+          : math.max(3.0, MediaQuery.of(context).devicePixelRatio).toDouble();
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
@@ -475,6 +486,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       _language = const {'en', 'te', 'hi'}.contains(language)
           ? language
           : 'en';
+      final savedTemplate = draft['template']?.toString() ?? 'bold';
+      _template = const {'bold', 'festive', 'fresh', 'minimal'}
+              .contains(savedTemplate)
+          ? savedTemplate
+          : 'bold';
+      final savedFormat = draft['ad_format']?.toString() ?? 'feed';
+      _adFormat = const {'feed', 'square', 'story'}.contains(savedFormat)
+          ? savedFormat
+          : 'feed';
       _selectedProductKey = matchingProductKey ?? '';
     });
     _showMessage(
@@ -737,6 +757,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                     if (value != null) setState(() => _language = value);
                   },
           ),
+          const SizedBox(height: 16),
+          _buildTemplatePicker(),
+          const SizedBox(height: 12),
+          _buildAdFormatPicker(),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: _selectedProductKey,
@@ -810,6 +834,203 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     );
   }
 
+  List<Color> _templateColors(String template) {
+    switch (template) {
+      case 'festive':
+        return const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)];
+      case 'fresh':
+        return const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)];
+      case 'minimal':
+        return const [Color(0xFFF8FAFC), Color(0xFFFFFFFF)];
+      default:
+        return const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
+    }
+  }
+
+  Widget _buildTemplatePicker() {
+    const templates = <Map<String, String>>[
+      {'id': 'bold', 'name': 'Bold gradient', 'subtitle': 'Big headline'},
+      {'id': 'festive', 'name': 'Festive offer', 'subtitle': 'Bright & punchy'},
+      {'id': 'fresh', 'name': 'Fresh & local', 'subtitle': 'Friendly colours'},
+      {'id': 'minimal', 'name': 'Clean minimal', 'subtitle': 'Product first'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Choose an ad design',
+          style: TextStyle(
+            color: _ink,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Switch designs any time before sharing.',
+          style: TextStyle(color: _muted, fontSize: 12),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 116,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: templates.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 9),
+            itemBuilder: (context, index) {
+              final entry = templates[index];
+              final id = entry['id']!;
+              final selected = _template == id;
+              final colors = _templateColors(id);
+              return InkWell(
+                borderRadius: BorderRadius.circular(15),
+                onTap: _busy
+                    ? null
+                    : () {
+                        setState(() {
+                          _template = id;
+                          if (_currentDraft != null) {
+                            _currentDraft = Map<String, dynamic>.from(
+                              _currentDraft!,
+                            )..['template'] = id;
+                          }
+                        });
+                      },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 126,
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: selected ? const Color(0xFFEEF2FF) : Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: selected ? _purple : const Color(0xFFE2E8F0),
+                      width: selected ? 2 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: id == 'minimal'
+                                ? const Color(0xFFF8FAFC)
+                                : null,
+                            gradient: id == 'minimal'
+                                ? null
+                                : LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: colors,
+                                  ),
+                            borderRadius: BorderRadius.circular(9),
+                            border: id == 'minimal'
+                                ? Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  )
+                                : null,
+                          ),
+                          padding: const EdgeInsets.all(7),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  color: id == 'minimal'
+                                      ? const Color(0xFF111827)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              Container(
+                                width: id == 'festive' ? 58 : 43,
+                                height: 13,
+                                decoration: BoxDecoration(
+                                  color: id == 'minimal'
+                                      ? const Color(0xFFBE123C)
+                                      : (id == 'festive'
+                                          ? const Color(0xFFFDE68A)
+                                          : Colors.white.withValues(alpha: 0.86)),
+                                  borderRadius: BorderRadius.circular(
+                                    id == 'festive' ? 3 : 5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        entry['name']!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _ink,
+                          fontSize: 10.5,
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        entry['subtitle']!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: _muted, fontSize: 9.5),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdFormatPicker() {
+    return DropdownButtonFormField<String>(
+      value: _adFormat,
+      decoration: const InputDecoration(
+        labelText: 'Ad placement / image size',
+        prefixIcon: Icon(Icons.aspect_ratio_rounded),
+        border: OutlineInputBorder(),
+        helperText: 'Exports target 1080px wide: feed ads, square posts, or vertical Stories/Status.',
+      ),
+      items: const [
+        DropdownMenuItem(
+          value: 'feed',
+          child: Text('Feed ad · 4:5 · 1080×1350'),
+        ),
+        DropdownMenuItem(
+          value: 'square',
+          child: Text('Square ad · 1:1 · 1080×1080'),
+        ),
+        DropdownMenuItem(
+          value: 'story',
+          child: Text('Story / Status · 9:16 · 1080×1920'),
+        ),
+      ],
+      onChanged: _busy
+          ? null
+          : (value) {
+              if (value == null) return;
+              setState(() {
+                _adFormat = value;
+                if (_currentDraft != null) {
+                  _currentDraft = Map<String, dynamic>.from(_currentDraft!)
+                    ..['ad_format'] = value;
+                }
+              });
+            },
+    );
+  }
+
   Widget _emptyPreview() {
     return Container(
       padding: const EdgeInsets.all(26),
@@ -844,13 +1065,22 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         ? (_currentDraft!['product_price'] as num).toDouble()
         : null;
     final width = math.min(360.0, MediaQuery.of(context).size.width - 48.0).toDouble();
+    final template = _currentDraft!['template']?.toString() ?? _template;
+    final format = _currentDraft!['ad_format']?.toString() ?? _adFormat;
+    final heightFactor = switch (format) {
+      'square' => 1.0,
+      'story' => 16 / 9,
+      _ => 5 / 4,
+    };
     return Center(
       child: RepaintBoundary(
         key: _posterKey,
         child: SizedBox(
           width: width,
-          height: width * 1.24,
+          height: width * heightFactor,
           child: _PosterArtwork(
+            template: template,
+            format: format,
             shopName: _shopController.text.trim().isEmpty
                 ? 'My Shop'
                 : _shopController.text.trim(),
@@ -1084,6 +1314,8 @@ class _PosterArtwork extends StatelessWidget {
     required this.offer,
     required this.offerCode,
     required this.language,
+    required this.template,
+    required this.format,
   });
 
   final String shopName;
@@ -1093,9 +1325,42 @@ class _PosterArtwork extends StatelessWidget {
   final String offer;
   final String offerCode;
   final String language;
+  final String template;
+  final String format;
 
   @override
   Widget build(BuildContext context) {
+    final isFestive = template == 'festive';
+    final isFresh = template == 'fresh';
+    final isMinimal = template == 'minimal';
+    final isStory = format == 'story';
+    final isSquare = format == 'square';
+    final hasProduct = productName.trim().isNotEmpty;
+    final hasOffer = offer.trim().isNotEmpty;
+    final colors = isFestive
+        ? const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)]
+        : isFresh
+            ? const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)]
+            : const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
+    final textColor = isMinimal ? const Color(0xFF111827) : Colors.white;
+    final mutedColor = isMinimal ? const Color(0xFF475569) : Colors.white70;
+    final accentColor = isFestive
+        ? const Color(0xFFFDE68A)
+        : isFresh
+            ? const Color(0xFFD9F99D)
+            : isMinimal
+                ? const Color(0xFFBE123C)
+                : const Color(0xFFFDE68A);
+    final accentTextColor = isFestive || !isMinimal
+        ? const Color(0xFF422006)
+        : Colors.white;
+    final cardColor = isMinimal
+        ? const Color(0xFFF8FAFC)
+        : Colors.white.withValues(alpha: 0.13);
+    final cardBorder = isMinimal
+        ? const Color(0xFFCBD5E1)
+        : Colors.white.withValues(alpha: 0.28);
+    final cornerRadius = isFestive ? 8.0 : isMinimal ? 4.0 : 18.0;
     final visitLabel = language == 'te'
         ? 'ఈరోజే సందర్శించండి'
         : language == 'hi'
@@ -1104,9 +1369,17 @@ class _PosterArtwork extends StatelessWidget {
     final offerCodeLabel = language == 'te'
         ? 'ఆఫర్ కోడ్'
         : language == 'hi'
-            ? 'ऑफ़र कोड'
+            ? 'ऑफ़र कोడ్'
             : 'Offer code';
-    final hasProduct = productName.trim().isNotEmpty;
+    final badgeLabel = isFestive
+        ? (hasOffer
+            ? (language == 'te' ? 'ప్రత్యేక ఆఫర్' : language == 'hi' ? 'खास ऑफ़र' : 'SPECIAL OFFER')
+            : (language == 'te' ? 'షాప్ ప్రమోషన్' : language == 'hi' ? 'दुकान प्रमोशन' : 'SHOP PROMOTION'))
+        : isFresh
+            ? (language == 'te' ? 'మీ స్థానిక దుకాణం' : language == 'hi' ? 'आपकी स्थानीय दुकान' : 'YOUR LOCAL SHOP')
+            : isMinimal
+                ? (language == 'te' ? 'దుకాణ సమాచారం' : language == 'hi' ? 'दुकान की जानकारी' : 'SHOP UPDATE')
+                : (language == 'te' ? 'దుకాణ ప్రత్యేకతలు' : language == 'hi' ? 'दुकान की खास बातें' : 'SHOP HIGHLIGHTS');
     final priceText = price == null
         ? ''
         : '₹' +
@@ -1115,49 +1388,72 @@ class _PosterArtwork extends StatelessWidget {
                 : price!.toStringAsFixed(2));
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(22),
       child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF101638),
-              Color(0xFF4C1D95),
-              Color(0xFF7C3AED),
-            ],
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -50,
-              top: -40,
-              child: Container(
-                width: 190,
-                height: 190,
-                decoration: const BoxDecoration(
-                  color: Color(0x227C3AED),
-                  shape: BoxShape.circle,
+        decoration: isMinimal
+            ? const BoxDecoration(color: Colors.white)
+            : BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: colors,
                 ),
               ),
-            ),
+        child: Stack(
+          children: [
+            if (!isMinimal)
+              Positioned(
+                right: isStory ? -68 : -42,
+                top: isStory ? -58 : -34,
+                child: Container(
+                  width: isStory ? 230 : 180,
+                  height: isStory ? 230 : 180,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: isFestive ? 0.10 : 0.09),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            if (isMinimal)
+              Positioned(
+                left: -48,
+                bottom: -54,
+                child: Container(
+                  width: 170,
+                  height: 170,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFCE7F3),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
             Padding(
-              padding: const EdgeInsets.all(22),
+              padding: EdgeInsets.all(isStory ? 26 : isSquare ? 13 : 21),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Container(
-                        width: 40,
-                        height: 40,
+                        width: isStory ? 48 : 40,
+                        height: isStory ? 48 : 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          color: isMinimal
+                              ? const Color(0xFF111827)
+                              : Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(isMinimal ? 8 : 13),
                         ),
-                        child: const Icon(Icons.storefront_rounded,
-                            color: Colors.white, size: 24),
+                        child: Icon(
+                          isFresh
+                              ? Icons.eco_rounded
+                              : isFestive
+                                  ? Icons.celebration_rounded
+                                  : isMinimal
+                                      ? Icons.storefront_rounded
+                                      : Icons.shopping_bag_rounded,
+                          color: isMinimal ? Colors.white : accentColor,
+                          size: isStory ? 28 : 24,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -1165,112 +1461,192 @@ class _PosterArtwork extends StatelessWidget {
                           shopName,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.w900,
+                            fontSize: isStory ? 21 : 17,
+                            height: 1.05,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const Spacer(),
+                  SizedBox(height: isStory ? 28 : isSquare ? 8 : 18),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isFestive ? 10 : 11,
+                      vertical: isStory ? 9 : isSquare ? 4 : 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      borderRadius: BorderRadius.circular(cornerRadius),
+                    ),
+                    child: Text(
+                      badgeLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: accentTextColor,
+                        fontSize: isStory ? 11 : isSquare ? 8 : 9.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: isMinimal ? 0.4 : 1.0,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: isSquare ? 7 : 14),
                   Text(
                     headline.isEmpty ? 'Your neighbourhood shop' : headline,
-                    maxLines: 3,
+                    maxLines: isStory ? 4 : 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      height: 1.08,
-                      fontSize: 27,
+                    style: TextStyle(
+                      color: textColor,
+                      height: 1.04,
+                      fontSize: isStory ? 34 : isSquare ? 21 : isMinimal ? 26 : 28,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 15),
+                  SizedBox(height: isStory ? 24 : isSquare ? 7 : 15),
                   if (hasProduct)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(14),
+                      padding: EdgeInsets.all(isStory ? 17 : isSquare ? 8 : 13),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.24),
-                        ),
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(cornerRadius),
+                        border: Border.all(color: cardBorder),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.local_mall_rounded,
-                              color: Color(0xFFFDE68A), size: 34),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              productName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
+                      child: isMinimal
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  productName,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: isStory ? 20 : 16,
+                                    height: 1.15,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                if (priceText.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    priceText,
+                                    style: TextStyle(
+                                      color: accentColor,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: isStory ? 30 : 24,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Icon(
+                                  Icons.local_mall_rounded,
+                                  color: accentColor,
+                                  size: isStory ? 38 : isSquare ? 23 : 32,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    productName,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: isStory ? 18 : isSquare ? 11 : 15,
+                                      height: 1.1,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                if (priceText.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      priceText,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: isStory ? 22 : isSquare ? 14 : 18,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ),
-                          if (priceText.isNotEmpty)
-                            Text(
-                              priceText,
-                              style: const TextStyle(
-                                color: Color(0xFFFDE68A),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 17,
-                              ),
-                            ),
-                        ],
-                      ),
                     ),
-                  if (offer.trim().isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                  if (hasOffer) ...[
+                    SizedBox(height: isSquare ? 6 : 11),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: isStory ? 13 : isSquare ? 5 : 9,
+                      ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFDE68A),
-                        borderRadius: BorderRadius.circular(10),
+                        color: accentColor,
+                        borderRadius: BorderRadius.circular(cornerRadius),
                       ),
                       child: Text(
                         offer,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF422006),
+                        style: TextStyle(
+                          color: accentTextColor,
+                          height: 1.15,
                           fontWeight: FontWeight.w900,
+                          fontSize: isStory ? 16 : isSquare ? 10 : 13,
                         ),
                       ),
                     ),
                   ],
                   const Spacer(),
-                  const Divider(color: Colors.white30),
+                  Divider(color: isMinimal ? const Color(0xFFE2E8F0) : Colors.white30),
                   Text(
                     visitLabel,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 11,
+                      color: mutedColor,
+                      fontSize: isStory ? 13 : isSquare ? 8.5 : 10.5,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: 1.8,
+                      letterSpacing: isMinimal ? 0.9 : 1.4,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    offerCodeLabel + ': ' + offerCode,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
+                    shopName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: isStory ? 15 : isSquare ? 10 : 12,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
+                  if (hasOffer) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      offerCodeLabel + ': ' + offerCode,
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: isStory ? 12 : isSquare ? 8 : 10,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 5),
+                  Text(
                     'Made with Retail Mind',
-                    style: TextStyle(color: Colors.white60, fontSize: 9),
+                    style: TextStyle(
+                      color: mutedColor,
+                      fontSize: isSquare ? 7 : 8.5,
+                    ),
                   ),
                 ],
               ),

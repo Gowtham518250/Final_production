@@ -2727,7 +2727,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           controller: editor,
           autofocus: true,
           textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: _voiceBillingLabel('Original catalogue name'),
             helperText: _voiceBillingLabel(
               'Keep the catalogue name to deduct stock correctly.',

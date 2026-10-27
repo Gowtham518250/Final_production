@@ -16,7 +16,7 @@ void main() {
     expect(caption, contains('Green Basket'));
     expect(caption, contains('Rice'));
     expect(caption, contains('₹55'));
-    expect(caption, contains('RM123456'));
+    expect(caption, isNot(contains('RM123456')));
     expect(caption, isNot(contains('%')));
     expect(caption, isNot(contains('discount')));
   });
@@ -36,9 +36,9 @@ void main() {
     );
 
     expect(telugu, contains('మీ దగ్గరలోని'));
-    expect(telugu, contains('RM123456'));
+    expect(telugu, isNot(contains('RM123456')));
     expect(hindi, contains('आपकी भरोसेमंद'));
-    expect(hindi, contains('RM123456'));
+    expect(hindi, isNot(contains('RM123456')));
   });
 
   test('offer codes have a stable prefix and six-character suffix', () {
@@ -62,6 +62,8 @@ void main() {
     );
 
     expect(withoutOffer, isNot(contains('Offer:')));
+    expect(withoutOffer, isNot(contains('RM000001')));
     expect(withOffer, contains('Offer: 10% off on rice today'));
+    expect(withOffer, contains('RM000001'));
   });
 }
