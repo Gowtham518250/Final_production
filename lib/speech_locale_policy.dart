@@ -20,6 +20,27 @@ class SpeechLocalePolicy {
     });
   }
 
+  /// Convert the app's saved language code (for example `te`) into the
+  /// explicit locale passed to cloud transcription and on-device STT.
+  /// Never send `auto` when a user has already chosen a language.
+  static String toSpeechLocaleCode(String languageCode) {
+    final normalized = normalize(languageCode);
+    final base = normalized.split('-').first;
+    const defaultLocales = <String, String>{
+      'en': 'en-IN',
+      'hi': 'hi-IN',
+      'te': 'te-IN',
+      'ta': 'ta-IN',
+      'kn': 'kn-IN',
+      'ml': 'ml-IN',
+      'mr': 'mr-IN',
+      'bn': 'bn-IN',
+      'gu': 'gu-IN',
+      'pa': 'pa-IN',
+    };
+    return defaultLocales[base] ?? 'te-IN';
+  }
+
   static String normalize(String locale) =>
       locale.trim().replaceAll('_', '-').toLowerCase();
 }

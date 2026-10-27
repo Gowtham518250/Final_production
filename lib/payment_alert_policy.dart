@@ -1,13 +1,13 @@
 /// Policy for whether a detected payment needs an audible OS notification.
 ///
-/// A verification-required incoming credit gets an audible notification even
-/// when speech is enabled. Background TTS can fail silently on some Android
-/// devices, so confirmation prompts must not rely on TTS as the only alert.
+/// When voice is enabled, TTS owns routine live payment announcements. The OS
+/// notification stays silent so one detected payment does not produce speech
+/// plus a second sound. Late events, disabled voice, and identity conflicts
+/// remain independently audible.
 bool shouldUseAudiblePaymentAlert({
   required bool isLate,
   required bool voiceEnabled,
   required bool hasConflict,
-  required bool needsVerification,
 }) {
-  return isLate || !voiceEnabled || hasConflict || needsVerification;
+  return isLate || !voiceEnabled || hasConflict;
 }

@@ -900,28 +900,72 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       Locale(_selectedLang.code.split('-').first.toLowerCase());
 
   static const Map<String, Map<String, String>> _voiceBillingLabels = {
+    'hi': {
+      'AI Voice Billing': 'AI वॉइस बिलिंग',
+      'Speak naturally. Review before billing.': 'स्वाभाविक रूप से बोलें। बिल बनाने से पहले विवरण जाँचें।',
+      'Listening': 'सुन रहा है',
+      'What I heard': 'मैंने क्या सुना',
+      'Process': 'समझें',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'आपकी पहचानी गई आवाज़ यहाँ दिखेगी। बिल में जोड़ने से पहले वस्तुओं और चेतावनियों की जाँच करें।',
+      'Please verify': 'कृपया जाँचें',
+      'AI understood:': 'AI ने यह समझा:',
+      'DETECTED ITEMS': 'पहचानी गई वस्तुएँ',
+      'Custom item — not in inventory; no stock deduction.': 'कस्टम वस्तु — इन्वेंटरी में नहीं है; स्टॉक नहीं घटेगा।',
+      'Low confidence — please verify': 'पहचान का भरोसा कम है — कृपया जाँचें',
+      'Price not found. Enter it in the bill before saving.': 'कीमत नहीं मिली। सेव करने से पहले बिल में कीमत भरें।',
+      'Original item name': 'वस्तु का मूल नाम',
+      'Original catalogue name': 'कैटलॉग में मूल नाम',
+      'Keep the catalogue name to deduct stock correctly.': 'स्टॉक सही घटाने के लिए कैटलॉग वाला नाम रखें।',
+      'Cancel': 'रद्द करें',
+      'Save name': 'नाम सेव करें',
+      'Qty': 'मात्रा',
+      'Price': 'कीमत',
+      'selected': 'चुने गए',
+      'Clear': 'हटाएँ',
+      'Add to Bill': 'बिल में जोड़ें',
+      'No items were identified. Try again or enter the items manually.': 'कोई वस्तु नहीं पहचानी गई। फिर बोलें या वस्तुएँ खुद दर्ज करें।',
+    },
+    'ta': {
+      'AI Voice Billing': 'AI குரல் பில்லிங்',
+      'Speak naturally. Review before billing.': 'இயல்பாகப் பேசுங்கள். பில் செய்வதற்கு முன் விவரங்களைச் சரிபார்க்கவும்.',
+      'Listening': 'கேட்கிறது',
+      'What I heard': 'நான் கேட்டது',
+      'Process': 'செயலாக்கு',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'நீங்கள் பேசியது இங்கே காட்டப்படும். பில்லில் சேர்ப்பதற்கு முன் கண்டறிந்த பொருட்களையும் எச்சரிக்கைகளையும் சரிபார்க்கவும்.',
+      'Please verify': 'சரிபார்க்கவும்',
+      'AI understood:': 'AI புரிந்துகொண்டது:',
+      'DETECTED ITEMS': 'கண்டறிந்த பொருட்கள்',
+      'Custom item — not in inventory; no stock deduction.': 'தனிப்பயன் பொருள் — இருப்பில் இல்லை; ஸ்டாக் குறைக்கப்படாது.',
+      'Low confidence — please verify': 'அடையாளம் காண்பதில் நம்பிக்கை குறைவு — சரிபார்க்கவும்',
+      'Price not found. Enter it in the bill before saving.': 'விலை கிடைக்கவில்லை. சேமிப்பதற்கு முன் விலையை உள்ளிடவும்.',
+      'Original item name': 'அசல் பொருளின் பெயர்',
+      'Original catalogue name': 'பட்டியலில் உள்ள அசல் பெயர்',
+      'Keep the catalogue name to deduct stock correctly.': 'ஸ்டாக் சரியாகக் குறைய பட்டியலில் உள்ள பெயரை மாற்ற வேண்டாம்.',
+      'Cancel': 'ரத்துசெய்',
+      'Save name': 'பெயரைச் சேமி',
+      'Qty': 'அளவு',
+      'Price': 'விலை',
+      'selected': 'தேர்ந்தெடுத்தவை',
+      'Clear': 'அழி',
+      'Add to Bill': 'பில்லில் சேர்',
+      'No items were identified. Try again or enter the items manually.': 'பொருட்கள் கண்டறியப்படவில்லை. மீண்டும் பேசுங்கள் அல்லது கையால் உள்ளிடுங்கள்.',
+    },
     'te': {
       'AI Voice Billing': 'AI వాయిస్ బిల్లింగ్',
-      'Speak naturally. Review before billing.':
-          'సహజంగా మాట్లాడండి. బిల్లు చేసే ముందు వివరాలు పరిశీలించండి.',
+      'Speak naturally. Review before billing.': 'సహజంగా మాట్లాడండి. బిల్లు చేసే ముందు వివరాలు పరిశీలించండి.',
       'Listening': 'వింటున్నాను',
       'What I heard': 'మీరు చెప్పింది',
       'Process': 'వివరాలను గుర్తించండి',
-      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.':
-          'మీరు మాట్లాడిన మాటలు ఇక్కడే ఉంటాయి. బిల్లులో చేర్చే ముందు గుర్తించిన వస్తువులు, హెచ్చరికలు పరిశీలించండి.',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'మీరు మాట్లాడిన మాటలు ఇక్కడే ఉంటాయి. బిల్లులో చేర్చే ముందు గుర్తించిన వస్తువులు, హెచ్చరికలు పరిశీలించండి.',
       'Please verify': 'దయచేసి తనిఖీ చేయండి',
       'AI understood:': 'AI అర్థం చేసుకున్నది:',
       'DETECTED ITEMS': 'గుర్తించిన వస్తువులు',
-      'Custom item — not in inventory; no stock deduction.':
-          'దుకాణ నిల్వలో లేని కస్టమ్ వస్తువు; స్టాక్ తగ్గదు.',
-      'Low confidence — please verify':
-          'గుర్తింపు స్పష్టంగా లేదు — దయచేసి తనిఖీ చేయండి',
-      'Price not found. Enter it in the bill before saving.':
-          'ధర గుర్తించలేదు. సేవ్ చేసే ముందు బిల్లులో ధర నమోదు చేయండి.',
-      'Edit original product name': 'అసలు ఉత్పత్తి పేరును మార్చండి',
+      'Custom item — not in inventory; no stock deduction.': 'దుకాణ నిల్వలో లేని కస్టమ్ వస్తువు; స్టాక్ తగ్గదు.',
+      'Low confidence — please verify': 'గుర్తింపు స్పష్టంగా లేదు — దయచేసి తనిఖీ చేయండి',
+      'Price not found. Enter it in the bill before saving.': 'ధర గుర్తించలేదు. సేవ్ చేసే ముందు బిల్లులో ధర నమోదు చేయండి.',
+      'Original item name': 'వస్తువు అసలు పేరు',
       'Original catalogue name': 'కేటలాగ్‌లోని అసలు పేరు',
-      'Keep the catalogue name to deduct stock correctly.':
-          'స్టాక్ సరిగ్గా తగ్గాలంటే కేటలాగ్‌లోని పేరును అలాగే ఉంచండి.',
+      'Keep the catalogue name to deduct stock correctly.': 'స్టాక్ సరిగ్గా తగ్గాలంటే కేటలాగ్‌లోని పేరును అలాగే ఉంచండి.',
       'Cancel': 'రద్దు చేయండి',
       'Save name': 'పేరును సేవ్ చేయండి',
       'Qty': 'పరిమాణం',
@@ -929,11 +973,159 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       'selected': 'ఎంచుకున్నారు',
       'Clear': 'తొలగించండి',
       'Add to Bill': 'బిల్లులో చేర్చండి',
-      'No items were identified. Try again or enter the items manually.':
-          'వస్తువులు గుర్తించబడలేదు. మళ్లీ మాట్లాడండి లేదా వస్తువులను చేతితో నమోదు చేయండి.',
+      'No items were identified. Try again or enter the items manually.': 'వస్తువులు గుర్తించబడలేదు. మళ్లీ మాట్లాడండి లేదా వస్తువులను చేతితో నమోదు చేయండి.',
+    },
+    'kn': {
+      'AI Voice Billing': 'AI ಧ್ವನಿ ಬಿಲ್ಲಿಂಗ್',
+      'Speak naturally. Review before billing.': 'ಸಹಜವಾಗಿ ಮಾತನಾಡಿ. ಬಿಲ್ ಮಾಡುವ ಮೊದಲು ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.',
+      'Listening': 'ಕೇಳಲಾಗುತ್ತಿದೆ',
+      'What I heard': 'ನಾನು ಕೇಳಿದ್ದು',
+      'Process': 'ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'ನೀವು ಮಾತನಾಡಿದ ಪದಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಬಿಲ್‌ಗೆ ಸೇರಿಸುವ ಮೊದಲು ಗುರುತಿಸಿದ ವಸ್ತುಗಳು ಮತ್ತು ಎಚ್ಚರಿಕೆಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.',
+      'Please verify': 'ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ',
+      'AI understood:': 'AI ಅರ್ಥಮಾಡಿಕೊಂಡಿದ್ದು:',
+      'DETECTED ITEMS': 'ಗುರುತಿಸಿದ ವಸ್ತುಗಳು',
+      'Custom item — not in inventory; no stock deduction.': 'ಕಸ್ಟಮ್ ವಸ್ತು — ದಾಸ್ತಾನಿನಲ್ಲಿ ಇಲ್ಲ; ಸ್ಟಾಕ್ ಕಡಿತವಾಗುವುದಿಲ್ಲ.',
+      'Low confidence — please verify': 'ಗುರುತಿಸುವ ವಿಶ್ವಾಸ ಕಡಿಮೆ — ಪರಿಶೀಲಿಸಿ',
+      'Price not found. Enter it in the bill before saving.': 'ಬೆಲೆ ಸಿಗಲಿಲ್ಲ. ಉಳಿಸುವ ಮೊದಲು ಬಿಲ್‌ನಲ್ಲಿ ಬೆಲೆ ನಮೂದಿಸಿ.',
+      'Original item name': 'ವಸ್ತುವಿನ ಮೂಲ ಹೆಸರು',
+      'Original catalogue name': 'ಕ್ಯಾಟಲಾಗ್‌ನ ಮೂಲ ಹೆಸರು',
+      'Keep the catalogue name to deduct stock correctly.': 'ಸ್ಟಾಕ್ ಸರಿಯಾಗಿ ಕಡಿತಗೊಳ್ಳಲು ಕ್ಯಾಟಲಾಗ್ ಹೆಸರನ್ನೇ ಬಳಸಿ.',
+      'Cancel': 'ರದ್ದುಮಾಡಿ',
+      'Save name': 'ಹೆಸರನ್ನು ಉಳಿಸಿ',
+      'Qty': 'ಪ್ರಮಾಣ',
+      'Price': 'ಬೆಲೆ',
+      'selected': 'ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ',
+      'Clear': 'ತೆರವುಗೊಳಿಸಿ',
+      'Add to Bill': 'ಬಿಲ್‌ಗೆ ಸೇರಿಸಿ',
+      'No items were identified. Try again or enter the items manually.': 'ಯಾವುದೇ ವಸ್ತು ಗುರುತಿಸಲಿಲ್ಲ. ಮತ್ತೆ ಮಾತನಾಡಿ ಅಥವಾ ಕೈಯಾರೆ ನಮೂದಿಸಿ.',
+    },
+    'ml': {
+      'AI Voice Billing': 'AI വോയ്സ് ബില്ലിംഗ്',
+      'Speak naturally. Review before billing.': 'സ്വാഭാവികമായി സംസാരിക്കുക. ബിൽ ചെയ്യുന്നതിന് മുമ്പ് വിവരങ്ങൾ പരിശോധിക്കുക.',
+      'Listening': 'കേൾക്കുന്നു',
+      'What I heard': 'ഞാൻ കേട്ടത്',
+      'Process': 'പ്രോസസ് ചെയ്യുക',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'നിങ്ങൾ പറഞ്ഞത് ഇവിടെ കാണിക്കും. ബില്ലിൽ ചേർക്കുന്നതിന് മുമ്പ് കണ്ടെത്തിയ ഇനങ്ങളും മുന്നറിയിപ്പുകളും പരിശോധിക്കുക.',
+      'Please verify': 'ദയവായി പരിശോധിക്കുക',
+      'AI understood:': 'AI മനസ്സിലാക്കിയത്:',
+      'DETECTED ITEMS': 'കണ്ടെത്തിയ ഇനങ്ങൾ',
+      'Custom item — not in inventory; no stock deduction.': 'കസ്റ്റം ഇനം — സ്റ്റോക്കിൽ ഇല്ല; സ്റ്റോക്ക് കുറയ്ക്കില്ല.',
+      'Low confidence — please verify': 'തിരിച്ചറിയൽ ഉറപ്പില്ല — പരിശോധിക്കുക',
+      'Price not found. Enter it in the bill before saving.': 'വില കണ്ടെത്തിയില്ല. സേവ് ചെയ്യുന്നതിന് മുമ്പ് ബില്ലിൽ വില നൽകുക.',
+      'Original item name': 'ഇനത്തിന്റെ യഥാർത്ഥ പേര്',
+      'Original catalogue name': 'കാറ്റലോഗിലെ യഥാർത്ഥ പേര്',
+      'Keep the catalogue name to deduct stock correctly.': 'സ്റ്റോക്ക് ശരിയായി കുറയ്ക്കാൻ കാറ്റലോഗിലെ പേര് നിലനിർത്തുക.',
+      'Cancel': 'റദ്ദാക്കുക',
+      'Save name': 'പേര് സേവ് ചെയ്യുക',
+      'Qty': 'അളവ്',
+      'Price': 'വില',
+      'selected': 'തിരഞ്ഞെടുത്തത്',
+      'Clear': 'മായ്ക്കുക',
+      'Add to Bill': 'ബില്ലിൽ ചേർക്കുക',
+      'No items were identified. Try again or enter the items manually.': 'ഇനങ്ങൾ കണ്ടെത്തിയില്ല. വീണ്ടും സംസാരിക്കുക അല്ലെങ്കിൽ കൈകൊണ്ട് നൽകുക.',
+    },
+    'mr': {
+      'AI Voice Billing': 'AI व्हॉइस बिलिंग',
+      'Speak naturally. Review before billing.': 'नैसर्गिकपणे बोला. बिल करण्यापूर्वी तपशील तपासा.',
+      'Listening': 'ऐकत आहे',
+      'What I heard': 'मी ऐकलेले',
+      'Process': 'प्रक्रिया करा',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'तुम्ही बोललेले शब्द येथे दिसतील. बिलात जोडण्यापूर्वी ओळखलेल्या वस्तू आणि सूचना तपासा.',
+      'Please verify': 'कृपया तपासा',
+      'AI understood:': 'AI ला समजले:',
+      'DETECTED ITEMS': 'ओळखलेल्या वस्तू',
+      'Custom item — not in inventory; no stock deduction.': 'कस्टम वस्तू — साठ्यात नाही; स्टॉक कमी होणार नाही.',
+      'Low confidence — please verify': 'ओळखण्याचा विश्वास कमी आहे — तपासा',
+      'Price not found. Enter it in the bill before saving.': 'किंमत सापडली नाही. सेव्ह करण्यापूर्वी बिलात किंमत भरा.',
+      'Original item name': 'वस्तूचे मूळ नाव',
+      'Original catalogue name': 'कॅटलॉगमधील मूळ नाव',
+      'Keep the catalogue name to deduct stock correctly.': 'स्टॉक योग्यरीत्या कमी होण्यासाठी कॅटलॉगमधील नाव तसेच ठेवा.',
+      'Cancel': 'रद्द करा',
+      'Save name': 'नाव जतन करा',
+      'Qty': 'प्रमाण',
+      'Price': 'किंमत',
+      'selected': 'निवडले',
+      'Clear': 'पुसून टाका',
+      'Add to Bill': 'बिलात जोडा',
+      'No items were identified. Try again or enter the items manually.': 'वस्तू ओळखल्या गेल्या नाहीत. पुन्हा बोला किंवा हाताने नोंदवा.',
+    },
+    'bn': {
+      'AI Voice Billing': 'AI ভয়েস বিলিং',
+      'Speak naturally. Review before billing.': 'স্বাভাবিকভাবে বলুন। বিল করার আগে বিবরণ যাচাই করুন।',
+      'Listening': 'শুনছে',
+      'What I heard': 'আমি যা শুনেছি',
+      'Process': 'প্রক্রিয়া করুন',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'আপনার বলা কথাগুলি এখানে দেখা যাবে। বিলে যোগ করার আগে শনাক্ত করা পণ্য ও সতর্কবার্তা যাচাই করুন।',
+      'Please verify': 'অনুগ্রহ করে যাচাই করুন',
+      'AI understood:': 'AI যা বুঝেছে:',
+      'DETECTED ITEMS': 'শনাক্ত করা পণ্য',
+      'Custom item — not in inventory; no stock deduction.': 'কাস্টম পণ্য — ইনভেন্টরিতে নেই; স্টক কমবে না।',
+      'Low confidence — please verify': 'শনাক্তকরণে আস্থা কম — যাচাই করুন',
+      'Price not found. Enter it in the bill before saving.': 'দাম পাওয়া যায়নি। সংরক্ষণের আগে বিলে দাম লিখুন।',
+      'Original item name': 'পণ্যের আসল নাম',
+      'Original catalogue name': 'ক্যাটালগের আসল নাম',
+      'Keep the catalogue name to deduct stock correctly.': 'স্টক সঠিকভাবে কমাতে ক্যাটালগের নামটি অপরিবর্তিত রাখুন।',
+      'Cancel': 'বাতিল',
+      'Save name': 'নাম সংরক্ষণ করুন',
+      'Qty': 'পরিমাণ',
+      'Price': 'দাম',
+      'selected': 'নির্বাচিত',
+      'Clear': 'মুছুন',
+      'Add to Bill': 'বিলে যোগ করুন',
+      'No items were identified. Try again or enter the items manually.': 'কোনও পণ্য শনাক্ত হয়নি। আবার বলুন অথবা হাতে লিখুন।',
+    },
+    'gu': {
+      'AI Voice Billing': 'AI વૉઇસ બિલિંગ',
+      'Speak naturally. Review before billing.': 'સ્વાભાવિક રીતે બોલો. બિલ બનાવતા પહેલાં વિગતો તપાસો.',
+      'Listening': 'સાંભળી રહ્યું છે',
+      'What I heard': 'મેં જે સાંભળ્યું',
+      'Process': 'પ્રક્રિયા કરો',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'તમે બોલેલા શબ્દો અહીં દેખાશે. બિલમાં ઉમેરતા પહેલાં ઓળખાયેલી વસ્તુઓ અને ચેતવણીઓ તપાસો.',
+      'Please verify': 'કૃપા કરીને તપાસો',
+      'AI understood:': 'AI એ સમજ્યું:',
+      'DETECTED ITEMS': 'ઓળખાયેલી વસ્તુઓ',
+      'Custom item — not in inventory; no stock deduction.': 'કસ્ટમ વસ્તુ — ઇન્વેન્ટરીમાં નથી; સ્ટોક ઘટશે નહીં.',
+      'Low confidence — please verify': 'ઓળખ અંગે ખાતરી ઓછી છે — તપાસો',
+      'Price not found. Enter it in the bill before saving.': 'કિંમત મળી નથી. સેવ કરતા પહેલાં બિલમાં કિંમત દાખલ કરો.',
+      'Original item name': 'વસ્તુનું મૂળ નામ',
+      'Original catalogue name': 'કૅટલોગમાં મૂળ નામ',
+      'Keep the catalogue name to deduct stock correctly.': 'સ્ટોક યોગ્ય રીતે ઘટાડવા કૅટલોગનું નામ જાળવો.',
+      'Cancel': 'રદ કરો',
+      'Save name': 'નામ સાચવો',
+      'Qty': 'જથ્થો',
+      'Price': 'કિંમત',
+      'selected': 'પસંદ કરેલ',
+      'Clear': 'સાફ કરો',
+      'Add to Bill': 'બિલમાં ઉમેરો',
+      'No items were identified. Try again or enter the items manually.': 'કોઈ વસ્તુ ઓળખાઈ નથી. ફરી બોલો અથવા વસ્તુઓ જાતે દાખલ કરો.',
+    },
+    'pa': {
+      'AI Voice Billing': 'AI ਵੌਇਸ ਬਿਲਿੰਗ',
+      'Speak naturally. Review before billing.': 'ਕੁਦਰਤੀ ਤਰੀਕੇ ਨਾਲ ਬੋਲੋ। ਬਿੱਲ ਬਣਾਉਣ ਤੋਂ ਪਹਿਲਾਂ ਵੇਰਵੇ ਜਾਂਚੋ।',
+      'Listening': 'ਸੁਣ ਰਿਹਾ ਹੈ',
+      'What I heard': 'ਮੈਂ ਜੋ ਸੁਣਿਆ',
+      'Process': 'ਪ੍ਰਕਿਰਿਆ ਕਰੋ',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.': 'ਤੁਹਾਡੇ ਬੋਲੇ ਸ਼ਬਦ ਇੱਥੇ ਦਿਖਣਗੇ। ਬਿੱਲ ਵਿੱਚ ਜੋੜਨ ਤੋਂ ਪਹਿਲਾਂ ਪਛਾਣੀਆਂ ਚੀਜ਼ਾਂ ਅਤੇ ਚੇਤਾਵਨੀਆਂ ਜਾਂਚੋ।',
+      'Please verify': 'ਕਿਰਪਾ ਕਰਕੇ ਜਾਂਚੋ',
+      'AI understood:': 'AI ਨੇ ਇਹ ਸਮਝਿਆ:',
+      'DETECTED ITEMS': 'ਪਛਾਣੀਆਂ ਚੀਜ਼ਾਂ',
+      'Custom item — not in inventory; no stock deduction.': 'ਕਸਟਮ ਚੀਜ਼ — ਸਟਾਕ ਵਿੱਚ ਨਹੀਂ; ਸਟਾਕ ਨਹੀਂ ਘਟੇਗਾ।',
+      'Low confidence — please verify': 'ਪਛਾਣ ਬਾਰੇ ਭਰੋਸਾ ਘੱਟ ਹੈ — ਜਾਂਚੋ',
+      'Price not found. Enter it in the bill before saving.': 'ਕੀਮਤ ਨਹੀਂ ਮਿਲੀ। ਸੇਵ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਬਿੱਲ ਵਿੱਚ ਕੀਮਤ ਭਰੋ।',
+      'Original item name': 'ਚੀਜ਼ ਦਾ ਅਸਲ ਨਾਮ',
+      'Original catalogue name': 'ਕੈਟਾਲਾਗ ਵਿੱਚ ਅਸਲ ਨਾਮ',
+      'Keep the catalogue name to deduct stock correctly.': 'ਸਟਾਕ ਸਹੀ ਘਟਾਉਣ ਲਈ ਕੈਟਾਲਾਗ ਵਾਲਾ ਨਾਮ ਰੱਖੋ।',
+      'Cancel': 'ਰੱਦ ਕਰੋ',
+      'Save name': 'ਨਾਮ ਸੰਭਾਲੋ',
+      'Qty': 'ਮਾਤਰਾ',
+      'Price': 'ਕੀਮਤ',
+      'selected': 'ਚੁਣੀਆਂ',
+      'Clear': 'ਸਾਫ਼ ਕਰੋ',
+      'Add to Bill': 'ਬਿੱਲ ਵਿੱਚ ਜੋੜੋ',
+      'No items were identified. Try again or enter the items manually.': 'ਕੋਈ ਚੀਜ਼ ਪਛਾਣੀ ਨਹੀਂ ਗਈ। ਦੁਬਾਰਾ ਬੋਲੋ ਜਾਂ ਹੱਥ ਨਾਲ ਦਾਖ਼ਲ ਕਰੋ।',
     },
   };
-
   String _voiceBillingLabel(String source) =>
       _voiceBillingLabels[_selectedDisplayLocale.languageCode]?[source] ??
       source;
@@ -1465,25 +1657,26 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           if (!mounted) return;
 
           final raw = result.recognizedWords.trim();
-          final normalized = raw.isEmpty
+          final normalizedForParser = raw.isEmpty
               ? ''
-              : PhoneticNormalizer.normalize(
-                  raw,
-                  _selectedLang.code,
-                );
+              : PhoneticNormalizer.normalize(raw, _selectedLang.code);
 
+          // Keep exactly what the recognizer heard in the editable transcript.
+          // Normalization belongs in the parser pipeline, not the visible text.
           setState(() {
-            _transcript = normalized;
-            _transcriptCtrl.text = normalized;
+            _transcript = raw;
+            _transcriptCtrl.text = raw;
           });
 
-          if (normalized.isNotEmpty) {
-            _lastFinalTranscript = normalized;
+          if (normalizedForParser.isNotEmpty) {
+            _lastFinalTranscript = normalizedForParser;
           }
 
-          if (result.finalResult && normalized.isNotEmpty && !_finalResultHandled) {
+          if (result.finalResult &&
+              normalizedForParser.isNotEmpty &&
+              !_finalResultHandled) {
             _finalResultHandled = true;
-            _doProcess(normalized, commit: true);
+            _doProcess(raw, commit: true);
           }
         },
         listenFor: cfg.listenFor,
@@ -1677,8 +1870,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       _clearEditControllers();
       if (parsedResult.items.isEmpty) {
         setState(() {
-          _transcript = cleanTranscript;
-          _transcriptCtrl.text = cleanTranscript;
+          _transcript = transcript;
+          _transcriptCtrl.text = transcript;
           _lastFinalTranscript = cleanTranscript;
           _lastPreviewItems = const [];
           _parseWarnings = parsedResult.warnings;
@@ -1700,8 +1893,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           ParsedItems = List<ParsedItem>.from(_committedItems);
           _lastFinalTranscript = cleanTranscript;
           _lastCommittedText = cleanTranscript;
-          _transcript = cleanTranscript;
-          _transcriptCtrl.text = cleanTranscript;
+          _transcript = transcript;
+          _transcriptCtrl.text = transcript;
           _isProcessing = false;
         });
         _showSnack(
@@ -1873,8 +2066,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         _committedItems = _mergeParsedItems(_committedItems, items);
         ParsedItems = List<ParsedItem>.from(_committedItems);
         _lastFinalTranscript = clean;
-        _transcript = clean;
-        _transcriptCtrl.text = clean;
+        // Keep the shopkeeper's original words visible; the cleaned string is
+        // used only for parsing and learned corrections.
+        _transcript = text.trim();
+        _transcriptCtrl.text = text.trim();
 
         if (_committedItems.isEmpty) {
           _showSnack(
@@ -2859,6 +3054,33 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_selectedDisplayLocale.languageCode != 'en')
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveTranslatedText(
+                        _voiceBillingLabel('Original item name'),
+                        locale: _selectedDisplayLocale,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF64748B),
+                          fontSize: 9.5,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF64748B),
+                            fontSize: 9.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   _miniField(_voiceBillingLabel('Qty'), _editControllers[idx]!['qty']!),

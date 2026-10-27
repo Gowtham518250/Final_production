@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../../language_provider.dart';
+import '../../../voice_billing_localization.dart';
 import '../controllers/sales_entry_provider.dart';
 import '../models/sales_item.dart';
 
@@ -24,7 +26,7 @@ class PremiumProductEntryList extends StatelessWidget {
           itemBuilder: (context, index) {
             final item = provider.entries[index];
             return _ProductEntryCard(
-              key: ValueKey('entry_'),
+              key: ValueKey('entry_${item.id}'),
               index: index,
               item: item,
               showDelete: provider.entries.length > 1,
@@ -140,6 +142,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedLocale = context.watch<LanguageProvider>().locale;
     Widget cardContent = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -198,12 +201,50 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
           children: [
             Expanded(
               flex: 3,
-              child: PremiumProductEntry(
-                controller: _nameCtrl,
-                focusNode: _nameNode,
-                label: 'Product Name',
-                icon: Icons.inventory_2_rounded,
-                onChanged: (_) => _notifyChange(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PremiumProductEntry(
+                    controller: _nameCtrl,
+                    focusNode: _nameNode,
+                    label: 'Product Name',
+                    icon: Icons.inventory_2_rounded,
+                    onChanged: (_) => _notifyChange(),
+                  ),
+                  if (_nameCtrl.text.trim().isNotEmpty &&
+                      selectedLocale.languageCode.toLowerCase() != 'en')
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, top: 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            VoiceBillingLocalization.label(
+                              'In your language:',
+                              selectedLocale.languageCode,
+                            ),
+                            locale: selectedLocale,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF64748B),
+                              fontSize: 9,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: LiveTranslatedText(
+                              _nameCtrl.text.trim(),
+                              locale: selectedLocale,
+                              style: GoogleFonts.poppins(
+                                color: const Color(0xFF4F46E5),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 8),
