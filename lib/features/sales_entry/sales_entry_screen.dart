@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import '../../language_provider.dart';
 import '../../speech_locale_policy.dart';
+import '../../voice_billing_localization.dart';
 import 'controllers/sales_entry_provider.dart';
 import 'widgets/compact_total_card.dart';
 import 'widgets/premium_product_entry.dart';
@@ -180,8 +181,11 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                   color: Color(0xFF4F46E5), size: 19),
               const SizedBox(width: 8),
               Expanded(
-                child: LiveTranslatedText(
-                  'Voice recognition result',
+                child: Text(
+                  VoiceBillingLocalization.label(
+                    'Voice recognition result',
+                    selectedLocale.languageCode,
+                  ),
                   locale: selectedLocale,
                   style: GoogleFonts.poppins(
                     color: const Color(0xFF1E293B),
@@ -194,8 +198,8 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
           ),
           if (transcript.isNotEmpty) ...[
             const SizedBox(height: 12),
-            LiveTranslatedText(
-              'What I heard',
+            Text(
+              VoiceBillingLocalization.label('What I heard', selectedLocale.languageCode),
               locale: selectedLocale,
               style: GoogleFonts.poppins(
                 color: const Color(0xFF64748B),
@@ -215,8 +219,8 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
           ],
           if (interpretation.isNotEmpty) ...[
             const SizedBox(height: 10),
-            LiveTranslatedText(
-              'AI understood',
+            Text(
+              VoiceBillingLocalization.label('AI understood', selectedLocale.languageCode),
               locale: selectedLocale,
               style: GoogleFonts.poppins(
                 color: const Color(0xFF64748B),
@@ -238,8 +242,8 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
           ],
           if (items.isNotEmpty) ...[
             const SizedBox(height: 12),
-            LiveTranslatedText(
-              'Detected items',
+            Text(
+              VoiceBillingLocalization.label('Detected items', selectedLocale.languageCode),
               locale: selectedLocale,
               style: GoogleFonts.poppins(
                 color: const Color(0xFF64748B),
@@ -283,8 +287,11 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
             ),
           ],
           const SizedBox(height: 9),
-          LiveTranslatedText(
-            'Review every product, quantity, and price before saving the sale.',
+          Text(
+            VoiceBillingLocalization.label(
+              'Review every product, quantity, and price before saving the sale.',
+              selectedLocale.languageCode,
+            ),
             locale: selectedLocale,
             style: GoogleFonts.poppins(
               color: const Color(0xFF92400E),
