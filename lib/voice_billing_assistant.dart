@@ -3054,6 +3054,33 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_selectedDisplayLocale.languageCode != 'en')
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveTranslatedText(
+                        _voiceBillingLabel('Original item name'),
+                        locale: _selectedDisplayLocale,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF64748B),
+                          fontSize: 9.5,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF64748B),
+                            fontSize: 9.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   _miniField(_voiceBillingLabel('Qty'), _editControllers[idx]!['qty']!),
