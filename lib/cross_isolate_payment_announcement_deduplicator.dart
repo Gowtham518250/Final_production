@@ -204,7 +204,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       origin == 'sms' || origin == 'notification+sms';
 
   static String _channelKey(PaymentEvent event) =>
-      '\${_origin(event.detectionSource)}|\${event.app.name}';
+      '${_origin(event.detectionSource)}|${event.app.name}';
 
   static String _directionKey(PaymentEvent event) {
     switch (event.direction) {
