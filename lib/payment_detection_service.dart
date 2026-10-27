@@ -4223,6 +4223,7 @@ class PaymentDetectionService {
   // Late source times are tracked separately so echo matching still compares
   // current detection timestamps, not hours-old timestamps from queued events.
   DateTime? _sourcePostedAt;
+  String? _sourceEventKey;
   final Map<String, DateTime> _lateEventTimes = <String, DateTime>{};
 
   /// Original source time for an event recovered after a service interruption.
@@ -4252,13 +4253,15 @@ class PaymentDetectionService {
   }
 
   void _handleNotification(ServiceNotificationEvent event) {
-    _sourcePostedAt = postedAtFromEventKey(
-      _safe(() => (event as dynamic).eventKey as String?),
-    );
+    _sourceEventKey = _safe(
+      () => (event as dynamic).eventKey as String?,
+    )?.trim();
+    _sourcePostedAt = postedAtFromEventKey(_sourceEventKey);
     try {
       _handleNotificationCore(event);
     } finally {
       _sourcePostedAt = null;
+      _sourceEventKey = null;
     }
   }
 
@@ -4687,6 +4690,7 @@ class PaymentDetectionService {
       amount: amount,
       timestamp: DateTime.now(),
       sourceTimestamp: _sourcePostedAt,
+      sourceEventKey: _sourceEventKey,
       app: app,
       payerName: name,
       referenceId: refId,
