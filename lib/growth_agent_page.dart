@@ -78,6 +78,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     if (value is num && value.isFinite) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
+  double? _productPrice(Map<String, dynamic>? product) {
+    if (product == null) return null;
+    final raw = product['unit_price'] ??
+        product['selling_price'] ??
+        product['price'];
+    if (raw == null || raw.toString().trim().isEmpty) return null;
+    final value = raw is num ? raw.toDouble() : double.tryParse(raw.toString().trim());
+    if (value == null || !value.isFinite || value < 0) return null;
+    return value;
+  }
 
   List<Map<String, dynamic>> _parseProducts(dynamic value) {
     dynamic rows = value;
@@ -118,8 +128,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       if (stock <= 0) continue;
       product['name'] = name;
       product['current_stock'] = stock;
-      product['unit_price'] =
-          _number(product['unit_price'] ?? product['selling_price'] ?? product['price']);
+      final price = _productPrice(product);
+      if (price != null) {
+        product['unit_price'] = price;
+      } else {
+        product.remove('unit_price');
+      }
       parsed.add(product);
     }
     return parsed;
@@ -277,7 +291,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final code = GrowthAdCopy.offerCode(now);
     final goalText = _goal;
     final productName = product?['name']?.toString() ?? '';
-    final price = product == null ? null : _number(product['unit_price']);
+    final price = _productPrice(product);
     final headline = GrowthAdCopy.headline(_goal, _language);
     final caption = GrowthAdCopy.caption(
       shopName: shop,
@@ -324,11 +338,37 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   Future<Map<String, dynamic>?> _saveCurrentEdits() async {
     final current = _currentDraft;
     if (current == null) return null;
+
+    final shopName = _shopController.text.trim();
+    final offer = _offerController.text.trim();
+    var caption = _captionController.text.trim();
+    final originalCaption = current['caption']?.toString().trim() ?? '';
+    final captionWasNotManuallyEdited = caption == originalCaption;
+    final shopChanged = shopName != (current['shop_name']?.toString() ?? '');
+    final offerChanged = offer != (current['offer']?.toString() ?? '');
+
+    // Keep the default caption consistent with shop/offer edits. If the owner
+    // has written a custom caption, preserve their wording.
+    if (captionWasNotManuallyEdited && (shopChanged || offerChanged)) {
+      final rawPrice = current['product_price'];
+      final price = rawPrice is num ? rawPrice.toDouble() : null;
+      caption = GrowthAdCopy.caption(
+        shopName: shopName,
+        goal: current['goal']?.toString() ?? 'nearby',
+        language: current['language']?.toString() ?? 'en',
+        productName: current['product_name']?.toString(),
+        price: price,
+        offer: offer,
+        offerCode: current['offer_code']?.toString() ?? '',
+      );
+      _captionController.text = caption;
+    }
+
     final updated = Map<String, dynamic>.from(current)
-      ..['shop_name'] = _shopController.text.trim()
+      ..['shop_name'] = shopName
       ..['headline'] = _headlineController.text.trim()
-      ..['caption'] = _captionController.text.trim()
-      ..['offer'] = _offerController.text.trim();
+      ..['caption'] = caption
+      ..['offer'] = offer;
     _currentDraft = updated;
     await _persistCampaign(updated);
     return updated;
@@ -668,15 +708,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               ..._products.asMap().entries.map((entry) {
               final product = entry.value;
               final key = _productKey(product, entry.key);
-              final price = _number(product['unit_price']);
+              final price = _productPrice(product);
+              final priceLabel = price == null
+                  ? ''
+                  : ' · ₹' +
+                      (price == price.truncateToDouble()
+                          ? price.toStringAsFixed(0)
+                          : price.toStringAsFixed(2));
               return DropdownMenuItem<String>(
                 value: key,
                 child: Text(
-                  product['name'].toString() +
-                      ' · ₹' +
-                      (price == price.truncateToDouble()
-                          ? price.toStringAsFixed(0)
-                          : price.toStringAsFixed(2)),
+                  product['name'].toString() + priceLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -768,6 +810,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             price: price,
             offer: _offerController.text.trim(),
             offerCode: _currentDraft!['offer_code'].toString(),
+            language: _currentDraft!['language']?.toString() ?? 'en',
           ),
         ),
       ),
@@ -982,6 +1025,7 @@ class _PosterArtwork extends StatelessWidget {
     required this.price,
     required this.offer,
     required this.offerCode,
+    required this.language,
   });
 
   final String shopName;
@@ -990,9 +1034,20 @@ class _PosterArtwork extends StatelessWidget {
   final double? price;
   final String offer;
   final String offerCode;
+  final String language;
 
   @override
   Widget build(BuildContext context) {
+    final visitLabel = language == 'te'
+        ? 'ఈరోజే సందర్శించండి'
+        : language == 'hi'
+            ? 'आज ही आएँ'
+            : 'VISIT US TODAY';
+    final offerCodeLabel = language == 'te'
+        ? 'ఆఫర్ కోడ్'
+        : language == 'hi'
+            ? 'ऑफ़र कोड'
+            : 'Offer code';
     final hasProduct = productName.trim().isNotEmpty;
     final priceText = price == null
         ? ''
@@ -1137,7 +1192,7 @@ class _PosterArtwork extends StatelessWidget {
                   const Spacer(),
                   const Divider(color: Colors.white30),
                   Text(
-                    'VISIT US TODAY',
+                    visitLabel,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 11,
@@ -1147,7 +1202,7 @@ class _PosterArtwork extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Offer code: ' + offerCode,
+                    offerCodeLabel + ': ' + offerCode,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
