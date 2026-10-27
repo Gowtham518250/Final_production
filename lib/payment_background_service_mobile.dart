@@ -174,18 +174,28 @@ Future<void> _postBackgroundPaymentAlert(
         event.direction == PaymentTransactionDirection.outgoingDebit;
     final isCredit =
         event.direction == PaymentTransactionDirection.incomingCredit;
-    final merchantVerifiedCredit =
-        isCredit && event.isMerchantConfirmed;
-    final needsVerify = isCredit && !merchantVerifiedCredit;
     final conflict = event.hasReferenceConflict;
+    final automaticCredit = isCredit &&
+        event.decision == PaymentDecision.confirmed &&
+        !conflict;
+    final automaticDebit = isDebit &&
+        event.decision == PaymentDecision.confirmed &&
+        !conflict;
+    // Ask for owner input only when the classifier is uncertain, the direction
+    // is missing, or evidence conflicts. Strong events must not ask every time.
+    final needsVerify = conflict ||
+        event.decision != PaymentDecision.confirmed ||
+        (!isCredit && !isDebit);
 
-    final title = isDebit
-        ? 'Debit detected'
-        : conflict
+    final title = conflict
         ? 'Payment review required'
-        : merchantVerifiedCredit
+        : isDebit
+        ? needsVerify
+            ? 'Debit detected — review needed'
+            : 'Debit detected'
+        : automaticCredit
         ? 'Payment received'
-        : 'Payment detected — please verify';
+        : 'Payment detected — review needed';
     final amountText = event.amount == event.amount.truncateToDouble()
         ? event.amount.toStringAsFixed(0)
         : event.amount.toStringAsFixed(2);
@@ -197,7 +207,7 @@ Future<void> _postBackgroundPaymentAlert(
     } else if (conflict) {
       body += ' — transaction details conflict; check your bank history.';
     } else if (needsVerify) {
-      body += ' — verify before recording.';
+      body += ' — review this payment before recording.';
     }
 
     // Unverified incoming credits need an audible fallback: a background TTS
