@@ -20,12 +20,18 @@ void main() {
       bool merchantConfirmed = false,
       bool conflict = false,
       double amount = 500,
+      String detectionSource = 'notification',
+      String? sourceEventKey,
+      String? accountSuffix,
     }) {
       return PaymentEvent(
         id: id,
         amount: amount,
         timestamp: now,
         app: app,
+        detectionSource: detectionSource,
+        sourceEventKey: sourceEventKey,
+        accountSuffix: accountSuffix,
         referenceId: referenceId,
         payerName: payerName,
         rawText: rawText,
@@ -83,6 +89,127 @@ void main() {
         deduper.shouldSuppress(
           second,
           now: now.add(const Duration(seconds: 2)),
+        ),
+        isTrue,
+      );
+    });
+
+
+    test('same native notification update with a changed payload is suppressed', () {
+      final deduper = PaymentAlertDeduplicator();
+      final postedAt = now.millisecondsSinceEpoch;
+      final first = event(
+        id: 'first',
+        rawText: 'Payment received ₹500',
+        sourceEventKey: 'com.phonepe.app|42|${postedAt}|first-hash',
+      );
+      final updated = event(
+        id: 'updated',
+        rawText: '₹500 credited successfully',
+        sourceEventKey: 'com.phonepe.app|42|${postedAt}|updated-hash',
+      );
+
+      expect(deduper.shouldSuppress(first, now: now), isFalse);
+      expect(
+        deduper.shouldSuppress(
+          updated,
+          now: now.add(const Duration(seconds: 2)),
+        ),
+        isTrue,
+      );
+    });
+
+    test('distinct same-value native notifications from the same payer remain eligible', () {
+      final deduper = PaymentAlertDeduplicator();
+      final postedAt = now.millisecondsSinceEpoch;
+      final first = event(
+        id: 'first',
+        payerName: 'Anna',
+        rawText: 'Anna sent ₹500 to you',
+        sourceEventKey: 'com.phonepe.app|42|${postedAt}|first-hash',
+      );
+      final second = event(
+        id: 'second',
+        payerName: 'Anna',
+        rawText: 'Anna sent ₹500 to you',
+        sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|second-hash',
+      );
+
+      expect(deduper.shouldSuppress(first, now: now), isFalse);
+      expect(
+        deduper.shouldSuppress(
+          second,
+          now: now.add(const Duration(seconds: 1)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('different UTRs stay separate even for same payer and amount', () {
+      final deduper = PaymentAlertDeduplicator();
+      expect(
+        deduper.shouldSuppress(
+          event(referenceId: '123456789012', payerName: 'Anna'),
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        deduper.shouldSuppress(
+          event(
+            referenceId: '123456789013',
+            payerName: 'Anna',
+            app: PaymentApp.unknown,
+          ),
+          now: now.add(const Duration(seconds: 1)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('two same-value payments pair with two cross-source echoes one-to-one', () {
+      final deduper = PaymentAlertDeduplicator();
+      final postedAt = now.millisecondsSinceEpoch;
+      final first = event(
+        id: 'phonepe-1',
+        payerName: 'Anna',
+        sourceEventKey: 'com.phonepe.app|42|${postedAt}|hash-1',
+      );
+      final second = event(
+        id: 'phonepe-2',
+        payerName: 'Anna',
+        sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|hash-2',
+      );
+
+      expect(deduper.shouldSuppress(first, now: now), isFalse);
+      expect(
+        deduper.shouldSuppress(
+          second,
+          now: now.add(const Duration(seconds: 1)),
+        ),
+        isFalse,
+      );
+      expect(
+        deduper.shouldSuppress(
+          event(
+            id: 'mirror-1',
+            payerName: 'Anna',
+            app: PaymentApp.unknown,
+            sourceEventKey: 'com.truecaller.app|7|${postedAt + 2000}|mirror-1',
+          ),
+          now: now.add(const Duration(seconds: 2)),
+        ),
+        isTrue,
+      );
+      expect(
+        deduper.shouldSuppress(
+          event(
+            id: 'mirror-2',
+            payerName: 'Anna',
+            app: PaymentApp.unknown,
+            sourceEventKey: 'com.truecaller.app|8|${postedAt + 3000}|mirror-2',
+          ),
+          now: now.add(const Duration(seconds: 3)),
         ),
         isTrue,
       );
