@@ -510,6 +510,8 @@ class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage> {
       appBar: AppBar(title:LiveTranslatedText('Retail Growth',style:GoogleFonts.poppins(fontWeight:FontWeight.w800)),backgroundColor:Colors.white,foregroundColor:const Color(0xFF111827),elevation:0,actions:[IconButton(onPressed:loading?null:_load,icon:const Icon(Icons.refresh_rounded))]),
       body:RefreshIndicator(onRefresh:_load,color:const Color(0xFF5B3DF5),child:ListView(padding:const EdgeInsets.all(16),children:[
         _hero(),
+        const SizedBox(height: 12),
+        _growthAgentShortcut(),
         if(error.isNotEmpty) ...[const SizedBox(height:12),_error(error)],
         const SizedBox(height:18),
         _title('Business pulse','Live owner metrics'),
@@ -560,6 +562,62 @@ class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage> {
 
   Widget _hero()=>Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(gradient:const LinearGradient(colors:[Color(0xFF11183F),Color(0xFF4C1D95),Color(0xFF5B3DF5)]),borderRadius:BorderRadius.circular(26),boxShadow:[BoxShadow(color:Color(0x334C1D95),blurRadius:28,offset:Offset(0,14))]),child:Row(children:[Container(width:52,height:52,decoration:BoxDecoration(color:Colors.white12,borderRadius:BorderRadius.circular(16)),child:const Icon(Icons.auto_awesome_rounded,color:Colors.white,size:27)),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[LiveTranslatedText('Retail Growth Suite',style:GoogleFonts.poppins(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800)),const SizedBox(height:3),LiveTranslatedText('AI insights, smart inventory, branches, delivery, loyalty, promotions and security.',style:GoogleFonts.poppins(color:Colors.white70,fontSize:11.5,height:1.4))]))]));
   Widget _title(String a,String b)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[LiveTranslatedText(a,style:GoogleFonts.poppins(fontSize:17,fontWeight:FontWeight.w800,color:const Color(0xFF111827))),const SizedBox(height:2),LiveTranslatedText(b,style:GoogleFonts.poppins(fontSize:10.5,color:const Color(0xFF94A3B8)))]);
+  Widget _growthAgentShortcut() => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: () => Navigator.of(context).pushNamed('/growth-agent'),
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F0FF),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFD9CCFF)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: const Color(0xFF5B3DF5),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.campaign_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Grow My Shop',
+                    style: TextStyle(
+                      color: Color(0xFF312E81),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Create a free shop advertisement and share it',
+                    style: TextStyle(
+                      color: Color(0xFF6D5DA8),
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                size: 16, color: Color(0xFF5B3DF5)),
+          ],
+        ),
+      ),
+    ),
+  );
   Widget _metric(IconData icon,String label,String value,Color color)=>Container(padding:const EdgeInsets.all(11),decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(17),border:Border.all(color:color.withValues(alpha:.12))),child:Row(children:[Container(width:38,height:38,decoration:BoxDecoration(color:color.withValues(alpha:.1),borderRadius:BorderRadius.circular(12)),child:Icon(icon,color:color,size:18)),const SizedBox(width:8),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisAlignment:MainAxisAlignment.center,children:[LiveTranslatedText(label,maxLines:1,overflow:TextOverflow.ellipsis,style:GoogleFonts.poppins(fontSize:9,color:const Color(0xFF64748B))),const SizedBox(height:2),LiveTranslatedText(value,maxLines:1,overflow:TextOverflow.ellipsis,style:GoogleFonts.poppins(fontSize:14,fontWeight:FontWeight.w800,color:const Color(0xFF172033)))]))]));
   Widget _copilotCard() {
     return Container(
