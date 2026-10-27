@@ -178,7 +178,7 @@ class PaymentAlertDeduplicator {
   }
 
   static String _channelKey(PaymentEvent event) =>
-      '\${_eventOrigin(event.detectionSource)}|\${event.app.name}';
+      '${_eventOrigin(event.detectionSource)}|${event.app.name}';
 
   static String _eventOrigin(String source) {
     final value = source.toLowerCase();
