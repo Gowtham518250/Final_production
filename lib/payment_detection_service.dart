@@ -5475,6 +5475,22 @@ class PaymentDetectionService {
     bool forceMute = false,
   }) async {
     event = requireMerchantConfirmation(event);
+
+    // Durable history can classify a replay before forwarding it from the
+    // background isolate. Do not publish that duplicate to UI/history/voice.
+    // Explicit merchant-confirmation transitions and reference conflicts stay
+    // visible because they change the review state rather than replaying it.
+    if (event.isDuplicate &&
+        !event.isMerchantConfirmed &&
+        !event.hasReferenceConflict) {
+      _stats.recordDupe();
+      PdsLogger.i(
+        'EMIT',
+        'Pre-classified payment replay suppressed before UI/voice emission: '
+            'amount=${event.amount} source=${_eventOrigin(event.detectionSource)}',
+      );
+      return;
+    }
     if (event.decision == PaymentDecision.rejected) return;
 
     if (_isRecentCrossSourceDuplicate(event)) {
