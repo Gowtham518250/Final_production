@@ -9,7 +9,7 @@ void main() {
           isLate: false,
           voiceEnabled: true,
           hasConflict: false,
-          ),
+        ),
         isFalse,
       );
     });
