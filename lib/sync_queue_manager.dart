@@ -31,6 +31,7 @@ class SyncQueueManager {
     'update_invoice_payment',
     'update_invoice_paid',
     'update_invoice_unpaid',
+    'record_payment',
     'record_khata_payment',
     'decrease_stock',
     'delete_product',
@@ -52,6 +53,10 @@ class SyncQueueManager {
   static DateTime? _syncStartTime;
   static const Duration _syncTimeout = Duration(minutes: 5);
   static Timer? _syncTimeoutTimer;
+
+  @visibleForTesting
+  static bool debugIsCriticalAction(String action) =>
+      _criticalActions.contains(action);
 
   static Future<bool> _setSyncLock() async {
     if (isSyncing) {

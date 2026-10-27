@@ -9,10 +9,13 @@ import 'inventory_stock_helper.dart';
 import 'sales_dedup_helper.dart';
 import 'invoice_dedup_helper.dart';
 import 'stored_sale.dart';
+import 'payment_idempotency_ledger.dart';
+import 'package:synchronized/synchronized.dart';
 
 /// SENIOR ENGINEER REFACTOR: Enterprise Local Storage Service
 /// Features: User Isolation, Hive Performance, Auto-recovery, and Zero Data Leakage.
 class LocalStorageService {
+  static final Lock _paymentWriteLock = Lock();
   // ✅ FIX: Schema versioning to prevent silent data corruption on app updates
   static const int _schemaVersion = 3;
   static const String _schemaVersionKey = 'schema_version';
@@ -1388,6 +1391,7 @@ class LocalStorageService {
     String? paymentDate,
     String? idempotencyKey,
   }) async {
+    return _paymentWriteLock.synchronized(() async {
     if (amount <= 0) {
       throw ArgumentError.value(
         amount,
@@ -1405,7 +1409,10 @@ class LocalStorageService {
       final alreadyApplied = invoices.any(
         (raw) =>
             raw is Map &&
-            raw['last_payment_idempotency_key']?.toString() == key,
+            PaymentIdempotencyLedger.contains(
+              Map<String, dynamic>.from(raw),
+              key,
+            ),
       );
       if (alreadyApplied) return;
     }
@@ -1479,7 +1486,7 @@ class LocalStorageService {
         row['payment_date'] =
             paymentDate ?? DateTime.now().toUtc().toIso8601String();
         if (idempotencyKey != null && idempotencyKey.isNotEmpty) {
-          row['last_payment_idempotency_key'] = idempotencyKey;
+          PaymentIdempotencyLedger.remember(row, idempotencyKey);
         }
         row['updated_at'] = DateTime.now().toUtc().toIso8601String();
 
@@ -1510,6 +1517,11 @@ class LocalStorageService {
         }..removeWhere((v) => v.isEmpty);
 
         if (saleIds.intersection(targetIds).isEmpty) continue;
+        if (idempotencyKey != null &&
+            idempotencyKey.trim().isNotEmpty &&
+            PaymentIdempotencyLedger.contains(sale, idempotencyKey)) {
+          return;
+        }
 
         final total =
             double.tryParse(
@@ -1537,7 +1549,7 @@ class LocalStorageService {
         sale['payment_date'] =
             paymentDate ?? DateTime.now().toUtc().toIso8601String();
         if (idempotencyKey != null && idempotencyKey.isNotEmpty) {
-          sale['last_payment_idempotency_key'] = idempotencyKey;
+          PaymentIdempotencyLedger.remember(sale, idempotencyKey);
         }
         sale['updated_at'] = DateTime.now().toUtc().toIso8601String();
         sales[i] = sale;
@@ -1552,6 +1564,7 @@ class LocalStorageService {
     final current = balances[customerPhone] ?? 0.0;
     balances[customerPhone] = current - amount;
     await saveKhataBalances(balances);
+    });
   }
 
   static Future<void> updateCustomerBalance(

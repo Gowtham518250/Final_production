@@ -268,6 +268,24 @@ void main() {
       expect(guarded.isMerchantConfirmed, isFalse);
     });
 
+    test('an unverified high-confidence credit remains detector-accepted', () {
+      final event = PaymentEvent(
+        id: 'automatic-detection',
+        amount: 250,
+        timestamp: DateTime(2026, 10, 21),
+        app: PaymentApp.googlePay,
+        rawText: '₹250 credited to your account',
+        decision: PaymentDecision.confirmed,
+      );
+
+      final guarded = PaymentDetectionService.requireMerchantConfirmation(
+        event,
+      );
+
+      expect(guarded.decision, PaymentDecision.confirmed);
+      expect(guarded.isMerchantConfirmed, isFalse);
+    });
+
     test('persisted reference conflict cannot be promoted to confirmed', () {
       final event = PaymentEvent(
         id: 'reference-conflict-event',

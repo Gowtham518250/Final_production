@@ -57,7 +57,7 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
-            tools:replace="android:foregroundServiceType">
+            tools:replace="android:exported,android:foregroundServiceType">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Continuous payment-notification monitoring for Retail Mind using user-enabled SMS and notification access." />

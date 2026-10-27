@@ -258,7 +258,7 @@ void main() {
     );
 
     final records = await OnlinePaymentHistoryService.load();
-    expect(records.single['status'], 'CONFIRMED');
+    expect(records.single['status'], 'AUTO_ACCEPTED');
     expect(records.single['merchant_confirmed'], isFalse);
     expect(records.single['confirmation_mode'], 'automatic');
     expect(records.single['verified'], isFalse);
@@ -285,7 +285,7 @@ void main() {
     expect(replay.detectionSource, isNot(contains(':pending_review_reminder')));
     final records = await OnlinePaymentHistoryService.load();
     expect(records, hasLength(1));
-    expect(records.single['status'], 'CONFIRMED');
+    expect(records.single['status'], 'AUTO_ACCEPTED');
     expect(records.single['merchant_confirmed'], isFalse);
     expect(records.single['verified'], isFalse);
   });

@@ -175,7 +175,8 @@ Future<void> _postBackgroundPaymentAlert(
     final isCredit =
         event.direction == PaymentTransactionDirection.incomingCredit;
     final conflict = event.hasReferenceConflict;
-    final automaticCredit = isCredit &&
+    final merchantConfirmedCredit = isCredit &&
+        event.isMerchantConfirmed &&
         event.decision == PaymentDecision.confirmed &&
         !conflict;
     // Ask for owner input only when the classifier is uncertain, the direction
@@ -190,19 +191,27 @@ Future<void> _postBackgroundPaymentAlert(
         ? needsVerify
             ? 'Debit detected — review needed'
             : 'Debit detected'
-        : automaticCredit
+        : merchantConfirmedCredit
         ? 'Payment received'
+        : event.decision == PaymentDecision.confirmed && isCredit
+        ? 'Payment detected'
         : 'Payment detected — review needed';
     final amountText = event.amount == event.amount.truncateToDouble()
         ? event.amount.toStringAsFixed(0)
         : event.amount.toStringAsFixed(2);
-    var body = '₹$amountText '
-        '${isDebit ? 'debited' : 'credited'} via ${event.appDisplayName}';
+    var body = isDebit
+        ? '₹$amountText debited via ${event.appDisplayName}'
+        : merchantConfirmedCredit
+        ? '₹$amountText received via ${event.appDisplayName}'
+        : '₹$amountText credit detected via ${event.appDisplayName}';
     if (lateAt != null) {
       body += ' — notification received at ${_clock(lateAt)} while '
           'detection was stopped. Check your bank/UPI app.';
     } else if (conflict) {
       body += ' — transaction details conflict; check your bank history.';
+    } else if (event.decision == PaymentDecision.confirmed && isCredit) {
+      body += ' — detector accepted this signal; verify in your bank history '
+          'before treating it as merchant-confirmed.';
     } else if (needsVerify) {
       body += ' — review this payment before recording.';
     }

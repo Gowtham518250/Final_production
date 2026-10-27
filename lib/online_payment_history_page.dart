@@ -50,11 +50,17 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
           }
           final entries = snapshot.data!;
           final confirmedEntries = entries
-              .where(_isConfirmed)
+              .where(_isMerchantConfirmed)
               .toList(growable: false);
+          final automaticEntries = entries.where(_isAutomaticAccepted).length;
           final conflictEntries = entries.where(_isConflict).length;
           final pendingEntries = entries
-              .where((entry) => !_isConfirmed(entry) && !_isConflict(entry))
+              .where(
+                (entry) =>
+                    !_isMerchantConfirmed(entry) &&
+                    !_isAutomaticAccepted(entry) &&
+                    !_isConflict(entry),
+              )
               .length;
           final confirmedTotal = confirmedEntries.fold<double>(
             0,
@@ -81,6 +87,7 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                     title: const LiveTranslatedText('Merchant-confirmed receipts'),
                     subtitle: LiveTranslatedText(
                       '${confirmedEntries.length} merchant-confirmed · '
+                      '$automaticEntries auto-accepted · '
                       '$pendingEntries pending · '
                       '$conflictEntries reference conflicts',
                     ),
@@ -101,12 +108,15 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                 for (final entry in entries)
                   Builder(
                     builder: (context) {
-                      final confirmed = _isConfirmed(entry);
+                      final confirmed = _isMerchantConfirmed(entry);
+                      final automatic = _isAutomaticAccepted(entry);
                       final conflict = _isConflict(entry);
                       final statusColor = conflict
                           ? Colors.red
                           : confirmed
                           ? Colors.green
+                          : automatic
+                          ? Colors.blue
                           : Colors.orange;
                       return Card(
                         child: ListTile(
@@ -119,9 +129,11 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                             child: Icon(
                               conflict
                                   ? Icons.warning_amber_rounded
-                                  : confirmed
-                                  ? Icons.check_circle_outline
-                                  : Icons.pending_outlined,
+                              : confirmed
+                              ? Icons.check_circle_outline
+                              : automatic
+                              ? Icons.auto_awesome_outlined
+                              : Icons.pending_outlined,
                               color: statusColor,
                             ),
                           ),
@@ -142,9 +154,11 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                           trailing: LiveTranslatedText(
                             conflict
                                 ? 'Review conflict'
-                                : confirmed
-                                ? 'Merchant-confirmed'
-                                : 'Pending review',
+                              : confirmed
+                              ? 'Merchant-confirmed'
+                              : automatic
+                              ? 'Auto-accepted · verify if needed'
+                              : 'Pending review',
                             style: TextStyle(
                               color: statusColor,
                               fontSize: 12,
@@ -157,9 +171,9 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                 const SizedBox(height: 12),
                 const LiveTranslatedText(
                   'This history is stored on this device. Only merchant-confirmed '
-                  'receipts are included in the total. Merchant confirmation is '
-                  'not independent bank verification; reference conflicts are '
-                  'excluded until reviewed against the bank statement.',
+                  'receipts are included in the total. Auto-accepted detections '
+                  'are detector decisions, not merchant confirmation or bank '
+                  'verification; reference conflicts are excluded until reviewed.',
                   style: TextStyle(color: Colors.black54, fontSize: 12),
                 ),
               ],
@@ -170,10 +184,15 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
     );
   }
 
-  bool _isConfirmed(Map<String, dynamic> entry) =>
-      entry['status'] == 'CONFIRMED' ||
+  bool _isMerchantConfirmed(Map<String, dynamic> entry) =>
+      (entry['status'] == 'CONFIRMED' && entry['merchant_confirmed'] == true) ||
       (entry['status'] == null &&
           (entry['merchant_confirmed'] == true || entry['verified'] == true));
+
+  bool _isAutomaticAccepted(Map<String, dynamic> entry) =>
+      entry['status'] == 'AUTO_ACCEPTED' ||
+      (entry['confirmation_mode'] == 'automatic' &&
+          entry['merchant_confirmed'] != true);
 
   bool _isConflict(Map<String, dynamic> entry) =>
       entry['status'] == 'CONFLICT_REVIEW';

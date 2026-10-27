@@ -549,12 +549,13 @@ class OnlinePaymentHistoryService {
                   event.appDisplayName == 'UPI App')
           ? base['app']
           : event.appDisplayName,
-      // High-confidence detector decisions are accepted automatically. This
-      // records Retail Mind's decision without claiming merchant or bank proof.
-      'status': (event.isMerchantConfirmed ||
-              event.decision == PaymentDecision.confirmed)
-          ? 'CONFIRMED'
-          : (oldStatus.isNotEmpty ? oldStatus : 'PENDING_CONFIRMATION'),
+       // High-confidence detector decisions are accepted automatically, but
+       // remain distinct from explicit merchant confirmation.
+       'status': event.isMerchantConfirmed
+           ? 'CONFIRMED'
+           : event.decision == PaymentDecision.confirmed
+               ? 'AUTO_ACCEPTED'
+               : (oldStatus.isNotEmpty ? oldStatus : 'PENDING_CONFIRMATION'),
       'merchant_confirmed':
           event.isMerchantConfirmed || base['merchant_confirmed'] == true,
       'confirmation_mode': event.isMerchantConfirmed
