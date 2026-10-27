@@ -211,7 +211,7 @@ class OnlinePaymentHistoryService {
     final eventTime = _eventTime(event);
     final rows = <Map<String, dynamic>>[];
 
-    for (final key in prefs.getKeys().where((key) => key.startsWith(prefix)) {
+    for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
       if (key == incomingKey) continue;
       final entry = _decodeEntry(prefs.getString(key));
       if (entry == null || _isAlias(entry)) continue;
