@@ -100,16 +100,17 @@ class PaymentAlertDeduplicator {
       final differentAccounts = account.isNotEmpty &&
           previous.account.isNotEmpty &&
           account != previous.account;
+      final previousPayer = previous.payer;
       final differentPayers = payer != null &&
-          previous.payer != null &&
-          !_payersCompatible(payer, previous.payer);
+          previousPayer != null &&
+          !_payersCompatible(payer, previousPayer);
       if (differentAccounts || differentPayers) continue;
 
       final sameAccount =
           account.isNotEmpty && account == previous.account;
       final samePayer = payer != null &&
-          previous.payer != null &&
-          _payersCompatible(payer, previous.payer);
+          previousPayer != null &&
+          _payersCompatible(payer, previousPayer);
       // No reliable shared identity means we cannot prove that two separate
       // same-value payments are the same transaction. Keep both candidates.
       if (!sameAccount && !samePayer) continue;
