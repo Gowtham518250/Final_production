@@ -223,7 +223,6 @@ Future<void> _postBackgroundPaymentAlert(
       isLate: lateAt != null,
       voiceEnabled: PdsConfig.isVoiceEnabled,
       hasConflict: conflict,
-      needsVerification: needsVerify,
     );
     final channelId = audible
         ? 'payment_detection_alerts_audible'
