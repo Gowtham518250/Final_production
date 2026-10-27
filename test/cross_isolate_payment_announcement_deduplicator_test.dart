@@ -173,6 +173,44 @@ void main() {
     );
   });
 
+  test('a referenced transfer is not paired with an older unreferenced signal', () async {
+    final time = DateTime(2026, 10, 27, 10, 0);
+    final olderNotification = _event(
+      id: 'notif-no-utr',
+      timestamp: time,
+      source: 'notification',
+      app: PaymentApp.bankApp,
+      rawText: '₹5 credited to account XXXX4222',
+      amount: 5,
+      accountSuffix: '4222',
+    );
+    final referencedSms = _event(
+      id: 'sms-with-utr',
+      timestamp: time.add(const Duration(seconds: 5)),
+      source: 'sms',
+      app: PaymentApp.bankSms,
+      rawText: '₹5 credited to account XXXX4222 UTR 123456789013',
+      amount: 5,
+      referenceId: '123456789013',
+      accountSuffix: '4222',
+    );
+
+    expect(
+      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+        olderNotification,
+        now: time,
+      ),
+      isFalse,
+    );
+    expect(
+      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+        referencedSms,
+        now: time.add(const Duration(seconds: 5)),
+      ),
+      isFalse,
+    );
+  });
+
   test('conflicting known account suffixes are never paired', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
     final first = _event(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/payment_detection_service.dart';
 import 'package:retail_mind/payment_event.dart';
@@ -1860,8 +1862,23 @@ void main() {
     test('different UTRs are not merged even when amount and account match', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();
+      final wasVoiceEnabled = PdsConfig.isVoiceEnabled;
+      PdsConfig.isVoiceEnabled = true;
+      addTearDown(() {
+        PdsConfig.isVoiceEnabled = wasVoiceEnabled;
+        service.debugResetTransientDetectionState();
+      });
+
+      final spoken = <String>[];
+      service.onSpeak = spoken.add;
       final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
+      final bothEventsReceived = Completer<void>();
+      final subscription = service.onPaymentDetected.listen((event) {
+        events.add(event);
+        if (events.length >= 2 && !bothEventsReceived.isCompleted) {
+          bothEventsReceived.complete();
+        }
+      });
       final timestamp = DateTime.now();
 
       await service.debugEmitForTesting(
@@ -1893,12 +1910,20 @@ void main() {
         ),
       );
 
+      // A broadcast StreamController delivers events asynchronously. Wait
+      // until both emitted events reach the listener before asserting history.
+      await bothEventsReceived.future.timeout(const Duration(seconds: 1));
+      // The voice queue applies a two-second gap to keep alerts intelligible.
+      await Future<void>.delayed(const Duration(milliseconds: 2250));
+
       expect(events, hasLength(2));
       expect(
         events.map((event) => event.normalizedReferenceId).toSet(),
         {'123456789012', '123456789013'},
       );
+      expect(spoken, hasLength(2));
       await subscription.cancel();
+      service.debugResetTransientDetectionState();
     });
 
     test('refund, reversal, pending and collect-request alerts cannot classify as incoming sale payments', () {

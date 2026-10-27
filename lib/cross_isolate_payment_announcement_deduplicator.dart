@@ -87,7 +87,11 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
 
       final previousReference =
           (previous['reference'] ?? '').toString().trim();
-      if (reference != null && previousReference.isNotEmpty) {
+      if (reference != null || previousReference.isNotEmpty) {
+        // A single missing reference is not evidence that two payment signals
+        // are the same transfer. Do not let fuzzy clues collapse a transfer
+        // whose authoritative identity is present on only one side.
+        if (reference == null || previousReference.isEmpty) continue;
         // Distinct authoritative references always represent distinct
         // transfers, even if the values and timestamps are identical.
         if (reference != previousReference) continue;
