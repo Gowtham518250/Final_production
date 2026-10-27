@@ -174,29 +174,31 @@ class OnlinePaymentHistoryService {
     Map<String, dynamic> entry,
     PaymentEvent event,
   ) {
-    final signature = _signalSignature(event);
-    if (_storedStrings(entry, 'signal_signatures').contains(signature)) {
-      return true;
-    }
-    final payerHash = _payerMatchHash(event);
-    if (payerHash != null && entry['payer_match_hash'] == payerHash) {
-      return true;
-    }
-    final channels = _storedStrings(entry, 'source_channels').toSet();
-    final apps = _storedStrings(entry, 'source_apps').toSet();
-    final legacyApp = _legacyAppKey(entry);
-    if (legacyApp != null) apps.add(legacyApp);
     final source = _sourceChannel(event.detectionSource);
-    final sameApp = apps.contains(event.app.name);
-    final channelsDiffer = channels.any((previous) =>
-        previous != source &&
-        previous != 'unknown' &&
-        source != 'unknown');
-    // Same-app notification/accessibility callbacks are two views of one OS alert.
-    return sameApp &&
-        channelsDiffer &&
-        ((channels.contains('notification') && source == 'accessibility') ||
-            (channels.contains('accessibility') && source == 'notification'));
+    if (source != 'notification' && source != 'accessibility') return false;
+
+    // Check source pairs rather than combining app and channel sets separately.
+    // A global set would let an old PhonePe notification plus an unrelated SMS
+    // make a second PhonePe notification look like a cross-channel replay.
+    final rawSignals = entry['source_signals'];
+    if (rawSignals is! List) return false;
+    final appLabel = event.appDisplayName.trim().toLowerCase();
+    final previousChannels = <String>{};
+    for (final signal in rawSignals.whereType<Map>()) {
+      final previousApp = (signal['app'] ?? '').toString().trim().toLowerCase();
+      final previousChannel = _sourceChannel(
+        (signal['channel'] ?? '').toString(),
+      );
+      if (previousApp == appLabel && previousChannel != 'unknown') {
+        previousChannels.add(previousChannel);
+      }
+    }
+
+    // Only deduplicate a notification/accessibility echo of the same app.
+    // Same-channel repeats can be distinct real payments with identical values.
+    return source == 'notification'
+        ? previousChannels.contains('accessibility')
+        : previousChannels.contains('notification');
   }
 
   static Future<List<Map<String, dynamic>>> _findCorrelatedRows(
