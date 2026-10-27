@@ -392,7 +392,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         throw StateError('Advertisement preview is not ready yet.');
       }
 
-      final pixelRatio = math.max(2.0, MediaQuery.of(context).devicePixelRatio).toDouble();
+      // Keep exported artwork at social-ad resolution regardless of the
+      // device's logical preview width (feed 1080×1350; Story 1080×1920).
+      final logicalWidth = renderObject.size.width;
+      final pixelRatio = logicalWidth > 0
+          ? (1080.0 / logicalWidth).clamp(2.0, 5.0).toDouble()
+          : math.max(3.0, MediaQuery.of(context).devicePixelRatio).toDouble();
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
@@ -995,20 +1000,20 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         labelText: 'Ad placement / image size',
         prefixIcon: Icon(Icons.aspect_ratio_rounded),
         border: OutlineInputBorder(),
-        helperText: 'Use feed posts for ads, or Stories/Status for vertical sharing.',
+        helperText: 'Exports target 1080px wide: feed ads, square posts, or vertical Stories/Status.',
       ),
       items: const [
         DropdownMenuItem(
           value: 'feed',
-          child: Text('Portrait feed post · 4:5'),
+          child: Text('Feed ad · 4:5 · 1080×1350'),
         ),
         DropdownMenuItem(
           value: 'square',
-          child: Text('Square post · 1:1'),
+          child: Text('Square ad · 1:1 · 1080×1080'),
         ),
         DropdownMenuItem(
           value: 'story',
-          child: Text('Story / Status · 9:16'),
+          child: Text('Story / Status · 9:16 · 1080×1920'),
         ),
       ],
       onChanged: _busy
