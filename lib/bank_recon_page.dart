@@ -32,6 +32,16 @@ class _BankReconPageState extends State<BankReconPage> with SingleTickerProvider
     _fetchRecords();
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _bankNameC.dispose();
+    _refC.dispose();
+    _amountC.dispose();
+    _notesC.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchRecords() async {
     try {
       final res = await ApiClient.getJson('/bank-recon');

@@ -39,6 +39,18 @@ class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProvider
     _tabController = TabController(length: 3, vsync: this);
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _issueNameC.dispose();
+    _issuePhoneC.dispose();
+    _issueAmountC.dispose();
+    _issueValidityC.dispose();
+    _redeemCodeC.dispose();
+    _redeemPhoneC.dispose();
+    super.dispose();
+  }
+
   Future<void> _issueCard() async {
     setState(() => _issuing = true);
     try {

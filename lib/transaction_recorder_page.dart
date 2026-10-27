@@ -45,7 +45,8 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
         source: _selectedSource,
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
-        amount: double.parse(_amountController.text),
+        amount: double.tryParse(_amountController.text.trim()) ??
+            (throw const FormatException('Please enter a valid amount')),
         type: _selectedType,
         transactionType: _selectedType == 'RECEIVED'
             ? TransactionType.confirmed
@@ -74,7 +75,7 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

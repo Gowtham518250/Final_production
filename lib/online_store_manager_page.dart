@@ -35,6 +35,15 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
     _loadSettings();
   }
 
+  @override
+  void dispose() {
+    _storeNameController.dispose();
+    _minOrderController.dispose();
+    _deliveryFeeController.dispose();
+    _onlineSetupFeeController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSettings() async {
     if (mounted) setState(() => _isLoading = true);
     try {

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -54,7 +55,7 @@
 
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="specialUse"
             tools:replace="android:foregroundServiceType">
             <property

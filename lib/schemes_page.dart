@@ -234,6 +234,16 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
     super.dispose();
   }
 
+  /// Parses a numeric field, throwing a readable message instead of a raw
+  /// FormatException (caught by _createScheme and shown in a snackbar).
+  double _num(String raw) {
+    final value = double.tryParse(raw.trim());
+    if (value == null) {
+      throw const FormatException('Please enter valid numbers in all fields');
+    }
+    return value;
+  }
+
   Future<void> _createScheme() async {
     if (_nameCtrl.text.isEmpty || _value1Ctrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -251,17 +261,17 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
       };
 
       if (_type == SchemeEngine.PERCENT_OFF) {
-        scheme['percent'] = double.parse(_value1Ctrl.text);
-        scheme['min_order'] = double.parse(_value2Ctrl.text);
+        scheme['percent'] = _num(_value1Ctrl.text);
+        scheme['min_order'] = _num(_value2Ctrl.text);
       } else if (_type == SchemeEngine.FLAT_OFF) {
-        scheme['flat_amount'] = double.parse(_value1Ctrl.text);
-        scheme['min_order'] = double.parse(_value2Ctrl.text);
+        scheme['flat_amount'] = _num(_value1Ctrl.text);
+        scheme['min_order'] = _num(_value2Ctrl.text);
       } else if (_type == SchemeEngine.BOGO) {
-        scheme['trigger_qty'] = int.parse(_value1Ctrl.text);
-        scheme['free_item_price'] = double.parse(_value2Ctrl.text);
+        scheme['trigger_qty'] = _num(_value1Ctrl.text).toInt();
+        scheme['free_item_price'] = _num(_value2Ctrl.text);
       } else if (_type == SchemeEngine.MIN_QTY_FREE) {
-        scheme['min_qty'] = int.parse(_value1Ctrl.text);
-        scheme['price_per_unit'] = double.parse(_value2Ctrl.text);
+        scheme['min_qty'] = _num(_value1Ctrl.text).toInt();
+        scheme['price_per_unit'] = _num(_value2Ctrl.text);
       }
 
       scheme['valid_from'] = DateTime.now().toIso8601String();

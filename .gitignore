@@ -59,3 +59,10 @@ app.*.map.json
 /android/manifest_output.txt
 /android/logcat*.txt
 /retail_mind_crash.txt
+
+# Debug artifacts that were previously committed
+lib/logs*.txt
+lib/loga*.txt
+lib/retail_mind_logs.txt
+android/crash_context.txt
+android/.kotlin/
