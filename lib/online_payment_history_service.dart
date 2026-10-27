@@ -517,21 +517,13 @@ class OnlinePaymentHistoryService {
 
     final prefs = await SharedPreferences.getInstance();
     final userId = await _currentUserId(prefs);
-    final fingerprint = sha256
-        .convert(utf8.encode(event.fingerprint))
-        .toString();
+    final fingerprint = sha256.convert(utf8.encode(event.fingerprint)).toString();
     final key = '${_userPrefix(userId)}$fingerprint';
-    final raw = prefs.getString(key);
-    if (raw == null) return event;
+    final canonicalKey = await _resolveCanonicalKey(prefs, key);
+    if (canonicalKey == null) return event;
 
-    Map<String, dynamic> existing;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return event;
-      existing = Map<String, dynamic>.from(decoded);
-    } on FormatException {
-      return event;
-    }
+    final existing = _decodeEntry(prefs.getString(canonicalKey));
+    if (existing == null) return event;
 
     if (existing['status']?.toString() == 'CONFLICT_REVIEW') {
       return event.copyWith(
@@ -546,8 +538,6 @@ class OnlinePaymentHistoryService {
     if (oldAmount != null &&
         oldAmount.isFinite &&
         (oldAmount - event.amount).abs() >= 0.01) {
-      // recordIncomingPayment transitions the old reference into a durable
-      // conflict-review state and removes it from confirmed history totals.
       await recordIncomingPayment(event);
       return event.copyWith(
         hasReferenceConflict: true,
@@ -559,9 +549,6 @@ class OnlinePaymentHistoryService {
 
     final oldStatus = (existing['status'] ?? '').toString().toUpperCase();
     if (oldStatus == 'PENDING_CONFIRMATION') {
-      // A candidate left unresolved overnight is not a resolved duplicate.
-      // Suppress ordinary replays for six hours, then surface the same
-      // reference again as a review reminder. This does not record/confirm it.
       DateTime? lastPendingAt;
       try {
         final rawTimestamp =
@@ -586,9 +573,6 @@ class OnlinePaymentHistoryService {
       }
     }
 
-    // Confirmed references and pending replays inside the reminder cooldown
-    // are duplicates. The Dashboard suppresses their alert and confirmation UI.
-    // Pending records become reviewable again only after the reminder interval.
     return event.copyWith(
       isDuplicate: true,
       decision: PaymentDecision.likely,
@@ -607,15 +591,11 @@ class OnlinePaymentHistoryService {
     final fingerprint = sha256
         .convert(utf8.encode('utr_${sha256.convert(utf8.encode(reference))}'))
         .toString();
-    final raw = prefs.getString('${_userPrefix(userId)}$fingerprint');
-    if (raw == null) return false;
-    try {
-      final decoded = jsonDecode(raw);
-      return decoded is Map &&
-          decoded['status']?.toString() == 'CONFLICT_REVIEW';
-    } on FormatException {
-      return false;
-    }
+    final key = '${_userPrefix(userId)}$fingerprint';
+    final canonicalKey = await _resolveCanonicalKey(prefs, key);
+    if (canonicalKey == null) return false;
+    final decoded = _decodeEntry(prefs.getString(canonicalKey));
+    return decoded?['status']?.toString() == 'CONFLICT_REVIEW';
   }
 
   static Future<List<Map<String, dynamic>>> load() async {
@@ -624,19 +604,14 @@ class OnlinePaymentHistoryService {
     final prefix = _userPrefix(userId);
     final entries = <Map<String, dynamic>>[];
     for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
-      final raw = prefs.getString(key);
-      if (raw == null) continue;
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        entries.add(Map<String, dynamic>.from(decoded));
-      }
+      final decoded = _decodeEntry(prefs.getString(key));
+      if (decoded == null || _isAlias(decoded)) continue;
+      entries.add(decoded);
     }
     entries.sort((a, b) {
-      final aDate =
-          DateTime.tryParse(a['timestamp']?.toString() ?? '') ??
+      final aDate = DateTime.tryParse(a['timestamp']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
-      final bDate =
-          DateTime.tryParse(b['timestamp']?.toString() ?? '') ??
+      final bDate = DateTime.tryParse(b['timestamp']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
       return bDate.compareTo(aDate);
     });
@@ -649,19 +624,34 @@ class OnlinePaymentHistoryService {
   ) async {
     final entries = <({String key, DateTime timestamp})>[];
     for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
-      final raw = prefs.getString(key);
-      if (raw == null) continue;
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) continue;
-      final timestamp =
-          DateTime.tryParse(decoded['timestamp']?.toString() ?? '') ??
+      final decoded = _decodeEntry(prefs.getString(key));
+      if (decoded == null || _isAlias(decoded)) continue;
+      final timestamp = DateTime.tryParse(decoded['timestamp']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
       entries.add((key: key, timestamp: timestamp));
     }
-    if (entries.length <= _maxEntries) return;
-    entries.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    for (final entry in entries.take(entries.length - _maxEntries)) {
-      await prefs.remove(entry.key);
+
+    if (entries.length > _maxEntries) {
+      entries.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      final removed = entries
+          .take(entries.length - _maxEntries)
+          .map((entry) => entry.key)
+          .toSet();
+      for (final key in removed) {
+        await prefs.remove(key);
+      }
+    }
+
+    // Alias rows are internal lookup entries only; remove any whose canonical
+    // row was trimmed so they cannot become orphaned pseudo-records.
+    for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
+      final decoded = _decodeEntry(prefs.getString(key));
+      if (decoded == null || !_isAlias(decoded)) continue;
+      final target = (decoded['_alias_for'] ?? '').toString();
+      if (target.isEmpty || prefs.getString(target) == null) {
+        await prefs.remove(key);
+      }
     }
   }
+
 }
