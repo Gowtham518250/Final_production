@@ -791,12 +791,85 @@ class OnlinePaymentHistoryService {
     PaymentEvent event,
   ) async {
     final reference = event.normalizedReferenceId;
-    if (reference == null) return event;
+    if (reference == null && event.sourceEventFingerprint == null) {
+      return event;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final userId = await _currentUserId(prefs);
-    final fingerprint = sha256.convert(utf8.encode(event.fingerprint)).toString();
-    final key = '${_userPrefix(userId)}$fingerprint';
+    final prefix = _userPrefix(userId);
+
+    // This path covers exact native notification replays even if the source
+    // did not expose a transaction reference. It runs before forwarding so a
+    // repeat cannot announce again or create another pending history row.
+    final sourceIdentityKey = _sourceIdentityKey(prefix, event);
+    if (sourceIdentityKey != null && !event.isMerchantConfirmed) {
+      final sourceCanonicalKey =
+          await _resolveCanonicalKey(prefs, sourceIdentityKey);
+      if (sourceCanonicalKey != null) {
+        final sourceEntry =
+            _decodeEntry(prefs.getString(sourceCanonicalKey));
+        if (sourceEntry != null && _matchesSourceEvent(sourceEntry, event)) {
+          final sourceStatus =
+              (sourceEntry['status'] ?? '').toString().toUpperCase();
+          if (sourceStatus == 'CONFLICT_REVIEW') {
+            return event.copyWith(
+              hasReferenceConflict: true,
+              isDuplicate: false,
+              decision: PaymentDecision.likely,
+              verificationStatus: PaymentVerificationStatus.unverified,
+            );
+          }
+          if (reference != null &&
+              (sourceEntry['reference_id'] ?? '').toString().trim().isEmpty) {
+            await _attachReferenceToSourceRow(
+              prefs,
+              prefix,
+              sourceCanonicalKey,
+              sourceEntry,
+              event,
+            );
+          }
+          if (sourceStatus == 'PENDING_CONFIRMATION') {
+            DateTime? lastPendingAt;
+            try {
+              final rawTimestamp =
+                  (sourceEntry['detected_at'] ?? sourceEntry['timestamp'])
+                      ?.toString();
+              if (rawTimestamp != null && rawTimestamp.isNotEmpty) {
+                lastPendingAt = DateTime.parse(rawTimestamp);
+              }
+            } on FormatException {
+              lastPendingAt = null;
+            }
+            final reminderDue = lastPendingAt == null ||
+                !DateTime.now().isBefore(
+                  lastPendingAt.add(pendingReviewReminderInterval),
+                );
+            if (reminderDue) {
+              return event.copyWith(
+                isDuplicate: false,
+                decision: PaymentDecision.likely,
+                verificationStatus: PaymentVerificationStatus.unverified,
+                detectionSource:
+                    '${event.detectionSource}:pending_review_reminder',
+              );
+            }
+          }
+          return event.copyWith(
+            isDuplicate: true,
+            decision: PaymentDecision.likely,
+            verificationStatus: PaymentVerificationStatus.unverified,
+          );
+        }
+      }
+    }
+
+    if (reference == null) return event;
+
+    final fingerprint =
+        sha256.convert(utf8.encode(event.fingerprint)).toString();
+    final key = '$prefix$fingerprint';
     final canonicalKey = await _resolveCanonicalKey(prefs, key);
     if (canonicalKey == null) return event;
 
