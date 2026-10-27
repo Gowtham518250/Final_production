@@ -894,6 +894,48 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     return _languages.first;
   }
 
+  /// Voice-billing copy follows the language selected in this screen rather
+  /// than only the app-wide locale. Curated Telugu labels also render offline.
+  Locale get _selectedDisplayLocale =>
+      Locale(_selectedLang.code.split('-').first.toLowerCase());
+
+  static const Map<String, Map<String, String>> _voiceBillingLabels = {
+    'te': {
+      'AI Voice Billing': 'AI వాయిస్ బిల్లింగ్',
+      'Speak naturally. Review before billing.':
+          'సహజంగా మాట్లాడండి. బిల్లు చేసే ముందు వివరాలు పరిశీలించండి.',
+      'Listening': 'వింటున్నాను',
+      'What I heard': 'మీరు చెప్పింది',
+      'Process': 'వివరాలను గుర్తించండి',
+      'Your recognized speech stays here. Review detected items and warnings before adding to the bill.':
+          'మీరు మాట్లాడిన మాటలు ఇక్కడే ఉంటాయి. బిల్లులో చేర్చే ముందు గుర్తించిన వస్తువులు, హెచ్చరికలు పరిశీలించండి.',
+      'Please verify': 'దయచేసి తనిఖీ చేయండి',
+      'AI understood:': 'AI అర్థం చేసుకున్నది:',
+      'DETECTED ITEMS': 'గుర్తించిన వస్తువులు',
+      'Custom item — not in inventory; no stock deduction.':
+          'దుకాణ నిల్వలో లేని కస్టమ్ వస్తువు; స్టాక్ తగ్గదు.',
+      'Low confidence — please verify':
+          'గుర్తింపు స్పష్టంగా లేదు — దయచేసి తనిఖీ చేయండి',
+      'Price not found. Enter it in the bill before saving.':
+          'ధర గుర్తించలేదు. సేవ్ చేసే ముందు బిల్లులో ధర నమోదు చేయండి.',
+      'Edit original product name': 'అసలు ఉత్పత్తి పేరును మార్చండి',
+      'Original catalogue name': 'కేటలాగ్‌లోని అసలు పేరు',
+      'Keep the catalogue name to deduct stock correctly.':
+          'స్టాక్ సరిగ్గా తగ్గాలంటే కేటలాగ్‌లోని పేరును అలాగే ఉంచండి.',
+      'Cancel': 'రద్దు చేయండి',
+      'Save name': 'పేరును సేవ్ చేయండి',
+      'Qty': 'పరిమాణం',
+      'Price': 'ధర',
+      'selected': 'ఎంచుకున్నారు',
+      'Clear': 'తొలగించండి',
+      'Add to Bill': 'బిల్లులో చేర్చండి',
+    },
+  };
+
+  String _voiceBillingLabel(String source) =>
+      _voiceBillingLabels[_selectedDisplayLocale.languageCode]?[source] ??
+      source;
+
   Future<void> _initializeCatalog() async {
     try {
       await _catalog.load(widget.knownProducts ?? const []);
@@ -1656,8 +1698,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           ParsedItems = List<ParsedItem>.from(_committedItems);
           _lastFinalTranscript = cleanTranscript;
           _lastCommittedText = cleanTranscript;
-          _transcript = '';
-          _transcriptCtrl.clear();
+          _transcript = cleanTranscript;
+          _transcriptCtrl.text = cleanTranscript;
           _isProcessing = false;
         });
         _showSnack(
@@ -1829,8 +1871,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         _committedItems = _mergeParsedItems(_committedItems, items);
         ParsedItems = List<ParsedItem>.from(_committedItems);
         _lastFinalTranscript = clean;
-        _transcript = '';
-        _transcriptCtrl.clear();
+        _transcript = clean;
+        _transcriptCtrl.text = clean;
 
         if (_committedItems.isEmpty) {
           _showSnack(
@@ -2164,7 +2206,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: LiveTranslatedText(msg),
+      content: LiveTranslatedText(msg, locale: _selectedDisplayLocale),
       backgroundColor: isError ? Colors.deepOrange : const Color(0xFF00C853),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2238,7 +2280,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               LiveTranslatedText(
-                'AI Voice Billing',
+                _voiceBillingLabel('AI Voice Billing'),
+                locale: _selectedDisplayLocale,
                 style: GoogleFonts.inter(
                   color: const Color(0xFF111827),
                   fontSize: 16,
@@ -2247,7 +2290,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               ),
               const SizedBox(height: 2),
               LiveTranslatedText(
-                'Speak naturally. Review before billing.',
+                _voiceBillingLabel('Speak naturally. Review before billing.'),
+                locale: _selectedDisplayLocale,
                 style: GoogleFonts.inter(
                   color: const Color(0xFF64748B),
                   fontSize: 10,
@@ -2270,7 +2314,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   _buildBlinkDot(),
                   const SizedBox(width: 5),
                   LiveTranslatedText(
-                    'Listening',
+                    _voiceBillingLabel('Listening'),
+                    locale: _selectedDisplayLocale,
                     style: GoogleFonts.inter(
                       color: const Color(0xFF4F46E5),
                       fontSize: 9.5,
@@ -2386,7 +2431,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 ),
                 const SizedBox(width: 7),
                 LiveTranslatedText(
-                  'What I heard',
+                  _voiceBillingLabel('What I heard'),
+                  locale: _selectedDisplayLocale,
                   style: GoogleFonts.inter(
                     color: const Color(0xFF374151),
                     fontSize: 11,
@@ -2405,7 +2451,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: LiveTranslatedText(
-                      'Process',
+                      _voiceBillingLabel('Process'),
+                      locale: _selectedDisplayLocale,
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -2441,6 +2488,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               onSubmitted: (val) {
                 _doProcess(val);
               },
+            ),
+            const SizedBox(height: 7),
+            LiveTranslatedText(
+              _voiceBillingLabel(
+                'Your recognized speech stays here. Review detected items and warnings before adding to the bill.',
+              ),
+              locale: _selectedDisplayLocale,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF64748B),
+                fontSize: 10.5,
+                height: 1.35,
+              ),
             ),
           ],
         ),
@@ -2523,7 +2582,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                     ),
                     const SizedBox(width: 8),
                     LiveTranslatedText(
-                      'Please verify',
+                      _voiceBillingLabel('Please verify'),
+                      locale: _selectedDisplayLocale,
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
@@ -2535,13 +2595,26 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 const SizedBox(height: 6),
                 ..._parseWarnings.take(3).map(
                   (warning) => Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: LiveTranslatedText(
-                      '• $warning',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: const Color(0xFF92400E),
-                      ),
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '• ',
+                          style: TextStyle(color: Color(0xFF92400E)),
+                        ),
+                        Expanded(
+                          child: LiveTranslatedText(
+                            warning,
+                            locale: _selectedDisplayLocale,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11.5,
+                              height: 1.35,
+                              color: const Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -2569,14 +2642,30 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: LiveTranslatedText(
-                    'AI understood: $_interpretedText',
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFF3730A3),
-                      fontSize: 11,
-                      height: 1.4,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveTranslatedText(
+                        _voiceBillingLabel('AI understood:'),
+                        locale: _selectedDisplayLocale,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF3730A3),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      LiveTranslatedText(
+                        _interpretedText,
+                        locale: _selectedDisplayLocale,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF3730A3),
+                          fontSize: 11.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2584,7 +2673,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: LiveTranslatedText('DETECTED ITEMS',
+          child: LiveTranslatedText(
+            _voiceBillingLabel('DETECTED ITEMS'),
+            locale: _selectedDisplayLocale,
             style: GoogleFonts.rajdhani(
               color: const Color(0xFF42A5F5),
               fontSize: 11,
@@ -2609,25 +2700,36 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     final updatedName = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const LiveTranslatedText('Edit product name'),
+        title: LiveTranslatedText(
+          _voiceBillingLabel('Edit original product name'),
+          locale: _selectedDisplayLocale,
+        ),
         content: TextField(
           controller: editor,
           autofocus: true,
           textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(
-            hintText: 'Original catalogue name',
-            helperText: 'Keep the catalogue name to deduct stock correctly.',
+            hintText: _voiceBillingLabel('Original catalogue name'),
+            helperText: _voiceBillingLabel(
+              'Keep the catalogue name to deduct stock correctly.',
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const LiveTranslatedText('Cancel'),
+            child: LiveTranslatedText(
+              _voiceBillingLabel('Cancel'),
+              locale: _selectedDisplayLocale,
+            ),
           ),
           ElevatedButton(
             onPressed: () =>
                 Navigator.of(dialogContext).pop(editor.text.trim()),
-            child: const LiveTranslatedText('Save name'),
+            child: LiveTranslatedText(
+              _voiceBillingLabel('Save name'),
+              locale: _selectedDisplayLocale,
+            ),
           ),
         ],
       ),
@@ -2708,6 +2810,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   _editControllers[idx]!['name']!.text.trim().isEmpty
                       ? item.name
                       : _editControllers[idx]!['name']!.text.trim(),
+                  locale: _selectedDisplayLocale,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
@@ -2718,7 +2821,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 ),
               ),
               IconButton(
-                tooltip: 'Edit original product name',
+                tooltip: _voiceBillingLabel('Edit original product name'),
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints(
                   minWidth: 30,
@@ -2734,16 +2837,25 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               ),
             ],
           ),
-          subtitle: Row(
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _miniField('Qty', _editControllers[idx]!['qty']!),
-              LiveTranslatedText(' ${item.unit}  ·  ₹',
-                style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 12)),
-              _miniField('Price', _editControllers[idx]!['price']!),
+              Row(
+                children: [
+                  _miniField(_voiceBillingLabel('Qty'), _editControllers[idx]!['qty']!),
+                  LiveTranslatedText(
+                    ' ${item.unit}  ·  ₹',
+                    locale: _selectedDisplayLocale,
+                    style: GoogleFonts.rajdhani(
+                      color: const Color(0xFF546E7A),
+                      fontSize: 12,
+                    ),
+                  ),
+                  _miniField(_voiceBillingLabel('Price'), _editControllers[idx]!['price']!),
               if (lowConf) ...[
                 const SizedBox(width: 6),
                 Tooltip(
-                  message: 'Low confidence — please verify',
+                  message: _voiceBillingLabel('Low confidence — please verify'),
                   child: Icon(
                     Icons.warning_amber_rounded,
                     color: const Color(0xFFFF6D00),
@@ -2754,7 +2866,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               if (item.price <= 0) ...[
                 const SizedBox(width: 6),
                 Tooltip(
-                  message: 'Price not found. Enter it in the bill before saving.',
+                  message: _voiceBillingLabel(
+                    'Price not found. Enter it in the bill before saving.',
+                  ),
                   child: const Icon(
                     Icons.price_check_rounded,
                     color: Color(0xFFF59E0B),
@@ -2765,8 +2879,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               if (!item.catalogMatched) ...[
                 const SizedBox(width: 6),
                 Tooltip(
-                  message:
-                      'Custom bill item — not in inventory; no stock deduction.',
+                  message: _voiceBillingLabel(
+                    'Custom item — not in inventory; no stock deduction.',
+                  ),
                   child: const Icon(
                     Icons.inventory_2_outlined,
                     color: Color(0xFFF59E0B),
@@ -2774,17 +2889,48 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   ),
                 ),
               ],
-              if (item.priceWarning != null) ...[
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: item.priceWarning!,
-                  child: const Icon(
-                    Icons.report_problem_outlined,
-                    color: Color(0xFFEF4444),
-                    size: 14,
+                  if (item.priceWarning != null) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: item.priceWarning!,
+                      child: const Icon(
+                        Icons.report_problem_outlined,
+                        color: Color(0xFFEF4444),
+                        size: 14,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (!item.catalogMatched)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: LiveTranslatedText(
+                    _voiceBillingLabel(
+                      'Custom item — not in inventory; no stock deduction.',
+                    ),
+                    locale: _selectedDisplayLocale,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF92400E),
+                      fontSize: 10.5,
+                      height: 1.3,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ],
+              if (item.priceWarning != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: LiveTranslatedText(
+                    item.priceWarning!,
+                    locale: _selectedDisplayLocale,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFB45309),
+                      fontSize: 10.5,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
             ],
           ),
           trailing: IconButton(
@@ -2826,8 +2972,14 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LiveTranslatedText('${ParsedItems.where((e) => e.isConfirmed).length} selected',
-                style: GoogleFonts.rajdhani(color: const Color(0xFF7986CB), fontSize: 12)),
+              LiveTranslatedText(
+                '${ParsedItems.where((e) => e.isConfirmed).length} ${_voiceBillingLabel('selected')}',
+                locale: _selectedDisplayLocale,
+                style: GoogleFonts.rajdhani(
+                  color: const Color(0xFF7986CB),
+                  fontSize: 12,
+                ),
+              ),
               LiveTranslatedText('₹${total.toStringAsFixed(2)}',
                 style: GoogleFonts.rajdhani(
                   color: Colors.white,
@@ -2847,7 +2999,14 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               _lastFinalTranscript = '';
               _transcriptCtrl.clear();
             }),
-            child: LiveTranslatedText('Clear', style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 14)),
+            child: LiveTranslatedText(
+              _voiceBillingLabel('Clear'),
+              locale: _selectedDisplayLocale,
+              style: GoogleFonts.rajdhani(
+                color: const Color(0xFF546E7A),
+                fontSize: 14,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           ElevatedButton(
@@ -2859,7 +3018,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
             ),
             child: LiveTranslatedText(
-            'Add to Bill',
+            _voiceBillingLabel('Add to Bill'),
+            locale: _selectedDisplayLocale,
             style: GoogleFonts.inter(
               fontSize: 10.5,
               fontWeight: FontWeight.w800,
