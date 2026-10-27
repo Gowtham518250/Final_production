@@ -4,7 +4,7 @@ class TranslationTextPolicy {
   TranslationTextPolicy._();
 
   static final RegExp _standaloneNumberOrCurrency = RegExp(
-    r'^(?:[₹$€£¥]\\s*)?[+-]?\\d[\\d,]*(?:\\.\\d+)?\\s*(?:%|₹|INR|USD|EUR|GBP)?$',
+    r'^[+-]?\s*(?:(?:[₹$€£¥]\s*)|(?:(?:INR|USD|EUR|GBP)\s+))?\d[\d,]*(?:\.\d+)?\s*(?:%|₹|INR|USD|EUR|GBP)?$',
     caseSensitive: false,
   );
 
