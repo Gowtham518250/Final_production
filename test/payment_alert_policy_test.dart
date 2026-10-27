@@ -3,15 +3,14 @@ import '../lib/payment_alert_policy.dart';
 
 void main() {
   group('shouldUseAudiblePaymentAlert', () {
-    test('verification-required credit is audible even when voice is enabled', () {
+    test('routine verification-required credit does not sound twice when voice is enabled', () {
       expect(
         shouldUseAudiblePaymentAlert(
           isLate: false,
           voiceEnabled: true,
           hasConflict: false,
-          needsVerification: true,
-        ),
-        isTrue,
+          ),
+        isFalse,
       );
     });
 
@@ -21,7 +20,6 @@ void main() {
           isLate: true,
           voiceEnabled: true,
           hasConflict: false,
-          needsVerification: false,
         ),
         isTrue,
       );
@@ -30,7 +28,6 @@ void main() {
           isLate: false,
           voiceEnabled: true,
           hasConflict: true,
-          needsVerification: false,
         ),
         isTrue,
       );
@@ -42,7 +39,6 @@ void main() {
           isLate: false,
           voiceEnabled: true,
           hasConflict: false,
-          needsVerification: false,
         ),
         isFalse,
       );
@@ -54,7 +50,6 @@ void main() {
           isLate: false,
           voiceEnabled: false,
           hasConflict: false,
-          needsVerification: false,
         ),
         isTrue,
       );
