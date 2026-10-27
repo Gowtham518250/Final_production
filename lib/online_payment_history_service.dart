@@ -370,6 +370,7 @@ class OnlinePaymentHistoryService {
     var canonicalKey =
         await _resolveCanonicalKey(prefs, incomingKey) ?? incomingKey;
     var existing = _decodeEntry(prefs.getString(canonicalKey));
+    var linkedToExisting = false;
 
     if (existing == null) {
       final candidates = await _findCorrelatedRows(
@@ -404,6 +405,7 @@ class OnlinePaymentHistoryService {
         if (selected != null) cluster = <Map<String, dynamic>>[selected];
       }
       if (selected != null) {
+        linkedToExisting = true;
         canonicalKey = selected['key'] as String;
         existing = Map<String, dynamic>.from(
           selected['entry'] as Map<String, dynamic>,
@@ -436,6 +438,13 @@ class OnlinePaymentHistoryService {
                     .whereType<Map>()
                     .map((item) => Map<String, dynamic>.from(item)),
             ].toSet().toList(),
+            'status': existing!['status'] == 'CONFIRMED' ||
+                    other['status'] == 'CONFIRMED'
+                ? 'CONFIRMED'
+                : (existing!['status'] ?? other['status'] ?? 'PENDING_CONFIRMATION'),
+            'merchant_confirmed': existing!['merchant_confirmed'] == true ||
+                other['merchant_confirmed'] == true,
+            'verified': false,
             'payer_match_hash': existing!['payer_match_hash'] ??
                 other['payer_match_hash'],
           };
@@ -515,7 +524,7 @@ class OnlinePaymentHistoryService {
       }
       return false;
     }
-    if (oldStatus == 'CONFIRMED' && !event.isMerchantConfirmed) {
+    if (oldStatus == 'CONFIRMED' && !event.isMerchantConfirmed && !linkedToExisting) {
       if (incomingKey != canonicalKey && existing != null) {
         await _writeAlias(prefs, incomingKey, canonicalKey, reference: reference);
       }
@@ -582,7 +591,8 @@ class OnlinePaymentHistoryService {
     final fingerprint = sha256
         .convert(utf8.encode(event.fingerprint))
         .toString();
-    final key = '${_userPrefix(userId)}$fingerprint';
+    final incomingKey = '${_userPrefix(userId)}$fingerprint';
+    final key = await _resolveCanonicalKey(prefs, incomingKey) ?? incomingKey;
     final raw = prefs.getString(key);
     Map<String, dynamic> existing = <String, dynamic>{};
     if (raw != null) {
@@ -617,6 +627,9 @@ class OnlinePaymentHistoryService {
         'rejected_at': DateTime.now().toIso8601String(),
       }),
     );
+    if (incomingKey != key) {
+      await _writeAlias(prefs, incomingKey, key, reference: event.normalizedReferenceId);
+    }
     await _trimHistory(prefs, _userPrefix(userId));
     return true;
   }
