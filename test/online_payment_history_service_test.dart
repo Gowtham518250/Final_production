@@ -47,7 +47,8 @@ void main() {
     () async {
       expect(
         await OnlinePaymentHistoryService.recordIncomingPayment(
-          event(verification: PaymentVerificationStatus.unverified),
+          event(decision: PaymentDecision.likely,
+          verification: PaymentVerificationStatus.unverified),
         ),
         isTrue,
       );
@@ -83,7 +84,8 @@ void main() {
 
   test('promotes a pending detection when it is confirmed', () async {
     await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(verification: PaymentVerificationStatus.unverified),
+      event(decision: PaymentDecision.likely,
+          verification: PaymentVerificationStatus.unverified),
     );
     var records = await OnlinePaymentHistoryService.load();
     expect(records, hasLength(1));
@@ -250,13 +252,40 @@ void main() {
     expect(records.single['status'], 'CONFLICT_REVIEW');
   });
 
-  test('keeps locally unverified history out of the verified state', () async {
+  test('auto-records high-confidence events without claiming bank verification', () async {
     await OnlinePaymentHistoryService.recordIncomingPayment(
       event(verification: PaymentVerificationStatus.unverified),
     );
 
     final records = await OnlinePaymentHistoryService.load();
-    expect(records.single['status'], 'PENDING_CONFIRMATION');
+    expect(records.single['status'], 'CONFIRMED');
+    expect(records.single['merchant_confirmed'], isFalse);
+    expect(records.single['confirmation_mode'], 'automatic');
+    expect(records.single['verified'], isFalse);
+  });
+
+  test('does not reopen a high-confidence auto-recorded reference for confirmation', () async {
+    final first = event(
+      decision: PaymentDecision.confirmed,
+      verification: PaymentVerificationStatus.unverified,
+      timestamp: DateTime.now().subtract(const Duration(hours: 8)),
+    );
+    await OnlinePaymentHistoryService.recordIncomingPayment(first);
+
+    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
+      event(
+        id: 'late-auto-recorded-replay',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: DateTime.now(),
+      ),
+    );
+
+    expect(replay.isDuplicate, isTrue);
+    expect(replay.detectionSource, isNot(contains(':pending_review_reminder')));
+    final records = await OnlinePaymentHistoryService.load();
+    expect(records, hasLength(1));
+    expect(records.single['status'], 'CONFIRMED');
     expect(records.single['merchant_confirmed'], isFalse);
     expect(records.single['verified'], isFalse);
   });
