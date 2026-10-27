@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_localizations.dart';
 import 'live_translation_service.dart';
 import 'shared_page_translations.dart';
+import 'translation_text_policy.dart';
 
 /// A replacement Text widget that localizes dictionary-backed labels and
 /// translates other visible strings for display.
@@ -97,6 +98,9 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
 
   bool _shouldPreserve(String input) {
     final value = input.trim();
+    if (TranslationTextPolicy.isStandaloneNumberOrCurrency(value)) {
+      return true;
+    }
     if (value.isEmpty ||
         value.contains('@') ||
         RegExp(r'^https?://', caseSensitive: false).hasMatch(value) ||
