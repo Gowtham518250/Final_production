@@ -102,6 +102,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telephony/telephony.dart';
 import 'payment_event.dart';
+import 'cross_isolate_payment_announcement_deduplicator.dart';
 import 'sms_background_receiver.dart';
 import 'local_storage_service.dart';
 import 'sync_service.dart';
@@ -5447,6 +5448,23 @@ class PaymentDetectionService {
       return;
     }
     _rememberEmittedPayment(event);
+
+    // The foreground and background service isolates have independent in-memory
+    // replay lists. Consult a small persisted one-to-one cross-source guard
+    // before any UI event or voice/OS announcement is emitted.
+    if (await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+      event,
+    )) {
+      _recentEmittedPayments.removeWhere((old) => old.id == event.id);
+      _echoClaims.remove(event.id);
+      _stats.recordDupe();
+      PdsLogger.i(
+        'EMIT',
+        'Cross-isolate payment echo suppressed before announcement: '
+            'amount=${event.amount} origin=${_eventOrigin(event.detectionSource)}',
+      );
+      return;
+    }
 
     // Cross-device UTR check happens before UI/voice emission. Serialize
     // concurrent same-UTR events on this device, and await the registration
