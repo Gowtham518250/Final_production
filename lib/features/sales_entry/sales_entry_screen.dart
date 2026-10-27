@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import '../../language_provider.dart';
+import '../../speech_locale_policy.dart';
 import 'controllers/sales_entry_provider.dart';
 import 'widgets/compact_total_card.dart';
 import 'widgets/premium_product_entry.dart';
@@ -111,7 +113,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
       }
 
       final provider = context.read<SalesEntryProvider>();
-      await provider.processVoiceRecording(audioPath, languageCode: 'auto');
+      final selectedLanguage = context.read<LanguageProvider>().locale.languageCode;
+      final speechLocale = SpeechLocalePolicy.toSpeechLocaleCode(selectedLanguage);
+      await provider.processVoiceRecording(audioPath, languageCode: speechLocale);
       if (!mounted) return;
 
       final message = provider.lastVoiceMessage;
@@ -142,6 +146,173 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
     }
   }
 
+
+  Widget _buildVoiceRecognitionSummary(
+    SalesEntryProvider provider,
+    Locale selectedLocale,
+  ) {
+    final transcript = provider.lastVoiceTranscript?.trim() ?? '';
+    final interpretation = provider.lastVoiceInterpretation?.trim() ?? '';
+    final items = provider.lastVoiceDetectedItems;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFC7D2FE)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4F46E5).withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.graphic_eq_rounded,
+                  color: Color(0xFF4F46E5), size: 19),
+              const SizedBox(width: 8),
+              Expanded(
+                child: LiveTranslatedText(
+                  'Voice recognition result',
+                  locale: selectedLocale,
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFF1E293B),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (transcript.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            LiveTranslatedText(
+              'What I heard',
+              locale: selectedLocale,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF64748B),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            SelectableText(
+              transcript,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF111827),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ],
+          if (interpretation.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            LiveTranslatedText(
+              'AI understood',
+              locale: selectedLocale,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF64748B),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            LiveTranslatedText(
+              interpretation,
+              locale: selectedLocale,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF3730A3),
+                fontSize: 12,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          if (items.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            LiveTranslatedText(
+              'Detected items',
+              locale: selectedLocale,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF64748B),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 5),
+            ...items.take(8).map(
+              (item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.check_circle_outline_rounded,
+                        color: Color(0xFF10B981), size: 16),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: LiveTranslatedText(
+                        item.itemName,
+                        locale: selectedLocale,
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF1E293B),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${item.quantity.toStringAsFixed(item.quantity % 1 == 0 ? 0 : 2)} × ₹${item.price.toStringAsFixed(2)}',
+                      style: GoogleFonts.robotoMono(
+                        color: const Color(0xFF334155),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 9),
+          LiveTranslatedText(
+            'Review every product, quantity, and price before saving the sale.',
+            locale: selectedLocale,
+            style: GoogleFonts.poppins(
+              color: const Color(0xFF92400E),
+              fontSize: 10.5,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _voiceExampleFor(String languageCode) {
+    const examples = <String, String>{
+      'en': 'Example: “2 kg rice 50, 1 oil 150.” Say the item, quantity, and unit price.',
+      'te': 'ఉదాహరణ: “2 కిలోల బియ్యం 50, 1 నూనె 150.” వస్తువు, పరిమాణం, ఒక్కొక్కటి ధర చెప్పండి.',
+      'hi': 'उदाहरण: “2 किलो चावल 50, 1 तेल 150।” वस्तु, मात्रा और प्रति इकाई कीमत बोलें।',
+      'ta': 'எடுத்துக்காட்டு: “2 கிலோ அரிசி 50, 1 எண்ணெய் 150.” பொருள், அளவு, ஒரு பொருளின் விலையைச் சொல்லுங்கள்.',
+      'kn': 'ಉದಾಹರಣೆ: “2 ಕೆಜಿ ಅಕ್ಕಿ 50, 1 ಎಣ್ಣೆ 150.” ವಸ್ತು, ಪ್ರಮಾಣ ಮತ್ತು ಪ್ರತಿ ಘಟಕದ ಬೆಲೆಯನ್ನು ಹೇಳಿ.',
+      'ml': 'ഉദാഹരണം: “2 കിലോ അരി 50, 1 എണ്ണ 150.” ഇനം, അളവ്, ഒരു യൂണിറ്റിന്റെ വില പറയുക.',
+      'mr': 'उदाहरण: “2 किलो तांदूळ 50, 1 तेल 150.” वस्तू, प्रमाण आणि प्रति युनिट किंमत सांगा.',
+      'bn': 'উদাহরণ: “2 কেজি চাল 50, 1 তেল 150।” পণ্য, পরিমাণ ও প্রতি ইউনিটের দাম বলুন।',
+      'gu': 'ઉદાહરણ: “2 કિલો ચોખા 50, 1 તેલ 150.” વસ્તુ, જથ્થો અને પ્રતિ એકમ કિંમત બોલો.',
+      'pa': 'ਉਦਾਹਰਨ: “2 ਕਿਲੋ ਚੌਲ 50, 1 ਤੇਲ 150।” ਚੀਜ਼, ਮਾਤਰਾ ਅਤੇ ਪ੍ਰਤੀ ਇਕਾਈ ਕੀਮਤ ਦੱਸੋ।',
+    };
+    return examples[languageCode.toLowerCase()] ?? examples['te']!;
+  }
+
   @override
   void dispose() {
     _recordTimer?.cancel();
@@ -152,6 +323,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SalesEntryProvider>();
+    final selectedLocale = context.watch<LanguageProvider>().locale;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -283,6 +455,21 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                         ),
                       )
                     ],
+                  ),
+                ),
+                if (provider.lastVoiceTranscript?.trim().isNotEmpty == true ||
+                    provider.lastVoiceInterpretation?.trim().isNotEmpty == true ||
+                    provider.lastVoiceDetectedItems.isNotEmpty)
+                  _buildVoiceRecognitionSummary(provider, selectedLocale),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 18),
+                  child: Text(
+                    _voiceExampleFor(selectedLocale.languageCode),
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      height: 1.35,
+                      color: const Color(0xFF64748B),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
