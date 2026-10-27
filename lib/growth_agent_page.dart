@@ -435,6 +435,55 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       'Manual redemption count updated on this device. Checkout is not connected to this tracking code.',
     );
   }
+  void _openCampaignForEditing(Map<String, dynamic> campaign) {
+    final draft = Map<String, dynamic>.from(campaign);
+    final productName = draft['product_name']?.toString() ?? '';
+    final draftPrice = draft['product_price'] is num
+        ? (draft['product_price'] as num).toDouble()
+        : null;
+    String? matchingProductKey;
+    for (var i = 0; i < _products.length; i++) {
+      final product = _products[i];
+      final sameName =
+          (product['name']?.toString() ?? '') == productName;
+      final currentPrice = _productPrice(product);
+      final samePrice = draftPrice == null ||
+          (currentPrice != null &&
+              (currentPrice - draftPrice).abs() < 0.001);
+      if (productName.isNotEmpty && sameName && samePrice) {
+        matchingProductKey = _productKey(product, i);
+        break;
+      }
+    }
+
+    setState(() {
+      _currentDraft = draft;
+      _shopController.text = draft['shop_name']?.toString() ?? 'My Shop';
+      _offerController.text = draft['offer']?.toString() ?? '';
+      _headlineController.text = draft['headline']?.toString() ?? '';
+      _captionController.text = draft['caption']?.toString() ?? '';
+      final goal = draft['goal']?.toString() ?? 'nearby';
+      _goal = const {
+        'nearby',
+        'new_product',
+        'clear_stock',
+        'regular_customers',
+      }.contains(goal)
+          ? goal
+          : 'nearby';
+      final language = draft['language']?.toString() ?? 'en';
+      _language = const {'en', 'te', 'hi'}.contains(language)
+          ? language
+          : 'en';
+      _selectedProductKey = matchingProductKey ?? '';
+    });
+    _showMessage(
+      matchingProductKey == null && productName.isNotEmpty
+          ? 'Draft reopened. Its saved product details may be out of date; check stock and price before sharing.'
+          : 'Draft reopened. Review it before sharing.',
+    );
+  }
+
 
   void _showMessage(String message) {
     if (!mounted) return;
@@ -954,13 +1003,22 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                 ],
               ),
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => _markRedeemed(campaign),
-                  icon: const Icon(Icons.add_circle_outline_rounded),
-                  label: const Text('Record redemption'),
-                ),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _openCampaignForEditing(campaign),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Open draft'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _markRedeemed(campaign),
+                    icon: const Icon(Icons.add_circle_outline_rounded),
+                    label: const Text('Record redemption'),
+                  ),
+                ],
               ),
             ],
           ),
