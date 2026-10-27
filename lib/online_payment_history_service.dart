@@ -243,9 +243,12 @@ class OnlinePaymentHistoryService {
       }
 
       if (hasRowReference) {
-        // A no-reference app alert can join a single nearby reference-backed
-        // receipt; the caller refuses this match if multiple receipts qualify.
-        if (_within(eventTime, rowTime, _referenceCorrelationWindow)) {
+        // A no-reference signal may join a referenced row only when the stored
+        // source evidence links the same app's notification/accessibility pair.
+        // Amount + time + a single candidate are not sufficient: legitimate
+        // same-amount payments can arrive seconds apart from the same app.
+        if (_within(eventTime, rowTime, _referenceCorrelationWindow) &&
+            _hasStrongSignalLink(entry, event)) {
           rows.add(<String, dynamic>{'key': key, 'entry': entry});
         }
         continue;
