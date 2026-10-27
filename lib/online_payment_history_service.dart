@@ -384,8 +384,19 @@ class OnlinePaymentHistoryService {
       Map<String, dynamic>? selected;
       List<Map<String, dynamic>> cluster = <Map<String, dynamic>>[];
       if (reference != null && _tightCrossAppCluster(candidates)) {
-        cluster = candidates;
-        selected = candidates.first;
+        final preferred = candidates.firstWhere(
+          (candidate) {
+            final entry = candidate['entry'] as Map<String, dynamic>;
+            return (entry['app'] ?? '').toString().trim().toLowerCase() !=
+                'upi app';
+          },
+          orElse: () => candidates.first,
+        );
+        cluster = <Map<String, dynamic>>[
+          preferred,
+          ...candidates.where((candidate) => !identical(candidate, preferred)),
+        ];
+        selected = preferred;
       } else {
         selected = reference != null
             ? _bestUnambiguousCandidate(candidates, event)
@@ -516,8 +527,12 @@ class OnlinePaymentHistoryService {
       ...base,
       'amount': event.amount,
       'timestamp': base['timestamp'] ?? _eventTime(event).toIso8601String(),
-      'detected_at': base['detected_at'] ?? event.timestamp.toIso8601String(),
-      'app': (base['app']?.toString().isNotEmpty ?? false)
+      'detected_at': event.detectionSource.contains(':pending_review_reminder')
+          ? event.timestamp.toIso8601String()
+          : (base['detected_at'] ?? event.timestamp.toIso8601String()),
+      'app': (base['app']?.toString().isNotEmpty ?? false) &&
+              (base['app']?.toString().trim().toLowerCase() != 'upi app' ||
+                  event.appDisplayName == 'UPI App')
           ? base['app']
           : event.appDisplayName,
       'status': event.isMerchantConfirmed
