@@ -139,6 +139,44 @@ void main() {
       expect(first.hasReferenceConflictWith(conflictingAmount), isTrue);
     });
 
+    test('native notification identity ignores payload hash but preserves new posts', () {
+      final first = PaymentEvent(
+        id: 'phonepe-first',
+        amount: 2,
+        timestamp: DateTime(2026, 10, 27, 18, 22),
+        app: PaymentApp.phonePe,
+        sourceEventKey: 'com.phonepe.app|42|1793125320000|payload-a',
+      );
+      final notificationUpdate = PaymentEvent(
+        id: 'phonepe-update',
+        amount: 2,
+        timestamp: DateTime(2026, 10, 27, 18, 22, 1),
+        app: PaymentApp.phonePe,
+        sourceEventKey: 'com.phonepe.app|42|1793125320000|payload-b',
+      );
+      final nextPayment = PaymentEvent(
+        id: 'phonepe-next-payment',
+        amount: 2,
+        timestamp: DateTime(2026, 10, 27, 18, 22, 2),
+        app: PaymentApp.phonePe,
+        sourceEventKey: 'com.phonepe.app|43|1793125322000|payload-c',
+      );
+
+      expect(first.sourceEventIdentity, 'com.phonepe.app|42|1793125320000');
+      expect(
+        first.sourceEventFingerprint,
+        notificationUpdate.sourceEventFingerprint,
+      );
+      expect(
+        first.sourceEventFingerprint,
+        isNot(nextPayment.sourceEventFingerprint),
+      );
+      expect(
+        PaymentEvent.fromJson(first.toJson()).sourceEventKey,
+        first.sourceEventKey,
+      );
+    });
+
     test('copyWith increments version and updates revision timestamp', () {
       final original = PaymentEvent(
         id: 'revisioned-event',

@@ -21,7 +21,10 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
   static const int _maxEntries = 100;
   static const Duration _smsWindow = Duration(hours: 3);
   static const Duration _crossAppWindow = Duration(minutes: 10);
-  static const Duration _sameChannelReplayWindow = Duration(seconds: 10);
+  // Accessibility can emit repeated updates from a static payment screen.
+  // Exact-text fallback is intentionally bounded; distinct native notification
+  // identities are exempted below.
+  static const Duration _sameChannelReplayWindow = Duration(minutes: 3);
 
   // Serialize callers within one isolate. SharedPreferences reload makes the
   // most recent stored list visible when another isolate processed a signal.
@@ -85,6 +88,25 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
         continue;
       }
 
+      final previousSourceFingerprint =
+          (previous['sourceEventFingerprint'] ?? '').toString();
+      final sourceFingerprint = event.sourceEventFingerprint;
+      if (sourceFingerprint != null &&
+          sourceFingerprint.isNotEmpty &&
+          sourceFingerprint == previousSourceFingerprint) {
+        final previousSourceReference =
+            (previous['reference'] ?? '').toString().trim();
+        if (reference != null &&
+            previousSourceReference.isNotEmpty &&
+            reference != previousSourceReference) {
+          // Reused notification identity with a different authoritative UTR:
+          // it is not the same transaction, even if the amount matches.
+          continue;
+        }
+        // Exact native notification post, same amount and direction.
+        return true;
+      }
+
       final previousReference =
           (previous['reference'] ?? '').toString().trim();
       if (reference != null || previousReference.isNotEmpty) {
@@ -108,8 +130,19 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       final age = now.difference(previousSeenAt).abs();
 
       if (previousChannel == channel) {
-        // Same channel may report two real transfers of the same amount.
-        // Suppress only a near-immediate exact text replay without a UTR.
+        final currentSourceFingerprint = event.sourceEventFingerprint;
+        final previousSourceFingerprint =
+            (previous['sourceEventFingerprint'] ?? '').toString();
+        if (currentSourceFingerprint != null &&
+            previousSourceFingerprint.isNotEmpty &&
+            currentSourceFingerprint != previousSourceFingerprint) {
+          // Native notification IDs/post times differ, so preserve both
+          // candidates even if their visible text and amounts are identical.
+          continue;
+        }
+        // Same-channel accessibility bursts may surface a static payment
+        // screen more than once. Coalesce only exact-text repeats in a bounded
+        // window when no distinct native notification identity proves otherwise.
         final previousText = (previous['text'] ?? '').toString();
         if (reference == null &&
             previousReference.isEmpty &&
@@ -166,6 +199,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       'payer': payer,
       'account': account,
       'text': text,
+      'sourceEventFingerprint': event.sourceEventFingerprint,
       'seenAt': now.toIso8601String(),
       'claimedChannels': <String>[],
     });

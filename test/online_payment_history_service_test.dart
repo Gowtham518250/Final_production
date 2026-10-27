@@ -21,6 +21,7 @@ void main() {
     double amount = 125.50,
     DateTime? timestamp,
     DateTime? sourceTimestamp,
+    String? sourceEventKey,
     PaymentApp app = PaymentApp.phonePe,
     String detectionSource = 'notification',
     String? payerName,
@@ -30,6 +31,7 @@ void main() {
     amount: amount,
     timestamp: timestamp ?? DateTime(2026, 10, 22, 9),
     sourceTimestamp: sourceTimestamp,
+    sourceEventKey: sourceEventKey,
     app: app,
     referenceId: referenceId,
     payerName: payerName,
@@ -494,6 +496,88 @@ void main() {
       expect(rows.where((row) => row['reference_id'] != null), hasLength(1));
       expect(rows.map((row) => (row['amount'] as num).toDouble()).toList(),
           everyElement(5.0));
+    },
+  );
+
+  test(
+    'replayed PhonePe notification updates stay one history row without a UTR',
+    () async {
+      final now = DateTime.now();
+      final postedAtMs = now.millisecondsSinceEpoch;
+      final first = event(
+        id: 'phonepe-notification-first',
+        amount: 2,
+        referenceId: null,
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: now,
+        sourceTimestamp: now,
+        sourceEventKey:
+            'com.phonepe.app|42|$postedAtMs|payload-hash-first',
+        rawText: 'You received ₹2 from a customer',
+      );
+      final replay = event(
+        id: 'phonepe-notification-replay',
+        amount: 2,
+        referenceId: null,
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: now.add(const Duration(seconds: 18)),
+        sourceTimestamp: now.add(const Duration(seconds: 18)),
+        // A payload hash can change when Android updates the same notification.
+        // Package, notification ID, and post time still identify that same post.
+        sourceEventKey:
+            'com.phonepe.app|42|$postedAtMs|payload-hash-updated',
+        rawText: 'Payment received ₹2',
+      );
+
+      expect(
+        await OnlinePaymentHistoryService.recordIncomingPayment(first),
+        isTrue,
+      );
+      final annotated =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(replay);
+      expect(annotated.isDuplicate, isTrue);
+      expect(
+        await OnlinePaymentHistoryService.recordIncomingPayment(annotated),
+        isFalse,
+      );
+
+      final rows = await OnlinePaymentHistoryService.load();
+      expect(rows, hasLength(1));
+      expect(rows.single['amount'], 2.0);
+      expect(rows.single['source_event_fingerprint'], first.sourceEventFingerprint);
+    },
+  );
+
+  test(
+    'does not merge distinct same-value native notifications',
+    () async {
+      final now = DateTime.now();
+      final postedAt = now.millisecondsSinceEpoch;
+      await OnlinePaymentHistoryService.recordIncomingPayment(event(
+        id: 'phonepe-two-rupee-a',
+        amount: 2,
+        referenceId: null,
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: now,
+        sourceEventKey: 'com.phonepe.app|51|$postedAt|hash-a',
+      ));
+      await OnlinePaymentHistoryService.recordIncomingPayment(event(
+        id: 'phonepe-two-rupee-b',
+        amount: 2,
+        referenceId: null,
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        timestamp: now.add(const Duration(seconds: 2)),
+        sourceEventKey:
+            'com.phonepe.app|52|${postedAt + 2000}|hash-b',
+      ));
+
+      final rows = await OnlinePaymentHistoryService.load();
+      expect(rows, hasLength(2));
+      expect(rows.map((row) => row['amount']).toList(), [2.0, 2.0]);
     },
   );
 

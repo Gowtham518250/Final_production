@@ -2834,7 +2834,10 @@ class PaymentDetectionService {
   // A bank alert often arrives once as a notification and again as an SMS.
   /// A near-instant identical re-post by the same app is a replay, not a new
   /// payment. Anything later from the same channel is treated as a new payment.
-  static const Duration _sameChannelReplayWindow = Duration(seconds: 10);
+  // Accessibility emits repeated updates for a static payment screen. Keep
+  // the exact-text fallback long enough to coalesce those bursts; distinct
+  // native notification identities are explicitly exempted below.
+  static const Duration _sameChannelReplayWindow = Duration(minutes: 3);
 
   /// Two different apps (e.g. PhonePe + Truecaller mirror) reporting one payment.
   static const Duration _crossAppEchoWindow = Duration(minutes: 10);
@@ -4223,6 +4226,7 @@ class PaymentDetectionService {
   // Late source times are tracked separately so echo matching still compares
   // current detection timestamps, not hours-old timestamps from queued events.
   DateTime? _sourcePostedAt;
+  String? _sourceEventKey;
   final Map<String, DateTime> _lateEventTimes = <String, DateTime>{};
 
   /// Original source time for an event recovered after a service interruption.
@@ -4252,13 +4256,15 @@ class PaymentDetectionService {
   }
 
   void _handleNotification(ServiceNotificationEvent event) {
-    _sourcePostedAt = postedAtFromEventKey(
-      _safe(() => (event as dynamic).eventKey as String?),
-    );
+    _sourceEventKey = _safe(
+      () => (event as dynamic).eventKey as String?,
+    )?.trim();
+    _sourcePostedAt = postedAtFromEventKey(_sourceEventKey);
     try {
       _handleNotificationCore(event);
     } finally {
       _sourcePostedAt = null;
+      _sourceEventKey = null;
     }
   }
 
@@ -4687,6 +4693,7 @@ class PaymentDetectionService {
       amount: amount,
       timestamp: DateTime.now(),
       sourceTimestamp: _sourcePostedAt,
+      sourceEventKey: _sourceEventKey,
       app: app,
       payerName: name,
       referenceId: refId,
@@ -5369,7 +5376,18 @@ class PaymentDetectionService {
       final oldChannel = _channelKey(old);
 
       if (oldChannel == channel) {
-        // Same app/channel: only a near-instant identical re-post is a replay.
+        final currentSourceFingerprint = event.sourceEventFingerprint;
+        final oldSourceFingerprint = old.sourceEventFingerprint;
+        if (currentSourceFingerprint != null &&
+            oldSourceFingerprint != null &&
+            currentSourceFingerprint != oldSourceFingerprint) {
+          // Different native notification posts are separate candidates even
+          // when the app reuses the same text and amount.
+          continue;
+        }
+        // Accessibility may re-emit a static screen repeatedly. Coalesce an
+        // exact-text replay for a short bounded period, but not distinct
+        // native notification posts whose stable IDs differ.
         if (age <= _sameChannelReplayWindow &&
             currentText == _echoText(old.rawText)) {
           PdsLogger.t('DROP', 'reason=same_channel_repost');
@@ -5457,6 +5475,22 @@ class PaymentDetectionService {
     bool forceMute = false,
   }) async {
     event = requireMerchantConfirmation(event);
+
+    // Durable history can classify a replay before forwarding it from the
+    // background isolate. Do not publish that duplicate to UI/history/voice.
+    // Explicit merchant-confirmation transitions and reference conflicts stay
+    // visible because they change the review state rather than replaying it.
+    if (event.isDuplicate &&
+        !event.isMerchantConfirmed &&
+        !event.hasReferenceConflict) {
+      _stats.recordDupe();
+      PdsLogger.i(
+        'EMIT',
+        'Pre-classified payment replay suppressed before UI/voice emission: '
+            'amount=${event.amount} source=${_eventOrigin(event.detectionSource)}',
+      );
+      return;
+    }
     if (event.decision == PaymentDecision.rejected) return;
 
     if (_isRecentCrossSourceDuplicate(event)) {

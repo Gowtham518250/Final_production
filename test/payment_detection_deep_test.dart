@@ -1781,6 +1781,43 @@ void main() {
     expect(spoken.single, contains('credited'));
   });
 
+  test(
+    'pre-classified duplicate is stopped before payment stream and voice',
+    () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      final spoken = <String>[];
+      final wasVoiceEnabled = PdsConfig.isVoiceEnabled;
+      PdsConfig.isVoiceEnabled = true;
+      service.onSpeak = spoken.add;
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      addTearDown(() {
+        PdsConfig.isVoiceEnabled = wasVoiceEnabled;
+        service.debugResetTransientDetectionState();
+      });
+
+      await service.debugEmitForTesting(
+        PaymentEvent(
+          id: 'duplicate-two-rupee-payment',
+          amount: 2,
+          timestamp: DateTime.now(),
+          app: PaymentApp.phonePe,
+          rawText: 'You received ₹2 from a customer',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+          isDuplicate: true,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(events, isEmpty);
+      expect(spoken, isEmpty);
+      await subscription.cancel();
+    },
+  );
+
   test('duplicate and reference-conflict events are not announced', () async {
     final queue = PriorityVoiceQueue();
     final spoken = <String>[];
