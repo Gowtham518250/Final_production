@@ -178,9 +178,6 @@ Future<void> _postBackgroundPaymentAlert(
     final automaticCredit = isCredit &&
         event.decision == PaymentDecision.confirmed &&
         !conflict;
-    final automaticDebit = isDebit &&
-        event.decision == PaymentDecision.confirmed &&
-        !conflict;
     // Ask for owner input only when the classifier is uncertain, the direction
     // is missing, or evidence conflicts. Strong events must not ask every time.
     final needsVerify = conflict ||
