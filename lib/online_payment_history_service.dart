@@ -66,13 +66,13 @@ class OnlinePaymentHistoryService {
     String aliasKey,
     String canonicalKey, {
     String? reference,
+    bool replaceExisting = false,
   }) async {
     final resolved = await _resolveCanonicalKey(prefs, canonicalKey);
     final target = resolved ?? canonicalKey;
     if (aliasKey == target) return;
-    // Never overwrite a real row with an alias.
     final existing = _decodeEntry(prefs.getString(aliasKey));
-    if (existing != null && !_isAlias(existing)) return;
+    if (existing != null && !_isAlias(existing) && !replaceExisting) return;
     await prefs.setString(aliasKey, jsonEncode(<String, dynamic>{
       '_record_type': _aliasRecordType,
       '_alias_for': target,
@@ -230,8 +230,8 @@ class OnlinePaymentHistoryService {
       final hasRowReference = rowReference.isNotEmpty;
 
       if (reference != null) {
-        // A bank/SMS reference may attach to one nearby unreferenced signal.
-        // Never merge two independently referenced payments.
+        // A reference may attach to nearby unreferenced signal rows. Rows with
+        // their own different reference are never merged into this payment.
         if (hasRowReference ||
             !_within(eventTime, rowTime, _referenceCorrelationWindow)) {
           continue;
@@ -240,13 +240,66 @@ class OnlinePaymentHistoryService {
         continue;
       }
 
-      final window =
-          hasRowReference ? _referenceCorrelationWindow : _signalCorrelationWindow;
-      if (!_within(eventTime, rowTime, window)) continue;
+      if (hasRowReference) {
+        // A no-reference app alert can join a single nearby reference-backed
+        // receipt; the caller refuses this match if multiple receipts qualify.
+        if (_within(eventTime, rowTime, _referenceCorrelationWindow)) {
+          rows.add(<String, dynamic>{'key': key, 'entry': entry});
+        }
+        continue;
+      }
+      if (!_within(eventTime, rowTime, _signalCorrelationWindow)) continue;
       if (!_hasStrongSignalLink(entry, event)) continue;
       rows.add(<String, dynamic>{'key': key, 'entry': entry});
     }
     return rows;
+  }
+
+  static bool _tightCrossAppCluster(
+    List<Map<String, dynamic>> candidates,
+  ) {
+    if (candidates.length < 2) return false;
+    final times = <DateTime>[];
+    final apps = <String>{};
+    for (final candidate in candidates) {
+      final entry = candidate['entry'] as Map<String, dynamic>;
+      final time = _storedTime(entry);
+      if (time == null) return false;
+      times.add(time);
+      final knownApps = _storedStrings(entry, 'source_apps');
+      final appKey = knownApps.isNotEmpty
+          ? knownApps.first
+          : (entry['app'] ?? 'unknown').toString().trim().toLowerCase();
+      if (appKey.isEmpty || !apps.add(appKey)) return false;
+    }
+    times.sort();
+    return times.last.difference(times.first) <= const Duration(seconds: 6);
+  }
+
+  static Duration _distanceToEvent(Map<String, dynamic> candidate, PaymentEvent event) {
+    final time = _storedTime(candidate['entry'] as Map<String, dynamic>);
+    if (time == null) return const Duration(days: 36500);
+    final sourceTime = _eventTime(event);
+    return sourceTime.isBefore(time)
+        ? time.difference(sourceTime)
+        : sourceTime.difference(time);
+  }
+
+  static Map<String, dynamic>? _bestUnambiguousCandidate(
+    List<Map<String, dynamic>> candidates,
+    PaymentEvent event,
+  ) {
+    if (candidates.isEmpty) return null;
+    if (candidates.length == 1) return candidates.single;
+    final sorted = List<Map<String, dynamic>>.from(candidates)
+      ..sort((a, b) => _distanceToEvent(a, event)
+          .compareTo(_distanceToEvent(b, event)));
+    final closest = _distanceToEvent(sorted[0], event);
+    final next = _distanceToEvent(sorted[1], event);
+    // If two equally plausible rows exist, leave them visible for review.
+    // A clear nearest timestamp may safely link a delayed bank SMS to one row.
+    if (next - closest >= const Duration(seconds: 8)) return sorted.first;
+    return null;
   }
 
   static Map<String, dynamic> _appendSignal(
@@ -325,13 +378,60 @@ class OnlinePaymentHistoryService {
         event,
         incomingKey: incomingKey,
       );
-      // Amount and time alone must not merge two real same-value transfers.
-      // A reference attaches only when exactly one unreferenced candidate fits.
-      if (candidates.length == 1) {
-        canonicalKey = candidates.single['key'] as String;
+      // If one UTR arrives after the PhonePe and UPI-app copies of the same
+      // alert, collapse only a tightly timed cluster from distinct source apps.
+      // Otherwise link a single candidate or an unambiguous nearest candidate.
+      Map<String, dynamic>? selected;
+      List<Map<String, dynamic>> cluster = <Map<String, dynamic>>[];
+      if (reference != null && _tightCrossAppCluster(candidates)) {
+        cluster = candidates;
+        selected = candidates.first;
+      } else {
+        selected = reference != null
+            ? _bestUnambiguousCandidate(candidates, event)
+            : (candidates.length == 1 ? candidates.single : null);
+        if (selected != null) cluster = <Map<String, dynamic>>[selected];
+      }
+      if (selected != null) {
+        canonicalKey = selected['key'] as String;
         existing = Map<String, dynamic>.from(
-          candidates.single['entry'] as Map<String, dynamic>,
+          selected['entry'] as Map<String, dynamic>,
         );
+        // Fold tightly correlated source rows into the chosen canonical row.
+        for (final candidate in cluster.skip(1)) {
+          final otherKey = candidate['key'] as String;
+          final other = candidate['entry'] as Map<String, dynamic>;
+          final mergedSignals = <String, dynamic>{
+            ...existing!,
+            'source_apps': <String>{
+              ..._storedStrings(existing!, 'source_apps'),
+              ..._storedStrings(other, 'source_apps'),
+            }.toList(),
+            'source_channels': <String>{
+              ..._storedStrings(existing!, 'source_channels'),
+              ..._storedStrings(other, 'source_channels'),
+            }.toList(),
+            'signal_signatures': <String>{
+              ..._storedStrings(existing!, 'signal_signatures'),
+              ..._storedStrings(other, 'signal_signatures'),
+            }.take(12).toList(),
+            'source_signals': <Map<String, dynamic>>[
+              if (existing!['source_signals'] is List)
+                ...(existing!['source_signals'] as List)
+                    .whereType<Map>()
+                    .map((item) => Map<String, dynamic>.from(item)),
+              if (other['source_signals'] is List)
+                ...(other['source_signals'] as List)
+                    .whereType<Map>()
+                    .map((item) => Map<String, dynamic>.from(item)),
+            ].toSet().toList(),
+            'payer_match_hash': existing!['payer_match_hash'] ??
+                other['payer_match_hash'],
+          };
+          existing = mergedSignals;
+          await prefs.setString(canonicalKey, jsonEncode(existing));
+          await _writeAlias(prefs, otherKey, canonicalKey, replaceExisting: true);
+        }
       }
     }
 
