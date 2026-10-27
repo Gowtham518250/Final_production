@@ -450,8 +450,53 @@ class OnlinePaymentHistoryService {
         await _resolveCanonicalKey(prefs, incomingKey) ?? incomingKey;
     var existing = _decodeEntry(prefs.getString(canonicalKey));
     var linkedToExisting = false;
+    final sourceIdentityKey = _sourceIdentityKey(prefix, event);
+    final sourceCanonicalKey = sourceIdentityKey == null
+        ? null
+        : await _resolveCanonicalKey(prefs, sourceIdentityKey);
+    var sourceIdentityConflict = false;
+    if (sourceCanonicalKey != null) {
+      final sourceEntry = _decodeEntry(prefs.getString(sourceCanonicalKey));
+      if (sourceEntry != null && _matchesSourceEvent(sourceEntry, event)) {
+        final status = (sourceEntry['status'] ?? '').toString().toUpperCase();
+        if (event.isMerchantConfirmed ||
+            event.detectionSource.contains(':pending_review_reminder')) {
+          canonicalKey = sourceCanonicalKey;
+          existing = sourceEntry;
+          linkedToExisting = true;
+        } else {
+          if (reference != null &&
+              (sourceEntry['reference_id'] ?? '').toString().trim().isEmpty) {
+            await _attachReferenceToSourceRow(
+              prefs,
+              prefix,
+              sourceCanonicalKey,
+              sourceEntry,
+              event,
+            );
+          }
+          if (incomingKey != sourceCanonicalKey) {
+            await _writeAlias(
+              prefs,
+              incomingKey,
+              sourceCanonicalKey,
+              reference: reference,
+              replaceExisting: true,
+            );
+          }
+          if (status == 'REJECTED' || status == 'CONFLICT_REVIEW') {
+            return false;
+          }
+          return false;
+        }
+      } else {
+        // A reused notification key with different money/reference data is
+        // not a replay. Keep it separate and do not merge it by amount/time.
+        sourceIdentityConflict = true;
+      }
+    }
 
-    if (existing == null) {
+    if (existing == null && !sourceIdentityConflict) {
       final candidates = await _findCorrelatedRows(
         prefs,
         prefix,
@@ -646,6 +691,8 @@ class OnlinePaymentHistoryService {
       'direction': _historyDirection(event) == 'unknown'
           ? (base['direction'] ?? 'unknown')
           : _historyDirection(event),
+      if (event.sourceEventFingerprint != null)
+        'source_event_fingerprint': event.sourceEventFingerprint,
     };
     final withSignal = _appendSignal(record, event);
     await prefs.setString(canonicalKey, jsonEncode(withSignal));
@@ -659,6 +706,20 @@ class OnlinePaymentHistoryService {
         canonicalKey,
         reference: reference,
       );
+    }
+    if (sourceIdentityKey != null && !sourceIdentityConflict) {
+      final existingSourceTarget =
+          await _resolveCanonicalKey(prefs, sourceIdentityKey);
+      if (existingSourceTarget == null ||
+          existingSourceTarget == canonicalKey) {
+        await _writeAlias(
+          prefs,
+          sourceIdentityKey,
+          canonicalKey,
+          reference: reference,
+          replaceExisting: true,
+        );
+      }
     }
     await _trimHistory(prefs, prefix);
     return true;
