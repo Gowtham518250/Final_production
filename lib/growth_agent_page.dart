@@ -1329,6 +1329,7 @@ class _PosterArtwork extends StatelessWidget {
     final isFresh = template == 'fresh';
     final isMinimal = template == 'minimal';
     final isStory = format == 'story';
+    final isSquare = format == 'square';
     final hasProduct = productName.trim().isNotEmpty;
     final hasOffer = offer.trim().isNotEmpty;
     final colors = isFestive
@@ -1422,7 +1423,7 @@ class _PosterArtwork extends StatelessWidget {
                 ),
               ),
             Padding(
-              padding: EdgeInsets.all(isStory ? 26 : 21),
+              padding: EdgeInsets.all(isStory ? 26 : isSquare ? 13 : 21),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1465,11 +1466,11 @@ class _PosterArtwork extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(height: isStory ? 28 : 18),
+                  SizedBox(height: isStory ? 28 : isSquare ? 8 : 18),
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: isFestive ? 10 : 11,
-                      vertical: isStory ? 9 : 7,
+                      vertical: isStory ? 9 : isSquare ? 4 : 7,
                     ),
                     decoration: BoxDecoration(
                       color: accentColor,
@@ -1481,13 +1482,13 @@ class _PosterArtwork extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: accentTextColor,
-                        fontSize: isStory ? 11 : 9.5,
+                        fontSize: isStory ? 11 : isSquare ? 8 : 9.5,
                         fontWeight: FontWeight.w900,
                         letterSpacing: isMinimal ? 0.4 : 1.0,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: isSquare ? 7 : 14),
                   Text(
                     headline.isEmpty ? 'Your neighbourhood shop' : headline,
                     maxLines: isStory ? 4 : 3,
@@ -1495,15 +1496,15 @@ class _PosterArtwork extends StatelessWidget {
                     style: TextStyle(
                       color: textColor,
                       height: 1.04,
-                      fontSize: isStory ? 34 : isMinimal ? 26 : 28,
+                      fontSize: isStory ? 34 : isSquare ? 21 : isMinimal ? 26 : 28,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  SizedBox(height: isStory ? 24 : 15),
+                  SizedBox(height: isStory ? 24 : isSquare ? 7 : 15),
                   if (hasProduct)
                     Container(
                       width: double.infinity,
-                      padding: EdgeInsets.all(isStory ? 17 : 13),
+                      padding: EdgeInsets.all(isStory ? 17 : isSquare ? 8 : 13),
                       decoration: BoxDecoration(
                         color: cardColor,
                         borderRadius: BorderRadius.circular(cornerRadius),
@@ -1542,7 +1543,7 @@ class _PosterArtwork extends StatelessWidget {
                                 Icon(
                                   Icons.local_mall_rounded,
                                   color: accentColor,
-                                  size: isStory ? 38 : 32,
+                                  size: isStory ? 38 : isSquare ? 23 : 32,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -1552,7 +1553,7 @@ class _PosterArtwork extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: textColor,
-                                      fontSize: isStory ? 18 : 15,
+                                      fontSize: isStory ? 18 : isSquare ? 11 : 15,
                                       height: 1.1,
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -1568,7 +1569,7 @@ class _PosterArtwork extends StatelessWidget {
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.w900,
-                                        fontSize: isStory ? 22 : 18,
+                                        fontSize: isStory ? 22 : isSquare ? 14 : 18,
                                       ),
                                     ),
                                   ),
@@ -1577,12 +1578,12 @@ class _PosterArtwork extends StatelessWidget {
                             ),
                     ),
                   if (hasOffer) ...[
-                    const SizedBox(height: 11),
+                    SizedBox(height: isSquare ? 6 : 11),
                     Container(
                       width: double.infinity,
                       padding: EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: isStory ? 13 : 9,
+                        vertical: isStory ? 13 : isSquare ? 5 : 9,
                       ),
                       decoration: BoxDecoration(
                         color: accentColor,
@@ -1596,7 +1597,7 @@ class _PosterArtwork extends StatelessWidget {
                           color: accentTextColor,
                           height: 1.15,
                           fontWeight: FontWeight.w900,
-                          fontSize: isStory ? 16 : 13,
+                          fontSize: isStory ? 16 : isSquare ? 10 : 13,
                         ),
                       ),
                     ),
@@ -1607,7 +1608,7 @@ class _PosterArtwork extends StatelessWidget {
                     visitLabel,
                     style: TextStyle(
                       color: mutedColor,
-                      fontSize: isStory ? 13 : 10.5,
+                      fontSize: isStory ? 13 : isSquare ? 8.5 : 10.5,
                       fontWeight: FontWeight.w900,
                       letterSpacing: isMinimal ? 0.9 : 1.4,
                     ),
@@ -1619,7 +1620,7 @@ class _PosterArtwork extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: isStory ? 15 : 12,
+                      fontSize: isStory ? 15 : isSquare ? 10 : 12,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -1630,14 +1631,17 @@ class _PosterArtwork extends StatelessWidget {
                       style: TextStyle(
                         color: mutedColor,
                         fontWeight: FontWeight.w700,
-                        fontSize: isStory ? 12 : 10,
+                        fontSize: isStory ? 12 : isSquare ? 8 : 10,
                       ),
                     ),
                   ],
                   const SizedBox(height: 5),
                   Text(
                     'Made with Retail Mind',
-                    style: TextStyle(color: mutedColor, fontSize: 8.5),
+                    style: TextStyle(
+                      color: mutedColor,
+                      fontSize: isSquare ? 7 : 8.5,
+                    ),
                   ),
                 ],
               ),
