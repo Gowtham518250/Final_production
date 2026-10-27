@@ -85,6 +85,25 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
         continue;
       }
 
+      final previousSourceFingerprint =
+          (previous['sourceEventFingerprint'] ?? '').toString();
+      final sourceFingerprint = event.sourceEventFingerprint;
+      if (sourceFingerprint != null &&
+          sourceFingerprint.isNotEmpty &&
+          sourceFingerprint == previousSourceFingerprint) {
+        final previousSourceReference =
+            (previous['reference'] ?? '').toString().trim();
+        if (reference != null &&
+            previousSourceReference.isNotEmpty &&
+            reference != previousSourceReference) {
+          // Reused notification identity with a different authoritative UTR:
+          // it is not the same transaction, even if the amount matches.
+          continue;
+        }
+        // Exact native notification post, same amount and direction.
+        return true;
+      }
+
       final previousReference =
           (previous['reference'] ?? '').toString().trim();
       if (reference != null || previousReference.isNotEmpty) {
@@ -166,6 +185,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       'payer': payer,
       'account': account,
       'text': text,
+      'sourceEventFingerprint': event.sourceEventFingerprint,
       'seenAt': now.toIso8601String(),
       'claimedChannels': <String>[],
     });
