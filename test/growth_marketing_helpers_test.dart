@@ -35,7 +35,7 @@ void main() {
       offerCode: 'RM123456',
     );
 
-    expect(telugu, contains('మా దగ్గరలోని').or(contains('మీ దగ్గరలోని')));
+    expect(telugu, contains('మీ దగ్గరలోని'));
     expect(telugu, contains('RM123456'));
     expect(hindi, contains('आपकी भरोसेमंद'));
     expect(hindi, contains('RM123456'));
