@@ -41,6 +41,11 @@ class PaymentEvent {
   /// Keep this separate from [timestamp], which records when Retail Mind
   /// processed the event and is used for live deduplication windows.
   final DateTime? sourceTimestamp;
+
+  /// Native notification identity from the listener plugin. It is carried
+  /// through background/foreground isolates so replayed notifications can be
+  /// idempotent even when those isolates have separate in-memory caches.
+  final String? sourceEventKey;
   final DateTime timestamp;
   final PaymentApp app;
 
@@ -80,6 +85,7 @@ class PaymentEvent {
     required this.amount,
     required this.timestamp,
     this.sourceTimestamp,
+    this.sourceEventKey,
     required this.app,
     this.payerName,
     this.referenceId,
@@ -188,6 +194,29 @@ class PaymentEvent {
       return 'utr_${sha256.convert(utf8.encode(reference))}';
     }
     return 'event_$id';
+  }
+
+  /// Stable identity of an Android notification post, ignoring only the
+  /// payload hash. The plugin's event key is package|notificationId|postTime
+  /// |payloadHash, so an updated payload for the same post still maps to the
+  /// same identity, while a newly posted notification gets a new post time.
+  String? get sourceEventIdentity {
+    final key = sourceEventKey?.trim();
+    if (key == null || key.isEmpty) return null;
+    final parts = key.split('|');
+    if (parts.length >= 4 &&
+        int.tryParse(parts[parts.length - 2]) != null) {
+      return parts.take(parts.length - 1).join('|');
+    }
+    return key;
+  }
+
+  /// Hashed identity is safe to persist in local payment history and the
+  /// cross-isolate announcement cache without storing notification contents.
+  String? get sourceEventFingerprint {
+    final identity = sourceEventIdentity;
+    if (identity == null || identity.isEmpty) return null;
+    return 'source_event_${sha256.convert(utf8.encode(identity))}';
   }
 
   static String _transactionDirection(String text) {
@@ -335,6 +364,7 @@ class PaymentEvent {
     double? amount,
     DateTime? timestamp,
     DateTime? sourceTimestamp,
+    String? sourceEventKey,
     PaymentApp? app,
     String? payerName,
     String? referenceId,
@@ -362,6 +392,7 @@ class PaymentEvent {
       amount: amount ?? this.amount,
       timestamp: timestamp ?? this.timestamp,
       sourceTimestamp: sourceTimestamp ?? this.sourceTimestamp,
+      sourceEventKey: sourceEventKey ?? this.sourceEventKey,
       app: app ?? this.app,
       payerName: payerName ?? this.payerName,
       referenceId: referenceId ?? this.referenceId,
@@ -396,6 +427,7 @@ class PaymentEvent {
     'timestamp': timestamp.toIso8601String(),
     if (sourceTimestamp != null)
       'sourceTimestamp': sourceTimestamp!.toIso8601String(),
+    if (sourceEventKey != null) 'sourceEventKey': sourceEventKey,
     'app': app.name,
     'payerName': payerName,
     'referenceId': referenceId,
@@ -428,6 +460,7 @@ class PaymentEvent {
     sourceTimestamp: json['sourceTimestamp'] == null
         ? null
         : DateTime.tryParse(json['sourceTimestamp'].toString()),
+    sourceEventKey: json['sourceEventKey']?.toString(),
     app: PaymentApp.values.firstWhere(
       (e) => e.name == json['app'],
       orElse: () => PaymentApp.unknown,
