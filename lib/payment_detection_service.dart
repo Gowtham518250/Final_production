@@ -2834,7 +2834,10 @@ class PaymentDetectionService {
   // A bank alert often arrives once as a notification and again as an SMS.
   /// A near-instant identical re-post by the same app is a replay, not a new
   /// payment. Anything later from the same channel is treated as a new payment.
-  static const Duration _sameChannelReplayWindow = Duration(seconds: 10);
+  // Accessibility emits repeated updates for a static payment screen. Keep
+  // the exact-text fallback long enough to coalesce those bursts; distinct
+  // native notification identities are explicitly exempted below.
+  static const Duration _sameChannelReplayWindow = Duration(minutes: 3);
 
   /// Two different apps (e.g. PhonePe + Truecaller mirror) reporting one payment.
   static const Duration _crossAppEchoWindow = Duration(minutes: 10);
@@ -5373,7 +5376,18 @@ class PaymentDetectionService {
       final oldChannel = _channelKey(old);
 
       if (oldChannel == channel) {
-        // Same app/channel: only a near-instant identical re-post is a replay.
+        final currentSourceFingerprint = event.sourceEventFingerprint;
+        final oldSourceFingerprint = old.sourceEventFingerprint;
+        if (currentSourceFingerprint != null &&
+            oldSourceFingerprint != null &&
+            currentSourceFingerprint != oldSourceFingerprint) {
+          // Different native notification posts are separate candidates even
+          // when the app reuses the same text and amount.
+          continue;
+        }
+        // Accessibility may re-emit a static screen repeatedly. Coalesce an
+        // exact-text replay for a short bounded period, but not distinct
+        // native notification posts whose stable IDs differ.
         if (age <= _sameChannelReplayWindow &&
             currentText == _echoText(old.rawText)) {
           PdsLogger.t('DROP', 'reason=same_channel_repost');
