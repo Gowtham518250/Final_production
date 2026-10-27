@@ -50,8 +50,12 @@ class GrowthAdCopy {
         parts.add('అందుబాటులో ఉంది: ' + product +
             (validPrice ? ' — ₹' + _money(price!) : ''));
       }
-      if (offerText.isNotEmpty) parts.add('ఆఫర్: ' + offerText);
-      parts.add('దుకాణాన్ని సందర్శించండి. ఆఫర్ కోడ్: ' + offerCode);
+      if (offerText.isNotEmpty) {
+        parts.add('ఆఫర్: ' + offerText);
+        parts.add('దుకాణాన్ని సందర్శించి ఆఫర్ కోడ్‌ను చెప్పండి: ' + offerCode);
+      } else {
+        parts.add('ఈరోజే మా దుకాణాన్ని సందర్శించండి.');
+      }
       return parts.join('\n');
     }
 
@@ -64,8 +68,12 @@ class GrowthAdCopy {
         parts.add('उपलब्ध उत्पाद: ' + product +
             (validPrice ? ' — ₹' + _money(price!) : ''));
       }
-      if (offerText.isNotEmpty) parts.add('ऑफ़र: ' + offerText);
-      parts.add('आज दुकान पर आएँ। ऑफ़र कोड: ' + offerCode);
+      if (offerText.isNotEmpty) {
+        parts.add('ऑफ़र: ' + offerText);
+        parts.add('दुकान पर आकर ऑफ़र कोड बताएँ: ' + offerCode);
+      } else {
+        parts.add('आज ही हमारी दुकान पर आएँ।');
+      }
       return parts.join('\n');
     }
 
@@ -77,8 +85,12 @@ class GrowthAdCopy {
       parts.add('Available: ' + product +
           (validPrice ? ' — ₹' + _money(price!) : ''));
     }
-    if (offerText.isNotEmpty) parts.add('Offer: ' + offerText);
-    parts.add('Visit us today. Offer code: ' + offerCode);
+    if (offerText.isNotEmpty) {
+      parts.add('Offer: ' + offerText);
+      parts.add('Visit us and mention offer code: ' + offerCode + '.');
+    } else {
+      parts.add('Visit us today.');
+    }
     return parts.join('\n');
   }
 
