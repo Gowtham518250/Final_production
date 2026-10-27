@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../language_provider.dart';
+import '../../../voice_billing_localization.dart';
 import '../controllers/sales_entry_provider.dart';
 import '../models/sales_item.dart';
 
@@ -217,8 +218,11 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          LiveTranslatedText(
-                            'In your language:',
+                          Text(
+                            VoiceBillingLocalization.label(
+                              'In your language:',
+                              selectedLocale.languageCode,
+                            ),
                             locale: selectedLocale,
                             style: GoogleFonts.poppins(
                               color: const Color(0xFF64748B),
