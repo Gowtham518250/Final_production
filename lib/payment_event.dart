@@ -101,7 +101,10 @@ class PaymentEvent {
     this.version = 1,
     DateTime? updatedAt,
     String? id,
-    this.decision = PaymentDecision.confirmed,
+    // Detection events are provisional unless the classifier explicitly
+    // supplies a confirmed decision. A missing field must never imply proof
+    // of settlement when decoding a legacy or partially populated payload.
+    this.decision = PaymentDecision.likely,
   }) : id = id ?? _genId(),
        updatedAt = updatedAt ?? DateTime.now();
 
@@ -453,7 +456,7 @@ class PaymentEvent {
     ),
     decision: PaymentDecision.values.firstWhere(
       (e) => e.name == json['decision'],
-      orElse: () => PaymentDecision.confirmed,
+      orElse: () => PaymentDecision.likely,
     ),
     saleId: json['sale_id'],
     version: json['version'] ?? 1,

@@ -687,8 +687,13 @@ class _DashboardPageState extends State<DashboardPage>
         // into a statement that money was received.
         final merchantVerifiedCredit =
             isIncomingCredit && event.isMerchantConfirmed;
+        final autoAcceptedCredit =
+            isIncomingCredit &&
+            event.decision == PaymentDecision.confirmed &&
+            !event.isMerchantConfirmed;
         final needsMerchantConfirmation =
             isIncomingCredit &&
+            event.decision == PaymentDecision.likely &&
             !event.isMerchantConfirmed &&
             !event.isDuplicate &&
             !event.hasReferenceConflict;
@@ -713,9 +718,11 @@ class _DashboardPageState extends State<DashboardPage>
                 : 'Payment Detected',
             merchantVerifiedCredit
                 ? activity
-                : needsConflictReview
-                ? '$activity — conflicting details; verify in your bank history.'
-                : '$activity — verify before recording.',
+                 : needsConflictReview
+                 ? '$activity — conflicting details; verify in your bank history.'
+                 : autoAcceptedCredit
+                 ? '$activity — automatically accepted as a detection; invoice totals stay unchanged.'
+                 : '$activity — verify before recording.',
             merchantVerifiedCredit,
             localOnly: true,
             // The voice queue intentionally rejects duplicate/conflict events.

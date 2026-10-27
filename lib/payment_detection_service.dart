@@ -187,8 +187,10 @@ class PaymentUiState {
     final from = payerName != null ? ' from $payerName' : '';
     switch (decision) {
       case PaymentDecision.confirmed:
-        final check = isUserConfirmed ? ' ✓' : '';
-        return '✅ ₹${_fmt(amount)}$from received$check · $timeAgo';
+        if (!isUserConfirmed) {
+          return 'ℹ️ ₹${_fmt(amount)}$from detected automatically · $timeAgo';
+        }
+        return '✅ ₹${_fmt(amount)}$from received ✓ · $timeAgo';
       case PaymentDecision.likely:
         if (isUserConfirmed)
           return '✅ ₹${_fmt(amount)}$from confirmed · $timeAgo';
@@ -203,20 +205,22 @@ class PaymentUiState {
   String voiceText(VoiceLanguage lang) {
     if (isFailed) return VoiceBuilder.failed(amount, lang);
     if (isPartial) {
-      return decision == PaymentDecision.likely
-          ? VoiceBuilder.partialDetected(amount, shortfall ?? 0, lang)
-          : VoiceBuilder.partial(amount, shortfall ?? 0, lang);
+      return decision == PaymentDecision.confirmed && isUserConfirmed
+          ? VoiceBuilder.partial(amount, shortfall ?? 0, lang)
+          : VoiceBuilder.partialDetected(amount, shortfall ?? 0, lang);
     }
 
     final direction = VoiceBuilder.detectDirection(rawText);
     switch (decision) {
       case PaymentDecision.confirmed:
-        return VoiceBuilder.receivedDirectional(
-          amount,
-          payerName,
-          lang,
-          direction,
-        );
+        return isUserConfirmed
+            ? VoiceBuilder.receivedDirectional(
+                amount,
+                payerName,
+                lang,
+                direction,
+              )
+            : VoiceBuilder.detectedDirectional(amount, lang, direction);
       case PaymentDecision.likely:
         return VoiceBuilder.detectedDirectional(amount, lang, direction);
       case PaymentDecision.rejected:
@@ -3219,7 +3223,8 @@ class PaymentDetectionService {
   }
 
   /// A device notification or SMS can alert the merchant, but cannot prove
-  /// funds settled. Automatically detected events stay pending for review.
+  /// funds settled. High-confidence events may be auto-accepted as detector
+  /// observations, but only merchant-confirmed events may settle an invoice.
   static PaymentEvent requireMerchantConfirmation(PaymentEvent event) {
     // Persisted reference conflicts always remain review-only, even if a
     // stale callback claims the event had previously been confirmed.
@@ -3239,6 +3244,15 @@ class PaymentDetectionService {
       );
     }
     if (event.isMerchantConfirmed && isSafeIncomingCredit(event)) return event;
+    // Keep the detector's high-confidence outcome distinct from merchant
+    // confirmation. A forged source suffix is never accepted as proof of a
+    // merchant action.
+    if (event.decision == PaymentDecision.confirmed &&
+        event.verificationStatus == PaymentVerificationStatus.unverified &&
+        !event.detectionSource.contains(':merchant_confirmed') &&
+        isSafeIncomingCredit(event)) {
+      return event;
+    }
     if (event.decision == PaymentDecision.likely) {
       return event.copyWith(
         verificationStatus: PaymentVerificationStatus.unverified,
@@ -5513,10 +5527,15 @@ class PaymentDetectionService {
       direction: event.direction,
     );
 
+    final decisionLabel = event.isMerchantConfirmed
+        ? 'MERCHANT_CONFIRMED'
+        : event.decision == PaymentDecision.confirmed
+        ? 'AUTO_ACCEPTED'
+        : event.decision.name;
     PdsLogger.i(
       'EMIT',
-      '${event.decision == PaymentDecision.confirmed ? "✅" : "⚠️"} '
-          '₹${event.amount} ${event.decision.name} '
+      '${event.isMerchantConfirmed ? "✅" : event.decision == PaymentDecision.confirmed ? "ℹ️" : "⚠️"} '
+          '₹${event.amount} $decisionLabel '
           'conf=${event.confidenceScore.toStringAsFixed(2)} '
           'src=${event.detectionSource}',
     );
@@ -5527,7 +5546,7 @@ class PaymentDetectionService {
     // V26: Deduplicate history entries by ID (In-place update)
     history.addOrUpdate(ui);
 
-    if (event.decision == PaymentDecision.confirmed) _lastConfirmed = event;
+    if (event.isMerchantConfirmed) _lastConfirmed = event;
 
     // Await auto-settlement check
     final matchedSaleId =

@@ -169,7 +169,7 @@ void main() {
               .having(
                 (payment) => payment.decision,
                 'decision',
-                PaymentDecision.likely,
+                PaymentDecision.confirmed,
               ),
         ),
       );
@@ -827,7 +827,7 @@ void main() {
     );
 
     test(
-      'automatically detected notifications always require confirmation',
+      'high-confidence detections stay auto-accepted without merchant proof',
       () {
         final notification = PaymentEvent(
           amount: 250,
@@ -841,7 +841,8 @@ void main() {
           notification,
         );
 
-        expect(pending.decision, PaymentDecision.likely);
+        expect(pending.decision, PaymentDecision.confirmed);
+        expect(pending.isMerchantConfirmed, isFalse);
       },
     );
 
