@@ -153,6 +153,80 @@ class OnlinePaymentHistoryService {
     return single.isEmpty ? <String>[] : <String>[single];
   }
 
+  static String? _sourceIdentityKey(String prefix, PaymentEvent event) {
+    final fingerprint = event.sourceEventFingerprint;
+    return fingerprint == null ? null : '$prefix$fingerprint';
+  }
+
+  /// Only exact native notification identity plus matching financial direction
+  /// and amount can replay the same history row. Amount/time alone never merge.
+  static bool _matchesSourceEvent(
+    Map<String, dynamic> entry,
+    PaymentEvent event,
+  ) {
+    final sourceFingerprint = event.sourceEventFingerprint;
+    if (sourceFingerprint == null ||
+        entry['source_event_fingerprint'] != sourceFingerprint) {
+      return false;
+    }
+
+    final oldAmount = (entry['amount'] as num?)?.toDouble();
+    if (oldAmount == null ||
+        !oldAmount.isFinite ||
+        (oldAmount - event.amount).abs() >= 0.01) {
+      return false;
+    }
+
+    final oldDirection = (entry['direction'] ?? 'unknown').toString();
+    final newDirection = _historyDirection(event);
+    if (oldDirection != 'unknown' &&
+        newDirection != 'unknown' &&
+        oldDirection != newDirection) {
+      return false;
+    }
+
+    final oldReference = (entry['reference_id'] ?? '').toString().trim();
+    final newReference = event.normalizedReferenceId;
+    if (oldReference.isNotEmpty &&
+        newReference != null &&
+        oldReference != newReference) {
+      return false;
+    }
+    return true;
+  }
+
+  static Future<void> _attachReferenceToSourceRow(
+    SharedPreferences prefs,
+    String prefix,
+    String canonicalKey,
+    Map<String, dynamic> entry,
+    PaymentEvent event,
+  ) async {
+    final reference = event.normalizedReferenceId;
+    if (reference == null) return;
+    final oldReference = (entry['reference_id'] ?? '').toString().trim();
+    if (oldReference.isNotEmpty && oldReference != reference) return;
+
+    final updated = <String, dynamic>{
+      ...entry,
+      'reference_id': reference,
+      'source_event_fingerprint': event.sourceEventFingerprint,
+    };
+    await prefs.setString(canonicalKey, jsonEncode(updated));
+    final transactionFingerprint =
+        sha256.convert(utf8.encode(event.fingerprint)).toString();
+    final incomingReferenceKey = '$prefix$transactionFingerprint';
+    if (incomingReferenceKey != canonicalKey) {
+      await _writeAlias(
+        prefs,
+        incomingReferenceKey,
+        canonicalKey,
+        reference: reference,
+        replaceExisting: true,
+      );
+    }
+  }
+
   static String? _legacyAppKey(Map<String, dynamic> entry) {
     switch ((entry['app'] ?? '').toString().trim().toLowerCase()) {
       case 'phonepe':
