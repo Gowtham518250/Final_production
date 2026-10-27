@@ -101,6 +101,60 @@ void main() {
     },
   );
 
+  test(
+    'repeated accessibility text is coalesced but another payment remains eligible',
+    () async {
+      final now = DateTime.now();
+      final first = _event(
+        id: 'accessibility-first',
+        timestamp: now,
+        source: 'accessibility',
+        app: PaymentApp.phonePe,
+        rawText: 'You received ₹3 from Ravi',
+        amount: 3,
+      );
+      final repeatedScreenEvent = _event(
+        id: 'accessibility-repeat',
+        timestamp: now.add(const Duration(seconds: 45)),
+        source: 'accessibility',
+        app: PaymentApp.phonePe,
+        rawText: 'You received ₹3 from Ravi',
+        amount: 3,
+      );
+      final distinctPayment = _event(
+        id: 'accessibility-another-payment',
+        timestamp: now.add(const Duration(minutes: 4)),
+        source: 'accessibility',
+        app: PaymentApp.phonePe,
+        rawText: 'You received ₹3 from Meena',
+        amount: 3,
+        payerName: 'Meena',
+      );
+
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          first,
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          repeatedScreenEvent,
+          now: now.add(const Duration(seconds: 45)),
+        ),
+        isTrue,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          distinctPayment,
+          now: now.add(const Duration(minutes: 4)),
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('one notification and its SMS echo are announced once without UTR', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
     final notification = _event(
