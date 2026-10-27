@@ -1987,6 +1987,21 @@ class PriorityVoiceQueue {
 
   VoiceLanguage get _lang => getLanguage?.call() ?? VoiceLanguage.english;
 
+  /// Clears short-lived voice deduplication state for deterministic tests.
+  /// PaymentDetectionService is a singleton, so this state otherwise survives
+  /// between tests that reuse the service.
+  @visibleForTesting
+  void debugResetTransientState() {
+    _timer?.cancel();
+    _timer = null;
+    _queue.clear();
+    _recentTs.clear();
+    _lastAt = null;
+    _spokenFps.clear();
+    _recentPayments.clear();
+    _echoClaims.clear();
+  }
+
   // Spoken fingerprints with expiry — blocks any repeat within 5 minutes.
   // Using a Map<fp, expiry> instead of a single string so that:
   //   - Multiple different payments are tracked (not just the last one)
@@ -2029,7 +2044,10 @@ class PriorityVoiceQueue {
       if (event.id == old.id) return true;
 
       final priorReference = old.normalizedReferenceId;
-      if (currentReference != null && priorReference != null) {
+      if (currentReference != null || priorReference != null) {
+        // If either event has a reference, amount/account similarity alone
+        // cannot prove that the other event describes the same transfer.
+        if (currentReference == null || priorReference == null) continue;
         if (currentReference != priorReference ||
             event.hasReferenceConflictWith(old)) {
           // Different authoritative references must never be collapsed.
@@ -2954,6 +2972,7 @@ class PaymentDetectionService {
     _pendingBuffer.dispose();
     billContext.clear();
     history.clear();
+    _voice.debugResetTransientState();
   }
 
   // Watchdog heartbeat, exposed read-only so the dashboard can show a
@@ -5336,7 +5355,10 @@ class PaymentDetectionService {
       }
 
       final oldReference = old.normalizedReferenceId;
-      if (currentReference != null && oldReference != null) {
+      if (currentReference != null || oldReference != null) {
+        // A reference on only one side is not enough evidence to pair two
+        // payments by amount/direction/account alone.
+        if (currentReference == null || oldReference == null) continue;
         // Different references mean different transfers; never merge those.
         if (currentReference != oldReference) continue;
         if (event.hasReferenceConflictWith(old)) continue;
