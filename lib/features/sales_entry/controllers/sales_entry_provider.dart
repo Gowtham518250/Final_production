@@ -24,6 +24,9 @@ class SalesEntryProvider extends ChangeNotifier {
   bool isGeneratingBill = false;
   bool isVoiceProcessing = false;
   String? lastVoiceMessage;
+  String? lastVoiceTranscript;
+  String? lastVoiceInterpretation;
+  List<SalesItem> lastVoiceDetectedItems = <SalesItem>[];
 
   final TextEditingController customerPhoneController = TextEditingController();
   final TextEditingController customerNameController = TextEditingController();
@@ -126,6 +129,9 @@ class SalesEntryProvider extends ChangeNotifier {
 
     isVoiceProcessing = true;
     lastVoiceMessage = null;
+    lastVoiceTranscript = transcript;
+    lastVoiceInterpretation = null;
+    lastVoiceDetectedItems = <SalesItem>[];
     notifyListeners();
 
     try {
@@ -247,6 +253,9 @@ class SalesEntryProvider extends ChangeNotifier {
   }) async {
     isVoiceProcessing = true;
     lastVoiceMessage = null;
+    lastVoiceTranscript = null;
+    lastVoiceInterpretation = null;
+    lastVoiceDetectedItems = <SalesItem>[];
     notifyListeners();
 
     try {
@@ -301,6 +310,13 @@ class SalesEntryProvider extends ChangeNotifier {
   }
 
   void _applyVoiceBillingPayload(Map<String, dynamic> decoded) {
+    final decodedTranscript = (decoded['transcript'] ?? '').toString().trim();
+    if (decodedTranscript.isNotEmpty) {
+      lastVoiceTranscript = decodedTranscript;
+    }
+    final interpreted = (decoded['interpreted_text_en'] ?? '').toString().trim();
+    lastVoiceInterpretation = interpreted.isEmpty ? null : interpreted;
+
     final rawItems = decoded['items'];
     final parsedItems = <SalesItem>[];
     final priceWarningProducts = <String>[];
@@ -360,6 +376,7 @@ class SalesEntryProvider extends ChangeNotifier {
       }
     }
 
+    lastVoiceDetectedItems = List<SalesItem>.unmodifiable(parsedItems);
     if (parsedItems.isNotEmpty) _appendVoiceDraftItems(parsedItems);
 
     final clarification = (decoded['clarification_question'] ?? '').toString().trim();
@@ -375,8 +392,8 @@ class SalesEntryProvider extends ChangeNotifier {
         if (missingPriceProducts.isNotEmpty)
           'Enter a selling price for: ${missingPriceProducts.take(4).join(', ')} before saving.',
       ].join(' ');
-      final transcript = (decoded['transcript'] ?? '').toString().trim();
-      final english = (decoded['interpreted_text_en'] ?? '').toString().trim();
+      final transcript = lastVoiceTranscript ?? '';
+      final english = lastVoiceInterpretation ?? '';
       final heardPrefix = transcript.isEmpty ? '' : 'Heard: "$transcript". ';
       final englishPrefix = english.isEmpty ? '' : 'English: "$english". ';
       final confirmation =
