@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'live_translation_web.dart'
     if (dart.library.io) 'live_translation_native.dart' as platform;
 import 'device_capability_service.dart';
+import 'dynamic_translation_load_policy.dart';
 
 /// Translates dynamic display strings with a small bounded queue.
 /// Duplicate strings are coalesced and requests are batched to avoid a remote
@@ -56,6 +57,16 @@ class LiveTranslationService {
 
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
+
+    // Local dictionary-backed UI copy never reaches this queue. Bound the
+    // remaining dynamic strings so a large screen cannot enqueue hundreds of
+    // remote/on-device translation tasks on a low-memory phone.
+    if (!DynamicTranslationLoadPolicy.shouldAccept(
+      pendingUniqueRequests: _inFlight.length,
+      lowEndDevice: DeviceCapabilityService.instance.isLowEndDevice,
+    )) {
+      return Future<String>.value(text);
+    }
 
     final completer = Completer<String>();
     _inFlight[key] = completer.future;
