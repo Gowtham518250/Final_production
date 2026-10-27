@@ -4227,6 +4227,7 @@ class PaymentDetectionService {
   // current detection timestamps, not hours-old timestamps from queued events.
   DateTime? _sourcePostedAt;
   String? _sourceEventKey;
+  bool _sourceNativeAnnouncementHandled = false;
   final Map<String, DateTime> _lateEventTimes = <String, DateTime>{};
 
   /// Original source time for an event recovered after a service interruption.
@@ -4260,11 +4261,13 @@ class PaymentDetectionService {
       () => (event as dynamic).eventKey as String?,
     )?.trim();
     _sourcePostedAt = postedAtFromEventKey(_sourceEventKey);
+    _sourceNativeAnnouncementHandled = event.nativeAnnouncementHandled == true;
     try {
       _handleNotificationCore(event);
     } finally {
       _sourcePostedAt = null;
       _sourceEventKey = null;
+      _sourceNativeAnnouncementHandled = false;
     }
   }
 
@@ -5475,6 +5478,14 @@ class PaymentDetectionService {
     bool forceMute = false,
   }) async {
     event = requireMerchantConfirmation(event);
+    // Preserve the native fallback marker as payment events cross isolates.
+    // Classification/history still run, but later Flutter speech/alerts are muted.
+    if (_sourceNativeAnnouncementHandled && _sourceEventKey != null) {
+      event = event.copyWith(
+        sourceEventKey: event.sourceEventKey ?? _sourceEventKey,
+        nativeAnnouncementHandled: true,
+      );
+    }
 
     // Durable history can classify a replay before forwarding it from the
     // background isolate. Do not publish that duplicate to UI/history/voice.
@@ -5653,14 +5664,14 @@ class PaymentDetectionService {
     _uiCtrl.add(finalUi);
 
     // Voice Rule: Bill settlement message PREVENTS standard amount voice
-    if (isSettled && !forceMute) {
+    if (isSettled && !forceMute && !finalEvent.nativeAnnouncementHandled) {
       final t = VoiceBuilder.received(finalEvent.amount, null, _voiceLanguage);
       _voice.enqueueRaw(
         'Payment Confirmed. $t',
         _VP.high,
         fingerprint: finalEvent.fingerprint,
       );
-    } else if (!forceMute) {
+    } else if (!forceMute && !finalEvent.nativeAnnouncementHandled) {
       _voice.enqueue(finalEvent, finalUi);
     }
 

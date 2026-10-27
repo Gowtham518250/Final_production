@@ -46,6 +46,8 @@ class PaymentEvent {
   /// through background/foreground isolates so replayed notifications can be
   /// idempotent even when those isolates have separate in-memory caches.
   final String? sourceEventKey;
+  /// True when the native Android fallback already announced this source event.
+  final bool nativeAnnouncementHandled;
   final DateTime timestamp;
   final PaymentApp app;
 
@@ -86,6 +88,7 @@ class PaymentEvent {
     required this.timestamp,
     this.sourceTimestamp,
     this.sourceEventKey,
+    this.nativeAnnouncementHandled = false,
     required this.app,
     this.payerName,
     this.referenceId,
@@ -365,6 +368,7 @@ class PaymentEvent {
     DateTime? timestamp,
     DateTime? sourceTimestamp,
     String? sourceEventKey,
+    bool? nativeAnnouncementHandled,
     PaymentApp? app,
     String? payerName,
     String? referenceId,
@@ -393,6 +397,7 @@ class PaymentEvent {
       timestamp: timestamp ?? this.timestamp,
       sourceTimestamp: sourceTimestamp ?? this.sourceTimestamp,
       sourceEventKey: sourceEventKey ?? this.sourceEventKey,
+      nativeAnnouncementHandled: nativeAnnouncementHandled ?? this.nativeAnnouncementHandled,
       app: app ?? this.app,
       payerName: payerName ?? this.payerName,
       referenceId: referenceId ?? this.referenceId,
@@ -428,6 +433,7 @@ class PaymentEvent {
     if (sourceTimestamp != null)
       'sourceTimestamp': sourceTimestamp!.toIso8601String(),
     if (sourceEventKey != null) 'sourceEventKey': sourceEventKey,
+    'nativeAnnouncementHandled': nativeAnnouncementHandled,
     'app': app.name,
     'payerName': payerName,
     'referenceId': referenceId,
@@ -461,6 +467,7 @@ class PaymentEvent {
         ? null
         : DateTime.tryParse(json['sourceTimestamp'].toString()),
     sourceEventKey: json['sourceEventKey']?.toString(),
+    nativeAnnouncementHandled: json['nativeAnnouncementHandled'] == true,
     app: PaymentApp.values.firstWhere(
       (e) => e.name == json['app'],
       orElse: () => PaymentApp.unknown,

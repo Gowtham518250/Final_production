@@ -141,6 +141,8 @@ public class NotificationListener extends NotificationListenerService {
             intent.putExtra(NotificationConstants.HAVE_EXTRA_PICTURE, false);
         }
         sendBroadcast(intent);
+        // If no Flutter listener acknowledges this queued event, announce it natively.
+        NativePaymentAnnouncementFallback.schedule(this, eventKey);
     }
 
 
