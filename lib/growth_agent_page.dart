@@ -172,18 +172,22 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       }
 
       var products = <Map<String, dynamic>>[];
+      var remoteInventorySucceeded = false;
       try {
         final response = await ApiClient.getJson(
           ApiClient.inventoryPrefix + '/products?skip=0&limit=1000',
         ).timeout(const Duration(seconds: 12));
         if (response.statusCode == 200) {
+          remoteInventorySucceeded = true;
           products = _parseProducts(jsonDecode(response.body));
         }
       } catch (_) {
         // Inventory may be offline; use the already-cached product list.
       }
 
-      if (products.isEmpty) {
+      // An authoritative empty server response must not resurrect stale
+      // cached products (which could be out of stock or have an old price).
+      if (!remoteInventorySucceeded && products.isEmpty) {
         try {
           final cached = await LocalStorageService.loadBackendProducts();
           products = _parseProducts(cached);
@@ -192,7 +196,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         }
       }
 
-      if (products.isEmpty) {
+      if (!remoteInventorySucceeded && products.isEmpty) {
         try {
           final local = await LocalStorageService.loadLocalProducts();
           products = _parseProducts(local.entries.map((entry) {
