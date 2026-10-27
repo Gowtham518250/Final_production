@@ -431,6 +431,43 @@ void main() {
     },
   );
 
+
+  test(
+    'does not merge a new same-amount same-app notification into an existing UTR',
+    () async {
+      final now = DateTime.now();
+      await OnlinePaymentHistoryService.recordIncomingPayment(event(
+        id: 'previous-five',
+        amount: 5,
+        referenceId: 'UTR-PREVIOUS-5551',
+        app: PaymentApp.phonePe,
+        detectionSource: 'notification',
+        rawText: 'You received Rs 5 from Ravi',
+        timestamp: now,
+        sourceTimestamp: now,
+      ));
+
+      await OnlinePaymentHistoryService.recordIncomingPayment(event(
+        id: 'new-five',
+        amount: 5,
+        referenceId: null,
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        app: PaymentApp.phonePe,
+        detectionSource: 'notification',
+        rawText: 'You received Rs 5 from Ravi',
+        timestamp: now.add(const Duration(seconds: 2)),
+        sourceTimestamp: now.add(const Duration(seconds: 2)),
+      ));
+
+      final rows = await OnlinePaymentHistoryService.load();
+      expect(rows, hasLength(2));
+      expect(rows.where((row) => row['reference_id'] != null), hasLength(1));
+      expect(rows.map((row) => (row['amount'] as num).toDouble()).toList(),
+          everyElement(5.0));
+    },
+  );
+
   test('does not store rejected or outgoing payments', () async {
     expect(
       await OnlinePaymentHistoryService.recordIncomingPayment(
