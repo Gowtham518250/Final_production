@@ -11,6 +11,7 @@ PaymentEvent _event({
   required PaymentApp app,
   double amount = 500,
   String? referenceId,
+  String? sourceEventKey,
   String? payerName,
   String? accountSuffix,
   PaymentTransactionDirection direction =
@@ -22,6 +23,7 @@ PaymentEvent _event({
     timestamp: timestamp,
     app: app,
     referenceId: referenceId,
+    sourceEventKey: sourceEventKey,
     payerName: payerName,
     accountSuffix: accountSuffix,
     rawText: rawText,
@@ -37,6 +39,67 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  test(
+    'same native notification version cannot be announced twice across isolates',
+    () async {
+      final now = DateTime.now();
+      final postedAt = now.millisecondsSinceEpoch;
+      final first = _event(
+        id: 'phonepe-first',
+        timestamp: now,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'You received ₹2 from a customer',
+        amount: 2,
+        sourceEventKey: 'com.phonepe.app|42|$postedAt|first-hash',
+      );
+      final updatedReplay = _event(
+        id: 'phonepe-replay',
+        timestamp: now.add(const Duration(seconds: 18)),
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹2',
+        amount: 2,
+        // Android may change the content hash while updating the same post.
+        sourceEventKey: 'com.phonepe.app|42|$postedAt|updated-hash',
+      );
+      final distinctPayment = _event(
+        id: 'phonepe-distinct-payment',
+        timestamp: now.add(const Duration(seconds: 25)),
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹2',
+        amount: 2,
+        sourceEventKey:
+            'com.phonepe.app|43|${postedAt + 25000}|new-notification-hash',
+      );
+
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          first,
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          updatedReplay,
+          now: now.add(const Duration(seconds: 18)),
+        ),
+        isTrue,
+      );
+      // Same amount and similar text are not enough: a different native
+      // notification ID/post time is a separate payment candidate.
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          distinctPayment,
+          now: now.add(const Duration(seconds: 25)),
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('one notification and its SMS echo are announced once without UTR', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
