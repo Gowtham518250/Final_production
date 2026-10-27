@@ -2221,6 +2221,120 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  Widget _buildGrowMyShopCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const accent = Color(0xFF6D4AE8);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, '/growth-agent'),
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? const [Color(0xFF211B3D), Color(0xFF31215A)]
+                  : const [Color(0xFFF6F2FF), Color(0xFFEEE8FF)],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: accent.withValues(alpha: isDark ? 0.52 : 0.24),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: isDark ? 0.06 : 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.campaign_rounded,
+                  color: Colors.white,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: LiveTranslatedText(
+                            'Grow My Shop',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF30205F),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'FREE',
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF166534),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    LiveTranslatedText(
+                      'Create a shop poster and share your offers with customers.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        height: 1.4,
+                        color: isDark
+                            ? Colors.white70
+                            : const Color(0xFF62577D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_rounded,
+                color: isDark ? const Color(0xFFC4B5FD) : accent,
+                size: 21,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildOnlineStoreStatusCard() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -15911,6 +16025,8 @@ class _DashboardPageState extends State<DashboardPage>
                 // through Shop Modules.
                 if (!_isStaffMode) ...[
                   _buildOnlineStoreStatusCard(),
+                  const SizedBox(height: 10),
+                  _buildGrowMyShopCard(),
                   const SizedBox(height: 16),
                 ],
 
