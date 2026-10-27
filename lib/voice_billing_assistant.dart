@@ -929,6 +929,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       'selected': 'ఎంచుకున్నారు',
       'Clear': 'తొలగించండి',
       'Add to Bill': 'బిల్లులో చేర్చండి',
+      'No items were identified. Try again or enter the items manually.':
+          'వస్తువులు గుర్తించబడలేదు. మళ్లీ మాట్లాడండి లేదా వస్తువులను చేతితో నమోదు చేయండి.',
     },
   };
 
@@ -2248,10 +2250,12 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           ),
           GuidedDictationExclusion(child: _buildTranscriptBox()),
           _buildMicButton(),
-          if (ParsedItems.isNotEmpty) ...[
+          if (ParsedItems.isNotEmpty ||
+              _parseWarnings.isNotEmpty ||
+              _interpretedText.trim().isNotEmpty) ...[
             const Divider(color: Color(0xFF2A3A5C), height: 1),
             GuidedDictationExclusion(child: _buildParsedItems()),
-            _buildConfirmBar(),
+            if (ParsedItems.isNotEmpty) _buildConfirmBar(),
           ],
         ],
       ),
@@ -2683,6 +2687,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               letterSpacing: 1.5,
             )),
         ),
+        if (ParsedItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: LiveTranslatedText(
+              _voiceBillingLabel(
+                'No items were identified. Try again or enter the items manually.',
+              ),
+              locale: _selectedDisplayLocale,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF64748B),
+                fontSize: 11.5,
+                height: 1.4,
+              ),
+            ),
+          ),
         ...ParsedItems.asMap().entries.map((e) => _buildItemCard(e.key, e.value)),
       ],
     );
