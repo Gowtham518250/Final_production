@@ -341,7 +341,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         throw StateError('Advertisement preview is not ready yet.');
       }
 
-      final pixelRatio = math.max(2.0, MediaQuery.of(context).devicePixelRatio);
+      final pixelRatio = math.max(2.0, MediaQuery.of(context).devicePixelRatio).toDouble();
       final image = await renderObject.toImage(pixelRatio: pixelRatio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
@@ -584,6 +584,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           TextField(
             controller: _shopController,
             textCapitalization: TextCapitalization.words,
+            onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               labelText: 'Shop name',
               prefixIcon: Icon(Icons.storefront_rounded),
@@ -654,7 +655,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                   ? 'No in-stock products loaded. You can still create a general shop ad.'
                   : _products.length.toString() + ' in-stock products available',
             ),
-            items: _products.asMap().entries.map((entry) {
+            items: <DropdownMenuItem<String>>[
+              const DropdownMenuItem<String>(
+                value: '',
+                child: Text('General shop ad — no specific product'),
+              ),
+              ..._products.asMap().entries.map((entry) {
               final product = entry.value;
               final key = _productKey(product, entry.key);
               final price = _number(product['unit_price']);
@@ -670,7 +676,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                   overflow: TextOverflow.ellipsis,
                 ),
               );
-            }).toList(),
+            }),
+            ],
             onChanged: _busy || _products.isEmpty
                 ? null
                 : (value) => setState(() => _selectedProductKey = value),
@@ -679,6 +686,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           TextField(
             controller: _offerController,
             textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() {}),
             maxLength: 90,
             decoration: const InputDecoration(
               labelText: 'Offer details (optional)',
@@ -739,7 +747,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final price = _currentDraft!['product_price'] is num
         ? (_currentDraft!['product_price'] as num).toDouble()
         : null;
-    final width = math.min(360.0, MediaQuery.of(context).size.width - 48.0);
+    final width = math.min(360.0, MediaQuery.of(context).size.width - 48.0).toDouble();
     return Center(
       child: RepaintBoundary(
         key: _posterKey,
