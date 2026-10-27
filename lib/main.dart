@@ -47,6 +47,7 @@ import 'screens/owner/online_shopping_config_page.dart';
 import 'screens/owner/online_store_hub_page.dart';
 import 'online_store_manager_page.dart';
 import 'retail_growth_suite_page.dart';
+import 'growth_agent_page.dart';
 import 'reset_password_page.dart';
 import 'responsive.dart';
 import 'language_provider.dart';
@@ -1915,6 +1916,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                             const OnlineStoreHubPage(),
                         '/retail-growth': (context) =>
                             const RetailGrowthSuitePage(),
+                        '/growth-agent': (context) => const GrowthAgentPage(),
                         '/online-store-manager': (context) =>
                             const OnlineStoreManagerPage(),
                         '/online-orders': (context) => const OnlineOrdersTab(),
