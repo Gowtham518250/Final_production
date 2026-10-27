@@ -88,6 +88,14 @@ final class NativePaymentAnnouncementFallback {
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
             "(?:₹\\s*|\\bINR\\s*|\\bRs\\.?\\s*)([0-9][0-9,]*(?:\\.[0-9]{1,2})?)",
             Pattern.CASE_INSENSITIVE);
+    // Only cross-source suppress when the notification exposes a transaction reference.
+    // Never deduplicate native announcements by amount alone: two customers can pay
+    // the same amount at nearly the same time.
+    private static final Pattern REFERENCE_PATTERN = Pattern.compile(
+            "(?:\\b(?:utr|rrn|ref(?:erence)?|txn|transaction\\s*(?:id|no\\.?|number)|upi\\s*(?:ref(?:erence)?|txn|transaction))\\b\\s*(?:(?:no\\.?|number|id)\\b\\s*)?[:#=\\-]?\\s*)([A-Z0-9]{8,30})",
+            Pattern.CASE_INSENSITIVE);
+    private static final long REFERENCE_DEDUP_TTL_MS = 2 * 60 * 1000L;
+
     private static final Pattern CREDIT_PATTERN = Pattern.compile(
             "\\b(?:credited|received|deposited|cashback received|money received|credit to your account)\\b",
             Pattern.CASE_INSENSITIVE);
@@ -165,7 +173,76 @@ final class NativePaymentAnnouncementFallback {
         String english = credit
                 ? "Payment notification reports " + amount + " rupees received. Please verify in your bank or UPI app."
                 : "Payment notification reports " + amount + " rupees debited. Please verify in your bank or UPI app.";
-        return new Announcement(phrase, english, lang);
+        Matcher referenceMatcher = REFERENCE_PATTERN.matcher(raw);
+        String referenceId = referenceMatcher.find()
+                ? referenceMatcher.group(1).replaceAll("[^A-Z0-9]", "").toUpperCase(Locale.ROOT)
+                : null;
+        return new Announcement(phrase, english, lang, referenceId);
+    }
+
+    /**
+     * Returns true only when this exact transaction reference was already
+     * announced within the short native fallback window. Amount-only events
+     * are intentionally not cross-source deduplicated.
+     */
+    private static boolean wasReferenceRecentlyAnnounced(Context context, String referenceId) {
+        if (referenceId == null || referenceId.isEmpty()) return false;
+        SharedPreferences prefs = context.getSharedPreferences(
+                "retailmind_native_payment_dedup", Context.MODE_PRIVATE);
+        synchronized (LOCK) {
+            try {
+                org.json.JSONObject stored = new org.json.JSONObject(
+                        prefs.getString("announced_references", "{}"));
+                org.json.JSONObject kept = new org.json.JSONObject();
+                boolean duplicate = false;
+                long now = System.currentTimeMillis();
+                java.util.Iterator<String> keys = stored.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    long at = stored.optLong(key, 0L);
+                    if (at > 0L && now >= at && now - at <= REFERENCE_DEDUP_TTL_MS) {
+                        kept.put(key, at);
+                        if (key.equals(referenceId)) duplicate = true;
+                    }
+                }
+                prefs.edit().putString("announced_references", kept.toString()).commit();
+                return duplicate;
+            } catch (org.json.JSONException | RuntimeException error) {
+                Log.w(TAG, "Unable to inspect native announcement dedup state", error);
+                return false;
+            }
+        }
+    }
+
+    private static void rememberAnnouncedReference(Context context, String referenceId) {
+        if (referenceId == null || referenceId.isEmpty()) return;
+        SharedPreferences prefs = context.getSharedPreferences(
+                "retailmind_native_payment_dedup", Context.MODE_PRIVATE);
+        synchronized (LOCK) {
+            try {
+                org.json.JSONObject stored = new org.json.JSONObject(
+                        prefs.getString("announced_references", "{}"));
+                org.json.JSONObject kept = new org.json.JSONObject();
+                long now = System.currentTimeMillis();
+                java.util.Iterator<String> keys = stored.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    long at = stored.optLong(key, 0L);
+                    if (at > 0L && now >= at && now - at <= REFERENCE_DEDUP_TTL_MS) {
+                        kept.put(key, at);
+                    }
+                }
+                kept.put(referenceId, now);
+                // Bound local storage; no transaction history is kept here.
+                if (kept.length() > 200) {
+                    java.util.Iterator<String> it = kept.keys();
+                    if (it.hasNext()) kept.remove(it.next());
+                }
+                prefs.edit().putString("announced_references", kept.toString()).commit();
+            } catch (org.json.JSONException | RuntimeException error) {
+                Log.w(TAG, "Unable to persist native announcement dedup state", error);
+            }
+        }
     }
 
     private static String localizedMessage(String lang, String amount, boolean credit) {
@@ -246,6 +323,15 @@ final class NativePaymentAnnouncementFallback {
                 SCHEDULED.remove(request.eventKey);
                 continue;
             }
+            if (wasReferenceRecentlyAnnounced(request.context, request.announcement.referenceId)) {
+                // Mark this event as already handled by speech so Flutter can
+                // still process history/UI without repeating this transaction's voice.
+                NotificationRelayReceiver.markNativeAnnouncementHandled(
+                        request.context, request.eventKey, true);
+                Log.i(TAG, "Duplicate native announcement suppressed by transaction reference");
+                SCHEDULED.remove(request.eventKey);
+                continue;
+            }
             if (!NotificationRelayReceiver.markNativeAnnouncementHandled(
                     request.context, request.eventKey, true)) {
                 SCHEDULED.remove(request.eventKey);
@@ -270,6 +356,7 @@ final class NativePaymentAnnouncementFallback {
                         request.context, request.eventKey, false);
                 Log.w(TAG, "TTS rejected native payment announcement");
             } else {
+                rememberAnnouncedReference(request.context, request.announcement.referenceId);
                 Log.i(TAG, "Native fallback announced a payment notification; financial verification is still required.");
             }
             SCHEDULED.remove(request.eventKey);
@@ -295,10 +382,12 @@ final class NativePaymentAnnouncementFallback {
         final String localized;
         final String english;
         final String language;
-        Announcement(String localized, String english, String language) {
+        final String referenceId;
+        Announcement(String localized, String english, String language, String referenceId) {
             this.localized = localized;
             this.english = english;
             this.language = language;
+            this.referenceId = referenceId;
         }
     }
 
