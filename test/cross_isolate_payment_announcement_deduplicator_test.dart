@@ -190,6 +190,88 @@ void main() {
     );
   });
 
+  test(
+    'unique Truecaller mirror without payer/account/UTR is coalesced within eight seconds',
+    () async {
+      final time = DateTime(2026, 10, 27, 10, 0);
+      final notification = _event(
+        id: 'phonepe-original',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received INR 500',
+        amount: 500,
+        sourceEventKey: 'com.phonepe.app|71|${time.millisecondsSinceEpoch}|phonepe',
+      );
+      final truecallerEcho = _event(
+        id: 'truecaller-mirror',
+        timestamp: time.add(const Duration(seconds: 3)),
+        source: 'truecaller_notification',
+        app: PaymentApp.bankApp,
+        rawText: 'UPI transfer received INR 500',
+        amount: 500,
+        sourceEventKey:
+            'com.truecaller|72|${time.millisecondsSinceEpoch + 3000}|truecaller',
+      );
+
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          notification,
+          now: time,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          truecallerEcho,
+          now: time.add(const Duration(seconds: 3)),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'Truecaller same-value event outside short window needs matching transaction clues',
+    () async {
+      final time = DateTime(2026, 10, 27, 10, 0);
+      final notification = _event(
+        id: 'phonepe-original',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received INR 500',
+        amount: 500,
+        sourceEventKey: 'com.phonepe.app|73|${time.millisecondsSinceEpoch}|phonepe',
+      );
+      final laterTruecaller = _event(
+        id: 'truecaller-later',
+        timestamp: time.add(const Duration(seconds: 9)),
+        source: 'truecaller_notification',
+        app: PaymentApp.bankApp,
+        rawText: 'UPI transfer received INR 500',
+        amount: 500,
+        sourceEventKey:
+            'com.truecaller|74|${time.millisecondsSinceEpoch + 9000}|truecaller',
+      );
+
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          notification,
+          now: time,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          laterTruecaller,
+          now: time.add(const Duration(seconds: 9)),
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('two same-value notifications can pair with two SMS messages one-to-one', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
     final firstNotification = _event(

@@ -27,6 +27,43 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
   // Exact-text fallback is intentionally bounded; distinct native notification
   // identities are exempted below.
   static const Duration _sameChannelReplayWindow = Duration(minutes: 3);
+  static const Duration _truecallerCrossSourceEchoWindow =
+      Duration(seconds: 8);
+
+  static const Set<String> _truecallerEchoTrustedSources = {
+    'googlepay',
+    'phonepe',
+    'paytm',
+    'amazonpay',
+    'bhim',
+    'payzapp',
+    'icici',
+    'sbiyono',
+    'axis',
+    'hdfc',
+    'banksms',
+    'bankapp',
+    'com.google.android.apps.nbu.paisa.user',
+    'com.google.android.apps.nbu.paisa.merchant',
+    'net.one97.paytm',
+    'com.paytm.business',
+    'com.phonepe.app',
+    'com.phonepe.app.business',
+    'com.phonepe.app.merchant',
+    'com.phonepe.business',
+    'in.org.npci.upiapp',
+    'com.dreamplug.androidapp',
+    'com.hdfcbank.payzapp',
+    'com.icicibank.imobile',
+    'com.sbi.imobile',
+    'com.axis.mobile',
+    'com.hdfcbank.smartbuy',
+    'com.indusind.mobilebanking',
+    'com.yes.mobile',
+    'com.baroda.mpassbook',
+    'com.canarabank.mobility',
+    'com.kotak.mobile.banking',
+  };
 
   // Serialize callers within one isolate. SharedPreferences reload makes the
   // most recent stored list visible when another isolate processed a signal.
@@ -196,9 +233,20 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
           previousPayer.isNotEmpty &&
           _payersCompatible(payer, previousPayer);
 
-      // Amount and direction are not unique transaction IDs. Without a shared
-      // UTR, require corroborating payer/account evidence.
-      if (!sameAccount && !samePayer) continue;
+      // Truecaller may mirror a trusted UPI/bank notification but omit its
+      // payer, masked account, and UTR. Coalesce only a UNIQUE cross-channel
+      // candidate within 8 seconds, with matching known amount/direction and
+      // no conflicting payer/account evidence. Ordinary amount-only matching
+      // remains disabled so unrelated same-value payments are not merged.
+      final truecallerCrossAppEcho =
+          age <= _truecallerCrossSourceEchoWindow &&
+          ((origin == 'truecaller_notification' &&
+                  previousOrigin != 'truecaller_notification' &&
+                  _isTrustedTruecallerEchoCounterpart(previousChannel)) ||
+              (previousOrigin == 'truecaller_notification' &&
+                  origin != 'truecaller_notification' &&
+                  _isTrustedTruecallerEchoCounterpart(channel)));
+      if (!sameAccount && !samePayer && !truecallerCrossAppEcho) continue;
 
       final claimedChannels = (previous['claimedChannels'] is List)
           ? (previous['claimedChannels'] as List)
@@ -283,6 +331,14 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
 
   static bool _isSmsOrigin(String origin) =>
       origin == 'sms' || origin == 'notification+sms';
+
+  static bool _isTrustedTruecallerEchoCounterpart(String channel) {
+    final parts = channel.toLowerCase().split('|');
+    if (parts.isEmpty) return false;
+    final origin = parts.first;
+    if (origin == 'sms' || origin == 'notification+sms') return true;
+    return _truecallerEchoTrustedSources.contains(parts.last);
+  }
 
   static String _channelKey(PaymentEvent event) =>
       '${_origin(event.detectionSource)}|${event.app.name}';

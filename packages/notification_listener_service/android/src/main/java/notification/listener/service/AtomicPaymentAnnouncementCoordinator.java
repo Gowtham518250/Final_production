@@ -38,6 +38,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
     private static final String TABLE = "announcement_observations";
     private static final long MAX_AGE_MS = 24L * 60L * 60L * 1000L;
     private static final long CROSS_APP_MS = 10L * 60L * 1000L;
+    private static final long TRUECALLER_CROSS_APP_MS = 8_000L;
     private static final long SMS_ECHO_MS = 3L * 60L * 60L * 1000L;
     private static final long EXACT_TEXT_REPLAY_MS = 2000L;
     private static final int MAX_ROWS = 500;
@@ -210,7 +211,14 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
 
                 boolean sameAccount = notEmpty(accountHash) && accountHash.equals(old.accountHash);
                 boolean samePayer = notEmpty(payerHash) && payerHash.equals(old.payerHash);
-                if (!sameAccount && !samePayer) continue;
+                boolean currentTruecaller = isTruecallerChannel(channel, origin);
+                boolean oldTruecaller = isTruecallerChannel(old.channel, old.origin);
+                String counterpartChannel = currentTruecaller ? old.channel : channel;
+                boolean truecallerCrossAppEcho =
+                        currentTruecaller != oldTruecaller
+                                && age <= TRUECALLER_CROSS_APP_MS
+                                && isTrustedTruecallerEchoCounterpart(counterpartChannel);
+                if (!sameAccount && !samePayer && !truecallerCrossAppEcho) continue;
                 if (old.claimedChannels.contains(channel)) continue;
 
                 if (uniqueCandidate != null && uniqueCandidate.id != old.id) {
@@ -328,6 +336,55 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         if (value.startsWith("truecaller_notification")) return "truecaller_notification";
         int colon = value.indexOf(':');
         return colon >= 0 ? value.substring(0, colon) : value;
+    }
+
+    private static boolean isTruecallerChannel(String channel, String origin) {
+        String normalizedChannel = value(channel).toLowerCase(Locale.ROOT);
+        String normalizedOrigin = value(origin).toLowerCase(Locale.ROOT);
+        return normalizedChannel.contains("com.truecaller")
+                || normalizedChannel.contains("truecaller_notification")
+                || normalizedOrigin.equals("truecaller_notification");
+    }
+
+    private static boolean isTrustedTruecallerEchoCounterpart(String channel) {
+        String normalized = value(channel).toLowerCase(Locale.ROOT);
+        String[] parts = normalized.split("\\|");
+        if (parts.length == 0) return false;
+        String origin = parts[0];
+        if ("sms".equals(origin) || "notification+sms".equals(origin)) return true;
+        String source = parts[parts.length - 1];
+        return source.equals("googlepay")
+                || source.equals("phonepe")
+                || source.equals("paytm")
+                || source.equals("amazonpay")
+                || source.equals("bhim")
+                || source.equals("payzapp")
+                || source.equals("icici")
+                || source.equals("sbiyono")
+                || source.equals("axis")
+                || source.equals("hdfc")
+                || source.equals("bankapp")
+                || source.equals("banksms")
+                || source.equals("com.google.android.apps.nbu.paisa.user")
+                || source.equals("com.google.android.apps.nbu.paisa.merchant")
+                || source.equals("net.one97.paytm")
+                || source.equals("com.paytm.business")
+                || source.equals("com.phonepe.app")
+                || source.equals("com.phonepe.app.business")
+                || source.equals("com.phonepe.app.merchant")
+                || source.equals("com.phonepe.business")
+                || source.equals("in.org.npci.upiapp")
+                || source.equals("com.dreamplug.androidapp")
+                || source.equals("com.hdfcbank.payzapp")
+                || source.equals("com.icicibank.imobile")
+                || source.equals("com.sbi.imobile")
+                || source.equals("com.axis.mobile")
+                || source.equals("com.hdfcbank.smartbuy")
+                || source.equals("com.indusind.mobilebanking")
+                || source.equals("com.yes.mobile")
+                || source.equals("com.baroda.mpassbook")
+                || source.equals("com.canarabank.mobility")
+                || source.equals("com.kotak.mobile.banking");
     }
 
     private static String normalizeReference(String value) {
