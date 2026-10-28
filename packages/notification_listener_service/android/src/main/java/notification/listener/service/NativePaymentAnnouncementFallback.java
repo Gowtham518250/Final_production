@@ -94,7 +94,6 @@ final class NativePaymentAnnouncementFallback {
     private static final Pattern REFERENCE_PATTERN = Pattern.compile(
             "(?:\\b(?:utr|rrn|ref(?:erence)?|txn|transaction\\s*(?:id|no\\.?|number)|upi\\s*(?:ref(?:erence)?|txn|transaction))\\b\\s*(?:(?:no\\.?|number|id)\\b\\s*)?[:#=\\-]?\\s*)([A-Z0-9]{8,30})",
             Pattern.CASE_INSENSITIVE);
-    private static final long REFERENCE_DEDUP_TTL_MS = 2 * 60 * 1000L;
 
     private static final Pattern CREDIT_PATTERN = Pattern.compile(
             "\\b(?:credited|received|deposited|cashback received|money received|credit to your account)\\b",
@@ -138,7 +137,7 @@ final class NativePaymentAnnouncementFallback {
                 return;
             }
 
-            queueSpeak(appContext, eventKey, announcement);
+            queueSpeak(appContext, eventKey, announcement, event);
         }, FALLBACK_DELAY_MS);
     }
 
@@ -155,9 +154,12 @@ final class NativePaymentAnnouncementFallback {
         Matcher matcher = AMOUNT_PATTERN.matcher(raw);
         if (!matcher.find()) return null;
         String amount;
+        double numericAmount;
         try {
-            amount = new BigDecimal(matcher.group(1).replace(",", ""))
-                    .stripTrailingZeros().toPlainString();
+            BigDecimal parsedAmount = new BigDecimal(matcher.group(1).replace(",", ""))
+                    .stripTrailingZeros();
+            amount = parsedAmount.toPlainString();
+            numericAmount = parsedAmount.doubleValue();
         } catch (NumberFormatException error) {
             return null;
         }
@@ -177,72 +179,9 @@ final class NativePaymentAnnouncementFallback {
         String referenceId = referenceMatcher.find()
                 ? referenceMatcher.group(1).replaceAll("[^A-Z0-9]", "").toUpperCase(Locale.ROOT)
                 : null;
-        return new Announcement(phrase, english, lang, referenceId);
-    }
-
-    /**
-     * Returns true only when this exact transaction reference was already
-     * announced within the short native fallback window. Amount-only events
-     * are intentionally not cross-source deduplicated.
-     */
-    private static boolean wasReferenceRecentlyAnnounced(Context context, String referenceId) {
-        if (referenceId == null || referenceId.isEmpty()) return false;
-        SharedPreferences prefs = context.getSharedPreferences(
-                "retailmind_native_payment_dedup", Context.MODE_PRIVATE);
-        synchronized (LOCK) {
-            try {
-                org.json.JSONObject stored = new org.json.JSONObject(
-                        prefs.getString("announced_references", "{}"));
-                org.json.JSONObject kept = new org.json.JSONObject();
-                boolean duplicate = false;
-                long now = System.currentTimeMillis();
-                java.util.Iterator<String> keys = stored.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    long at = stored.optLong(key, 0L);
-                    if (at > 0L && now >= at && now - at <= REFERENCE_DEDUP_TTL_MS) {
-                        kept.put(key, at);
-                        if (key.equals(referenceId)) duplicate = true;
-                    }
-                }
-                prefs.edit().putString("announced_references", kept.toString()).commit();
-                return duplicate;
-            } catch (org.json.JSONException | RuntimeException error) {
-                Log.w(TAG, "Unable to inspect native announcement dedup state", error);
-                return false;
-            }
-        }
-    }
-
-    private static void rememberAnnouncedReference(Context context, String referenceId) {
-        if (referenceId == null || referenceId.isEmpty()) return;
-        SharedPreferences prefs = context.getSharedPreferences(
-                "retailmind_native_payment_dedup", Context.MODE_PRIVATE);
-        synchronized (LOCK) {
-            try {
-                org.json.JSONObject stored = new org.json.JSONObject(
-                        prefs.getString("announced_references", "{}"));
-                org.json.JSONObject kept = new org.json.JSONObject();
-                long now = System.currentTimeMillis();
-                java.util.Iterator<String> keys = stored.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    long at = stored.optLong(key, 0L);
-                    if (at > 0L && now >= at && now - at <= REFERENCE_DEDUP_TTL_MS) {
-                        kept.put(key, at);
-                    }
-                }
-                kept.put(referenceId, now);
-                // Bound local storage; no transaction history is kept here.
-                if (kept.length() > 200) {
-                    java.util.Iterator<String> it = kept.keys();
-                    if (it.hasNext()) kept.remove(it.next());
-                }
-                prefs.edit().putString("announced_references", kept.toString()).commit();
-            } catch (org.json.JSONException | RuntimeException error) {
-                Log.w(TAG, "Unable to persist native announcement dedup state", error);
-            }
-        }
+        return new Announcement(
+                phrase, english, lang, referenceId, numericAmount,
+                credit ? "credit" : "debit", raw);
     }
 
     private static String localizedMessage(String lang, String amount, boolean credit) {
@@ -290,9 +229,9 @@ final class NativePaymentAnnouncementFallback {
         }
     }
 
-    private static void queueSpeak(Context context, String eventKey, Announcement announcement) {
+    private static void queueSpeak(Context context, String eventKey, Announcement announcement, Map<String, Object> event) {
         synchronized (LOCK) {
-            WAITING.add(new SpeakRequest(context.getApplicationContext(), eventKey, announcement));
+            WAITING.add(new SpeakRequest(context.getApplicationContext(), eventKey, announcement, event));
             if (ttsReady) {
                 drainWaiting();
             } else if (!ttsInitializing) {
@@ -323,17 +262,33 @@ final class NativePaymentAnnouncementFallback {
                 SCHEDULED.remove(request.eventKey);
                 continue;
             }
-            if (wasReferenceRecentlyAnnounced(request.context, request.announcement.referenceId)) {
-                // Mark this event as already handled by speech so Flutter can
-                // still process history/UI without repeating this transaction's voice.
+            Map<String, Object> claim = new java.util.HashMap<>();
+            String packageName = value(request.event.get("packageName"));
+            claim.put("amount", request.announcement.amountValue);
+            claim.put("direction", request.announcement.direction);
+            claim.put("referenceId", request.announcement.referenceId);
+            claim.put("sourceEventKey", request.eventKey);
+            claim.put("sourceIdentity", stableIdentity(request.eventKey));
+            claim.put("sourceTimestamp", postedAt(request.eventKey));
+            claim.put("timestamp", System.currentTimeMillis());
+            claim.put("origin", "notification");
+            claim.put("channel", "notification|" + packageName);
+            claim.put("packageName", packageName);
+            claim.put("payerName", extractPayer(request.announcement.rawText));
+            claim.put("accountSuffix", extractAccount(request.announcement.rawText));
+            claim.put("rawText", request.announcement.rawText);
+            if (AtomicPaymentAnnouncementCoordinator.shouldSuppress(request.context, claim)) {
+                // Another Flutter/native worker already owns this announcement.
+                // Preserve the event for later history/review without repeating speech.
                 NotificationRelayReceiver.markNativeAnnouncementHandled(
                         request.context, request.eventKey, true);
-                Log.i(TAG, "Duplicate native announcement suppressed by transaction reference");
                 SCHEDULED.remove(request.eventKey);
                 continue;
             }
             if (!NotificationRelayReceiver.markNativeAnnouncementHandled(
                     request.context, request.eventKey, true)) {
+                AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
+                        request.context, stableIdentity(request.eventKey));
                 SCHEDULED.remove(request.eventKey);
                 continue;
             }
@@ -354,13 +309,52 @@ final class NativePaymentAnnouncementFallback {
             if (result == TextToSpeech.ERROR) {
                 NotificationRelayReceiver.markNativeAnnouncementHandled(
                         request.context, request.eventKey, false);
+                AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
+                        request.context, stableIdentity(request.eventKey));
                 Log.w(TAG, "TTS rejected native payment announcement");
             } else {
-                rememberAnnouncedReference(request.context, request.announcement.referenceId);
                 Log.i(TAG, "Native fallback announced a payment notification; financial verification is still required.");
             }
             SCHEDULED.remove(request.eventKey);
         }
+    }
+
+    private static String stableIdentity(String eventKey) {
+        if (eventKey == null) return "";
+        String[] parts = eventKey.split("\\|");
+        if (parts.length < 4) return eventKey;
+        StringBuilder value = new StringBuilder();
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (i > 0) value.append('|');
+            value.append(parts[i]);
+        }
+        return value.toString();
+    }
+
+    private static long postedAt(String eventKey) {
+        if (eventKey == null) return 0L;
+        String[] parts = eventKey.split("\\|");
+        if (parts.length < 4) return 0L;
+        try { return Long.parseLong(parts[parts.length - 2]); }
+        catch (NumberFormatException error) { return 0L; }
+    }
+
+    private static String extractPayer(String raw) {
+        if (raw == null) return "";
+        Matcher sent = Pattern.compile("^\\s*([\\p{L}][\\p{L} .'-]{1,50}?)\\s+(?:sent|paid|transferred)\\b",
+                Pattern.CASE_INSENSITIVE).matcher(raw);
+        if (sent.find()) return sent.group(1).trim();
+        Matcher from = Pattern.compile("\\b(?:from|received from|transfer from)\\s+([\\p{L}][\\p{L} .'-]{1,50}?)(?=\\s+(?:to|via|for|upi|utr|ref|txn|id|credited|sent|paid|account|a/c)\\b|[.,;]|₹|$)",
+                Pattern.CASE_INSENSITIVE).matcher(raw);
+        return from.find() ? from.group(1).trim() : "";
+    }
+
+    private static String extractAccount(String raw) {
+        if (raw == null) return "";
+        Matcher matcher = Pattern.compile("(?:account|a/c|acct)[^0-9]{0,12}(?:x{2,})?([0-9]{4})|x{2,}([0-9]{4})",
+                Pattern.CASE_INSENSITIVE).matcher(raw);
+        if (!matcher.find()) return "";
+        return matcher.group(1) == null ? matcher.group(2) : matcher.group(1);
     }
 
     private static Locale localeFor(String lang) {
@@ -383,11 +377,18 @@ final class NativePaymentAnnouncementFallback {
         final String english;
         final String language;
         final String referenceId;
-        Announcement(String localized, String english, String language, String referenceId) {
+        final double amountValue;
+        final String direction;
+        final String rawText;
+        Announcement(String localized, String english, String language, String referenceId,
+                     double amountValue, String direction, String rawText) {
             this.localized = localized;
             this.english = english;
             this.language = language;
             this.referenceId = referenceId;
+            this.amountValue = amountValue;
+            this.direction = direction;
+            this.rawText = rawText;
         }
     }
 
@@ -395,10 +396,12 @@ final class NativePaymentAnnouncementFallback {
         final Context context;
         final String eventKey;
         final Announcement announcement;
-        SpeakRequest(Context context, String eventKey, Announcement announcement) {
+        final Map<String, Object> event;
+        SpeakRequest(Context context, String eventKey, Announcement announcement, Map<String, Object> event) {
             this.context = context;
             this.eventKey = eventKey;
             this.announcement = announcement;
+            this.event = new java.util.HashMap<>(event);
         }
     }
 }

@@ -85,6 +85,13 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
                 result.success(false);
                 e.printStackTrace();
             }
+        } else if (call.method.equals("shouldSuppressPaymentAnnouncement")) {
+            if (!(call.arguments instanceof Map)) {
+                result.error("InvalidAnnouncement", "Announcement payload is required", null);
+                return;
+            }
+            result.success(AtomicPaymentAnnouncementCoordinator.shouldSuppress(
+                    context, (Map<?, ?>) call.arguments));
         } else if (call.method.equals("acknowledgeNotification")) {
             final String eventKey = call.argument("eventKey");
             if (eventKey == null || eventKey.trim().isEmpty()) {
