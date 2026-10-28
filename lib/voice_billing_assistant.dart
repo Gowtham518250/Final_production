@@ -1346,7 +1346,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
         if (idNameMismatch && knownProduct != null) {
           final warning =
-              'AI product name and catalogue ID disagreed. Matched the exact shop-catalogue name "\${_catalogProductName(knownProduct)}" instead; verify it before billing.';
+              'AI product name and catalogue ID disagreed. Matched the exact shop-catalogue name "${_catalogProductName(knownProduct)}" instead; verify it before billing.';
           if (!warnings.contains(warning)) warnings.add(warning);
         }
 
