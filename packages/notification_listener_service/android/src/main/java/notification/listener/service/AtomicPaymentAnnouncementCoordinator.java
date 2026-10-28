@@ -301,7 +301,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
             return eventKey;
         }
 
-        long sourceTimestamp = number(input.get("sourceTimestamp"), 0.0).longValue();
+        long sourceTimestamp = (long) number(input.get("sourceTimestamp"), 0.0);
         if ("sms".equals(origin) && sourceTimestamp > 0L) {
             return "sms|" + sourceTimestamp + "|" + hash(normalizeText(rawText));
         }
