@@ -2037,6 +2037,8 @@ class PriorityVoiceQueue {
     _echoClaims.removeWhere((id, _) => !liveVoiceEventIds.contains(id));
     final currentReference = event.normalizedReferenceId;
     final currentChannel = PaymentDetectionService._channelKey(event);
+    PaymentEvent? uniqueEchoCandidate;
+    var ambiguousCandidates = false;
 
     for (final previous in _recentPayments) {
       final old = previous.event;
@@ -2045,12 +2047,9 @@ class PriorityVoiceQueue {
 
       final priorReference = old.normalizedReferenceId;
       if (currentReference != null || priorReference != null) {
-        // If either event has a reference, amount/account similarity alone
-        // cannot prove that the other event describes the same transfer.
         if (currentReference == null || priorReference == null) continue;
         if (currentReference != priorReference ||
             event.hasReferenceConflictWith(old)) {
-          // Different authoritative references must never be collapsed.
           continue;
         }
         return true;
@@ -2060,12 +2059,18 @@ class PriorityVoiceQueue {
       if (age > _crossSourceEchoWindow) continue;
 
       final oldChannel = PaymentDetectionService._channelKey(old);
-      final sameAccount = event.accountSuffix != null &&
-          old.accountSuffix != null &&
-          event.accountSuffix == old.accountSuffix;
-      final differentAccounts = event.accountSuffix != null &&
-          old.accountSuffix != null &&
-          event.accountSuffix != old.accountSuffix;
+      final currentSourceFingerprint = event.sourceEventFingerprint;
+      final oldSourceFingerprint = old.sourceEventFingerprint;
+      final sameNativePost = currentSourceFingerprint != null &&
+          oldSourceFingerprint != null &&
+          currentSourceFingerprint == oldSourceFingerprint;
+      final hasNativeIdentity =
+          currentSourceFingerprint != null || oldSourceFingerprint != null;
+
+      final sameAmountAndDirection =
+          (event.amount - old.amount).abs() < 0.01 &&
+          currentDirection ==
+              PaymentDetectionService._eventPaymentDirection(old);
       final currentPayer = _normalizedVoicePayer(event.payerName);
       final priorPayer = _normalizedVoicePayer(old.payerName);
       final sameKnownPayer = currentPayer != null &&
@@ -2073,49 +2078,57 @@ class PriorityVoiceQueue {
           (currentPayer == priorPayer ||
               currentPayer.contains(priorPayer) ||
               priorPayer.contains(currentPayer));
+      final sameAccount = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix == old.accountSuffix;
+      final differentAccounts = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
+      final differentKnownPayers = currentPayer != null &&
+          priorPayer != null &&
+          !sameKnownPayer;
 
       if (oldChannel == currentChannel) {
-        final sameAmountAndDirection =
-            (event.amount - old.amount).abs() < 0.01 &&
-            currentDirection ==
-                PaymentDetectionService._eventPaymentDirection(old);
-        final identicalNoReferencePayload =
-            currentReference == null &&
-            priorReference == null &&
+        if (hasNativeIdentity && !sameNativePost) {
+          // Different native posts remain separate, even if payer and amount match.
+          continue;
+        }
+        if (sameNativePost && sameAmountAndDirection) {
+          // Same Android notification identity with a changed payload hash.
+          return true;
+        }
+
+        final noNativeIdentityOnEitherSide =
+            currentSourceFingerprint == null && oldSourceFingerprint == null;
+        final identicalImmediateReplay = noNativeIdentityOnEitherSide &&
+            age <= const Duration(seconds: 3) &&
             sameAmountAndDirection &&
             PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
             PaymentDetectionService._echoText(event.rawText) ==
                 PaymentDetectionService._echoText(old.rawText);
-        final sameTruecallerPaymentClues =
-            currentReference == null &&
-            priorReference == null &&
-            sameAmountAndDirection &&
+        final sameTruecallerPaymentClues = noNativeIdentityOnEitherSide &&
             age <= _truecallerReplayAnnouncementWindow &&
+            sameAmountAndDirection &&
             PaymentDetectionService._eventOrigin(event.detectionSource) ==
                 'truecaller_notification' &&
             PaymentDetectionService._eventOrigin(old.detectionSource) ==
                 'truecaller_notification' &&
             (sameAccount || sameKnownPayer);
-        if (identicalNoReferencePayload || sameTruecallerPaymentClues) {
+        if (identicalImmediateReplay || sameTruecallerPaymentClues) {
           PdsLogger.d(
             'VOICE',
-            identicalNoReferencePayload
-                ? 'Exact same-channel no-reference payment replay suppressed'
-                : 'Likely same Truecaller notification update: repeat sound suppressed; event kept for review',
+            identicalImmediateReplay
+                ? 'Immediate exact same-channel replay suppressed'
+                : 'Truecaller repeat without native identity suppressed',
           );
           return true;
         }
         continue;
       }
 
-      if (currentReference != null &&
-          priorReference != null &&
-          currentReference != priorReference) {
-        continue;
-      }
-      if ((event.amount - old.amount).abs() >= 0.01 ||
-          currentDirection !=
-              PaymentDetectionService._eventPaymentDirection(old)) {
+      if (!sameAmountAndDirection ||
+          differentAccounts ||
+          differentKnownPayers) {
         continue;
       }
 
@@ -2123,22 +2136,26 @@ class PriorityVoiceQueue {
       if (claimedChannels != null && claimedChannels.contains(currentChannel)) {
         continue;
       }
-      final differentKnownPayers = currentPayer != null &&
-          priorPayer != null &&
-          !sameKnownPayer;
-      if (differentAccounts || differentKnownPayers) continue;
-      if (!sameAccount && !sameKnownPayer) {
-        // E.g. a generic PhonePe alert and a Truecaller mirror without any
-        // common transaction/account/payer evidence: leave both reviewable.
-        continue;
-      }
+      if (!sameAccount && !sameKnownPayer) continue;
 
-      (_echoClaims[old.id] ??= <String>{}).add(currentChannel);
-      PdsLogger.d(
-        'VOICE',
-        'Cross-channel payment echo suppressed channel=$currentChannel',
-      );
+      // More than one plausible same-value event is ambiguous; preserve the
+      // current announcement rather than suppress a possibly distinct payment.
+      if (uniqueEchoCandidate != null &&
+          uniqueEchoCandidate.id != old.id) {
+        ambiguousCandidates = true;
+        break;
+      }
+      uniqueEchoCandidate = old;
+    }
+
+    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
+      (_echoClaims[uniqueEchoCandidate.id] ??= <String>{})
+          .add(currentChannel);
+      PdsLogger.d('VOICE', 'Unique cross-channel echo suppressed');
       return true;
+    }
+    if (ambiguousCandidates) {
+      PdsLogger.d('VOICE', 'Ambiguous cross-channel match kept as separate');
     }
     return false;
   }
@@ -5331,8 +5348,7 @@ class PaymentDetectionService {
   ///    Two Rs 5 payments therefore need two SMS to be fully paired; an SMS
   ///    arriving 20+ minutes after the notification still pairs with it.
   bool _isRecentCrossSourceDuplicate(PaymentEvent event) {
-    // Never discard explicit merchant confirmations, failures, reference
-    // conflicts, or events that were already marked as duplicates.
+    // Never discard confirmations, failures, conflicts, or pre-classified duplicates.
     if (event.isMerchantConfirmed ||
         event.isDuplicate ||
         event.hasReferenceConflict ||
@@ -5350,8 +5366,9 @@ class PaymentDetectionService {
     final currentReference = event.normalizedReferenceId;
     final currentText = _echoText(event.rawText);
     final currentIsSms = _eventOrigin(event.detectionSource).contains('sms');
+    PaymentEvent? uniqueEchoCandidate;
+    var ambiguousCandidates = false;
 
-    // Oldest first so each echo pairs with the earliest unmatched payment.
     for (final old in _recentEmittedPayments) {
       if (old.isMerchantConfirmed ||
           old.isDuplicate ||
@@ -5366,10 +5383,8 @@ class PaymentDetectionService {
 
       final oldReference = old.normalizedReferenceId;
       if (currentReference != null || oldReference != null) {
-        // A reference on only one side is not enough evidence to pair two
-        // payments by amount/direction/account alone.
+        // References only prove identity when both sides expose the same ID.
         if (currentReference == null || oldReference == null) continue;
-        // Different references mean different transfers; never merge those.
         if (currentReference != oldReference) continue;
         if (event.hasReferenceConflictWith(old)) continue;
         return true;
@@ -5381,19 +5396,23 @@ class PaymentDetectionService {
       if (oldChannel == channel) {
         final currentSourceFingerprint = event.sourceEventFingerprint;
         final oldSourceFingerprint = old.sourceEventFingerprint;
-        if (currentSourceFingerprint != null &&
-            oldSourceFingerprint != null &&
-            currentSourceFingerprint != oldSourceFingerprint) {
-          // Different native notification posts are separate candidates even
-          // when the app reuses the same text and amount.
-          continue;
+        if (currentSourceFingerprint != null || oldSourceFingerprint != null) {
+          // Different native notification posts are different payment candidates.
+          if (currentSourceFingerprint == null ||
+              oldSourceFingerprint == null ||
+              currentSourceFingerprint != oldSourceFingerprint) {
+            continue;
+          }
+          // Same Android notification post, even if its text/hash changed.
+          return true;
         }
-        // Accessibility may re-emit a static screen repeatedly. Coalesce an
-        // exact-text replay for a short bounded period, but not distinct
-        // native notification posts whose stable IDs differ.
-        if (age <= _sameChannelReplayWindow &&
+
+        // Without a native ID, only an immediate exact-text replay is safe
+        // to coalesce. Fuzzy amount/payer matching could hide a second payment.
+        if (age <= const Duration(seconds: 3) &&
+            currentText.isNotEmpty &&
             currentText == _echoText(old.rawText)) {
-          PdsLogger.t('DROP', 'reason=same_channel_repost');
+          PdsLogger.t('DROP', 'reason=same_channel_repost_without_native_id');
           return true;
         }
         continue;
@@ -5405,40 +5424,48 @@ class PaymentDetectionService {
           : _crossAppEchoWindow;
       if (age > window) continue;
 
-      // One echo per channel per payment: a channel that already echoed this
-      // payment cannot also be the report of a second, separate payment.
       final claimed = _echoClaims[old.id];
       if (claimed != null && claimed.contains(channel)) continue;
 
-      final sameAccount =
-          event.accountSuffix != null &&
+      final sameAccount = event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-      final differentAccounts =
-          event.accountSuffix != null &&
+      final differentAccounts = event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix != old.accountSuffix;
       final currentPayer = _normalizedPayer(event.payerName);
       final previousPayer = _normalizedPayer(old.payerName);
+      final sameKnownPayer = currentPayer != null &&
+          previousPayer != null &&
+          _payersCompatible(event.payerName, old.payerName);
       final differentKnownPayers = currentPayer != null &&
           previousPayer != null &&
-          !_payersCompatible(event.payerName, old.payerName);
-      if (differentAccounts || differentKnownPayers) {
-        // Never pair transactions that contradict known account/payer clues.
-        continue;
-      }
-      // Android notification relays (especially Truecaller and delayed bank
-      // SMS) sometimes omit a payer or account. In that case allow a bounded,
-      // one-to-one cross-channel echo pairing based on amount and direction;
-      // explicit conflicting identities above always win.
+          !sameKnownPayer;
+      if (differentAccounts || differentKnownPayers) continue;
 
-      (_echoClaims[old.id] ??= <String>{}).add(channel);
-      PdsLogger.t(
-        'DROP',
-        'reason=echo_paired channel=${_eventOrigin(event.detectionSource)} '
-            'prev=${_eventOrigin(old.detectionSource)} ageSec=${age.inSeconds}',
-      );
+      // Amount + direction alone are not transaction identity.
+      if (!sameAccount && !sameKnownPayer) continue;
+
+      // If several earlier payments could explain this signal, the match is
+      // ambiguous. Keep the event instead of hiding a potentially real payment.
+      if (uniqueEchoCandidate != null &&
+          uniqueEchoCandidate.id != old.id) {
+        ambiguousCandidates = true;
+        break;
+      }
+      uniqueEchoCandidate = old;
+    }
+
+    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
+      (_echoClaims[uniqueEchoCandidate.id] ??= <String>{}).add(channel);
+      PdsLogger.t('DROP', 'reason=unique_echo_paired');
       return true;
+    }
+    if (ambiguousCandidates) {
+      PdsLogger.t(
+        'KEEP',
+        'reason=ambiguous_cross_source_match; preserving distinct payment candidate',
+      );
     }
     return false;
   }
