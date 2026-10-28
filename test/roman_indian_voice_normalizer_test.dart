@@ -24,6 +24,10 @@ void main() {
     test('supports Telugu tens + units', () {
       expect(RomanIndianVoiceNormalizer.normalize('iravai rendu kilo'), '22 kg');
     });
+    test('normalizes spoken hundreds through the complete voice normalizer', () {
+      expect(RomanIndianVoiceNormalizer.normalize('moodu vandalu biyyam'), '300 rice');
+      expect(RomanIndianVoiceNormalizer.normalize('మూడు వందలు బియ్యం'), '300 rice');
+    });
     test('normalizes Roman Telugu hundreds to the intended amount', () {
       expect(
         RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('3 vandalu biyyam'),
