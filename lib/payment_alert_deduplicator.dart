@@ -38,19 +38,15 @@ class PaymentAlertDeduplicator {
     final text = _normalizeText(event.rawText);
     final payer = _payerIdentity(event);
     final account = _normalizeAccount(event.accountSuffix);
+    _AlertObservation? uniqueEchoCandidate;
+    var ambiguousCandidates = false;
 
-    // Newest first: when a notification updates the same source post and the
-    // first version lacked a UTR, its later UTR-bearing version should enrich
-    // that observation rather than attach to an older same-value payment.
     for (final previous in _seen.reversed) {
       if ((previous.amount - amount).abs() >= 0.01 ||
           previous.direction != direction) {
         continue;
       }
 
-      // A stable native notification identity handles changed text/hash.
-      // If both versions expose references, different references are not
-      // duplicates—even when Android reused a notification ID.
       if (sourceFingerprint != null &&
           previous.sourceFingerprint == sourceFingerprint) {
         if (previous.reference != null &&
@@ -65,8 +61,6 @@ class PaymentAlertDeduplicator {
         return true;
       }
 
-      // A UTR is stronger than fuzzy payer/account clues. Never merge different
-      // references, nor a referenced payment with an unreferenced candidate.
       if (reference != null || previous.reference != null) {
         if (reference != null && previous.reference == reference) return true;
         continue;
@@ -76,15 +70,10 @@ class PaymentAlertDeduplicator {
       if (age > _fallbackTtl) continue;
 
       if (previous.channel == channel) {
-        // If Android supplied distinct notification-post identities, these
-        // are separate candidates even if the displayed text is identical.
-        if (sourceFingerprint != null &&
-            previous.sourceFingerprint != null &&
-            sourceFingerprint != previous.sourceFingerprint) {
+        if (sourceFingerprint != null || previous.sourceFingerprint != null) {
+          // A missing or distinct native identity cannot be treated as a replay.
           continue;
         }
-        // For sources without native IDs, only suppress an immediate exact
-        // replay on the same channel. Do not collapse by amount/time alone.
         if (age <= _sameChannelReplayWindow &&
             text.isNotEmpty &&
             text == previous.text) {
@@ -93,8 +82,6 @@ class PaymentAlertDeduplicator {
         continue;
       }
 
-      // A source channel can echo a prior payment at most once. That makes two
-      // real same-amount payments pair with two corresponding SMS/UPI alerts.
       if (previous.claimedChannels.contains(channel)) continue;
 
       final differentAccounts = account.isNotEmpty &&
@@ -111,14 +98,22 @@ class PaymentAlertDeduplicator {
       final samePayer = payer != null &&
           previousPayer != null &&
           _payersCompatible(payer, previousPayer);
-      // No reliable shared identity means we cannot prove that two separate
-      // same-value payments are the same transaction. Keep both candidates.
       if (!sameAccount && !samePayer) continue;
 
-      previous.claimedChannels.add(channel);
+      if (uniqueEchoCandidate != null &&
+          !identical(uniqueEchoCandidate, previous)) {
+        ambiguousCandidates = true;
+        break;
+      }
+      uniqueEchoCandidate = previous;
+    }
+
+    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
+      uniqueEchoCandidate.claimedChannels.add(channel);
       return true;
     }
 
+    // Preserve an ambiguous cross-source event as its own alert candidate.
     _remember(event, direction, moment);
     return false;
   }

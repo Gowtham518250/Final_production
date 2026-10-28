@@ -276,7 +276,7 @@ void main() {
           payerName: 'Rahul Kumar',
           accountSuffix: '4222',
           sourceEventKey:
-              'com.truecaller|41|\${firstAt.millisecondsSinceEpoch}|hash-a',
+              'com.truecaller|41|${firstAt.millisecondsSinceEpoch}|hash-a',
           rawText: 'Rahul Kumar sent ₹500 to account 4222',
           detectionSource: 'truecaller_notification',
           direction: PaymentTransactionDirection.incomingCredit,
@@ -290,7 +290,7 @@ void main() {
           payerName: 'Rahul Kumar',
           accountSuffix: '4222',
           sourceEventKey:
-              'com.truecaller|42|\${secondAt.millisecondsSinceEpoch}|hash-b',
+              'com.truecaller|42|${secondAt.millisecondsSinceEpoch}|hash-b',
           rawText: 'Rahul Kumar sent ₹500 to account 4222',
           detectionSource: 'truecaller_notification',
           direction: PaymentTransactionDirection.incomingCredit,
@@ -331,7 +331,7 @@ void main() {
             payer: 'Rahul Kumar',
             accountSuffix: '4222',
             sourceEventKey:
-                'com.phonepe.app|51|\${now.millisecondsSinceEpoch}|hash-1',
+                'com.phonepe.app|51|${now.millisecondsSinceEpoch}|hash-1',
             text: 'Rahul Kumar sent ₹500 to account 4222',
           ),
           _credit(
@@ -342,7 +342,7 @@ void main() {
             payer: 'Rahul Kumar',
             accountSuffix: '4222',
             sourceEventKey:
-                'com.phonepe.app|52|\${now.millisecondsSinceEpoch + 1000}|hash-2',
+                'com.phonepe.app|52|${now.millisecondsSinceEpoch + 1000}|hash-2',
             text: 'Rahul Kumar sent ₹500 to account 4222',
           ),
           _credit(
@@ -353,7 +353,7 @@ void main() {
             payer: 'Rahul Kumar',
             accountSuffix: '4222',
             sourceEventKey:
-                'com.truecaller|53|\${now.millisecondsSinceEpoch + 2000}|hash-3',
+                'com.truecaller|53|${now.millisecondsSinceEpoch + 2000}|hash-3',
             text: 'Rahul Kumar sent ₹500 to account 4222',
           ),
         ]);

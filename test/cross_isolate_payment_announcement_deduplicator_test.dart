@@ -163,6 +163,7 @@ void main() {
       source: 'notification',
       app: PaymentApp.phonePe,
       rawText: 'Payment received ₹500',
+      payerName: 'Ravi Kumar',
     );
     final sms = _event(
       id: 'sms-1',
@@ -170,6 +171,7 @@ void main() {
       source: 'sms',
       app: PaymentApp.bankSms,
       rawText: 'Your account has been credited by INR 500',
+      payerName: 'Ravi Kumar',
     );
 
     expect(
@@ -215,6 +217,7 @@ void main() {
       app: PaymentApp.bankSms,
       rawText: 'A/c credited ₹5',
       amount: 5,
+      payerName: 'Ravi',
     );
     final secondSms = _event(
       id: 'sms-2',
@@ -223,6 +226,7 @@ void main() {
       app: PaymentApp.bankSms,
       rawText: 'A/c credited ₹5',
       amount: 5,
+      payerName: 'Meena',
     );
 
     expect(
@@ -253,6 +257,44 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('ambiguous same-payer same-amount cross-source event is not suppressed', () async {
+    final now = DateTime.now();
+    final first = _event(
+      id: 'phonepe-1',
+      timestamp: now,
+      source: 'notification',
+      app: PaymentApp.phonePe,
+      rawText: 'Payment received ₹500 from Ravi',
+      payerName: 'Ravi Kumar',
+      accountSuffix: '4222',
+      sourceEventKey: 'com.phonepe.app|11|${now.millisecondsSinceEpoch}|a',
+    );
+    final second = _event(
+      id: 'phonepe-2',
+      timestamp: now.add(const Duration(seconds: 1)),
+      source: 'notification',
+      app: PaymentApp.phonePe,
+      rawText: 'Payment received ₹500 from Ravi',
+      payerName: 'Ravi Kumar',
+      accountSuffix: '4222',
+      sourceEventKey: 'com.phonepe.app|12|${now.millisecondsSinceEpoch + 1000}|b',
+    );
+    final ambiguousEcho = _event(
+      id: 'truecaller-1',
+      timestamp: now.add(const Duration(seconds: 2)),
+      source: 'notification',
+      app: PaymentApp.bankApp,
+      rawText: 'Payment received ₹500 from Ravi',
+      payerName: 'Ravi Kumar',
+      accountSuffix: '4222',
+      sourceEventKey: 'com.truecaller|13|${now.millisecondsSinceEpoch + 2000}|c',
+    );
+
+    expect(await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(first, now: now), isFalse);
+    expect(await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(second, now: now.add(const Duration(seconds: 1))), isFalse);
+    expect(await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(ambiguousEcho, now: now.add(const Duration(seconds: 2))), isFalse);
   });
 
   test('different authoritative references are never paired', () async {

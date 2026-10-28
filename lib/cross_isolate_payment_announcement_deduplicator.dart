@@ -74,9 +74,12 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     final channel = _channelKey(event);
     final origin = _origin(event.detectionSource);
     final reference = event.normalizedReferenceId;
+    final sourceFingerprint = event.sourceEventFingerprint;
     final text = _normalizeText(event.rawText);
     final payer = _normalizePayer(event.payerName);
     final account = _normalizeAccount(event.accountSuffix);
+    Map<String, dynamic>? uniqueEchoCandidate;
+    var ambiguousCandidates = false;
 
     for (var i = 0; i < stored.length; i++) {
       final previous = stored[i];
@@ -90,7 +93,6 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
 
       final previousSourceFingerprint =
           (previous['sourceEventFingerprint'] ?? '').toString();
-      final sourceFingerprint = event.sourceEventFingerprint;
       if (sourceFingerprint != null &&
           sourceFingerprint.isNotEmpty &&
           sourceFingerprint == previousSourceFingerprint) {
@@ -99,26 +101,18 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
         if (reference != null &&
             previousSourceReference.isNotEmpty &&
             reference != previousSourceReference) {
-          // Reused notification identity with a different authoritative UTR:
-          // it is not the same transaction, even if the amount matches.
           continue;
         }
-        // Exact native notification post, same amount and direction.
         return true;
       }
 
       final previousReference =
           (previous['reference'] ?? '').toString().trim();
       if (reference != null || previousReference.isNotEmpty) {
-        // A single missing reference is not evidence that two payment signals
-        // are the same transfer. Do not let fuzzy clues collapse a transfer
-        // whose authoritative identity is present on only one side.
+        // A shared reference is the strongest cross-source identity. A
+        // reference missing on one side or a different reference never pairs.
         if (reference == null || previousReference.isEmpty) continue;
-        // Distinct authoritative references always represent distinct
-        // transfers, even if the values and timestamps are identical.
         if (reference != previousReference) continue;
-        // Same reference with conflicting amount/direction has already failed
-        // the checks above and is intentionally not treated as an echo.
         return true;
       }
 
@@ -130,19 +124,11 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       final age = now.difference(previousSeenAt).abs();
 
       if (previousChannel == channel) {
-        final currentSourceFingerprint = event.sourceEventFingerprint;
-        final previousSourceFingerprint =
-            (previous['sourceEventFingerprint'] ?? '').toString();
-        if (currentSourceFingerprint != null &&
-            previousSourceFingerprint.isNotEmpty &&
-            currentSourceFingerprint != previousSourceFingerprint) {
-          // Native notification IDs/post times differ, so preserve both
-          // candidates even if their visible text and amounts are identical.
+        // When either signal has native identity, only that same identity
+        // can prove a replay. Different or missing identities stay separate.
+        if (sourceFingerprint != null || previousSourceFingerprint.isNotEmpty) {
           continue;
         }
-        // Same-channel accessibility bursts may surface a static payment
-        // screen more than once. Coalesce only exact-text repeats in a bounded
-        // window when no distinct native notification identity proves otherwise.
         final previousText = (previous['text'] ?? '').toString();
         if (reference == null &&
             previousReference.isEmpty &&
@@ -160,21 +146,26 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       if (age > allowedAge) continue;
 
       final previousAccount = (previous['account'] ?? '').toString();
-      if (account.isNotEmpty &&
-          previousAccount.isNotEmpty &&
-          account != previousAccount) {
-        continue;
-      }
-
       final previousPayer = (previous['payer'] ?? '').toString();
-      if (payer.isNotEmpty &&
+      final differentAccounts = account.isNotEmpty &&
+          previousAccount.isNotEmpty &&
+          account != previousAccount;
+      final differentPayers = payer.isNotEmpty &&
           previousPayer.isNotEmpty &&
-          !_payersCompatible(payer, previousPayer)) {
-        continue;
-      }
+          !_payersCompatible(payer, previousPayer);
+      if (differentAccounts || differentPayers) continue;
 
-      // One-to-one source pairing matters: two genuine same-value payments
-      // should be able to pair with two notifications and two bank SMS messages.
+      final sameAccount =
+          account.isNotEmpty && account == previousAccount;
+      final samePayer =
+          payer.isNotEmpty &&
+          previousPayer.isNotEmpty &&
+          _payersCompatible(payer, previousPayer);
+
+      // Amount and direction are not unique transaction IDs. Without a shared
+      // UTR, require corroborating payer/account evidence.
+      if (!sameAccount && !samePayer) continue;
+
       final claimedChannels = (previous['claimedChannels'] is List)
           ? (previous['claimedChannels'] as List)
               .map((value) => value.toString())
@@ -182,13 +173,31 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
           : <String>{};
       if (claimedChannels.contains(channel)) continue;
 
+      if (uniqueEchoCandidate != null &&
+          !identical(uniqueEchoCandidate, previous)) {
+        ambiguousCandidates = true;
+        break;
+      }
+      uniqueEchoCandidate = previous;
+    }
+
+    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
+      final claimedChannels = (uniqueEchoCandidate['claimedChannels'] is List)
+          ? (uniqueEchoCandidate['claimedChannels'] as List)
+              .map((value) => value.toString())
+              .toSet()
+          : <String>{};
       claimedChannels.add(channel);
-      previous['claimedChannels'] = claimedChannels.toList();
-      stored[i] = previous;
+      uniqueEchoCandidate['claimedChannels'] = claimedChannels.toList();
+      final id = uniqueEchoCandidate['id'];
+      final index = stored.indexWhere((entry) => entry['id'] == id);
+      if (index >= 0) stored[index] = uniqueEchoCandidate;
       await prefs.setString(_storageKey, jsonEncode(stored));
       return true;
     }
 
+    // Ambiguous or unmatched candidates are retained independently so a real
+    // same-person same-amount payment is not silently swallowed.
     stored.add(<String, dynamic>{
       'id': event.id,
       'amount': event.amount,
