@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/voice_billing_price_policy.dart';
+import 'package:retail_mind/voice_billing_price_policy.dart';
 
 void main() {
   group('VoiceBillingPricePolicy', () {
