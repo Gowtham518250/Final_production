@@ -1189,6 +1189,67 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     return null;
   }
 
+  String _catalogProductName(Map<String, dynamic> product) =>
+      (product['product_name'] ??
+              product['name'] ??
+              product['productName'] ??
+              product['itemName'] ??
+              '')
+          .toString()
+          .trim();
+
+  Set<String> _voiceCatalogTokens(String value) => value
+      .toLowerCase()
+      .replaceAll(
+        RegExp(
+          r'[^a-z0-9\u0900-\u0d7f\u0980-\u09ff\u0a00-\u0aff\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\s]',
+        ),
+        ' ',
+      )
+      .split(RegExp(r'\s+'))
+      .where((token) => token.length >= 2)
+      .toSet();
+
+  /// A model-provided product ID is not trusted by itself: the returned name
+  /// must agree with that catalogue row or be a unique alias/subset match.
+  /// This prevents a high-confidence AI response for "sugar" from attaching a
+  /// different product ID (such as rice) and deducting the wrong stock.
+  bool _isProductNameConsistentWithCatalog(
+    String proposedName,
+    Map<String, dynamic> product,
+  ) {
+    final catalogName = _catalogProductName(product);
+    if (proposedName.trim().isEmpty || catalogName.isEmpty) return false;
+
+    if (proposedName.trim().toLowerCase() == catalogName.toLowerCase()) {
+      return true;
+    }
+    final proposedKey = _catalogKey(proposedName);
+    final catalogKey = _catalogKey(catalogName);
+    if (proposedKey.isNotEmpty && proposedKey == catalogKey) return true;
+
+    final alias = PhoneticProductResolver.resolve(proposedName);
+    final aliasKey = alias == null ? '' : _catalogKey(alias);
+    if (aliasKey.isNotEmpty && aliasKey == catalogKey) return true;
+
+    final proposedTokens = _voiceCatalogTokens(proposedName);
+    final catalogTokens = _voiceCatalogTokens(catalogName);
+    if (proposedTokens.isEmpty || !catalogTokens.containsAll(proposedTokens)) {
+      return false;
+    }
+
+    // A short/generic name such as "oil" must not choose between multiple
+    // catalog products like coconut oil and sunflower oil.
+    final plausible = (widget.knownProducts ?? const <Map<String, dynamic>>[])
+        .where((candidate) {
+          if (candidate['source'] == 'Sales History') return false;
+          return _voiceCatalogTokens(_catalogProductName(candidate))
+              .containsAll(proposedTokens);
+        })
+        .toList();
+    return plausible.length == 1 && identical(plausible.single, product);
+  }
+
   Future<({List<ParsedItem> items, List<String> warnings, String interpretedText})>
       _parseWithGroq(String transcript) async {
     final response = await ApiClient.postJson(
@@ -1263,8 +1324,32 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         // not sufficient to authorize stock-backed billing.
         final rawProductId =
             (raw['product_id'] ?? '').toString().trim();
-        final knownProduct = _findKnownProductById(rawProductId) ??
-            (rawProductId.isEmpty ? _findKnownProduct(name) : null);
+        final idMatchedProduct = _findKnownProductById(rawProductId);
+        final exactNameProduct = _findKnownProduct(name);
+        final idNameMismatch = idMatchedProduct != null &&
+            !_isProductNameConsistentWithCatalog(name, idMatchedProduct);
+        final unknownProductId =
+            rawProductId.isNotEmpty && idMatchedProduct == null;
+
+        // If the ID contradicts the AI's name, only recover through an exact
+        // local catalogue-name match. Never fuzzy-select a different product.
+        final Map<String, dynamic>? knownProduct;
+        if (rawProductId.isEmpty) {
+          knownProduct = exactNameProduct;
+        } else if (idMatchedProduct == null) {
+          knownProduct = null;
+        } else if (idNameMismatch) {
+          knownProduct = exactNameProduct;
+        } else {
+          knownProduct = idMatchedProduct;
+        }
+
+        if (idNameMismatch && knownProduct != null) {
+          final warning =
+              'AI product name and catalogue ID disagreed. Matched the exact shop-catalogue name "\${_catalogProductName(knownProduct)}" instead; verify it before billing.';
+          if (!warnings.contains(warning)) warnings.add(warning);
+        }
+
         if (knownProduct == null) {
           // An unlisted item can still be billed as a custom invoice line when
           // the cashier reviews it. It must not inherit a product ID, barcode,
@@ -1276,9 +1361,13 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           final unit = (raw['unit'] ?? raw['unit_name'] ?? 'pc')
               .toString()
               .trim();
-          final warning = hasSpokenPrice
-              ? '"$name" is not in this shop catalogue. It can be billed as a custom item with no stock deduction; verify its name and price.'
-              : '"$name" is not in this shop catalogue and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
+          final warning = idNameMismatch
+              ? 'The AI product name "$name" conflicts with its catalogue ID. It was not linked to inventory; confirm the exact item manually. No stock will be deducted.'
+              : unknownProductId
+                  ? 'The AI returned an unknown catalogue ID for "$name". Select the correct item manually; no stock will be deducted.'
+                  : hasSpokenPrice
+                      ? '"$name" is not in this shop catalogue. It can be billed as a custom item with no stock deduction; verify its name and price.'
+                      : '"$name" is not in this shop catalogue and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
           if (!warnings.contains(warning)) warnings.add(warning);
           items.add(
             ParsedItem(
@@ -1850,19 +1939,29 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         throw StateError('No clear speech was detected. Please record again.');
       }
 
-      var cleanTranscript = PhoneticNormalizer.normalize(
+      final phoneticTranscript = PhoneticNormalizer.normalize(
         transcript,
         _selectedLang.code,
       );
       final correctedTranscript =
           await VoiceFeedbackLearningService.applyLearnedCorrections(
-        transcript: cleanTranscript,
+        transcript: phoneticTranscript,
         languageCode: _selectedLang.code,
       );
+      final correctedOrOriginal = correctedTranscript.trim().isNotEmpty
+          ? correctedTranscript
+          : phoneticTranscript;
+      final cleanTranscript =
+          RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
+        correctedOrOriginal,
+        locale: _selectedLang.code,
+      );
       var parsedResult = parsed;
-      if (correctedTranscript.trim().isNotEmpty &&
-          correctedTranscript != cleanTranscript) {
-        cleanTranscript = correctedTranscript;
+      // The audio endpoint already produced a draft. Re-run the text parser
+      // only when learned corrections or deterministic number normalization
+      // changed the transcript, avoiding an unnecessary second AI request.
+      if (correctedTranscript != phoneticTranscript ||
+          cleanTranscript != phoneticTranscript) {
         parsedResult = await _parseWithGroq(cleanTranscript);
       }
 
@@ -1979,6 +2078,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           languageCode: _selectedLang.code,
         );
       }
+      clean = RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
+        clean,
+        locale: _selectedLang.code,
+      );
 
       List<ParsedItem> items;
       List<String> warnings;
