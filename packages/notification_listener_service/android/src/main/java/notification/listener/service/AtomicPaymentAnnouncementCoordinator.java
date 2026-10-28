@@ -127,7 +127,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
             return false;
         }
 
-        final String direction = clean(value(input.get("direction"))).toLowerCase(Locale.ROOT);
+        final String direction = value(input.get("direction")).toLowerCase(Locale.ROOT);
         final String origin = normalizeOrigin(value(input.get("origin")));
         final String channel = firstNonEmpty(value(input.get("channel")),
                 origin + "|" + firstNonEmpty(value(input.get("packageName")), value(input.get("app"))));
