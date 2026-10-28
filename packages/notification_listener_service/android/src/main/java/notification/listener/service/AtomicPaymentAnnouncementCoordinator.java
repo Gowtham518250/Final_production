@@ -10,7 +10,7 @@ import android.util.Log;
 import org.json.JSONArray;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -117,7 +117,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
 
     private boolean evaluate(Map<?, ?> input) {
         final double amount = number(input.get("amount"), 0.0);
-        if (!Double.isFinite(amount) || amount <= 0.0) return false;
+        if (Double.isNaN(amount) || Double.isInfinite(amount) || amount <= 0.0) return false;
 
         final long amountCents;
         try {
@@ -139,7 +139,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         final String accountHash = hash(normalizeAccount(firstNonEmpty(
                 value(input.get("accountSuffix")), extractAccount(rawText))));
         final String textHash = hash(normalizeText(rawText));
-        final long now = number(input.get("timestamp"), System.currentTimeMillis()).longValue();
+        final long now = (long) number(input.get("timestamp"), System.currentTimeMillis());
 
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
@@ -289,7 +289,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
 
         String eventKey = value(input.get("sourceEventKey"));
         if (notEmpty(eventKey)) {
-            String[] parts = eventKey.split("\\\\|");
+            String[] parts = eventKey.split("\\|");
             if (parts.length >= 4) {
                 StringBuilder stable = new StringBuilder();
                 for (int i = 0; i < parts.length - 1; i++) {
@@ -326,7 +326,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
 
     private static String normalizePayer(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\\\p{L}\\\\p{N}]+", " ").trim();
+                .replaceAll("[^\\p{L}\\p{N}]+", " ").trim();
     }
 
     private static String normalizeAccount(String value) {
@@ -335,7 +335,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
 
     private static String normalizeText(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT)
-                .replaceAll("\\\\s+", " ").trim();
+                .replaceAll("\\s+", " ").trim();
     }
 
     private static String extractPayer(String raw) {
@@ -372,7 +372,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         if (value == null || value.isEmpty()) return "";
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8));
+                    .digest(value.getBytes(Charset.forName("UTF-8")));
             StringBuilder out = new StringBuilder(digest.length * 2);
             for (byte b : digest) out.append(String.format(Locale.ROOT, "%02x", b & 0xff));
             return out.toString();

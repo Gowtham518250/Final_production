@@ -321,7 +321,7 @@ final class NativePaymentAnnouncementFallback {
 
     private static String stableIdentity(String eventKey) {
         if (eventKey == null) return "";
-        String[] parts = eventKey.split("\\\\|");
+        String[] parts = eventKey.split("\\|");
         if (parts.length < 4) return eventKey;
         StringBuilder value = new StringBuilder();
         for (int i = 0; i < parts.length - 1; i++) {
@@ -333,7 +333,7 @@ final class NativePaymentAnnouncementFallback {
 
     private static long postedAt(String eventKey) {
         if (eventKey == null) return 0L;
-        String[] parts = eventKey.split("\\\\|");
+        String[] parts = eventKey.split("\\|");
         if (parts.length < 4) return 0L;
         try { return Long.parseLong(parts[parts.length - 2]); }
         catch (NumberFormatException error) { return 0L; }
@@ -341,10 +341,10 @@ final class NativePaymentAnnouncementFallback {
 
     private static String extractPayer(String raw) {
         if (raw == null) return "";
-        Matcher sent = Pattern.compile("^\\\\s*([\\\\p{L}][\\\\p{L} .'-]{1,50}?)\\\\s+(?:sent|paid|transferred)\\\\b",
+        Matcher sent = Pattern.compile("^\\s*([\\p{L}][\\p{L} .'-]{1,50}?)\\s+(?:sent|paid|transferred)\\b",
                 Pattern.CASE_INSENSITIVE).matcher(raw);
         if (sent.find()) return sent.group(1).trim();
-        Matcher from = Pattern.compile("\\\\b(?:from|received from|transfer from)\\\\s+([\\\\p{L}][\\\\p{L} .'-]{1,50}?)(?=\\\\s+(?:to|via|for|upi|utr|ref|txn|id|credited|sent|paid|account|a/c)\\\\b|[.,;]|₹|$)",
+        Matcher from = Pattern.compile("\\b(?:from|received from|transfer from)\\s+([\\p{L}][\\p{L} .'-]{1,50}?)(?=\\s+(?:to|via|for|upi|utr|ref|txn|id|credited|sent|paid|account|a/c)\\b|[.,;]|₹|$)",
                 Pattern.CASE_INSENSITIVE).matcher(raw);
         return from.find() ? from.group(1).trim() : "";
     }
