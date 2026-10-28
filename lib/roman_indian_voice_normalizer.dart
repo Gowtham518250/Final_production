@@ -16,6 +16,35 @@
 class RomanIndianVoiceNormalizer {
   const RomanIndianVoiceNormalizer._();
 
+  // Scale words spoken by Telugu-speaking shopkeepers and common mixed-language
+  // ASR output. Treat these as multipliers only when they follow a number.
+  static const Map<String, int> _spokenScaleWords = {
+    'hundred': 100,
+    'sau': 100,
+    'सौ': 100,
+    'vanda': 100,
+    'vandu': 100,
+    'vandalu': 100,
+    'vandala': 100,
+    'vandlu': 100,
+    'vandallu': 100,
+    'వంద': 100,
+    'వందలు': 100,
+    'వందల': 100,
+    'thousand': 1000,
+    'vela': 1000,
+    'velu': 1000,
+    'velalu': 1000,
+    'వేలు': 1000,
+    'వేల': 1000,
+  };
+
+  // These English homophones are valid ordinary words, not reliable number
+  // tokens. Never turn e.g. "for hundred" or "tree hundred" into a price.
+  static const Set<String> _ambiguousNumberHomophones = {
+    'to', 'too', 'won', 'for', 'tree', 'free',
+  };
+
   static final Map<String, String> _aliases = <String, String>{
     // -------------------------------------------------------------------------
     // English / common ASR variants
@@ -611,6 +640,71 @@ class RomanIndianVoiceNormalizer {
   
 };
 
+  /// Convert spoken scale phrases to a single numeric token while preserving
+  /// product names and every other word. Examples: "3 vandalu" -> "300",
+  /// "moodu vandalu" -> "300", and "మూడు వందలు" -> "300".
+  ///
+  /// Used before cloud parsing so numeric correction does not rewrite custom
+  /// product/brand names. Also used by the offline normalizer below.
+  static String normalizeSpokenScalePhrases(String input) {
+    if (input.trim().isEmpty) return input;
+
+    final tokens = input.trim().split(RegExp(r'\s+'));
+    final out = <String>[];
+    var i = 0;
+
+    while (i < tokens.length) {
+      final current = _cleanToken(tokens[i]);
+      if (i + 1 < tokens.length) {
+        final scale = _spokenScaleWords[_cleanToken(tokens[i + 1])];
+        final currentNumber = _numberFromToken(current);
+        final looksLikeNumber = double.tryParse(current) != null ||
+            (!_ambiguousNumberHomophones.contains(current) &&
+                currentNumber != null);
+
+        if (scale != null && looksLikeNumber) {
+          final amount = currentNumber;
+          if (amount != null && amount >= 1 && amount <= 99) {
+            var value = amount * scale;
+            var consumed = 2;
+            var remainderIndex = i + 2;
+
+            // Support forms such as "three hundred and fifty" and
+            // "moodu vandalu yabhai" without swallowing product words.
+            if (remainderIndex < tokens.length &&
+                const {'and', 'aur', 'మరియు', 'mariyu'}
+                    .contains(_cleanToken(tokens[remainderIndex]))) {
+              remainderIndex++;
+            }
+            if (remainderIndex < tokens.length) {
+              final remainderToken = _cleanToken(tokens[remainderIndex]);
+              final remainder = _numberFromToken(remainderToken);
+              final remainderIsSafe = double.tryParse(remainderToken) != null ||
+                  (!_ambiguousNumberHomophones.contains(remainderToken) &&
+                      remainder != null);
+              if (remainder != null &&
+                  remainderIsSafe &&
+                  remainder >= 1 &&
+                  remainder < scale) {
+                value += remainder;
+                consumed = remainderIndex - i + 1;
+              }
+            }
+
+            out.add(_formatNumber(value));
+            i += consumed;
+            continue;
+          }
+        }
+      }
+
+      out.add(tokens[i]);
+      i++;
+    }
+
+    return out.join(' ');
+  }
+
   /// Normalizes realistic Indian retail speech without deleting the original
   /// transcript. It returns parser-friendly semantic tokens.
   static String normalize(String input, {String? locale}) {
@@ -627,6 +721,8 @@ class RomanIndianVoiceNormalizer {
     // Keep decimal points but make punctuation a token boundary.
     text = text.replaceAll(RegExp(r'[,;|/]'), ' ');
     text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    text = normalizeSpokenScalePhrases(text);
 
     final tokens = text.split(' ').where((t) => t.isNotEmpty).toList();
     final out = <String>[];
