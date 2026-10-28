@@ -20,6 +20,9 @@ class RomanIndianVoiceNormalizer {
   // ASR output. Treat these as multipliers only when they follow a number.
   static const Map<String, int> _spokenScaleWords = {
     'hundred': 100,
+    'sau': 100,
+    'so': 100,
+    'सौ': 100,
     'vanda': 100,
     'vandu': 100,
     'vandalu': 100,
