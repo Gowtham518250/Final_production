@@ -1954,7 +1954,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       final cleanTranscript =
           RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
         correctedOrOriginal,
-        locale: _selectedLang.code,
       );
       var parsedResult = parsed;
       // The audio endpoint already produced a draft. Re-run the text parser
@@ -2080,7 +2079,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       }
       clean = RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
         clean,
-        locale: _selectedLang.code,
       );
 
       List<ParsedItem> items;
