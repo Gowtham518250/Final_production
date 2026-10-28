@@ -46,6 +46,29 @@ class NotificationListenerService {
     }
   }
 
+  /// Atomically check/store an announcement candidate in Android SQLite.
+  ///
+  /// Returns true when this event is a duplicate and should be suppressed,
+  /// false when it is the unique announcement candidate, or null when the
+  /// native plugin is unavailable and the caller should use its local fallback.
+  static Future<bool?> shouldSuppressPaymentAnnouncement(
+    Map<String, dynamic> event,
+  ) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await methodeChannel.invokeMethod<bool>(
+        'shouldSuppressPaymentAnnouncement',
+        event,
+      );
+    } on PlatformException catch (error) {
+      log('Atomic payment announcement gate failed: $error');
+      return null;
+    } on MissingPluginException catch (error) {
+      log('Atomic payment announcement gate unavailable: $error');
+      return null;
+    }
+  }
+
   /// Acknowledge a durable native notification after the detector processed it.
   static Future<void> acknowledgeNotification(String? eventKey) async {
     if (!Platform.isAndroid || eventKey == null || eventKey.trim().isEmpty) {

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:notification_listener_service/notification_listener_service.dart';
 
 import 'payment_event.dart';
 
@@ -59,7 +61,39 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       return false;
     }
 
+    if (event.nativeAnnouncementHandled) {
+      // Native TTS already owns this event. Keep it eligible for UI/history
+      // processing; _emit mutes the Flutter voice for this marker.
+      return false;
+    }
+
     final direction = _directionKey(event);
+    if (Platform.isAndroid) {
+      final identity = event.sourceEventIdentity;
+      final sourcePackage = (identity?.split('|').isNotEmpty ?? false)
+          ? identity!.split('|').first
+          : event.app.name;
+      final origin = _origin(event.detectionSource);
+      final channel = '$origin|$sourcePackage';
+      final nativeDecision =
+          await NotificationListenerService.shouldSuppressPaymentAnnouncement({
+        'amount': event.amount,
+        'direction': direction,
+        'referenceId': event.normalizedReferenceId,
+        'sourceIdentity': identity,
+        'sourceEventKey': event.sourceEventKey,
+        'sourceTimestamp': event.sourceTimestamp?.millisecondsSinceEpoch,
+        'timestamp': now.millisecondsSinceEpoch,
+        'origin': origin,
+        'channel': channel,
+        'app': event.app.name,
+        'payerName': event.payerName,
+        'accountSuffix': event.accountSuffix,
+        'bankName': event.bankName,
+        'rawText': event.rawText,
+      });
+      if (nativeDecision != null) return nativeDecision;
+    }
     if (direction == 'unknown') return false;
 
     final prefs = await SharedPreferences.getInstance();
