@@ -201,7 +201,7 @@ void main() {
         app: PaymentApp.phonePe,
         rawText: 'Payment received INR 500',
         amount: 500,
-        sourceEventKey: 'com.phonepe.app|71|\u0024{time.millisecondsSinceEpoch}|phonepe',
+        sourceEventKey: 'com.phonepe.app|71|${time.millisecondsSinceEpoch}|phonepe',
       );
       final truecallerEcho = _event(
         id: 'truecaller-mirror',
@@ -211,7 +211,7 @@ void main() {
         rawText: 'UPI transfer received INR 500',
         amount: 500,
         sourceEventKey:
-            'com.truecaller|72|\u0024{time.millisecondsSinceEpoch + 3000}|truecaller',
+            'com.truecaller|72|${time.millisecondsSinceEpoch + 3000}|truecaller',
       );
 
       expect(
@@ -242,7 +242,7 @@ void main() {
         app: PaymentApp.phonePe,
         rawText: 'Payment received INR 500',
         amount: 500,
-        sourceEventKey: 'com.phonepe.app|73|\u0024{time.millisecondsSinceEpoch}|phonepe',
+        sourceEventKey: 'com.phonepe.app|73|${time.millisecondsSinceEpoch}|phonepe',
       );
       final laterTruecaller = _event(
         id: 'truecaller-later',
@@ -252,7 +252,7 @@ void main() {
         rawText: 'UPI transfer received INR 500',
         amount: 500,
         sourceEventKey:
-            'com.truecaller|74|\u0024{time.millisecondsSinceEpoch + 9000}|truecaller',
+            'com.truecaller|74|${time.millisecondsSinceEpoch + 9000}|truecaller',
       );
 
       expect(
