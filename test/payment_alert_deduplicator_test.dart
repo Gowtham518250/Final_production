@@ -177,7 +177,7 @@ void main() {
       );
       final second = event(
         id: 'phonepe-2',
-        payerName: 'Anna',
+        payerName: 'Meena',
         sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|hash-2',
       );
 
@@ -205,7 +205,7 @@ void main() {
         deduper.shouldSuppress(
           event(
             id: 'mirror-2',
-            payerName: 'Anna',
+            payerName: 'Meena',
             app: PaymentApp.unknown,
             sourceEventKey: 'com.truecaller.app|8|${postedAt + 3000}|mirror-2',
           ),

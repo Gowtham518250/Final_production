@@ -9,6 +9,9 @@ class ServiceNotificationEvent {
   /// Stable native identity used to acknowledge durable notification delivery.
   String? eventKey;
 
+  /// True when Android already announced this event while Flutter was unavailable.
+  bool? nativeAnnouncementHandled;
+
   /// check if we can reply the Notification
   bool? canReply;
 
@@ -67,6 +70,7 @@ class ServiceNotificationEvent {
   ServiceNotificationEvent({
     this.id,
     this.eventKey,
+    this.nativeAnnouncementHandled,
     this.canReply,
     this.haveExtraPicture,
     this.hasRemoved,
@@ -87,6 +91,7 @@ class ServiceNotificationEvent {
   ServiceNotificationEvent.fromMap(Map<dynamic, dynamic> map) {
     id = map['id'];
     eventKey = map['eventKey'] as String?;
+    nativeAnnouncementHandled = map['nativeAnnouncementHandled'] == true;
     canReply = map['canReply'];
     haveExtraPicture = map['haveExtraPicture'];
     hasRemoved = map['hasRemoved'];

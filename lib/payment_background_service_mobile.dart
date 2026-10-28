@@ -129,7 +129,9 @@ Future<void> _persistPaymentHistoryThenForward(
   }
   // Persist the alert after history has classified this event, so a replay
   // marked duplicate by durable history never creates a fresh background alert.
-  await _postBackgroundPaymentAlert(pds, forwardedEvent);
+  if (!forwardedEvent.nativeAnnouncementHandled) {
+    await _postBackgroundPaymentAlert(pds, forwardedEvent);
+  }
   final payload = forwardedEvent.toJson();
   payload['history_handled'] = historyHandled;
   service.invoke('payment_detected', payload);

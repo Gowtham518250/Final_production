@@ -68,6 +68,7 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
         Map<String, Object> event = new HashMap<>();
         event.put("id", intent.getIntExtra(NotificationConstants.ID, -1));
         event.put("eventKey", eventKey);
+        event.put("nativeAnnouncementHandled", false);
         event.put("packageName", intent.getStringExtra(NotificationConstants.PACKAGE_NAME));
         event.put("title", intent.getStringExtra(NotificationConstants.NOTIFICATION_TITLE));
         event.put("content", intent.getStringExtra(NotificationConstants.NOTIFICATION_CONTENT));
@@ -141,6 +142,45 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
                 Log.e(TAG, "Unable to read pending notification events", error);
             }
             return result;
+        }
+    }
+
+    /** Find an unacknowledged event by its stable native key. */
+    public static Map<String, Object> getPendingEvent(Context context, String eventKey) {
+        if (eventKey == null || eventKey.trim().isEmpty()) return null;
+        for (Map<String, Object> event : getPendingEvents(context)) {
+            if (eventKey.equals(String.valueOf(event.get("eventKey")))) return event;
+        }
+        return null;
+    }
+
+    public static boolean isPendingEvent(Context context, String eventKey) {
+        return getPendingEvent(context, eventKey) != null;
+    }
+
+    /**
+     * Persist that the native fallback has already spoken this event. Flutter
+     * still processes it for history/UI, but suppresses its second announcement.
+     */
+    public static boolean markNativeAnnouncementHandled(
+            Context context, String eventKey, boolean handled) {
+        if (eventKey == null || eventKey.trim().isEmpty()) return false;
+        synchronized (LOCK) {
+            try {
+                SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+                JSONArray pending = new JSONArray(preferences.getString(PENDING, "[]"));
+                for (int i = 0; i < pending.length(); i++) {
+                    JSONObject item = pending.optJSONObject(i);
+                    if (item == null || !eventKey.equals(item.optString("eventKey"))) continue;
+                    item.put("nativeAnnouncementHandled", handled);
+                    pending.put(i, item);
+                    return preferences.edit().putString(PENDING, pending.toString()).commit();
+                }
+                return false;
+            } catch (JSONException | RuntimeException error) {
+                Log.e(TAG, "Unable to mark native announcement state", error);
+                return false;
+            }
         }
     }
 

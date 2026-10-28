@@ -11,6 +11,8 @@ PaymentEvent _credit({
   double amount = 5,
   String? payer,
   String? ref,
+  String? accountSuffix,
+  String? sourceEventKey,
   String text = 'sent to you',
 }) => PaymentEvent(
   id: id,
@@ -18,7 +20,9 @@ PaymentEvent _credit({
   timestamp: at,
   app: app,
   payerName: payer,
+  accountSuffix: accountSuffix,
   referenceId: ref,
+  sourceEventKey: sourceEventKey,
   rawText: '$id $text',
   detectionSource: source,
   direction: PaymentTransactionDirection.incomingCredit,
@@ -69,8 +73,8 @@ void main() {
         () async {
       final now = DateTime.now();
       final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now),
-        _credit(id: 't1', app: PaymentApp.bankApp, source: 'notification', at: now),
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, payer: 'Anna Devi', accountSuffix: '4222'),
+        _credit(id: 't1', app: PaymentApp.bankApp, source: 'notification', at: now, payer: 'Anna Devi', accountSuffix: '4222'),
       ]);
       expect(events, hasLength(1));
     });
@@ -106,32 +110,44 @@ void main() {
           app: PaymentApp.phonePe,
           source: 'notification',
           at: now.subtract(const Duration(minutes: 20)),
+          payer: 'Anna Devi',
         ),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, payer: 'Anna Devi'),
       ]);
       expect(events, hasLength(1));
     });
 
     test('two payments + two late SMS = 2, a third unmatched SMS = 3', () async {
       final now = DateTime.now();
-      PaymentEvent n(String id, int minsAgo) => _credit(
+      PaymentEvent n(String id, int minsAgo, String payer) => _credit(
         id: id,
         app: PaymentApp.phonePe,
         source: 'notification',
         at: now.subtract(Duration(minutes: minsAgo)),
+        payer: payer,
       );
-      PaymentEvent s(String id) =>
-          _credit(id: id, app: PaymentApp.bankSms, source: 'sms', at: now);
+      PaymentEvent s(String id, String payer) => _credit(
+        id: id,
+        app: PaymentApp.bankSms,
+        source: 'sms',
+        at: now,
+        payer: payer,
+      );
 
-      final two = await emitAll([n('n1', 21), n('n2', 20), s('s1'), s('s2')]);
+      final two = await emitAll([
+        n('n1', 21, 'Anna Devi'),
+        n('n2', 20, 'Meena Devi'),
+        s('s1', 'Anna Devi'),
+        s('s2', 'Meena Devi'),
+      ]);
       expect(two, hasLength(2));
 
       final three = await emitAll([
-        n('n1', 21),
-        n('n2', 20),
-        s('s1'),
-        s('s2'),
-        s('s3'),
+        n('n1', 21, 'Anna Devi'),
+        n('n2', 20, 'Meena Devi'),
+        s('s1', 'Anna Devi'),
+        s('s2', 'Meena Devi'),
+        s('s3', 'Ravi Kumar'),
       ]);
       expect(three, hasLength(3));
     });
@@ -162,8 +178,9 @@ void main() {
           app: PaymentApp.phonePe,
           source: 'notification',
           at: now.subtract(const Duration(minutes: 90)),
+          payer: 'Anna Devi',
         ),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, payer: 'Anna Devi'),
       ]);
       expect(events, hasLength(1));
     });
@@ -238,6 +255,112 @@ void main() {
         service.clearBill();
         service.debugResetTransientDetectionState();
         PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+      },
+    );
+
+    test(
+      'same payer sends the same amount twice with distinct native posts: both speak',
+      () async {
+        final originalVoiceEnabled = PdsConfig.isVoiceEnabled;
+        PdsConfig.isVoiceEnabled = true;
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+        final firstAt = DateTime.now();
+        final secondAt = firstAt.add(const Duration(seconds: 2));
+        final first = PaymentEvent(
+          id: 'tc-post-1',
+          amount: 500,
+          timestamp: firstAt,
+          app: PaymentApp.bankApp,
+          payerName: 'Rahul Kumar',
+          accountSuffix: '4222',
+          sourceEventKey:
+              'com.truecaller|41|${firstAt.millisecondsSinceEpoch}|hash-a',
+          rawText: 'Rahul Kumar sent ₹500 to account 4222',
+          detectionSource: 'truecaller_notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
+        final second = PaymentEvent(
+          id: 'tc-post-2',
+          amount: 500,
+          timestamp: secondAt,
+          app: PaymentApp.bankApp,
+          payerName: 'Rahul Kumar',
+          accountSuffix: '4222',
+          sourceEventKey:
+              'com.truecaller|42|${secondAt.millisecondsSinceEpoch}|hash-b',
+          rawText: 'Rahul Kumar sent ₹500 to account 4222',
+          detectionSource: 'truecaller_notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
+        PaymentUiState ui(PaymentEvent event) => PaymentUiState(
+          id: event.id,
+          decision: event.decision,
+          amount: event.amount,
+          payerName: event.payerName,
+          bankName: event.bankName,
+          isFailed: event.isFailed,
+          detectedAt: event.timestamp,
+          rawText: event.rawText,
+          direction: event.direction,
+        );
+
+        queue.enqueue(first, ui(first));
+        queue.enqueue(second, ui(second));
+        await Future<void>.delayed(const Duration(milliseconds: 2600));
+
+        expect(spoken, hasLength(2));
+        queue.dispose();
+        PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+      },
+    );
+
+    test(
+      'ambiguous same-payer same-amount cross-source match does not suppress a payment',
+      () async {
+        final now = DateTime.now();
+        final events = await emitAll([
+          _credit(
+            id: 'phonepe-1',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            payer: 'Rahul Kumar',
+            accountSuffix: '4222',
+            sourceEventKey:
+                'com.phonepe.app|51|${now.millisecondsSinceEpoch}|hash-1',
+            text: 'Rahul Kumar sent ₹500 to account 4222',
+          ),
+          _credit(
+            id: 'phonepe-2',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now.add(const Duration(seconds: 1)),
+            payer: 'Rahul Kumar',
+            accountSuffix: '4222',
+            sourceEventKey:
+                'com.phonepe.app|52|${now.millisecondsSinceEpoch + 1000}|hash-2',
+            text: 'Rahul Kumar sent ₹500 to account 4222',
+          ),
+          _credit(
+            id: 'truecaller-echo',
+            app: PaymentApp.bankApp,
+            source: 'notification',
+            at: now.add(const Duration(seconds: 2)),
+            payer: 'Rahul Kumar',
+            accountSuffix: '4222',
+            sourceEventKey:
+                'com.truecaller|53|${now.millisecondsSinceEpoch + 2000}|hash-3',
+            text: 'Rahul Kumar sent ₹500 to account 4222',
+          ),
+        ]);
+
+        // With two plausible originals and no shared transaction reference,
+        // choosing one would risk hiding a genuine second payment.
+        expect(events, hasLength(3));
       },
     );
 
