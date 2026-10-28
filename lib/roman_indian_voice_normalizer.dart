@@ -21,7 +21,6 @@ class RomanIndianVoiceNormalizer {
   static const Map<String, int> _spokenScaleWords = {
     'hundred': 100,
     'sau': 100,
-    'so': 100,
     'सौ': 100,
     'vanda': 100,
     'vandu': 100,
