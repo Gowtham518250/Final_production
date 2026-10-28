@@ -24,5 +24,33 @@ void main() {
     test('supports Telugu tens + units', () {
       expect(RomanIndianVoiceNormalizer.normalize('iravai rendu kilo'), '22 kg');
     });
+    test('normalizes Roman Telugu hundreds to the intended amount', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('3 vandalu biyyam'),
+        '300 biyyam',
+      );
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('moodu vandalu biyyam'),
+        '300 biyyam',
+      );
+    });
+    test('normalizes Telugu-script hundreds without rewriting product words', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('మూడు వందలు బియ్యం'),
+        '300 బియ్యం',
+      );
+    });
+    test('supports a remainder after a spoken hundred', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('3 vandalu yabhai rupees'),
+        '350 rupees',
+      );
+    });
+    test('does not mistake ordinary English homophones for number words', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('tree vandalu soap'),
+        'tree vandalu soap',
+      );
+    });
   });
 }
