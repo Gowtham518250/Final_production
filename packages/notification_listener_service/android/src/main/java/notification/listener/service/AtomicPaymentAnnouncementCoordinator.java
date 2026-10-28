@@ -150,9 +150,11 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
             boolean ambiguous = false;
 
             for (Observation old : observations) {
-                if (old.amountCents != amountCents || !old.direction.equals(direction)) {
-                    continue;
-                }
+                if (old.amountCents != amountCents) continue;
+                boolean sameDirection = old.direction.equals(direction);
+                boolean identityDirectionCompatible = sameDirection
+                        || "unknown".equals(direction)
+                        || "unknown".equals(old.direction);
 
                 if (notEmpty(sourceIdentity) && sourceIdentity.equals(old.sourceIdentity)) {
                     if (notEmpty(referenceHash) && notEmpty(old.referenceHash)
@@ -161,19 +163,28 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                         // different authoritative transaction: preserve it.
                         continue;
                     }
-                    db.setTransactionSuccessful();
-                    return true;
-                }
-
-                if (notEmpty(referenceHash) || notEmpty(old.referenceHash)) {
-                    // Only a shared reference may pair reference-bearing
-                    // events. A missing/different reference is not an echo.
-                    if (notEmpty(referenceHash) && referenceHash.equals(old.referenceHash)) {
+                    if (identityDirectionCompatible) {
                         db.setTransactionSuccessful();
                         return true;
                     }
                     continue;
                 }
+
+                if (notEmpty(referenceHash) || notEmpty(old.referenceHash)) {
+                    // A shared reference plus compatible amount/direction is
+                    // enough even if one source cannot infer the direction.
+                    // Known credit/debit contradictions remain independently reviewable.
+                    if (notEmpty(referenceHash) && referenceHash.equals(old.referenceHash)
+                            && identityDirectionCompatible) {
+                        db.setTransactionSuccessful();
+                        return true;
+                    }
+                    continue;
+                }
+
+                // Fuzzy cross-source matching is stricter: both sides must
+                // agree on a known direction, in addition to payer/account evidence.
+                if (!sameDirection || "unknown".equals(direction)) continue;
 
                 long age = Math.abs(now - old.seenAt);
                 if (old.channel.equals(channel)) {
