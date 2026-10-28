@@ -644,7 +644,7 @@ class RomanIndianVoiceNormalizer {
   ///
   /// Kept separate from the full vocabulary normalizer so the cloud AI parser
   /// gets number disambiguation without us rewriting custom product/brand names.
-  static String normalizeSpokenScalePhrases(String input, {String? locale}) {
+  static String normalizeSpokenScalePhrases(String input) {
     if (input.trim().isEmpty) return input;
 
     final tokens = input.trim().split(RegExp(r'\s+'));
@@ -671,7 +671,7 @@ class RomanIndianVoiceNormalizer {
     text = text.replaceAll(RegExp(r'[,;|/]'), ' ');
     text = text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-    text = normalizeSpokenScalePhrases(text, locale: locale);
+    text = normalizeSpokenScalePhrases(text);
 
     final tokens = text.split(' ').where((t) => t.isNotEmpty).toList();
     final out = <String>[];
