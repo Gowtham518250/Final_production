@@ -1631,6 +1631,20 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       return;
     }
 
+    // For Indian-language billing, prefer the cloud ASR path even when a
+    // device locale is installed: local recognizers can return plausible but
+    // incorrect code-switched product names and prices without an error.
+    // English remains on-device to preserve the fast path.
+    if (_selectedLang.code != 'en-IN') {
+      if (kDebugMode) {
+        debugPrint(
+          '🎙️ [VoiceBilling] using cloud-first transcription for ${_selectedLang.code}',
+        );
+      }
+      await _startCloudAudioFallback();
+      return;
+    }
+
     if (!_hasInitializedStt) {
       final available = await _speech.initialize(
         onStatus: (status) {
@@ -1857,7 +1871,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         unawaited(_stopAndTranscribeCloudRecording());
       });
       _showSnack(
-        'On-device ${_selectedLang.label} recognition is unavailable. Recording for online transcription; internet is required. Tap the microphone again when you finish.',
+        'Recording for cloud ${_selectedLang.label} recognition to better capture product names and quantities. Internet is required. Tap the microphone again when you finish.',
       );
     } catch (error) {
       _cloudRecordingLimitTimer?.cancel();
