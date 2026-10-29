@@ -101,6 +101,35 @@ void main() {
     });
   });
 
+  group('Native announcement idempotency marker', () {
+    test('native announcement marker survives even when event key is missing', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      service.clearBill();
+      service.setBillExpected(10);
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+
+      service.debugHandleNotification(
+        ServiceNotificationEvent(
+          packageName: 'com.phonepe.app',
+          id: 77,
+          title: 'PhonePe',
+          content: 'You received ₹5 from Rahul',
+          nativeAnnouncementHandled: true,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+
+      expect(events, isNotEmpty);
+      expect(events.any((event) => event.nativeAnnouncementHandled), isTrue);
+
+      await subscription.cancel();
+      service.clearBill();
+      service.debugResetTransientDetectionState();
+    });
+  });
+
   group('SMS source identity and safe matching', () {
     test('identical bank SMS text from distinct source rows remains two candidates', () async {
       final service = PaymentDetectionService();
