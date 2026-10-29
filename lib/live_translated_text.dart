@@ -52,21 +52,47 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
   String _displayText = '';
   late final VoidCallback _capacityListener;
 
+  bool _isListeningForCapacity = false;
+
   @override
   void initState() {
     super.initState();
     _displayText = widget.text;
     _capacityListener = _retryDeferredTranslation;
+  }
+
+  void _listenForCapacityChanges() {
+    if (_isListeningForCapacity) return;
     LiveTranslationService.instance.capacityChanges.addListener(_capacityListener);
+    _isListeningForCapacity = true;
+  }
+
+  void _stopListeningForCapacityChanges() {
+    if (!_isListeningForCapacity) return;
+    LiveTranslationService.instance.capacityChanges.removeListener(_capacityListener);
+    _isListeningForCapacity = false;
   }
 
   void _retryDeferredTranslation() {
-    if (!mounted || _displayText != widget.text) return;
+    if (!mounted || _displayText != widget.text) {
+      _stopListeningForCapacityChanges();
+      return;
+    }
     final targetCode =
         (widget.locale ?? Localizations.localeOf(context)).languageCode;
-    if (targetCode == 'en') return;
+    if (targetCode == 'en') {
+      _stopListeningForCapacityChanges();
+      return;
+    }
 
     final service = LiveTranslationService.instance;
+    if (!service.hasDeferredTranslation(
+      widget.text,
+      targetLanguageCode: targetCode,
+    )) {
+      _stopListeningForCapacityChanges();
+      return;
+    }
     if (!service.isDeferredAndRetryable(
       widget.text,
       targetLanguageCode: targetCode,
@@ -74,10 +100,10 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
       return;
     }
 
-    // A full queue deliberately leaves the source text visible. When capacity
-    // returns, retry only those deferred/cached values instead of re-requesting
-    // every translated widget in the tree.
+    // Only widgets with work actually deferred by the bounded queue subscribe
+    // here. Ordinary translated labels no longer receive every capacity pulse.
     _requestKey = null;
+    _stopListeningForCapacityChanges();
     _queueTranslation(targetCode);
   }
   String? _requestKey;
@@ -188,11 +214,13 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
   void _queueTranslation(String targetCode) {
     final requestKey = '$targetCode\u0000${widget.text}';
     if (_requestKey == requestKey) return;
+    _stopListeningForCapacityChanges();
     _requestKey = requestKey;
     final requestVersion = ++_requestVersion;
 
     if (targetCode == 'en' || widget.text.trim().isEmpty) {
       _displayText = widget.text;
+      _stopListeningForCapacityChanges();
       return;
     }
 
@@ -200,6 +228,7 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     final curated = _curatedTranslation(widget.text, targetCode);
     if (curated != null) {
       _displayText = curated;
+      _stopListeningForCapacityChanges();
       return;
     }
 
@@ -207,6 +236,7 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     // translation. Those values must remain exact on screen.
     if (_shouldPreserve(widget.text)) {
       _displayText = widget.text;
+      _stopListeningForCapacityChanges();
       return;
     }
 
@@ -216,14 +246,29 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
         .then((translated) {
           if (!mounted || requestVersion != _requestVersion) return;
           if (_displayText != translated) {
+            _stopListeningForCapacityChanges();
             setState(() => _displayText = translated);
+            return;
+          }
+
+          // Register only when the translation service confirms that this
+          // widget's request is deferred due to backpressure. This avoids
+          // waking every LiveTranslatedText on a large dashboard after batches.
+          final service = LiveTranslationService.instance;
+          if (service.hasDeferredTranslation(
+            widget.text,
+            targetLanguageCode: targetCode,
+          )) {
+            _listenForCapacityChanges();
+          } else {
+            _stopListeningForCapacityChanges();
           }
         });
   }
 
   @override
   void dispose() {
-    LiveTranslationService.instance.capacityChanges.removeListener(_capacityListener);
+    _stopListeningForCapacityChanges();
     super.dispose();
   }
 
