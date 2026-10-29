@@ -100,8 +100,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Bundle only assets used at runtime. assets/icon.png remains the source for
+  # flutter_launcher_icons and is generated into Android mipmap resources.
   assets:
-    - assets/
+    - assets/shop_logo.png
+    - assets/shop_keeper.png
+    - assets/shop_bottom_left.png
+    - assets/bag_bottom_right.png
 
 flutter_launcher_icons:
   android: true
