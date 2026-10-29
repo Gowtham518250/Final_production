@@ -846,7 +846,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         }
       }
 
-      if (!kIsWeb) {
+      if (!kIsWeb && !widget.testMode) {
         try {
           await PerformanceMonitorService.instance.startMonitoring();
         } catch (e) {
@@ -965,6 +965,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    PerformanceMonitorService.instance.stopMonitoring();
 
     // Stop all services through adaptive manager
     AdaptiveServiceManager.instance.stopAllServices();
