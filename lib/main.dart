@@ -748,14 +748,6 @@ void main() async {
         if (kDebugMode) debugPrint('⚠️ Background service init error: $e');
       }
     });
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        debugPrint('⚠️ Startup preparation failed; opening the app with fallbacks: $error');
-        debugPrintStack(stackTrace: stackTrace);
-      }
-    } finally {
-      if (!bootstrapReady.isCompleted) bootstrapReady.complete();
-    }
   } catch (error, stackTrace) {
     // Keep the first frame responsive even if an early bootstrap dependency
     // fails. MyApp's existing local/offline fallbacks handle partial startup.
