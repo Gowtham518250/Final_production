@@ -815,23 +815,34 @@ class LocalStorageService {
   }
 
   static Future<List<dynamic>> loadSales() async {
-    if (!await _hasValidUserId()) {
-      if (kDebugMode)
+    // Read the user ID once here rather than validating it and then reading it
+    // again just to log the result. _getBox still performs its own access check.
+    final userId = await _getUserId();
+    if (userId == null || userId <= 0) {
+      if (kDebugMode) {
         debugPrint('⚠️ loadSales: no user_id — returning empty (no fake data)');
+      }
       return [];
     }
+
     final box = await _getBox(_salesBoxBase, encrypted: true);
-    final userId = await _getUserId();
-    final sales = box.get('all_sales', defaultValue: []);
-    final typedSales = List<dynamic>.from(sales).map((sale) {
+    final sales = box.get('all_sales', defaultValue: const <dynamic>[]);
+    if (sales is! Iterable) return [];
+
+    // Iterate the stored list directly. List<dynamic>.from(sales) created an
+    // extra full-sized pointer list immediately before this result list, which
+    // is avoidable for large histories on memory-constrained devices.
+    final typedSales = sales.map((sale) {
       if (sale is StoredSale) return sale.toJson();
       if (sale is Map) return Map<String, dynamic>.from(sale);
       return sale;
     }).toList();
-    if (kDebugMode)
+
+    if (kDebugMode) {
       debugPrint(
         '🔍 [LocalStorage] Loaded ${typedSales.length} sales for USER_ID: $userId',
       );
+    }
     return typedSales;
   }
 
