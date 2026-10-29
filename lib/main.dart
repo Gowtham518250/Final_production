@@ -352,23 +352,13 @@ void main() async {
   bool hiveInitSuccess = false;
 
   try {
+    // Hive.initFlutter performs the required runtime bootstrap. Opening a
+    // throwaway box, writing it, closing it and deleting it on every launch
+    // added synchronous startup I/O but did not validate the real user boxes.
+    // Actual application boxes are opened by their owning storage services.
     await Hive.initFlutter();
     hiveInitSuccess = true;
-    debugPrint('✅ Hive initialized successfully');
-
-    // Verify Hive is working by attempting a simple operation
-    try {
-      final testBox = await Hive.openBox('hive_init_test');
-      await testBox.put('init_test', DateTime.now().toIso8601String());
-      await testBox.delete('init_test');
-      await testBox.close();
-      await Hive.deleteBoxFromDisk('hive_init_test');
-      debugPrint('✅ Hive initialization verified');
-    } catch (verifyError) {
-      debugPrint('⚠️ Hive verification failed: $verifyError');
-      hiveInitSuccess = false;
-      hiveRecoveryNeeded = true;
-    }
+    if (kDebugMode) debugPrint('✅ Hive initialized successfully');
   } catch (e) {
     debugPrint('🚨 Hive init failure: $e');
     hiveInitSuccess = false;
@@ -571,20 +561,27 @@ void main() async {
 
   // 🚀 PRODUCTION ARCHITECTURE INITIALIZATION (Ultra-Fast + Zero Data Loss)
   try {
-    // Initialize operation queue (persistent sync queue)
-    await OperationQueueService.initialize();
-    debugPrint('✅ Operation Queue Service initialized');
-
-    // Initialize enhanced local storage with UUID support
+    // EnhancedLocalStorageService.initialize also initializes the persistent
+    // operation queue. Initialize through that owner once, avoiding the
+    // duplicate Hive open/cleanup pass that previously ran on every launch.
     await EnhancedLocalStorageService.initialize();
-    debugPrint('✅ Enhanced Local Storage Service initialized');
+    debugPrint('✅ Enhanced Local Storage Service and operation queue initialized');
 
     // The canonical SyncService owns the durable outbox. The background
     // worker remains only as a compatibility adapter for legacy
     // OperationQueueService operations.
   } catch (e) {
     debugPrint('⚠️ Production architecture initialization error: $e');
-    // Continue startup even if new services fail - they have fallbacks
+    // Preserve the legacy queue fallback when enhanced-store initialization
+    // fails before its own queue initialization completes.
+    try {
+      await OperationQueueService.initialize();
+      debugPrint('✅ Operation Queue Service fallback initialized');
+    } catch (queueError) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Operation queue fallback failed: $queueError');
+      }
+    }
   }
 
   // Set up email credentials once in secure storage
