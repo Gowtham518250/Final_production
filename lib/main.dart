@@ -154,6 +154,13 @@ void main() async {
   LowMemoryPerformance.configure();
   unawaited(DeviceCapabilityService.instance.initialize());
 
+  // Paint immediately while Firebase, Hive and local stores initialize. The
+  // application/providers are mounted only after required bootstrap work has
+  // completed, so screens cannot race storage initialization.
+  final bootstrapReady = Completer<void>();
+  runApp(_StartupGate(ready: bootstrapReady.future));
+
+  try {
   // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
   bool firebaseInitialized = false;
   try {
@@ -559,13 +566,6 @@ void main() async {
     hiveInitSuccess || !hiveRecoveryNeeded,
   );
 
-  // Render a lightweight boot screen while local storage initializes. The
-  // actual providers/screens are mounted only after their required Hive boxes
-  // and durable queues are ready.
-  final bootstrapReady = Completer<void>();
-  runApp(_StartupGate(ready: bootstrapReady.future));
-
-  try {
     // 🚀 PRODUCTION ARCHITECTURE INITIALIZATION (Ultra-Fast + Zero Data Loss)
     try {
       // EnhancedLocalStorageService.initialize also initializes the persistent
@@ -748,9 +748,19 @@ void main() async {
         if (kDebugMode) debugPrint('⚠️ Background service init error: $e');
       }
     });
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Startup preparation failed; opening the app with fallbacks: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+    } finally {
+      if (!bootstrapReady.isCompleted) bootstrapReady.complete();
+    }
   } catch (error, stackTrace) {
+    // Keep the first frame responsive even if an early bootstrap dependency
+    // fails. MyApp's existing local/offline fallbacks handle partial startup.
     if (kDebugMode) {
-      debugPrint('⚠️ Startup preparation failed; opening the app with fallbacks: $error');
+      debugPrint('⚠️ Early application bootstrap failed: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
   } finally {
