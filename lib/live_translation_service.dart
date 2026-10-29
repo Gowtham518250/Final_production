@@ -70,6 +70,16 @@ class LiveTranslationService {
   /// was full. It is not a broadcast of every translation result.
   ValueListenable<int> get capacityChanges => _capacityRevision;
 
+  /// Whether this exact text is waiting because the low-memory queue was full.
+  /// Widgets only subscribe to capacity changes while they have deferred work.
+  bool hasDeferredTranslation(
+    String text, {
+    required String targetLanguageCode,
+  }) {
+    final key = '$targetLanguageCode\u0000${text.trim()}';
+    return _deferred.contains(key);
+  }
+
   bool isDeferredAndRetryable(
     String text, {
     required String targetLanguageCode,
