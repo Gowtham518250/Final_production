@@ -180,11 +180,11 @@ class VoiceNlpService {
         final value = double.parse(valueText);
         final lower = phrase.toLowerCase();
         final hasExplicitPriceMarker = RegExp(
-          r'(?:₹|\\brs\\.?\\b|\\binr\\b|\\brupees?\\b|\\brupee\\b|\\brupye\\b|\\brupya\\b|\\bprice\\b|\\bcost\\b)',
+          r'(?:₹|\brs\\.?\b|\binr\b|\brupees?\b|\brupee\b|\brupye\b|\brupya\b|\bprice\b|\bcost\b)',
           caseSensitive: false,
         ).hasMatch(lower);
         final hasQuantityMarker = RegExp(
-          r'\\b(?:qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\\b',
+          r'\b(?:qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\b',
           caseSensitive: false,
         ).hasMatch(lower);
         // A lone number without explicit context is ambiguous (e.g. "rice 3"
@@ -216,12 +216,12 @@ class VoiceNlpService {
     itemStr = itemStr
         .replaceAll(
           RegExp(
-            r'\\b(?:rupees?|rupee|rs\\.?|inr|rupye|rupya|price|cost|qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\\b',
+            r'\b(?:rupees?|rupee|rs\\.?|inr|rupye|rupya|price|cost|qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\b',
             caseSensitive: false,
           ),
           ' ',
         )
-        .replaceAll(RegExp(r'\\s+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     if (itemStr.isEmpty) return null;
 
