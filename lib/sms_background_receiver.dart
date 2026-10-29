@@ -59,8 +59,13 @@ String? smsSourceEventKey(SmsMessage message, String sender, String body) {
     }
   })();
   final senderHash = sha256.convert(utf8.encode(sender.trim())).toString();
-  final stableId = idValue.isNotEmpty ? 'id_$idValue' : 'sender_$senderHash';
   final bodyHash = sha256.convert(utf8.encode(body.trim())).toString();
+  // If the telephony provider omits the row ID, retain body identity inside
+  // the stable part of the key because the generic source-key parser strips
+  // only the final payload hash.
+  final stableId = idValue.isNotEmpty
+      ? 'id_$idValue'
+      : 'sender_${senderHash}_body_${bodyHash}';
   return 'sms|$stableId|$millis|$bodyHash';
 }
 
