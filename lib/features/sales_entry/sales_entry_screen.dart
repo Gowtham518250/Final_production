@@ -39,7 +39,7 @@ class _SalesEntryView extends StatefulWidget {
 class _SalesEntryViewState extends State<_SalesEntryView> {
   final Record _audioRecorder = Record();
   bool _isListening = false;
-  int _recordSeconds = 0;
+  final ValueNotifier<int> _recordSecondsNotifier = ValueNotifier<int>(0);
   Timer? _recordTimer;
   bool _finalizingVoice = false;
   
@@ -70,7 +70,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
 
       setState(() {
         _isListening = true;
-        _recordSeconds = 0;
+        _recordSecondsNotifier.value = 0;
       });
       _recordTimer?.cancel();
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -78,11 +78,11 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
           timer.cancel();
           return;
         }
-        if (_recordSeconds >= 59) {
+        if (_recordSecondsNotifier.value >= 59) {
           unawaited(_stopListening(context));
           return;
         }
-        setState(() => _recordSeconds++);
+        _recordSecondsNotifier.value++;
       });
     } catch (error) {
       _recordTimer?.cancel();
@@ -323,6 +323,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
   @override
   void dispose() {
     _recordTimer?.cancel();
+    _recordSecondsNotifier.dispose();
     unawaited(_audioRecorder.dispose());
     super.dispose();
   }
@@ -353,9 +354,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
           )
         ],
       ),
-      body: ListenableBuilder(
-        listenable: provider,
-        builder: (context, _) => Stack(
+      body: Stack(
         children: [
           SingleChildScrollView(
             padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 200),
@@ -431,15 +430,23 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            LiveTranslatedText(
-                              provider.isVoiceProcessing
-                                  ? 'Groq is transcribing and matching your inventory…'
-                                  : _isListening
-                                      ? 'Recording… $_recordSeconds s. Tap the mic to finish.'
-                                      : 'Speak product names, quantities and optional prices.',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white70,
-                                fontSize: 12,
+                            Selector<SalesEntryProvider, bool>(
+                              selector: (_, state) => state.isVoiceProcessing,
+                              builder: (context, isProcessing, _) =>
+                                  ValueListenableBuilder<int>(
+                                valueListenable: _recordSecondsNotifier,
+                                builder: (context, seconds, __) =>
+                                    LiveTranslatedText(
+                                  isProcessing
+                                      ? 'Groq is transcribing and matching your inventory…'
+                                      : _isListening
+                                          ? 'Recording… $seconds s. Tap the mic to finish.'
+                                          : 'Speak product names, quantities and optional prices.',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -466,10 +473,20 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                     ],
                   ),
                 ),
-                if (provider.lastVoiceTranscript?.trim().isNotEmpty == true ||
-                    provider.lastVoiceInterpretation?.trim().isNotEmpty == true ||
-                    provider.lastVoiceDetectedItems.isNotEmpty)
-                  _buildVoiceRecognitionSummary(provider, selectedLocale),
+                Consumer<SalesEntryProvider>(
+                  builder: (context, summaryProvider, _) {
+                    final hasSummary =
+                        summaryProvider.lastVoiceTranscript?.trim().isNotEmpty == true ||
+                        summaryProvider.lastVoiceInterpretation?.trim().isNotEmpty == true ||
+                        summaryProvider.lastVoiceDetectedItems.isNotEmpty;
+                    return hasSummary
+                        ? _buildVoiceRecognitionSummary(
+                            summaryProvider,
+                            selectedLocale,
+                          )
+                        : const SizedBox.shrink();
+                  },
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 0, 4, 18),
                   child: Text(
@@ -566,7 +583,16 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             LiveTranslatedText('Grand Total', style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF64748B))),
-                            LiveTranslatedText('₹${provider.totalAmount.toStringAsFixed(2)}', style: GoogleFonts.spaceMono(fontSize: 24, fontWeight: FontWeight.w800)),
+                            Selector<SalesEntryProvider, double>(
+                              selector: (_, state) => state.totalAmount,
+                              builder: (context, total, _) => LiveTranslatedText(
+                                '₹${total.toStringAsFixed(2)}',
+                                style: GoogleFonts.spaceMono(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -899,7 +925,6 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
             ),
           )
         ],
-      ),
       ),
     );
   }
