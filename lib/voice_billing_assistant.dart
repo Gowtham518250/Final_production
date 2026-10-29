@@ -45,6 +45,7 @@ import 'product_catalog_service.dart';
 import 'production_voice_billing_service.dart';
 import 'stt_accuracy_config.dart';
 import 'speech_locale_policy.dart';
+import 'voice_billing_price_policy.dart';
 
 // ─── Language Config ──────────────────────────────────────────────────────────
 
@@ -1412,27 +1413,30 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   '')
               .toString(),
         );
-        if (catalogPrice == null ||
-            !catalogPrice.isFinite ||
-            catalogPrice <= 0) {
+        final priceResolution =
+            VoiceBillingPricePolicy.resolveParsedPrice(
+          rawPriceSource: raw['price_source']?.toString(),
+          detectedPrice: spokenPrice,
+          cataloguePrice: catalogPrice,
+          productName: canonicalName,
+        );
+        if (!priceResolution.hasPrice) {
           final warning =
-              'No valid selling price is saved for $canonicalName. Update its price before billing.';
+              'No valid selling price is saved for $canonicalName. Update its price or speak a selling price before billing.';
           if (!warnings.contains(warning)) warnings.add(warning);
           continue;
         }
 
         String? priceWarning =
             (raw['price_warning'] ?? '').toString().trim();
-        if (spokenPrice != null &&
-            spokenPrice.isFinite &&
-            spokenPrice > 0 &&
-            (spokenPrice - catalogPrice).abs() >= 0.01) {
-          final warning =
-              'The AI heard ₹${spokenPrice.toStringAsFixed(2)} for $canonicalName, but this shop lists ₹${catalogPrice.toStringAsFixed(2)}. The shop price is shown; verify before billing.';
+        final resolutionWarning = priceResolution.warning;
+        if (resolutionWarning != null && resolutionWarning.isNotEmpty) {
           priceWarning = priceWarning.isEmpty
-              ? warning
-              : '$priceWarning $warning';
-          if (!warnings.contains(warning)) warnings.add(warning);
+              ? resolutionWarning
+              : '$priceWarning $resolutionWarning';
+          if (!warnings.contains(resolutionWarning)) {
+            warnings.add(resolutionWarning);
+          }
         }
         if (priceWarning.isNotEmpty && !warnings.contains(priceWarning)) {
           warnings.add(priceWarning);
@@ -1474,11 +1478,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             name: canonicalName,
             qty: quantity,
             unit: unit,
-            price: catalogPrice,
+            price: priceResolution.price!,
             confidence: confidence,
             catalogMatched: true,
             productId: productId,
-            priceSource: 'catalog',
+            priceSource: priceResolution.source,
             barcode: barcode.isEmpty ? null : barcode,
             gst: gst,
             priceWarning: priceWarning.isEmpty ? null : priceWarning,
@@ -2491,13 +2495,13 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 '')
             .toString(),
       );
-      // Catalogue pricing is authoritative unless the shopkeeper explicitly
-      // edited the price field in the review step.
-      final finalPrice = item.priceSource == 'manual'
-          ? item.price
-          : (catalogPrice != null && catalogPrice.isFinite && catalogPrice > 0
-              ? catalogPrice
-              : 0.0);
+      // Preserve speech-derived amounts through finalization. The cashier
+      // still reviews the mismatch warning and can explicitly edit the price.
+      final finalPrice = VoiceBillingPricePolicy.resolveFinalPrice(
+        priceSource: item.priceSource,
+        itemPrice: item.price,
+        cataloguePrice: catalogPrice,
+      );
       if (!finalPrice.isFinite || finalPrice <= 0) {
         rejectedCount++;
         continue;
