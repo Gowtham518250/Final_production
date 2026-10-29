@@ -178,6 +178,8 @@ class _DashboardPageState extends State<DashboardPage>
   int _selectedTimeFilter = 0;
   int _selectedChartIndex = 0;
   bool loading = false;
+  bool _salesLoadInProgress = false;
+  bool _salesLoadedOnce = false;
   bool insightLoading = false;
   bool showInsight = false;
   String todayInsight = '';
@@ -3705,8 +3707,10 @@ class _DashboardPageState extends State<DashboardPage>
         if (mounted) await _handleConnectivityChange(result);
       });
 
-      // Also run periodic internet checks (every 10 seconds) to catch WiFi-without-internet cases
-      _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 10), (
+      // Connectivity changes are handled immediately above. Use a slower
+      // fallback probe for Wi-Fi-without-internet cases to reduce wakeups and
+      // network/CPU churn on entry-level phones.
+      _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 30), (
         _,
       ) async {
         if (mounted) {
@@ -4682,13 +4686,16 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _loadSales() async {
-    if (!mounted) return;
-    setState(() => loading = true);
+    if (!mounted || _salesLoadInProgress) return;
+    _salesLoadInProgress = true;
 
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
+    // Keep the first-load indicator, but do not flash the dashboard back into
+    // a loading state during silent periodic/manual refreshes once it has data.
+    if (!_salesLoadedOnce) setState(() => loading = true);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       // OFFLINE-FIRST: local storage is the immediate source of truth.
       // Never block the dashboard on the network. A background reconciliation
       // runs after the local dashboard has rendered.
@@ -4746,6 +4753,7 @@ class _DashboardPageState extends State<DashboardPage>
           _dailyHealthScoreLoading = true;
           _checkLowStock();
 
+          _salesLoadedOnce = true;
           loading = false;
           if (_selectedChartIndex >= _chartLabels.length) {
             _selectedChartIndex = 0;
@@ -4865,6 +4873,7 @@ class _DashboardPageState extends State<DashboardPage>
         });
       }
     } finally {
+      _salesLoadInProgress = false;
       if (mounted) {
         unawaited(_afterSalesLoadGrowthHooks());
       }
