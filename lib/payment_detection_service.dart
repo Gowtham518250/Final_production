@@ -2543,12 +2543,13 @@ class PendingPaymentBuffer {
     // Never select the first of several plausible events based on queue order.
     // A unique payer+amount+time match can corroborate a pending event, but an
     // amount/time-only match is ambiguous and must remain a separate candidate.
-    if (strong.length == 1) {
+    if (strong.length == 1 && possible.length == 1) {
       strong.single.confirmed = true;
       PdsLogger.i('TCM', 'MATCH AMOUNT+TIME+PAYER ₹${strong.single.event.amount}');
       return strong.single;
     }
-    if (strong.length > 1 || (strong.isEmpty && possible.isNotEmpty)) {
+    if (possible.isNotEmpty &&
+        (strong.length != 1 || possible.length != 1)) {
       lastMatchAmbiguous = true;
       PdsLogger.w(
         'TCM',
@@ -4879,6 +4880,8 @@ class PaymentDetectionService {
     try {
       // Layer 4.7: TCM Matching
       _PendingEntry? matched;
+      // An earlier ambiguous credit must not mute a later debit or unrelated SMS.
+      _pendingBuffer.lastMatchAmbiguous = false;
       if (source == 'sms' && !isDebit) {
         matched = _pendingBuffer.matchSms(
           amount: amount,
@@ -5592,7 +5595,11 @@ class PaymentDetectionService {
     event = requireMerchantConfirmation(event);
     // Preserve the native fallback marker as payment events cross isolates.
     // Classification/history still run, but later Flutter speech/alerts are muted.
-    if (_sourceNativeAnnouncementHandled && _sourceEventKey != null) {
+    if (_sourceNativeAnnouncementHandled) {
+      // The native listener's explicit marker is sufficient to prevent a second
+      // Flutter announcement, even when older/plugin-generated events have no
+      // durable event key. Preserve the key when one is available for replay
+      // tracking, but never condition speech suppression on that key existing.
       event = event.copyWith(
         sourceEventKey: event.sourceEventKey ?? _sourceEventKey,
         nativeAnnouncementHandled: true,
