@@ -833,14 +833,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // 🔍 Initialize adaptive service manager (replaces individual service initialization)
+    // Start lightweight telemetry only after the first frame. The monitor
+    // samples actual frame timing and process RSS; it does not run fake CPU,
+    // battery or thermal estimates or initiate expensive "optimization" work.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await AdaptiveServiceManager.instance.initialize();
         if (kDebugMode) debugPrint('🚀 Adaptive service manager initialized');
       } catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('⚠️ Adaptive service manager initialization failed: $e');
+        }
+      }
+
+      if (!kIsWeb) {
+        try {
+          await PerformanceMonitorService.instance.startMonitoring();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Performance monitoring unavailable: $e');
+          }
+        }
       }
     });
 
