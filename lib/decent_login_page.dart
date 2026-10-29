@@ -620,6 +620,8 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                     borderRadius: BorderRadius.circular(14),
                     child: Image.asset(
                       'assets/shop_logo.png',
+                      cacheWidth: 192,
+                      cacheHeight: 192,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Icon(
                         Icons.storefront_rounded,
@@ -690,6 +692,8 @@ class _DecentLoginPageState extends State<DecentLoginPage>
               height: 170,
               child: Image.asset(
                 'assets/shop_keeper.png',
+                cacheWidth: 400,
+                cacheHeight: 454,
                 fit: BoxFit.contain,
                 alignment: Alignment.bottomCenter,
                 errorBuilder: (_, __, ___) => Align(
@@ -1312,6 +1316,8 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                                 'assets/shop_bottom_left.png',
                                 width: 132,
                                 height: 82,
+                                cacheWidth: 400,
+                                cacheHeight: 250,
                                 fit: BoxFit.contain,
                                 alignment: Alignment.bottomLeft,
                                 excludeFromSemantics: true,
@@ -1320,6 +1326,8 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                                 'assets/bag_bottom_right.png',
                                 width: 82,
                                 height: 86,
+                                cacheWidth: 250,
+                                cacheHeight: 260,
                                 fit: BoxFit.contain,
                                 alignment: Alignment.bottomRight,
                                 excludeFromSemantics: true,
