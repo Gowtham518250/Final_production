@@ -40,6 +40,7 @@ import 'visual_widgets.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
+import 'notification_access_disclosure.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'language_provider.dart';
 import 'guided_voice_service.dart';
@@ -1330,7 +1331,7 @@ class _DashboardPageState extends State<DashboardPage>
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: LiveTranslatedText(
-                'LATER',
+                'USE MANUAL BILLING',
                 style: GoogleFonts.poppins(
                   color: const Color(0xFF6B7280),
                   fontWeight: FontWeight.w600,
@@ -1339,12 +1340,26 @@ class _DashboardPageState extends State<DashboardPage>
             ),
             ElevatedButton.icon(
               onPressed: () async {
-                try {
-                  await NotificationListenerService.requestPermission();
-                } catch (e) {
-                  if (kDebugMode) {
-                    debugPrint('⚠️ Notification permission request failed: $e');
+                final notificationAccess =
+                    await requestNotificationAccessWithDisclosure(context);
+                if (notificationAccess !=
+                        NotificationAccessDisclosureResult.enabled &&
+                    notificationAccess !=
+                        NotificationAccessDisclosureResult.alreadyEnabled) {
+                  if (ctx.mounted) {
+                    Navigator.of(ctx).pop();
                   }
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Notification access was not enabled. You can still record sales manually.',
+                        ),
+                      ),
+                    );
+                    await _checkPermissions(showReminderIfMissing: false);
+                  }
+                  return;
                 }
 
                 try {
@@ -3594,7 +3609,19 @@ class _DashboardPageState extends State<DashboardPage>
     return GestureDetector(
       onTap: () async {
         if (!isActive) {
-          await PaymentDetectionService.openNotificationSettings();
+          final result = await requestNotificationAccessWithDisclosure(context);
+          if (result == NotificationAccessDisclosureResult.declined) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Notification access was left off. Manual billing is still available.',
+                  ),
+                ),
+              );
+            }
+            return;
+          }
           await Future<void>.delayed(const Duration(seconds: 1));
           _checkSoundboxStatus();
         } else {
@@ -11427,7 +11454,7 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                           const SizedBox(height: 5),
                           LiveTranslatedText(
-                            'Automatic UPI/payment detection is disabled until the required Android permissions are enabled.',
+                            'Automatic payment detection is optional. You can still record sales manually when it is off.',
                             style: GoogleFonts.poppins(
                               color: const Color(0xFFB91C1C),
                               fontSize: 12.5,
@@ -11474,14 +11501,22 @@ class _DashboardPageState extends State<DashboardPage>
                   height: 48,
                   child: ElevatedButton.icon(
                     onPressed: () async {
-                      try {
-                        await NotificationListenerService.requestPermission();
-                      } catch (e) {
-                        if (kDebugMode) {
-                          debugPrint(
-                            '⚠️ Notification permission request failed: $e',
-                          );
-                        }
+                      final notificationAccess =
+                          await requestNotificationAccessWithDisclosure(context);
+                      if (notificationAccess !=
+                              NotificationAccessDisclosureResult.enabled &&
+                          notificationAccess !=
+                              NotificationAccessDisclosureResult.alreadyEnabled) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Automatic detection remains off. Use Record Sale Manually to continue billing.',
+                            ),
+                          ),
+                        );
+                        await _checkPermissions(showReminderIfMissing: false);
+                        return;
                       }
 
                       try {
@@ -11523,6 +11558,23 @@ class _DashboardPageState extends State<DashboardPage>
                       ).withValues(alpha: 0.35),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/sales-entry')
+                          .then((_) => _loadSales());
+                    },
+                    icon: const Icon(Icons.edit_note_rounded, size: 18),
+                    label: LiveTranslatedText(
+                      'RECORD SALE MANUALLY',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -14404,8 +14456,10 @@ class _DashboardPageState extends State<DashboardPage>
                             ),
                             ElevatedButton(
                               onPressed: () async {
-                                await PaymentDetectionService.openNotificationSettings();
-                                setDlgState(() {});
+                                await requestNotificationAccessWithDisclosure(
+                                  context,
+                                );
+                                if (mounted) setDlgState(() {});
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white.withValues(
@@ -14589,7 +14643,7 @@ class _DashboardPageState extends State<DashboardPage>
                               ),
                               const SizedBox(height: 6),
                               LiveTranslatedText(
-                                'Privacy First: Accessibility and Notification services are ONLY used to detect payment confirmations within trusted apps. No bank balances, passwords, or personal chats are accessed. Detection happens locally on your device.',
+                                'Android notification access may expose notification content from other apps. Retail Mind uses enabled notification and accessibility services to look for supported payment alerts. Enable only if you agree; manual billing remains available.',
                                 style: GoogleFonts.poppins(
                                   color: Colors.white38,
                                   fontSize: 11,
