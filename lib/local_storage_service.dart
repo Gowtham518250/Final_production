@@ -472,10 +472,8 @@ class LocalStorageService {
 
   /// Resolve a Hive box name scoped to the current user.
   /// Never use a shared global sales box — prevents fake/leaked data on new accounts.
-  static Future<String> _getScopedBoxName(String base) async {
-    final userId = await _getUserId();
-
-    if (userId == null || userId <= 0) {
+  static Future<String> _getScopedBoxName(String base, {required int userId}) async {
+    if (userId <= 0) {
       throw Exception(
         'SECURITY: Cannot store data without authenticated user_id. User ID is null or zero.',
       );
@@ -768,16 +766,22 @@ class LocalStorageService {
 
   // =========== CORE BOX MANAGEMENT ===========
 
-  static Future<Box> _getBox(String base, {bool encrypted = false}) async {
-    // 🔒 SECURITY: Validate user ID before accessing any box
-    if (!await _hasValidUserId()) {
+  static Future<Box> _getBox(
+    String base, {
+    bool encrypted = false,
+    int? authenticatedUserId,
+  }) async {
+    // Resolve and validate the current ID once, then use the same identity for
+    // both authorization and box-name resolution.
+    final userId = authenticatedUserId ?? await _getUserId();
+    if (userId == null || userId <= 0) {
       if (kDebugMode) debugPrint('⚠️ _getBox failed — no valid user_id');
       throw Exception(
         'SECURITY: Cannot access storage without authenticated user_id. Please log in first.',
       );
     }
 
-    final name = await _getScopedBoxName(base);
+    final name = await _getScopedBoxName(base, userId: userId);
     if (!Hive.isBoxOpen(name)) {
       if (encrypted) {
         const secureStorage = FlutterSecureStorage();
@@ -857,7 +861,11 @@ class LocalStorageService {
       return [];
     }
 
-    final box = await _getBox(_salesBoxBase, encrypted: true);
+    final box = await _getBox(
+      _salesBoxBase,
+      encrypted: true,
+      authenticatedUserId: userId,
+    );
     final sales = box.get('all_sales', defaultValue: const <dynamic>[]);
     if (sales is! Iterable) return [];
 
