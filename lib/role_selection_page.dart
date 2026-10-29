@@ -557,6 +557,16 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
     }
   }
 
+  void _returnToLogin() {
+    // Verification is an authentication gate. Return to login instead of
+    // popping into a potentially protected page or leaving the gate blank.
+    unawaited(GuidedVoiceService.instance.stop());
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      '/login',
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -691,6 +701,30 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Keep a visible back-to-login control above the scrollable content.
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: IconButton(
+                  tooltip: 'Back to Login',
+                  onPressed: _returnToLogin,
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: Colors.white,
                   ),
                 ),
               ),
