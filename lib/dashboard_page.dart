@@ -284,6 +284,7 @@ class _DashboardPageState extends State<DashboardPage>
   String _unsyncedSyncDetail = '';
   bool _retryingUnsyncedBills = false;
   bool _emptySalesRestoreInProgress = false;
+  bool _salesReconciliationInProgress = false;
 
   void _addToActivityFeed(String activity) {
     setState(() {
@@ -4737,8 +4738,10 @@ class _DashboardPageState extends State<DashboardPage>
 
         // Background-only cloud reconciliation. It must never block the cashier UI.
         final localWasEmptyAtBoot = history.isEmpty;
-        unawaited(() async {
-          try {
+        if (!_salesReconciliationInProgress) {
+          _salesReconciliationInProgress = true;
+          unawaited(() async {
+            try {
             final changed = await _fetchInvoicesFromBackend();
             if ((changed || localWasEmptyAtBoot) && mounted) {
               final refreshed = await LocalStorageService.loadSales();
@@ -4790,12 +4793,15 @@ class _DashboardPageState extends State<DashboardPage>
                 _emptySalesRestoreInProgress = false;
               }
             }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('⚠️ Background dashboard reconciliation failed: $e');
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('⚠️ Background dashboard reconciliation failed: $e');
+              }
+            } finally {
+              _salesReconciliationInProgress = false;
             }
-          }
-        }());
+          }());
+        }
 
         // Schedule daily 9PM summary notification
         unawaited(
