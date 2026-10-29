@@ -247,7 +247,15 @@ class LiveTranslationService {
       }
     } finally {
       _activeBatches--;
-      _capacityRevision.value = _capacityRevision.value + 1;
+
+      // Mounted LiveTranslatedText widgets listen for deferred work. Do not
+      // broadcast to every visible text widget after every ordinary batch:
+      // that creates O(visible widgets × batches) callback work on low-RAM
+      // devices. Retry a deferred wave only after the accepted queue drains.
+      if (_deferred.isNotEmpty && _queue.isEmpty) {
+        _capacityRevision.value = _capacityRevision.value + 1;
+      }
+
       if (_queue.isNotEmpty) _schedulePump();
     }
   }
