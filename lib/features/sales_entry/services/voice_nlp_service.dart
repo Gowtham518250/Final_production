@@ -7,8 +7,7 @@ class VoiceNlpService {
   // short language particles ("ka", "ki", "lo", "di") globally: they can be
   // part of a product name or affect quantity/price meaning in Indian speech.
   static const List<String> _voiceCleanupWords = [
-    // Preserve currency and unit markers until quantity/price context is read.
-    // They are removed from the final product name only after parsing.
+    // Keep markers that disambiguate amounts for _parseSingleItem.
     'only', 'please', 'thank you', 'can i get', 'i want', 'i need',
     'give me', 'get me', 'wala', 'wali', 'bakse', 'cheyyandi',
     'istundi', 'undali', 'kavali', 'marchandi',
@@ -212,7 +211,7 @@ class VoiceNlpService {
       }
     }
 
-    // Remove context tokens only after price/quantity markers were inspected.
+    // Remove context tokens only after marker-based interpretation.
     itemStr = itemStr
         .replaceAll(
           RegExp(
