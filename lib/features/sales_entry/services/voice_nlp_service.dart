@@ -211,11 +211,11 @@ class VoiceNlpService {
       }
     }
 
-    // Remove context tokens only after marker-based interpretation.
+    // Remove amount/unit markers after they have informed interpretation.
     itemStr = itemStr
         .replaceAll(
           RegExp(
-            r'\b(?:rupees?|rupee|rs\.?|inr|rupye|rupya|price|cost|qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\b',
+            r'\b(?:rupees?|rupee|rs|inr|rupye|rupya|price|cost|qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\b',
             caseSensitive: false,
           ),
           ' ',
