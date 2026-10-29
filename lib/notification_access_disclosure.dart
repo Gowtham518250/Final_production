@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 
+import 'live_translated_text.dart';
+
 /// Result of the user-controlled notification-access flow.
 ///
 /// Opening Android Settings is never attempted until the user checks the
@@ -49,7 +51,7 @@ Future<NotificationAccessDisclosureResult>
               children: [
                 Icon(Icons.notifications_active_outlined),
                 SizedBox(width: 10),
-                Expanded(child: Text('Allow notification access?')),
+                Expanded(child: LiveTranslatedText('Allow notification access?')),
               ],
             ),
             content: SizedBox(
@@ -59,12 +61,12 @@ Future<NotificationAccessDisclosureResult>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    const LiveTranslatedText(
                       'Why Retail Mind asks',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    const LiveTranslatedText(
                       'Android notification access allows Retail Mind to read '
                       'notifications posted by apps on this device while access '
                       'is enabled. Retail Mind uses this feature to look for '
@@ -72,7 +74,7 @@ Future<NotificationAccessDisclosureResult>
                       'private messages or other sensitive information.',
                     ),
                     const SizedBox(height: 12),
-                    const Text(
+                    const LiveTranslatedText(
                       'When a payment alert is identified, relevant extracted '
                       'transaction details may be recorded in Retail Mind and '
                       'synced according to your existing app settings. A '
@@ -80,7 +82,7 @@ Future<NotificationAccessDisclosureResult>
                       'settled; review uncertain payments before relying on them.',
                     ),
                     const SizedBox(height: 12),
-                    const Text(
+                    const LiveTranslatedText(
                       'You can choose not to enable this feature and continue '
                       'recording sales manually. You can also turn notification '
                       'access off later in Android Settings.',
@@ -95,7 +97,7 @@ Future<NotificationAccessDisclosureResult>
                       },
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
-                      title: const Text(
+                      title: const LiveTranslatedText(
                         'I understand and agree to enable notification access '
                         'for Retail Mind payment detection.',
                         style: TextStyle(fontSize: 13),
@@ -108,14 +110,14 @@ Future<NotificationAccessDisclosureResult>
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Not now — use manual billing'),
+                child: const LiveTranslatedText('Not now — use manual billing'),
               ),
               FilledButton.icon(
                 onPressed: consentChecked
                     ? () => Navigator.of(dialogContext).pop(true)
                     : null,
                 icon: const Icon(Icons.settings_outlined),
-                label: const Text('Continue to Settings'),
+                label: const LiveTranslatedText('Continue to Settings'),
               ),
             ],
           );
