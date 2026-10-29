@@ -16254,11 +16254,7 @@ class _DashboardPageState extends State<DashboardPage>
                 // 0.0 Daily Health Score (single owner signal)
                 if (!_isStaffMode) _buildDailyHealthScoreCard(),
 
-                // 0.2 PERFORMANCE OVERVIEW
-                if (_hasDailyInsight && !_isStaffMode) ...[
-                  _buildModernPerformanceOverview(),
-                  const SizedBox(height: 8),
-                ],
+                // Today's business summary was removed to keep the dashboard lean.
 
                 // 0.3 LOW STOCK ALERT (NEW)
                 _buildLowStockBanner(),
