@@ -112,7 +112,13 @@ class LiveTranslationService {
     )) {
       // Keep a small retry marker rather than an unbounded list of futures.
       // LiveTranslatedText retries these markers as capacity becomes available.
-      if (_deferred.length < _maxDeferredUniqueRequests) {
+      if (!_deferred.contains(key)) {
+        if (_deferred.length >= _maxDeferredUniqueRequests &&
+            _deferred.isNotEmpty) {
+          // Favor newly mounted/currently displayed text while keeping retry
+          // bookkeeping bounded across repeated screen navigation.
+          _deferred.remove(_deferred.first);
+        }
         _deferred.add(key);
       }
       return text;
@@ -259,7 +265,11 @@ class LiveTranslationService {
     final entryCharacters = key.length + value.length;
     // Avoid keeping large descriptions/notes in memory cache. They can still
     // be translated for display, but are not worth retaining on 2GB devices.
-    if (entryCharacters > _maxCacheableTextCharacters) return;
+    if (entryCharacters > _maxCacheableTextCharacters) {
+      _deferred.remove(key);
+      _retryAfter.remove(key);
+      return;
+    }
 
     _cache[key] = value;
     _cachedTextCharacters += entryCharacters;
