@@ -4104,8 +4104,8 @@ class PaymentDetectionService {
         onNewMessage: (m) {
           final sender = m.address ?? '';
           final body = m.body ?? '';
-          final sourceEventKey = _smsSourceEventKey(m, sender, body);
-          final sourceMillis = _smsSourceTimestampMillis(m);
+          final sourceEventKey = smsSourceEventKey(m, sender, body);
+          final sourceMillis = smsSourceTimestampMillis(m);
           handleSms(
             sender,
             body,
