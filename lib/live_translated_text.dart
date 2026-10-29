@@ -65,6 +65,10 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     if (_isListeningForCapacity) return;
     LiveTranslationService.instance.capacityChanges.addListener(_capacityListener);
     _isListeningForCapacity = true;
+
+    // Close the small race where capacity became available just before this
+    // deferred widget attached its listener.
+    _retryDeferredTranslation();
   }
 
   void _stopListeningForCapacityChanges() {
