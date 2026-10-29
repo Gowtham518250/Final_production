@@ -241,6 +241,8 @@ class _DashboardPageState extends State<DashboardPage>
   bool _growthOnboardingQueued = false;
   bool _isMasterPinSet = false;
   List<Map<String, dynamic>> _lowStockProducts = [];
+  bool _lowStockCheckInProgress = false;
+  bool _lowStockCheckPending = false;
   int _dailyHealthScore = 0;
   bool _dailyHealthScoreLoading = true;
 
@@ -561,9 +563,11 @@ class _DashboardPageState extends State<DashboardPage>
       const Duration(minutes: 5),
       (_) => _refreshOnlineBusinessData(),
     );
-    // FIX BUG 6 — listen for inventory changes and reload analytics
+    // Inventory-only changes must not reload and re-flatten the entire sales
+    // history. Refresh the low-stock signal only; sales are refreshed by their
+    // own change feed. Coalesce bursts from bulk inventory updates.
     InventoryManagementService.onInventoryChanged = () {
-      if (mounted) _loadSales();
+      if (mounted) unawaited(_checkLowStock());
     };
     // Defer all heavy loads to after the first frame renders
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -1146,7 +1150,9 @@ class _DashboardPageState extends State<DashboardPage>
       // Keep the persistent Dashboard CTA animated until Android reports that
       // every required permission is actually enabled.
       if (!_paymentDetectionPulseController.isAnimating) {
-        _paymentDetectionPulseController.repeat(reverse: true);
+        // A single attention pulse is enough. A perpetual ticker wastes frames
+        // and battery on low-memory phones when permissions remain missing.
+        _paymentDetectionPulseController.forward(from: 0);
       }
       // Intentionally do not open a blocking dialog here. The Dashboard card
       // is the single persistent reminder and remains usable for billing.
@@ -5331,17 +5337,30 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _checkLowStock() async {
-    try {
-      // 🚀 REAL-TIME: Using dynamic stock levels instead of static alert history
-      final lowStockItems =
-          await InventoryManagementService.getAllLowStockProducts();
+    if (_lowStockCheckInProgress) {
+      _lowStockCheckPending = true;
+      return;
+    }
 
-      if (mounted) {
+    _lowStockCheckInProgress = true;
+    try {
+      do {
+        _lowStockCheckPending = false;
+        // Inventory bursts collapse into one follow-up request instead of
+        // running several overlapping low-stock reads and score updates.
+        final lowStockItems =
+            await InventoryManagementService.getAllLowStockProducts();
+
+        if (!mounted) return;
         setState(() => _lowStockProducts = lowStockItems);
-      }
-      _recomputeDailyHealthScore();
+        _recomputeDailyHealthScore();
+      } while (_lowStockCheckPending && mounted);
     } catch (e) {
-      debugPrint('Error checking real-time low stock: $e');
+      if (kDebugMode) {
+        debugPrint('Error checking real-time low stock: $e');
+      }
+    } finally {
+      _lowStockCheckInProgress = false;
     }
   }
 
