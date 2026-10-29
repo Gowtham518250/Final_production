@@ -605,6 +605,8 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
                               'assets/shop_logo.png',
                               width: 80,
                               height: 80,
+                              cacheWidth: 256,
+                              cacheHeight: 256,
                               errorBuilder: (c, e, s) => const Icon(
                                 Icons.shield_rounded,
                                 size: 80,
