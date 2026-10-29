@@ -4,7 +4,7 @@ import 'package:retail_mind/performance_monitor_service.dart';
 void main() {
   group('Performance telemetry', () {
     test('unsupported platform readings are represented as unavailable', () {
-      const metric = PerformanceMetric(
+      final metric = PerformanceMetric(
         timestamp: DateTime.utc(2026, 1, 1),
         memoryUsage: null,
         cpuUsage: null,
