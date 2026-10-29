@@ -25,23 +25,31 @@ class NotificationListenerService {
     throw Exception("Notifications API exclusively available on Android!");
   }
 
-  /// request notification permission
-  /// it will open the notification settings page and return `true` once the permission granted.
+  /// Opens Android notification-access settings and returns the actual
+  /// permission state after the user returns to Retail Mind.
   static Future<bool> requestPermission() async {
     try {
-      return await methodeChannel.invokeMethod('requestPermission');
+      return await methodeChannel.invokeMethod<bool>('requestPermission') ??
+          false;
     } on PlatformException catch (error) {
-      log("$error");
-      return Future.value(false);
+      log("requestPermission failed: $error");
+      return false;
+    } on MissingPluginException catch (error) {
+      log("requestPermission unavailable: $error");
+      return false;
     }
   }
 
-  /// check if notification permission is enebaled
+  /// Checks whether Android notification access is currently enabled.
   static Future<bool> isPermissionGranted() async {
     try {
-      return await methodeChannel.invokeMethod('isPermissionGranted');
+      return await methodeChannel.invokeMethod<bool>('isPermissionGranted') ??
+          false;
     } on PlatformException catch (error) {
-      log("$error");
+      log("isPermissionGranted failed: $error");
+      return false;
+    } on MissingPluginException catch (error) {
+      log("isPermissionGranted unavailable: $error");
       return false;
     }
   }
