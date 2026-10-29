@@ -835,6 +835,29 @@ class LocalStorageService {
     return typedSales;
   }
 
+  /// Loads a bounded tail of local sales for autocomplete only. It avoids
+  /// materializing a second copy of the shop's entire sales history merely to
+  /// seed product-name suggestions when opening Add Sale.
+  static Future<List<dynamic>> loadRecentSalesForAutocomplete({
+    int limit = 300,
+  }) async {
+    if (!await _hasValidUserId() || limit <= 0) return [];
+
+    final box = await _getBox(_salesBoxBase, encrypted: true);
+    final rawSales = box.get('all_sales', defaultValue: const <dynamic>[]);
+    if (rawSales is! List || rawSales.isEmpty) return [];
+
+    final boundedLimit = limit.clamp(1, 1000).toInt();
+    final startIndex =
+        (rawSales.length - boundedLimit).clamp(0, rawSales.length).toInt();
+
+    return rawSales.skip(startIndex).map((sale) {
+      if (sale is StoredSale) return sale.toJson();
+      if (sale is Map) return Map<String, dynamic>.from(sale);
+      return sale;
+    }).toList(growable: false);
+  }
+
   static Future<bool> cancelSale(String saleId) async {
     if (!await _hasValidUserId()) return false;
     final box = await _getBox(_salesBoxBase, encrypted: true);
