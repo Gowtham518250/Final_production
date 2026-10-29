@@ -50,6 +50,36 @@ class LiveTranslatedText extends StatefulWidget {
 
 class _LiveTranslatedTextState extends State<LiveTranslatedText> {
   String _displayText = '';
+  late final VoidCallback _capacityListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayText = widget.text;
+    _capacityListener = _retryDeferredTranslation;
+    LiveTranslationService.instance.capacityChanges.addListener(_capacityListener);
+  }
+
+  void _retryDeferredTranslation() {
+    if (!mounted || _displayText != widget.text) return;
+    final targetCode =
+        (widget.locale ?? Localizations.localeOf(context)).languageCode;
+    if (targetCode == 'en') return;
+
+    final service = LiveTranslationService.instance;
+    if (!service.isDeferredAndRetryable(
+      widget.text,
+      targetLanguageCode: targetCode,
+    )) {
+      return;
+    }
+
+    // A full queue deliberately leaves the source text visible. When capacity
+    // returns, retry only those deferred/cached values instead of re-requesting
+    // every translated widget in the tree.
+    _requestKey = null;
+    _queueTranslation(targetCode);
+  }
   String? _requestKey;
   int _requestVersion = 0;
 
@@ -122,12 +152,6 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _displayText = widget.text;
-  }
-
-  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Localizations.localeOf subscribes this widget to MaterialApp locale
@@ -183,6 +207,12 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
             setState(() => _displayText = translated);
           }
         });
+  }
+
+  @override
+  void dispose() {
+    LiveTranslationService.instance.capacityChanges.removeListener(_capacityListener);
+    super.dispose();
   }
 
   @override

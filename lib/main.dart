@@ -154,6 +154,13 @@ void main() async {
   LowMemoryPerformance.configure();
   unawaited(DeviceCapabilityService.instance.initialize());
 
+  // Paint immediately while Firebase, Hive and local stores initialize. The
+  // application/providers are mounted only after required bootstrap work has
+  // completed, so screens cannot race storage initialization.
+  final bootstrapReady = Completer<void>();
+  runApp(_StartupGate(ready: bootstrapReady.future));
+
+  try {
   // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
   bool firebaseInitialized = false;
   try {
@@ -352,23 +359,13 @@ void main() async {
   bool hiveInitSuccess = false;
 
   try {
+    // Hive.initFlutter performs the required runtime bootstrap. Opening a
+    // throwaway box, writing it, closing it and deleting it on every launch
+    // added synchronous startup I/O but did not validate the real user boxes.
+    // Actual application boxes are opened by their owning storage services.
     await Hive.initFlutter();
     hiveInitSuccess = true;
-    debugPrint('✅ Hive initialized successfully');
-
-    // Verify Hive is working by attempting a simple operation
-    try {
-      final testBox = await Hive.openBox('hive_init_test');
-      await testBox.put('init_test', DateTime.now().toIso8601String());
-      await testBox.delete('init_test');
-      await testBox.close();
-      await Hive.deleteBoxFromDisk('hive_init_test');
-      debugPrint('✅ Hive initialization verified');
-    } catch (verifyError) {
-      debugPrint('⚠️ Hive verification failed: $verifyError');
-      hiveInitSuccess = false;
-      hiveRecoveryNeeded = true;
-    }
+    if (kDebugMode) debugPrint('✅ Hive initialized successfully');
   } catch (e) {
     debugPrint('🚨 Hive init failure: $e');
     hiveInitSuccess = false;
@@ -569,190 +566,198 @@ void main() async {
     hiveInitSuccess || !hiveRecoveryNeeded,
   );
 
-  // 🚀 PRODUCTION ARCHITECTURE INITIALIZATION (Ultra-Fast + Zero Data Loss)
-  try {
-    // Initialize operation queue (persistent sync queue)
-    await OperationQueueService.initialize();
-    debugPrint('✅ Operation Queue Service initialized');
-
-    // Initialize enhanced local storage with UUID support
-    await EnhancedLocalStorageService.initialize();
-    debugPrint('✅ Enhanced Local Storage Service initialized');
-
-    // The canonical SyncService owns the durable outbox. The background
-    // worker remains only as a compatibility adapter for legacy
-    // OperationQueueService operations.
-  } catch (e) {
-    debugPrint('⚠️ Production architecture initialization error: $e');
-    // Continue startup even if new services fail - they have fallbacks
-  }
-
-  // Set up email credentials once in secure storage
-
-  final appPrefs = await SharedPreferences.getInstance();
-  final soundEnabled = appPrefs.getBool('payment_sound_enabled') ?? true;
-  PdsConfig.isVoiceEnabled = soundEnabled;
-
-  // Defer storage cleanup, initial full sync and background-service setup
-  // until the first interactive screen has settled. On low-RAM devices the
-  // extra grace period avoids a second burst of disk/network work just after
-  // the splash screen disappears.
-  final backgroundInitializationDelay =
-      DeviceCapabilityService.instance.isLowEndDevice
-          ? const Duration(seconds: 8)
-          : const Duration(seconds: 3);
-  Future.delayed(backgroundInitializationDelay, () async {
+    // 🚀 PRODUCTION ARCHITECTURE INITIALIZATION (Ultra-Fast + Zero Data Loss)
     try {
-      // 1. Move the heavy DB purging here so it doesn't block the UI thread
-      await LocalStorageService.validateAndMigrateSchema();
-      await LocalStorageService.purgeLegacyUnscopedHiveBoxes();
-      final rawStartupUserId =
-          appPrefs.get('user_id') ?? appPrefs.get('userId');
-      final startupUserId = rawStartupUserId is int
-          ? rawStartupUserId
-          : int.tryParse(rawStartupUserId?.toString() ?? '') ?? 0;
-      if (startupUserId > 0) {
-        await LocalStorageService.clearOrphanSalesBoxes();
-        await LocalStorageService.purgeLegacyPrefsSales();
-      }
+      // EnhancedLocalStorageService.initialize also initializes the persistent
+      // operation queue. Initialize through that owner once, avoiding the
+      // duplicate Hive open/cleanup pass that previously ran on every launch.
+      await EnhancedLocalStorageService.initialize();
+      debugPrint('✅ Enhanced Local Storage Service and operation queue initialized');
+
+      // The canonical SyncService owns the durable outbox. The background
+      // worker remains only as a compatibility adapter for legacy
+      // OperationQueueService operations.
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Deferred Hive cleanup error: $e');
-    }
-    try {
-      await setupEmailCredentialsOnce();
-
-      // Initialize independent services defensively. A failure in notifications,
-      // online orders, or TTS must not prevent payment detection from starting.
+      debugPrint('⚠️ Production architecture initialization error: $e');
+      // Preserve the legacy queue fallback when enhanced-store initialization
+      // fails before its own queue initialization completes.
       try {
-        await NotificationService().init();
-      } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Notification service init failed: $e');
-      }
-
-      try {
-        // Online orders: owner notifications + UPI payment matching.
-        await OnlineOrdersListener.instance.start();
-      } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Online orders listener failed: $e');
-      }
-
-      try {
-        // Prepare voice before detection, but do not block payment monitoring if
-        // the device's TTS engine is unavailable.
-        await PaymentAnnouncementService().init();
-      } catch (e) {
-        if (kDebugMode)
-          debugPrint(
-            '⚠️ Payment voice initialization failed; detection will continue: $e',
-          );
-      }
-
-      // SMS and notification-listener payment detection requires native
-      // Android services and is not available in browser builds.
-
-      // Initialize Email Service from secure storage
-      await EmailSenderService.initialize();
-
-      // Initialize the canonical Offline-First Sync Service before
-      // starting the legacy compatibility worker.
-      await SyncService.init();
-      debugPrint('✅ Canonical Offline-First Sync Service initialized');
-
-      try {
-        await BackgroundSyncWorker.instance.start();
-        debugPrint('✅ Legacy compatibility Sync Worker started');
-      } catch (e) {
+        await OperationQueueService.initialize();
+        debugPrint('✅ Operation Queue Service fallback initialized');
+      } catch (queueError) {
         if (kDebugMode) {
-          debugPrint('⚠️ Legacy compatibility worker failed: $e');
+          debugPrint('⚠️ Operation queue fallback failed: $queueError');
         }
       }
+    }
 
-      // 🔧 FIX: Auto-refresh session on app startup - OFFLINE-FIRST MODE
-      // Try to refresh session if online, but don't force logout if offline
+    // Set up email credentials once in secure storage
+
+    final appPrefs = await SharedPreferences.getInstance();
+    final soundEnabled = appPrefs.getBool('payment_sound_enabled') ?? true;
+    PdsConfig.isVoiceEnabled = soundEnabled;
+
+    // Defer storage cleanup, initial full sync and background-service setup
+    // until the first interactive screen has settled. On low-RAM devices the
+    // extra grace period avoids a second burst of disk/network work just after
+    // the splash screen disappears.
+    final backgroundInitializationDelay =
+        DeviceCapabilityService.instance.isLowEndDevice
+            ? const Duration(seconds: 8)
+            : const Duration(seconds: 3);
+    Future.delayed(backgroundInitializationDelay, () async {
       try {
+        // 1. Move the heavy DB purging here so it doesn't block the UI thread
+        await LocalStorageService.validateAndMigrateSchema();
+        await LocalStorageService.purgeLegacyUnscopedHiveBoxes();
         final rawStartupUserId =
             appPrefs.get('user_id') ?? appPrefs.get('userId');
         final startupUserId = rawStartupUserId is int
             ? rawStartupUserId
             : int.tryParse(rawStartupUserId?.toString() ?? '') ?? 0;
         if (startupUserId > 0) {
-          // Check if user has a valid local session (token exists)
-          final hasValidSession = await SessionManagementService.isTokenValid();
-
-          if (hasValidSession) {
-            if (kDebugMode)
-              debugPrint('✅ Valid local session found - user stays logged in');
-            // Try to refresh token in background if online, but don't block on failure
-            try {
-              final autoLoginResult = await SessionManagementService.autoLogin()
-                  .timeout(const Duration(seconds: 5), onTimeout: () => null);
-              if (autoLoginResult != null) {
-                if (kDebugMode) debugPrint('✅ Session refreshed successfully');
-              } else {
-                if (kDebugMode)
-                  debugPrint(
-                    '⚠️ Session refresh failed (offline or server error) - using local session',
-                  );
-              }
-            } catch (e) {
-              if (kDebugMode)
-                debugPrint(
-                  '⚠️ Session refresh error - continuing with local session: $e',
-                );
-            }
-          } else {
-            if (kDebugMode)
-              debugPrint('⚠️ No valid local session - user must login');
-          }
+          await LocalStorageService.clearOrphanSalesBoxes();
+          await LocalStorageService.purgeLegacyPrefsSales();
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Session check error on startup: $e');
+        if (kDebugMode) debugPrint('⚠️ Deferred Hive cleanup error: $e');
       }
-
-      // ✅ FIX: Validate device time at startup (prevents fraud)
-      await SyncService.getAuthoritativeTime();
-
-      // 🔒 DATA VALIDATION: Perform quick data integrity check
       try {
-        final integritySummary = await DataValidationService.instance
-            .performQuickIntegrityCheck();
-        if (integritySummary.hasCriticalIssues()) {
+        await setupEmailCredentialsOnce();
+
+        // Initialize independent services defensively. A failure in notifications,
+        // online orders, or TTS must not prevent payment detection from starting.
+        try {
+          await NotificationService().init();
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Notification service init failed: $e');
+        }
+
+        try {
+          // Online orders: owner notifications + UPI payment matching.
+          await OnlineOrdersListener.instance.start();
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Online orders listener failed: $e');
+        }
+
+        try {
+          // Prepare voice before detection, but do not block payment monitoring if
+          // the device's TTS engine is unavailable.
+          await PaymentAnnouncementService().init();
+        } catch (e) {
           if (kDebugMode)
             debugPrint(
-              '⚠️ Critical data integrity issues detected: $integritySummary',
+              '⚠️ Payment voice initialization failed; detection will continue: $e',
             );
-          // Could show user notification here
-        } else {
-          if (kDebugMode) debugPrint('✅ Data integrity check passed');
         }
-      } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Data integrity check failed: $e');
-      }
 
-      // Initialize Smart Notifications Service (daily summary, stock alerts, loyalty milestones)
-      try {
-        await SmartNotificationsService.init();
-        if (kDebugMode) debugPrint('✅ SmartNotificationsService initialized');
-      } catch (e) {
+        // SMS and notification-listener payment detection requires native
+        // Android services and is not available in browser builds.
+
+        // Initialize Email Service from secure storage
+        await EmailSenderService.initialize();
+
+        // Initialize the canonical Offline-First Sync Service before
+        // starting the legacy compatibility worker.
+        await SyncService.init();
+        debugPrint('✅ Canonical Offline-First Sync Service initialized');
+
+        try {
+          await BackgroundSyncWorker.instance.start();
+          debugPrint('✅ Legacy compatibility Sync Worker started');
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Legacy compatibility worker failed: $e');
+          }
+        }
+
+        // 🔧 FIX: Auto-refresh session on app startup - OFFLINE-FIRST MODE
+        // Try to refresh session if online, but don't force logout if offline
+        try {
+          final rawStartupUserId =
+              appPrefs.get('user_id') ?? appPrefs.get('userId');
+          final startupUserId = rawStartupUserId is int
+              ? rawStartupUserId
+              : int.tryParse(rawStartupUserId?.toString() ?? '') ?? 0;
+          if (startupUserId > 0) {
+            // Check if user has a valid local session (token exists)
+            final hasValidSession = await SessionManagementService.isTokenValid();
+
+            if (hasValidSession) {
+              if (kDebugMode)
+                debugPrint('✅ Valid local session found - user stays logged in');
+              // Try to refresh token in background if online, but don't block on failure
+              try {
+                final autoLoginResult = await SessionManagementService.autoLogin()
+                    .timeout(const Duration(seconds: 5), onTimeout: () => null);
+                if (autoLoginResult != null) {
+                  if (kDebugMode) debugPrint('✅ Session refreshed successfully');
+                } else {
+                  if (kDebugMode)
+                    debugPrint(
+                      '⚠️ Session refresh failed (offline or server error) - using local session',
+                    );
+                }
+              } catch (e) {
+                if (kDebugMode)
+                  debugPrint(
+                    '⚠️ Session refresh error - continuing with local session: $e',
+                  );
+              }
+            } else {
+              if (kDebugMode)
+                debugPrint('⚠️ No valid local session - user must login');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Session check error on startup: $e');
+        }
+
+        // ✅ FIX: Validate device time at startup (prevents fraud)
+        await SyncService.getAuthoritativeTime();
+
+        // 🔒 DATA VALIDATION: Perform quick data integrity check
+        try {
+          final integritySummary = await DataValidationService.instance
+              .performQuickIntegrityCheck();
+          if (integritySummary.hasCriticalIssues()) {
+            if (kDebugMode)
+              debugPrint(
+                '⚠️ Critical data integrity issues detected: $integritySummary',
+              );
+            // Could show user notification here
+          } else {
+            if (kDebugMode) debugPrint('✅ Data integrity check passed');
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Data integrity check failed: $e');
+        }
+
+        // Initialize Smart Notifications Service (daily summary, stock alerts, loyalty milestones)
+        try {
+          await SmartNotificationsService.init();
+          if (kDebugMode) debugPrint('✅ SmartNotificationsService initialized');
+        } catch (e) {
+          if (kDebugMode)
+            debugPrint('⚠️ SmartNotificationsService init error: $e');
+        }
+
         if (kDebugMode)
-          debugPrint('⚠️ SmartNotificationsService init error: $e');
+          debugPrint('✅ Background services initialized successfully');
+      } catch (e) {
+        if (kDebugMode) debugPrint('⚠️ Background service init error: $e');
       }
-
-      if (kDebugMode)
-        debugPrint('✅ Background services initialized successfully');
-    } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Background service init error: $e');
+    });
+  } catch (error, stackTrace) {
+    // Keep the first frame responsive even if an early bootstrap dependency
+    // fails. MyApp's existing local/offline fallbacks handle partial startup.
+    if (kDebugMode) {
+      debugPrint('⚠️ Early application bootstrap failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
-  });
-
-  runApp(
-    ErrorBoundary(
-      child: MultiProvider(
-        providers: createAppProviders(),
-        child: const MyApp(),
-      ),
-    ),
-  );
+  } finally {
+    if (!bootstrapReady.isCompleted) bootstrapReady.complete();
+  }
 }
 
 // API Endpoints
@@ -777,6 +782,31 @@ class CancelToken {
   bool get isCancelled => _isCancelled;
   void cancel() {
     _isCancelled = true;
+  }
+}
+
+class _StartupGate extends StatelessWidget {
+  const _StartupGate({required this.ready});
+
+  final Future<void> ready;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: ready,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const MaterialApp(home: _AppBootSplash());
+        }
+
+        return ErrorBoundary(
+          child: MultiProvider(
+            providers: createAppProviders(),
+            child: const MyApp(),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -836,14 +866,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // 🔍 Initialize adaptive service manager (replaces individual service initialization)
+    // Start lightweight telemetry only after the first frame. The monitor
+    // samples actual frame timing and process RSS; it does not run fake CPU,
+    // battery or thermal estimates or initiate expensive "optimization" work.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await AdaptiveServiceManager.instance.initialize();
         if (kDebugMode) debugPrint('🚀 Adaptive service manager initialized');
       } catch (e) {
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('⚠️ Adaptive service manager initialization failed: $e');
+        }
+      }
+
+      if (!kIsWeb && !widget.testMode) {
+        try {
+          await PerformanceMonitorService.instance.startMonitoring();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Performance monitoring unavailable: $e');
+          }
+        }
       }
     });
 
@@ -955,6 +998,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    PerformanceMonitorService.instance.stopMonitoring();
 
     // Stop all services through adaptive manager
     AdaptiveServiceManager.instance.stopAllServices();
@@ -968,6 +1012,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     if (kDebugMode) debugPrint('📱 App lifecycle changed: $state');
 
+    // Avoid periodic performance sampling while the app is backgrounded.
+    if (!kIsWeb && state != AppLifecycleState.resumed) {
+      PerformanceMonitorService.instance.stopMonitoring();
+    }
+
     // Cancel any ongoing sync operations when app goes to background
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
@@ -977,6 +1026,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
+        if (!kIsWeb) {
+          unawaited(PerformanceMonitorService.instance.startMonitoring());
+        }
         _handleAppResumed();
         break;
       case AppLifecycleState.paused:

@@ -309,6 +309,8 @@ class _DecentRegisterPageState extends State<DecentRegisterPage>
                             child: ClipOval(
                               child: Image.asset(
                                 'assets/shop_logo.png',
+                                cacheWidth: 192,
+                                cacheHeight: 192,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => const Icon(
                                   Icons.shopping_bag_outlined,

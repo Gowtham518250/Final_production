@@ -178,6 +178,8 @@ class _DashboardPageState extends State<DashboardPage>
   int _selectedTimeFilter = 0;
   int _selectedChartIndex = 0;
   bool loading = false;
+  bool _salesLoadInProgress = false;
+  bool _salesLoadedOnce = false;
   bool insightLoading = false;
   bool showInsight = false;
   String todayInsight = '';
@@ -282,6 +284,7 @@ class _DashboardPageState extends State<DashboardPage>
   String _unsyncedSyncDetail = '';
   bool _retryingUnsyncedBills = false;
   bool _emptySalesRestoreInProgress = false;
+  bool _salesReconciliationInProgress = false;
 
   void _addToActivityFeed(String activity) {
     setState(() {
@@ -352,44 +355,9 @@ class _DashboardPageState extends State<DashboardPage>
       final today = DateTime(now.year, now.month, now.day);
       final yesterday = today.subtract(const Duration(days: 1));
 
-      // Filter today's and yesterday's sales
-      final todaysSales = sales.where((sale) {
-        try {
-          if (sale is! Map<String, dynamic> ||
-              AnalyticsEngine.isVoidedSale(sale)) {
-            return false;
-          }
-          final saleDate = _getLocalDate(sale);
-          final saleDateOnly = DateTime(
-            saleDate.year,
-            saleDate.month,
-            saleDate.day,
-          );
-          return saleDateOnly == today;
-        } catch (_) {
-          return false;
-        }
-      }).toList();
-
-      final yesterdaysSales = sales.where((sale) {
-        try {
-          if (sale is! Map<String, dynamic> ||
-              AnalyticsEngine.isVoidedSale(sale)) {
-            return false;
-          }
-          final saleDate = _getLocalDate(sale);
-          final saleDateOnly = DateTime(
-            saleDate.year,
-            saleDate.month,
-            saleDate.day,
-          );
-          return saleDateOnly == yesterday;
-        } catch (_) {
-          return false;
-        }
-      }).toList();
-
-      // Calculate totals and counts
+      // Calculate today's and yesterday's totals in one pass. Building two
+      // filtered copies of the full sales history caused avoidable allocations
+      // and repeated date parsing on larger shops.
       double todaySalesAmount = 0;
       double yesterdaySalesAmount = 0;
 
@@ -419,39 +387,48 @@ class _DashboardPageState extends State<DashboardPage>
       }
 
       final Set<String> processedTodayBills = {};
-      for (final sale in todaysSales) {
-        final billId =
-            (sale['_bill_id'] ??
-                    sale['invoice_number'] ??
-                    sale['sale_id'] ??
-                    sale['id'])
-                ?.toString()
-                .trim() ??
-            '';
-        final invoiceKey = billId.isNotEmpty
-            ? billId
-            : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
-        if (processedTodayBills.contains(invoiceKey)) continue;
-        processedTodayBills.add(invoiceKey);
-        todaySalesAmount += _parseSaleAmount(sale);
-      }
-
       final Set<String> processedYesterdayBills = {};
-      for (final sale in yesterdaysSales) {
-        final billId =
-            (sale['_bill_id'] ??
-                    sale['invoice_number'] ??
-                    sale['sale_id'] ??
-                    sale['id'])
-                ?.toString()
-                .trim() ??
-            '';
-        final invoiceKey = billId.isNotEmpty
-            ? billId
-            : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
-        if (processedYesterdayBills.contains(invoiceKey)) continue;
-        processedYesterdayBills.add(invoiceKey);
-        yesterdaySalesAmount += _parseSaleAmount(sale);
+      for (final sale in sales) {
+        try {
+          if (sale is! Map<String, dynamic> ||
+              AnalyticsEngine.isVoidedSale(sale)) {
+            continue;
+          }
+
+          final saleDate = _getLocalDate(sale);
+          final saleDateOnly = DateTime(
+            saleDate.year,
+            saleDate.month,
+            saleDate.day,
+          );
+          final isToday = saleDateOnly == today;
+          final isYesterday = saleDateOnly == yesterday;
+          if (!isToday && !isYesterday) continue;
+
+          final billId =
+              (sale['_bill_id'] ??
+                      sale['invoice_number'] ??
+                      sale['sale_id'] ??
+                      sale['id'])
+                  ?.toString()
+                  .trim() ??
+              '';
+          final invoiceKey = billId.isNotEmpty
+              ? billId
+              : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
+          final processedBills =
+              isToday ? processedTodayBills : processedYesterdayBills;
+          if (!processedBills.add(invoiceKey)) continue;
+
+          final amount = _parseSaleAmount(sale);
+          if (isToday) {
+            todaySalesAmount += amount;
+          } else {
+            yesterdaySalesAmount += amount;
+          }
+        } catch (_) {
+          // One malformed historical row must not break the dashboard score.
+        }
       }
 
       final score = DailyHealthScoreService.computeScore(
@@ -3705,8 +3682,10 @@ class _DashboardPageState extends State<DashboardPage>
         if (mounted) await _handleConnectivityChange(result);
       });
 
-      // Also run periodic internet checks (every 10 seconds) to catch WiFi-without-internet cases
-      _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 10), (
+      // Connectivity changes are handled immediately above. Use a slower
+      // fallback probe for Wi-Fi-without-internet cases to reduce wakeups and
+      // network/CPU churn on entry-level phones.
+      _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 30), (
         _,
       ) async {
         if (mounted) {
@@ -4682,13 +4661,16 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _loadSales() async {
-    if (!mounted) return;
-    setState(() => loading = true);
+    if (!mounted || _salesLoadInProgress) return;
+    _salesLoadInProgress = true;
 
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
+    // Keep the first-load indicator, but do not flash the dashboard back into
+    // a loading state during silent periodic/manual refreshes once it has data.
+    if (!_salesLoadedOnce) setState(() => loading = true);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       // OFFLINE-FIRST: local storage is the immediate source of truth.
       // Never block the dashboard on the network. A background reconciliation
       // runs after the local dashboard has rendered.
@@ -4746,6 +4728,7 @@ class _DashboardPageState extends State<DashboardPage>
           _dailyHealthScoreLoading = true;
           _checkLowStock();
 
+          _salesLoadedOnce = true;
           loading = false;
           if (_selectedChartIndex >= _chartLabels.length) {
             _selectedChartIndex = 0;
@@ -4755,8 +4738,10 @@ class _DashboardPageState extends State<DashboardPage>
 
         // Background-only cloud reconciliation. It must never block the cashier UI.
         final localWasEmptyAtBoot = history.isEmpty;
-        unawaited(() async {
-          try {
+        if (!_salesReconciliationInProgress) {
+          _salesReconciliationInProgress = true;
+          unawaited(() async {
+            try {
             final changed = await _fetchInvoicesFromBackend();
             if ((changed || localWasEmptyAtBoot) && mounted) {
               final refreshed = await LocalStorageService.loadSales();
@@ -4808,12 +4793,15 @@ class _DashboardPageState extends State<DashboardPage>
                 _emptySalesRestoreInProgress = false;
               }
             }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('⚠️ Background dashboard reconciliation failed: $e');
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('⚠️ Background dashboard reconciliation failed: $e');
+              }
+            } finally {
+              _salesReconciliationInProgress = false;
             }
-          }
-        }());
+          }());
+        }
 
         // Schedule daily 9PM summary notification
         unawaited(
@@ -4865,6 +4853,7 @@ class _DashboardPageState extends State<DashboardPage>
         });
       }
     } finally {
+      _salesLoadInProgress = false;
       if (mounted) {
         unawaited(_afterSalesLoadGrowthHooks());
       }

@@ -151,6 +151,8 @@ class _SplashScreenState extends State<SplashScreen>
                       child: ClipOval(
                         child: Image.asset(
                           'assets/shop_logo.png',
+                          cacheWidth: 384,
+                          cacheHeight: 384,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => const Icon(Icons.storefront_rounded, color: Colors.white, size: 48),
                         ),
