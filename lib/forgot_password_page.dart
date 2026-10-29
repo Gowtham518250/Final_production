@@ -418,7 +418,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage>
         ),
         const SizedBox(height: 40),
         GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
+          onTap: _goBackToPreviousPage,
           child: AnimatedBuilder(
             animation: _gradientController,
             builder: (context, _) => Container(
@@ -555,7 +555,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage>
         ),
         const SizedBox(height: 22),
         GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
+          onTap: _goBackToPreviousPage,
           child: LiveTranslatedText(
             AppLocalizations.of(context).signIn,
             style: GoogleFonts.poppins(
