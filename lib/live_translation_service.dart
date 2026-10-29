@@ -18,10 +18,20 @@ class LiveTranslationService {
 
   static final LiveTranslationService instance = LiveTranslationService._();
 
-  static const int _maxBatchItems = 20;
-  static const int _maxCachedTranslations = 1200;
-  static const int _maxCacheableTextCharacters = 800;
-  static const int _maxCachedTextCharacters = 256 * 1024;
+  static const int _standardMaxBatchItems = 20;
+  static const int _standardMaxCachedTranslations = 1200;
+  static const int _standardMaxCacheableTextCharacters = 800;
+  static const int _standardMaxCachedTextCharacters = 256 * 1024;
+
+  // Keep translation work and retained text much smaller on entry-level phones.
+  int get _maxBatchItems =>
+      DeviceCapabilityService.instance.isLowEndDevice ? 8 : _standardMaxBatchItems;
+  int get _maxCachedTranslations =>
+      DeviceCapabilityService.instance.isLowEndDevice ? 400 : _standardMaxCachedTranslations;
+  int get _maxCacheableTextCharacters =>
+      DeviceCapabilityService.instance.isLowEndDevice ? 480 : _standardMaxCacheableTextCharacters;
+  int get _maxCachedTextCharacters =>
+      DeviceCapabilityService.instance.isLowEndDevice ? 96 * 1024 : _standardMaxCachedTextCharacters;
 
   // Start conservatively and only allow two batches when device detection says
   // this is not a low-RAM/low-core device.
@@ -41,8 +51,12 @@ class LiveTranslationService {
 
   static const String _persistentCacheKey =
       'retail_mind_dynamic_translation_cache_v1';
-  static const int _maxDeferredUniqueRequests = 600;
-  static const int _maxRetryCooldownEntries = 240;
+  static const int _standardMaxDeferredUniqueRequests = 600;
+  static const int _standardMaxRetryCooldownEntries = 240;
+  int get _maxDeferredUniqueRequests =>
+      DeviceCapabilityService.instance.isLowEndDevice ? 180 : _standardMaxDeferredUniqueRequests;
+  int get _maxRetryCooldownEntries =>
+      DeviceCapabilityService.instance.isLowEndDevice ? 120 : _standardMaxRetryCooldownEntries;
   static const Duration _translationRetryCooldown = Duration(seconds: 45);
 
   final Set<String> _deferred = <String>{};
