@@ -16,6 +16,13 @@ import 'package:synchronized/synchronized.dart';
 /// Features: User Isolation, Hive Performance, Auto-recovery, and Zero Data Leakage.
 class LocalStorageService {
   static final Lock _paymentWriteLock = Lock();
+
+  // Box names are deterministic per authenticated user. Cache the validated
+  // name for this process so every storage read does not hit the filesystem
+  // and reopen/close the same Hive box just to resolve its name.
+  static final Map<String, String> _scopedBoxNameCache = <String, String>{};
+  static final Map<String, Future<String>> _scopedBoxNameInFlight =
+      <String, Future<String>>{};
   // ✅ FIX: Schema versioning to prevent silent data corruption on app updates
   static const int _schemaVersion = 3;
   static const String _schemaVersionKey = 'schema_version';
@@ -468,62 +475,84 @@ class LocalStorageService {
   static Future<String> _getScopedBoxName(String base) async {
     final userId = await _getUserId();
 
-    // 🔒 VALIDATION: Ensure we have a valid user ID before creating scoped box
-    if (userId == null || userId == 0) {
+    if (userId == null || userId <= 0) {
       throw Exception(
         'SECURITY: Cannot store data without authenticated user_id. User ID is null or zero.',
       );
     }
 
+    final cacheKey = '$userId::$base';
+    final cached = _scopedBoxNameCache[cacheKey];
+    if (cached != null) return cached;
+
+    // Concurrent first reads of the same box must share one resolution. This
+    // prevents parallel callers from racing through Hive open/close checks.
+    final pending = _scopedBoxNameInFlight[cacheKey];
+    if (pending != null) return pending;
+
+    final resolution = _resolveScopedBoxName(base, userId, cacheKey);
+    _scopedBoxNameInFlight[cacheKey] = resolution;
+    try {
+      return await resolution;
+    } finally {
+      if (identical(_scopedBoxNameInFlight[cacheKey], resolution)) {
+        _scopedBoxNameInFlight.remove(cacheKey);
+      }
+    }
+  }
+
+  static Future<String> _resolveScopedBoxName(
+    String base,
+    int userId,
+    String cacheKey,
+  ) async {
     final scopedName = '${base}_$userId';
 
-    // 🔒 COLLISION DETECTION: Check for potential box name collisions
-    // Ensure the box name doesn't conflict with legacy unscoped boxes
     if (base == scopedName) {
-      if (kDebugMode)
-        debugPrint(
-          '⚠️ BOX NAME COLLISION DETECTED: $base matches unscoped box name',
-        );
       throw Exception(
         'SECURITY: Box name collision detected. Cannot use unscoped box name as scoped box.',
       );
     }
 
-    // Check if a legacy unscoped box with the same base name exists
-    if (await _boxExists(base)) {
-      if (kDebugMode)
-        debugPrint(
-          '⚠️ LEGACY BOX CONFLICT: Unscoped box $base exists, may cause data leakage',
-        );
-      // In production, you might want to migrate or delete the legacy box here
+    // These filesystem checks are needed once per user/box per process, not on
+    // every data read. Startup migration already removes legacy global boxes.
+    if (await _boxExists(base) && kDebugMode) {
+      debugPrint(
+        '⚠️ LEGACY BOX CONFLICT: Unscoped Hive box $base exists; using $scopedName.',
+      );
     }
 
-    // Verify the scoped box belongs to the current user by checking metadata
     if (await _boxExists(scopedName)) {
+      dynamic boxUserId;
+      final wasAlreadyOpen = Hive.isBoxOpen(scopedName);
       try {
-        final box = await Hive.openBox(scopedName);
-        final boxUserId = box.get('_user_id');
-        await box.close();
-
-        if (boxUserId != null && boxUserId != userId) {
-          if (kDebugMode)
-            debugPrint(
-              '⚠️ BOX OWNERSHIP MISMATCH: Box $scopedName belongs to user $boxUserId, not current user $userId',
-            );
-          throw Exception(
-            'SECURITY: Box ownership mismatch. Data isolation violated.',
-          );
-        }
+        // Never close a box owned by another active service. The old code
+        // reopened a box that might already be open and then closed it on every
+        // storage operation, forcing subsequent callers to reopen it.
+        final box = wasAlreadyOpen
+            ? Hive.box(scopedName)
+            : await Hive.openBox(scopedName);
+        boxUserId = box.get('_user_id');
+        if (!wasAlreadyOpen) await box.close();
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Error checking box ownership: $e');
-        // Continue but log the issue
+        // Encrypted boxes may not be openable here without their cipher. The
+        // scoped name itself remains user-specific; the normal _getBox path
+        // opens it with the configured encryption key.
+        if (kDebugMode) {
+          debugPrint('⚠️ Deferred Hive box ownership probe for $scopedName: $e');
+        }
+      }
+
+      // Keep ownership mismatch outside the probe try/catch. It must fail
+      // closed and must never enter the validated-name cache.
+      if (boxUserId != null && boxUserId != userId) {
+        throw StateError(
+          'SECURITY: Box ownership mismatch for $scopedName. Data isolation violated.',
+        );
       }
     }
 
-    if (kDebugMode) {
-      debugPrint('🔍 Creating scoped box: $scopedName');
-    }
-
+    _scopedBoxNameCache[cacheKey] = scopedName;
     return scopedName;
   }
 
@@ -534,6 +563,9 @@ class LocalStorageService {
 
   /// Close all boxes for the current user to ensure data isolation between accounts.
   static Future<void> closeUserBoxes() async {
+    // A logout/account switch invalidates per-session storage name caches.
+    _scopedBoxNameCache.clear();
+    _scopedBoxNameInFlight.clear();
     try {
       final userId = await _getUserId();
       if (userId == null || userId == 0) {
