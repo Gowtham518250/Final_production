@@ -225,14 +225,7 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
 
               if (widget.state == VoiceState.processing)
                 (LowMemoryPerformance.useReducedMotion
-                    ? SizedBox(
-                        width: 100,
-                        height: 100,
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(_getStateColor()),
-                          strokeWidth: 2,
-                        ),
-                      )
+                    ? const SizedBox.shrink()
                     : AnimatedBuilder(
                         animation: _rotateAnimation,
                         child: const SizedBox.shrink(),
