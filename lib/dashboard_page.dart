@@ -354,44 +354,9 @@ class _DashboardPageState extends State<DashboardPage>
       final today = DateTime(now.year, now.month, now.day);
       final yesterday = today.subtract(const Duration(days: 1));
 
-      // Filter today's and yesterday's sales
-      final todaysSales = sales.where((sale) {
-        try {
-          if (sale is! Map<String, dynamic> ||
-              AnalyticsEngine.isVoidedSale(sale)) {
-            return false;
-          }
-          final saleDate = _getLocalDate(sale);
-          final saleDateOnly = DateTime(
-            saleDate.year,
-            saleDate.month,
-            saleDate.day,
-          );
-          return saleDateOnly == today;
-        } catch (_) {
-          return false;
-        }
-      }).toList();
-
-      final yesterdaysSales = sales.where((sale) {
-        try {
-          if (sale is! Map<String, dynamic> ||
-              AnalyticsEngine.isVoidedSale(sale)) {
-            return false;
-          }
-          final saleDate = _getLocalDate(sale);
-          final saleDateOnly = DateTime(
-            saleDate.year,
-            saleDate.month,
-            saleDate.day,
-          );
-          return saleDateOnly == yesterday;
-        } catch (_) {
-          return false;
-        }
-      }).toList();
-
-      // Calculate totals and counts
+      // Calculate today's and yesterday's totals in one pass. Building two
+      // filtered copies of the full sales history caused avoidable allocations
+      // and repeated date parsing on larger shops.
       double todaySalesAmount = 0;
       double yesterdaySalesAmount = 0;
 
@@ -421,39 +386,48 @@ class _DashboardPageState extends State<DashboardPage>
       }
 
       final Set<String> processedTodayBills = {};
-      for (final sale in todaysSales) {
-        final billId =
-            (sale['_bill_id'] ??
-                    sale['invoice_number'] ??
-                    sale['sale_id'] ??
-                    sale['id'])
-                ?.toString()
-                .trim() ??
-            '';
-        final invoiceKey = billId.isNotEmpty
-            ? billId
-            : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
-        if (processedTodayBills.contains(invoiceKey)) continue;
-        processedTodayBills.add(invoiceKey);
-        todaySalesAmount += _parseSaleAmount(sale);
-      }
-
       final Set<String> processedYesterdayBills = {};
-      for (final sale in yesterdaysSales) {
-        final billId =
-            (sale['_bill_id'] ??
-                    sale['invoice_number'] ??
-                    sale['sale_id'] ??
-                    sale['id'])
-                ?.toString()
-                .trim() ??
-            '';
-        final invoiceKey = billId.isNotEmpty
-            ? billId
-            : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
-        if (processedYesterdayBills.contains(invoiceKey)) continue;
-        processedYesterdayBills.add(invoiceKey);
-        yesterdaySalesAmount += _parseSaleAmount(sale);
+      for (final sale in sales) {
+        try {
+          if (sale is! Map<String, dynamic> ||
+              AnalyticsEngine.isVoidedSale(sale)) {
+            continue;
+          }
+
+          final saleDate = _getLocalDate(sale);
+          final saleDateOnly = DateTime(
+            saleDate.year,
+            saleDate.month,
+            saleDate.day,
+          );
+          final isToday = saleDateOnly == today;
+          final isYesterday = saleDateOnly == yesterday;
+          if (!isToday && !isYesterday) continue;
+
+          final billId =
+              (sale['_bill_id'] ??
+                      sale['invoice_number'] ??
+                      sale['sale_id'] ??
+                      sale['id'])
+                  ?.toString()
+                  .trim() ??
+              '';
+          final invoiceKey = billId.isNotEmpty
+              ? billId
+              : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
+          final processedBills =
+              isToday ? processedTodayBills : processedYesterdayBills;
+          if (!processedBills.add(invoiceKey)) continue;
+
+          final amount = _parseSaleAmount(sale);
+          if (isToday) {
+            todaySalesAmount += amount;
+          } else {
+            yesterdaySalesAmount += amount;
+          }
+        } catch (_) {
+          // One malformed historical row must not break the dashboard score.
+        }
       }
 
       final score = DailyHealthScoreService.computeScore(
