@@ -114,7 +114,6 @@ import 'daily_summary_notification_service.dart';
 import 'screens/owner/online_store_hub_page.dart';
 import 'online_store_manager_page.dart';
 import 'widgets/online_analytics_card.dart';
-import 'widgets/dashboard/daily_business_summary_card.dart';
 import 'widgets/error_boundary.dart'; // Phase 3: Dashboard crash protection
 import 'performance_optimizations.dart'; // 🚀 Advanced performance optimizations
 import 'low_memory_performance.dart';
@@ -573,16 +572,14 @@ class _DashboardPageState extends State<DashboardPage>
       // Keep the initial wave limited to tasks needed for the first dashboard.
       // Network-heavy maintenance work is started later and one operation at a
       // time so low-memory phones do not have to process a burst of requests.
+      // Only load data needed to paint the first dashboard. Optional platform
+      // checks and secondary data loads are queued below to avoid a startup
+      // burst competing for CPU, I/O, and memory on 2GB devices.
       await Future.wait<dynamic>(
         [
           _loadDailyInsightFromPrefs(),
           _loadSales(),
-          _loadQr(),
-          _checkPaymentsConfig(),
-          _checkPermissions(),
-          _showOnboardingIfNeeded(),
           _loadWelcomeCardState(),
-          _checkSoundboxStatus(),
           _loadShopAndWorkerDataLocally(),
         ].map((future) => future.catchError((_) => null)),
       );
@@ -1605,8 +1602,26 @@ class _DashboardPageState extends State<DashboardPage>
       }
     }
 
-    // Connect realtime first, then perform optional refreshes serially to cap
-    // startup CPU, image/data decoding, and network contention.
+    // Queue non-critical platform/network work after the first useful render.
+    // Starting all of these alongside local sales hydration made startup bursty
+    // on low-memory Android devices.
+    await runSafely('QR setup', _loadQr);
+    if (!mounted) return;
+
+    await runSafely('payment configuration', _checkPaymentsConfig);
+    if (!mounted) return;
+
+    await runSafely('permission check', _checkPermissions);
+    if (!mounted) return;
+
+    await runSafely('soundbox status', _checkSoundboxStatus);
+    if (!mounted) return;
+
+    await runSafely('onboarding check', _showOnboardingIfNeeded);
+    if (!mounted) return;
+
+    // Connect realtime, then perform optional refreshes serially to cap startup
+    // CPU, image/data decoding, and network contention.
     await runSafely('realtime connection', _connectRealtime);
     if (!mounted) return;
 
@@ -5231,17 +5246,12 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  void _computeAndStoreDailyInsight() async {
-    _recalculateAnalytics();
+  void _computeAndStoreDailyInsight() {
+    // _loadSales() has already recalculated analytics before calling this
+    // method. Avoid a second full-history pass and a nested setState during
+    // the same dashboard load.
+    _dailyPerformanceMessage = _getSalesAnalysisSentence();
 
-    if (mounted) {
-      setState(() {
-        _dailyPerformanceMessage = _getSalesAnalysisSentence();
-      });
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
     final summary = {
       'yesterdayRevenue': _yesterdayRevenue,
       'yesterdayTransactions': _yesterdayTransactions,
@@ -5251,11 +5261,20 @@ class _DashboardPageState extends State<DashboardPage>
       'message': _dailyPerformanceMessage,
       'generatedAt': DateTime.now().toIso8601String(),
     };
-    // 🔒 SECURITY: Use scoped SharedPreferences for daily insights
-    await ScopedSharedPreferences.setString(
-      'dashboard_daily_insight_v1',
-      json.encode(summary),
-    );
+
+    // Cached insight persistence must never delay the dashboard render.
+    unawaited(() async {
+      try {
+        await ScopedSharedPreferences.setString(
+          'dashboard_daily_insight_v1',
+          json.encode(summary),
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Failed to persist daily dashboard insight: $e');
+        }
+      }
+    }());
   }
 
   String _formatHourRange(int hour) {
@@ -16193,13 +16212,6 @@ class _DashboardPageState extends State<DashboardPage>
 
                 // 0.0 Daily Health Score (single owner signal)
                 if (!_isStaffMode) _buildDailyHealthScoreCard(),
-
-                // Owner-facing source-of-truth summary from the daily report API.
-                if (!_isStaffMode) ...[
-                  const SizedBox(height: 12),
-                  const DailyBusinessSummaryCard(),
-                  const SizedBox(height: 12),
-                ],
 
                 // 0.2 PERFORMANCE OVERVIEW
                 if (_hasDailyInsight && !_isStaffMode) ...[
