@@ -114,7 +114,6 @@ import 'daily_summary_notification_service.dart';
 import 'screens/owner/online_store_hub_page.dart';
 import 'online_store_manager_page.dart';
 import 'widgets/online_analytics_card.dart';
-import 'widgets/dashboard/daily_business_summary_card.dart';
 import 'widgets/error_boundary.dart'; // Phase 3: Dashboard crash protection
 import 'performance_optimizations.dart'; // 🚀 Advanced performance optimizations
 import 'low_memory_performance.dart';
@@ -242,6 +241,8 @@ class _DashboardPageState extends State<DashboardPage>
   bool _growthOnboardingQueued = false;
   bool _isMasterPinSet = false;
   List<Map<String, dynamic>> _lowStockProducts = [];
+  bool _lowStockCheckInProgress = false;
+  bool _lowStockCheckPending = false;
   int _dailyHealthScore = 0;
   bool _dailyHealthScoreLoading = true;
 
@@ -562,9 +563,11 @@ class _DashboardPageState extends State<DashboardPage>
       const Duration(minutes: 5),
       (_) => _refreshOnlineBusinessData(),
     );
-    // FIX BUG 6 — listen for inventory changes and reload analytics
+    // Inventory-only changes must not reload and re-flatten the entire sales
+    // history. Refresh the low-stock signal only; sales are refreshed by their
+    // own change feed. Coalesce bursts from bulk inventory updates.
     InventoryManagementService.onInventoryChanged = () {
-      if (mounted) _loadSales();
+      if (mounted) unawaited(_checkLowStock());
     };
     // Defer all heavy loads to after the first frame renders
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -573,16 +576,14 @@ class _DashboardPageState extends State<DashboardPage>
       // Keep the initial wave limited to tasks needed for the first dashboard.
       // Network-heavy maintenance work is started later and one operation at a
       // time so low-memory phones do not have to process a burst of requests.
+      // Only load data needed to paint the first dashboard. Optional platform
+      // checks and secondary data loads are queued below to avoid a startup
+      // burst competing for CPU, I/O, and memory on 2GB devices.
       await Future.wait<dynamic>(
         [
           _loadDailyInsightFromPrefs(),
           _loadSales(),
-          _loadQr(),
-          _checkPaymentsConfig(),
-          _checkPermissions(),
-          _showOnboardingIfNeeded(),
           _loadWelcomeCardState(),
-          _checkSoundboxStatus(),
           _loadShopAndWorkerDataLocally(),
         ].map((future) => future.catchError((_) => null)),
       );
@@ -1149,7 +1150,9 @@ class _DashboardPageState extends State<DashboardPage>
       // Keep the persistent Dashboard CTA animated until Android reports that
       // every required permission is actually enabled.
       if (!_paymentDetectionPulseController.isAnimating) {
-        _paymentDetectionPulseController.repeat(reverse: true);
+        // A single attention pulse is enough. A perpetual ticker wastes frames
+        // and battery on low-memory phones when permissions remain missing.
+        _paymentDetectionPulseController.forward(from: 0);
       }
       // Intentionally do not open a blocking dialog here. The Dashboard card
       // is the single persistent reminder and remains usable for billing.
@@ -1605,8 +1608,26 @@ class _DashboardPageState extends State<DashboardPage>
       }
     }
 
-    // Connect realtime first, then perform optional refreshes serially to cap
-    // startup CPU, image/data decoding, and network contention.
+    // Queue non-critical platform/network work after the first useful render.
+    // Starting all of these alongside local sales hydration made startup bursty
+    // on low-memory Android devices.
+    await runSafely('QR setup', _loadQr);
+    if (!mounted) return;
+
+    await runSafely('payment configuration', _checkPaymentsConfig);
+    if (!mounted) return;
+
+    await runSafely('permission check', _checkPermissions);
+    if (!mounted) return;
+
+    await runSafely('soundbox status', _checkSoundboxStatus);
+    if (!mounted) return;
+
+    await runSafely('onboarding check', _showOnboardingIfNeeded);
+    if (!mounted) return;
+
+    // Connect realtime, then perform optional refreshes serially to cap startup
+    // CPU, image/data decoding, and network contention.
     await runSafely('realtime connection', _connectRealtime);
     if (!mounted) return;
 
@@ -1941,8 +1962,10 @@ class _DashboardPageState extends State<DashboardPage>
       // mirror before this event is published.
       final refreshed = await LocalStorageService.loadSales();
       if (!mounted) return;
+      final flattenedSales = await _flattenLocalSales(refreshed);
+      if (!mounted) return;
       setState(() {
-        sales = _flattenLocalSales(refreshed);
+        sales = flattenedSales;
         _cachedTodaySales = null;
         _cachedTodayOrders = null;
         _cachedTodayOnlineOrders = null;
@@ -1980,8 +2003,10 @@ class _DashboardPageState extends State<DashboardPage>
       if (invoicesChanged) {
         final refreshed = await LocalStorageService.loadSales();
         if (!mounted) return;
+        final flattenedSales = await _flattenLocalSales(refreshed);
+        if (!mounted) return;
         setState(() {
-          sales = _flattenLocalSales(refreshed);
+          sales = flattenedSales;
           _cachedTodaySales = null;
           _cachedTodayOrders = null;
           _cachedTodayOnlineOrders = null;
@@ -4393,12 +4418,22 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  List<Map<String, dynamic>> _flattenLocalSales(List<dynamic> localHistory) {
+  Future<List<Map<String, dynamic>>> _flattenLocalSales(
+    List<dynamic> localHistory,
+  ) async {
     final List<Map<String, dynamic>> flattened = [];
     final List<Map<String, dynamic>> pending = [];
     final Set<String> seenFingerprints = {};
+    var processedTransactions = 0;
 
     for (var tx in localHistory) {
+      processedTransactions++;
+      if (processedTransactions % 40 == 0) {
+        // Yield between chunks so very large histories do not monopolize the
+        // UI isolate and drop frames on 2GB-class devices.
+        await Future<void>.delayed(Duration.zero);
+        if (!mounted) return flattened;
+      }
       final List<dynamic> items = tx['items'] ?? [];
       final date =
           tx['business_date'] ??
@@ -4548,6 +4583,10 @@ class _DashboardPageState extends State<DashboardPage>
           : items;
 
       for (int idx = 0; idx < constrainedItems.length; idx++) {
+        if (idx > 0 && idx % 100 == 0) {
+          await Future<void>.delayed(Duration.zero);
+          if (!mounted) return flattened;
+        }
         final rawItem = constrainedItems[idx];
         // Normalize item for consistent parsing
         final double price =
@@ -4716,7 +4755,7 @@ class _DashboardPageState extends State<DashboardPage>
 
       List<Map<String, dynamic>> localSalesFlattened = [];
       try {
-        localSalesFlattened = _flattenLocalSales(history);
+        localSalesFlattened = await _flattenLocalSales(history);
       } catch (e) {
         debugPrint('Local sales decode error: $e');
         localSalesFlattened = [];
@@ -4774,8 +4813,10 @@ class _DashboardPageState extends State<DashboardPage>
               final refreshed = await LocalStorageService.loadSales();
               if (!mounted) return;
               if (refreshed.isNotEmpty || changed) {
+                final flattenedSales = await _flattenLocalSales(refreshed);
+                if (!mounted) return;
                 setState(() {
-                  sales = _flattenLocalSales(refreshed);
+                  sales = flattenedSales;
                   _cachedTodaySales = null;
                   _cachedTodayOrders = null;
                   _cachedTodayOnlineOrders = null;
@@ -4801,8 +4842,10 @@ class _DashboardPageState extends State<DashboardPage>
                 if (restore['success'] == true && mounted) {
                   final restored = await LocalStorageService.loadSales();
                   if (restored.isNotEmpty) {
+                    final flattenedSales = await _flattenLocalSales(restored);
+                    if (!mounted) return;
                     setState(() {
-                      sales = _flattenLocalSales(restored);
+                      sales = flattenedSales;
                       _cachedTodaySales = null;
                       _cachedTodayOrders = null;
                       _cachedTodayOnlineOrders = null;
@@ -5231,17 +5274,12 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  void _computeAndStoreDailyInsight() async {
-    _recalculateAnalytics();
+  void _computeAndStoreDailyInsight() {
+    // _loadSales() has already recalculated analytics before calling this
+    // method. Avoid a second full-history pass and a nested setState during
+    // the same dashboard load.
+    _dailyPerformanceMessage = _getSalesAnalysisSentence();
 
-    if (mounted) {
-      setState(() {
-        _dailyPerformanceMessage = _getSalesAnalysisSentence();
-      });
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
     final summary = {
       'yesterdayRevenue': _yesterdayRevenue,
       'yesterdayTransactions': _yesterdayTransactions,
@@ -5251,11 +5289,20 @@ class _DashboardPageState extends State<DashboardPage>
       'message': _dailyPerformanceMessage,
       'generatedAt': DateTime.now().toIso8601String(),
     };
-    // 🔒 SECURITY: Use scoped SharedPreferences for daily insights
-    await ScopedSharedPreferences.setString(
-      'dashboard_daily_insight_v1',
-      json.encode(summary),
-    );
+
+    // Cached insight persistence must never delay the dashboard render.
+    unawaited(() async {
+      try {
+        await ScopedSharedPreferences.setString(
+          'dashboard_daily_insight_v1',
+          json.encode(summary),
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Failed to persist daily dashboard insight: $e');
+        }
+      }
+    }());
   }
 
   String _formatHourRange(int hour) {
@@ -5290,17 +5337,30 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _checkLowStock() async {
-    try {
-      // 🚀 REAL-TIME: Using dynamic stock levels instead of static alert history
-      final lowStockItems =
-          await InventoryManagementService.getAllLowStockProducts();
+    if (_lowStockCheckInProgress) {
+      _lowStockCheckPending = true;
+      return;
+    }
 
-      if (mounted) {
+    _lowStockCheckInProgress = true;
+    try {
+      do {
+        _lowStockCheckPending = false;
+        // Inventory bursts collapse into one follow-up request instead of
+        // running several overlapping low-stock reads and score updates.
+        final lowStockItems =
+            await InventoryManagementService.getAllLowStockProducts();
+
+        if (!mounted) return;
         setState(() => _lowStockProducts = lowStockItems);
-      }
-      _recomputeDailyHealthScore();
+        _recomputeDailyHealthScore();
+      } while (_lowStockCheckPending && mounted);
     } catch (e) {
-      debugPrint('Error checking real-time low stock: $e');
+      if (kDebugMode) {
+        debugPrint('Error checking real-time low stock: $e');
+      }
+    } finally {
+      _lowStockCheckInProgress = false;
     }
   }
 
@@ -16193,13 +16253,6 @@ class _DashboardPageState extends State<DashboardPage>
 
                 // 0.0 Daily Health Score (single owner signal)
                 if (!_isStaffMode) _buildDailyHealthScoreCard(),
-
-                // Owner-facing source-of-truth summary from the daily report API.
-                if (!_isStaffMode) ...[
-                  const SizedBox(height: 12),
-                  const DailyBusinessSummaryCard(),
-                  const SizedBox(height: 12),
-                ],
 
                 // 0.2 PERFORMANCE OVERVIEW
                 if (_hasDailyInsight && !_isStaffMode) ...[

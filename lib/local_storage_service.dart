@@ -16,6 +16,13 @@ import 'package:synchronized/synchronized.dart';
 /// Features: User Isolation, Hive Performance, Auto-recovery, and Zero Data Leakage.
 class LocalStorageService {
   static final Lock _paymentWriteLock = Lock();
+
+  // Box names are deterministic per authenticated user. Cache the validated
+  // name for this process so every storage read does not hit the filesystem
+  // and reopen/close the same Hive box just to resolve its name.
+  static final Map<String, String> _scopedBoxNameCache = <String, String>{};
+  static final Map<String, Future<String>> _scopedBoxNameInFlight =
+      <String, Future<String>>{};
   // ✅ FIX: Schema versioning to prevent silent data corruption on app updates
   static const int _schemaVersion = 3;
   static const String _schemaVersionKey = 'schema_version';
@@ -465,65 +472,85 @@ class LocalStorageService {
 
   /// Resolve a Hive box name scoped to the current user.
   /// Never use a shared global sales box — prevents fake/leaked data on new accounts.
-  static Future<String> _getScopedBoxName(String base) async {
-    final userId = await _getUserId();
-
-    // 🔒 VALIDATION: Ensure we have a valid user ID before creating scoped box
-    if (userId == null || userId == 0) {
+  static Future<String> _getScopedBoxName(String base, {required int userId}) async {
+    if (userId <= 0) {
       throw Exception(
         'SECURITY: Cannot store data without authenticated user_id. User ID is null or zero.',
       );
     }
 
+    final cacheKey = '$userId::$base';
+    final cached = _scopedBoxNameCache[cacheKey];
+    if (cached != null) return cached;
+
+    // Concurrent first reads of the same box must share one resolution. This
+    // prevents parallel callers from racing through Hive open/close checks.
+    final pending = _scopedBoxNameInFlight[cacheKey];
+    if (pending != null) return pending;
+
+    final resolution = _resolveScopedBoxName(base, userId, cacheKey);
+    _scopedBoxNameInFlight[cacheKey] = resolution;
+    try {
+      return await resolution;
+    } finally {
+      if (identical(_scopedBoxNameInFlight[cacheKey], resolution)) {
+        _scopedBoxNameInFlight.remove(cacheKey);
+      }
+    }
+  }
+
+  static Future<String> _resolveScopedBoxName(
+    String base,
+    int userId,
+    String cacheKey,
+  ) async {
     final scopedName = '${base}_$userId';
 
-    // 🔒 COLLISION DETECTION: Check for potential box name collisions
-    // Ensure the box name doesn't conflict with legacy unscoped boxes
     if (base == scopedName) {
-      if (kDebugMode)
-        debugPrint(
-          '⚠️ BOX NAME COLLISION DETECTED: $base matches unscoped box name',
-        );
       throw Exception(
         'SECURITY: Box name collision detected. Cannot use unscoped box name as scoped box.',
       );
     }
 
-    // Check if a legacy unscoped box with the same base name exists
-    if (await _boxExists(base)) {
-      if (kDebugMode)
-        debugPrint(
-          '⚠️ LEGACY BOX CONFLICT: Unscoped box $base exists, may cause data leakage',
-        );
-      // In production, you might want to migrate or delete the legacy box here
+    // These filesystem checks are needed once per user/box per process, not on
+    // every data read. Startup migration already removes legacy global boxes.
+    if (await _boxExists(base) && kDebugMode) {
+      debugPrint(
+        '⚠️ LEGACY BOX CONFLICT: Unscoped Hive box $base exists; using $scopedName.',
+      );
     }
 
-    // Verify the scoped box belongs to the current user by checking metadata
     if (await _boxExists(scopedName)) {
+      dynamic boxUserId;
+      final wasAlreadyOpen = Hive.isBoxOpen(scopedName);
       try {
-        final box = await Hive.openBox(scopedName);
-        final boxUserId = box.get('_user_id');
-        await box.close();
-
-        if (boxUserId != null && boxUserId != userId) {
-          if (kDebugMode)
-            debugPrint(
-              '⚠️ BOX OWNERSHIP MISMATCH: Box $scopedName belongs to user $boxUserId, not current user $userId',
-            );
-          throw Exception(
-            'SECURITY: Box ownership mismatch. Data isolation violated.',
-          );
-        }
+        // Never close a box owned by another active service. The old code
+        // reopened a box that might already be open and then closed it on every
+        // storage operation, forcing subsequent callers to reopen it.
+        final box = wasAlreadyOpen
+            ? Hive.box(scopedName)
+            : await Hive.openBox(scopedName);
+        boxUserId = box.get('_user_id');
+        if (!wasAlreadyOpen) await box.close();
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Error checking box ownership: $e');
-        // Continue but log the issue
+        // Encrypted boxes may not be openable here without their cipher. The
+        // scoped name itself remains user-specific; the normal _getBox path
+        // opens it with the configured encryption key.
+        if (kDebugMode) {
+          debugPrint('⚠️ Deferred Hive box ownership probe for $scopedName: $e');
+        }
+      }
+
+      // Keep ownership mismatch outside the probe try/catch. It must fail
+      // closed and must never enter the validated-name cache.
+      if (boxUserId != null && boxUserId != userId) {
+        throw StateError(
+          'SECURITY: Box ownership mismatch for $scopedName. Data isolation violated.',
+        );
       }
     }
 
-    if (kDebugMode) {
-      debugPrint('🔍 Creating scoped box: $scopedName');
-    }
-
+    _scopedBoxNameCache[cacheKey] = scopedName;
     return scopedName;
   }
 
@@ -534,6 +561,9 @@ class LocalStorageService {
 
   /// Close all boxes for the current user to ensure data isolation between accounts.
   static Future<void> closeUserBoxes() async {
+    // A logout/account switch invalidates per-session storage name caches.
+    _scopedBoxNameCache.clear();
+    _scopedBoxNameInFlight.clear();
     try {
       final userId = await _getUserId();
       if (userId == null || userId == 0) {
@@ -736,16 +766,22 @@ class LocalStorageService {
 
   // =========== CORE BOX MANAGEMENT ===========
 
-  static Future<Box> _getBox(String base, {bool encrypted = false}) async {
-    // 🔒 SECURITY: Validate user ID before accessing any box
-    if (!await _hasValidUserId()) {
+  static Future<Box> _getBox(
+    String base, {
+    bool encrypted = false,
+    int? authenticatedUserId,
+  }) async {
+    // Resolve and validate the current ID once, then use the same identity for
+    // both authorization and box-name resolution.
+    final userId = authenticatedUserId ?? await _getUserId();
+    if (userId == null || userId <= 0) {
       if (kDebugMode) debugPrint('⚠️ _getBox failed — no valid user_id');
       throw Exception(
         'SECURITY: Cannot access storage without authenticated user_id. Please log in first.',
       );
     }
 
-    final name = await _getScopedBoxName(base);
+    final name = await _getScopedBoxName(base, userId: userId);
     if (!Hive.isBoxOpen(name)) {
       if (encrypted) {
         const secureStorage = FlutterSecureStorage();
@@ -815,23 +851,38 @@ class LocalStorageService {
   }
 
   static Future<List<dynamic>> loadSales() async {
-    if (!await _hasValidUserId()) {
-      if (kDebugMode)
+    // Read the user ID once here rather than validating it and then reading it
+    // again just to log the result. _getBox still performs its own access check.
+    final userId = await _getUserId();
+    if (userId == null || userId <= 0) {
+      if (kDebugMode) {
         debugPrint('⚠️ loadSales: no user_id — returning empty (no fake data)');
+      }
       return [];
     }
-    final box = await _getBox(_salesBoxBase, encrypted: true);
-    final userId = await _getUserId();
-    final sales = box.get('all_sales', defaultValue: []);
-    final typedSales = List<dynamic>.from(sales).map((sale) {
+
+    final box = await _getBox(
+      _salesBoxBase,
+      encrypted: true,
+      authenticatedUserId: userId,
+    );
+    final sales = box.get('all_sales', defaultValue: const <dynamic>[]);
+    if (sales is! Iterable) return [];
+
+    // Iterate the stored list directly. List<dynamic>.from(sales) created an
+    // extra full-sized pointer list immediately before this result list, which
+    // is avoidable for large histories on memory-constrained devices.
+    final typedSales = sales.map((sale) {
       if (sale is StoredSale) return sale.toJson();
       if (sale is Map) return Map<String, dynamic>.from(sale);
       return sale;
     }).toList();
-    if (kDebugMode)
+
+    if (kDebugMode) {
       debugPrint(
         '🔍 [LocalStorage] Loaded ${typedSales.length} sales for USER_ID: $userId',
       );
+    }
     return typedSales;
   }
 

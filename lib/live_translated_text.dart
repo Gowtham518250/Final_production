@@ -87,6 +87,18 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
   // localization dictionary for every dynamic product/status label on a page.
   static Map<String, String>? _englishTextToKey;
 
+  // Reuse matchers across dynamic labels instead of constructing regex objects
+  // repeatedly while hundreds of text widgets initialize on low-memory phones.
+  static final RegExp _urlPattern =
+      RegExp(r'^https?://', caseSensitive: false);
+  static final RegExp _phonePattern = RegExp(r'^\+?[0-9][0-9 ()-]{6,}$');
+  static final RegExp _machineIdentifierPattern =
+      RegExp(r'^[#A-Z0-9][A-Z0-9_./:#-]{4,}$');
+  static final RegExp _machineIdentifierCharacterPattern =
+      RegExp(r'[0-9_./:#-]');
+  static final RegExp _shortUppercaseTokenPattern =
+      RegExp(r'^[A-Z0-9 _./:#-]{2,}$');
+
   static Map<String, String> _getEnglishTextToKey() {
     final cached = _englishTextToKey;
     if (cached != null) return cached;
@@ -133,14 +145,14 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     }
     if (value.isEmpty ||
         value.contains('@') ||
-        RegExp(r'^https?://', caseSensitive: false).hasMatch(value) ||
-        RegExp(r'^\+?[0-9][0-9 ()-]{6,}$').hasMatch(value)) {
+        _urlPattern.hasMatch(value) ||
+        _phonePattern.hasMatch(value)) {
       return true;
     }
 
     // Preserve values such as ORD-20261017-13, invoice IDs and SKU codes.
-    if (RegExp(r'^[#A-Z0-9][A-Z0-9_./:#-]{4,}$').hasMatch(value) &&
-        RegExp(r'[0-9_./:#-]').hasMatch(value)) {
+    if (_machineIdentifierPattern.hasMatch(value) &&
+        _machineIdentifierCharacterPattern.hasMatch(value)) {
       return true;
     }
 
@@ -148,7 +160,7 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     // PENDING and CANCELLED translate as ordinary labels.
     return value.length <= 4 &&
         value == value.toUpperCase() &&
-        RegExp(r'^[A-Z0-9 _./:#-]{2,}$').hasMatch(value);
+        _shortUppercaseTokenPattern.hasMatch(value);
   }
 
   @override
