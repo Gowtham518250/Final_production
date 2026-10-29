@@ -24,27 +24,33 @@ class PrivacyPolicyPage extends StatelessWidget {
           children: [
             _section(
               'Why we read your SMS',
-              'We read SMS messages ONLY to detect payment '
-                  'notifications from your bank (UPI/NEFT/IMPS). '
-                  'We never read personal messages. Detection '
-                  'happens entirely on your device — messages '
-                  'are never uploaded to our servers.',
+              'SMS permission can expose SMS message content to Retail Mind. The app '
+                  'uses SMS access to look for payment-related messages from '
+                  'supported banks and payment services. While processing SMS '
+                  'for this purpose, the app may encounter messages unrelated '
+                  'to payments. Relevant detected transaction details may be '
+                  'saved in payment history and handled by related app features. '
+                  'Do not enable SMS access unless you are comfortable with it.',
             ),
             _section(
               'Why we use Notification Access',
-              'We listen for payment notifications from '
-                  'GPay, PhonePe, and Paytm to alert you to a possible payment. '
-                  'A notification does not prove settlement; verify and confirm '
-                  'incoming credits before treating them as paid. Incoming-credit '
-                  'detections and their confirmation status are stored locally '
-                  'in Online Payment History and are not uploaded by that feature. '
-                  'We never read notifications from other apps.',
+              'Android notification access can expose notification text and metadata from '
+                  'apps on this device while the permission is enabled. The listener '
+                  'may receive unrelated notifications before Retail Mind filters '
+                  'them for supported payment alerts, so it can encounter sensitive '
+                  'content unrelated to payments. Relevant detected transaction '
+                  'details may be saved in Online Payment History and handled by '
+                  'related app features according to their settings. A notification '
+                  'does not prove settlement; verify incoming credits before treating '
+                  'them as paid. Enable this access only if you agree to this use.',
             ),
             _section(
               'Why we use Accessibility Service',
-              'Only used as a fallback for payment detection '
-                  'when SMS is unavailable. We never capture '
-                  'passwords, OTPs, or personal data.',
+              'Accessibility access can expose text and interface information from other '
+                  'apps while enabled. Retail Mind uses this service as an additional '
+                  'payment-detection path. It may encounter sensitive information '
+                  'outside payment alerts. Enable it only if you understand and '
+                  'accept this access; manual billing remains available.',
             ),
             _section(
               'Your data rights',
@@ -53,7 +59,11 @@ class PrivacyPolicyPage extends StatelessWidget {
                   'account and all data from Settings → '
                   'Delete Account.',
             ),
-            _section('Contact', 'Questions? Email us at privacy@yourapp.com'),
+            _section(
+              'Contact',
+              'For privacy questions, use the current support contact published '
+                  'on the official Retail Mind app listing.',
+            ),
           ],
         ),
       ),
