@@ -7,7 +7,7 @@ class DynamicTranslationLoadPolicy {
 
   /// Keep low-RAM devices from accumulating hundreds of translation futures
   /// while a large dashboard is being built.
-  static const int maxPendingLowEnd = 40;
+  static const int maxPendingLowEnd = 12;
   static const int maxPendingStandard = 240;
 
   static int maxPending({required bool lowEndDevice}) =>
