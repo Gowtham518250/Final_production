@@ -2255,36 +2255,46 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (kDebugMode) debugPrint('Error loading local products: $e');
     }
 
-    // â”€â”€ Also seed known products from history for autocomplete â”€â”€
+    // Seed autocomplete from a bounded tail of sales history. Current stock
+    // products and barcode entries above remain authoritative; history only
+    // contributes lightweight name suggestions for older/unregistered items.
     try {
-      final List<dynamic> history = await LocalStorageService.loadSales();
+      final history =
+          await LocalStorageService.loadRecentSalesForAutocomplete(limit: 300);
       final Set<String> seenNames = known
           .map((e) => e['name'].toString().toLowerCase().trim())
           .toSet();
+      const maxHistorySuggestions = 800;
+      var historySuggestions = 0;
 
-      for (var sale in history) {
-        final List<dynamic> items = sale['items'] ?? [];
-        for (var item in items) {
-          String rawName = item['item']?.toString() ?? '';
+      // The persisted ledger appends new sales, so examine recent records first.
+      for (final sale in history.reversed) {
+        if (historySuggestions >= maxHistorySuggestions) break;
+        if (sale is! Map) continue;
+        final rawItems = sale['items'];
+        if (rawItems is! List) continue;
+
+        for (final item in rawItems.reversed) {
+          if (historySuggestions >= maxHistorySuggestions) break;
+          if (item is! Map) continue;
+
+          var rawName = item['item']?.toString() ?? '';
           if (rawName.isEmpty) continue;
-
           if (rawName.contains('_')) {
             rawName = rawName.substring(0, rawName.lastIndexOf('_'));
           }
           final nameLower = rawName.toLowerCase().trim();
+          if (nameLower.isEmpty || !seenNames.add(nameLower)) continue;
 
-          if (!seenNames.contains(nameLower)) {
-            seenNames.add(nameLower);
-            known.add({
-              'name': rawName,
-              'price': item['price']?.toString() ?? '0',
-              'gst': item['gst_percent']?.toString() ?? '18',
-              'barcode': item['barcode'] ?? '',
-              // History is useful for autocomplete, but it must never be
-              // mistaken for a current stock-bearing inventory product.
-              'source': 'Sales History',
-            });
-          }
+          known.add({
+            'name': rawName,
+            'price': item['price']?.toString() ?? '0',
+            'gst': item['gst_percent']?.toString() ?? '18',
+            'barcode': item['barcode'] ?? '',
+            // Historical items remain autocomplete-only, never stock-bearing.
+            'source': 'Sales History',
+          });
+          historySuggestions++;
         }
       }
     } catch (_) {}
