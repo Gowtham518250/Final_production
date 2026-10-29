@@ -101,6 +101,153 @@ void main() {
     });
   });
 
+  group('SMS source identity and safe matching', () {
+    test('identical bank SMS text from distinct source rows remains two candidates', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      service.clearBill();
+      service.setBillExpected(50);
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      final firstTime = DateTime.now();
+      const body = 'Your account is credited with Rs.5';
+
+      service.debugHandleSms(
+        'VM-PHONEPE',
+        body,
+        receivedAt: firstTime,
+        sourceEventKey: 'sms|id_101|${firstTime.millisecondsSinceEpoch}|body-hash-a',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      final secondTime = firstTime.add(const Duration(seconds: 2));
+      service.debugHandleSms(
+        'VM-PHONEPE',
+        body,
+        receivedAt: secondTime,
+        sourceEventKey: 'sms|id_102|${secondTime.millisecondsSinceEpoch}|body-hash-b',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+
+      expect(events, hasLength(2));
+      expect(events.map((event) => event.amount), everyElement(5));
+
+      await subscription.cancel();
+      service.clearBill();
+      service.debugResetTransientDetectionState();
+    });
+
+    test('replay of the same SMS source identity is processed once', () async {
+      final service = PaymentDetectionService();
+      service.debugResetTransientDetectionState();
+      service.clearBill();
+      service.setBillExpected(50);
+      final events = <PaymentEvent>[];
+      final subscription = service.onPaymentDetected.listen(events.add);
+      final receivedAt = DateTime.now();
+      const sourceEventKey = 'sms|id_103|1793268000000|same-body-hash';
+      const body = 'Your account is credited with Rs.5';
+
+      service.debugHandleSms(
+        'VM-PHONEPE',
+        body,
+        receivedAt: receivedAt,
+        sourceEventKey: sourceEventKey,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      service.debugHandleSms(
+        'VM-PHONEPE',
+        body,
+        receivedAt: receivedAt,
+        sourceEventKey: sourceEventKey,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      expect(events, hasLength(1));
+
+      await subscription.cancel();
+      service.clearBill();
+      service.debugResetTransientDetectionState();
+    });
+
+    test('amount and time alone never choose a pending payment', () {
+      final now = DateTime.now();
+      final buffer = PendingPaymentBuffer();
+      buffer.add(PaymentEvent(
+        id: 'pending-no-payer',
+        amount: 5,
+        timestamp: now,
+        app: PaymentApp.phonePe,
+        payerName: 'Rahul',
+        rawText: 'Payment received ₹5',
+        direction: PaymentTransactionDirection.incomingCredit,
+      ));
+
+      final match = buffer.matchSms(
+        amount: 5,
+        utr: null,
+        payerName: null,
+        now: now.add(const Duration(seconds: 1)),
+      );
+
+      expect(match, isNull);
+      expect(buffer.lastMatchAmbiguous, isTrue);
+      buffer.dispose();
+    });
+
+    test('multiple same-payer same-amount candidates stay ambiguous', () {
+      final now = DateTime.now();
+      final buffer = PendingPaymentBuffer();
+      for (final candidate in const ['pending-a', 'pending-b']) {
+        buffer.add(PaymentEvent(
+          id: candidate,
+          amount: 5,
+          timestamp: now,
+          app: PaymentApp.phonePe,
+          payerName: 'Rahul',
+          rawText: 'Payment received ₹5',
+          direction: PaymentTransactionDirection.incomingCredit,
+        ));
+      }
+
+      final match = buffer.matchSms(
+        amount: 5,
+        utr: null,
+        payerName: 'Rahul',
+        now: now.add(const Duration(seconds: 1)),
+      );
+
+      expect(match, isNull);
+      expect(buffer.lastMatchAmbiguous, isTrue);
+      buffer.dispose();
+    });
+
+    test('one unique payer amount time candidate can be corroborated', () {
+      final now = DateTime.now();
+      final buffer = PendingPaymentBuffer();
+      buffer.add(PaymentEvent(
+        id: 'pending-unique',
+        amount: 5,
+        timestamp: now,
+        app: PaymentApp.phonePe,
+        payerName: 'Rahul',
+        rawText: 'Payment received ₹5',
+        direction: PaymentTransactionDirection.incomingCredit,
+      ));
+
+      final match = buffer.matchSms(
+        amount: 5,
+        utr: null,
+        payerName: 'Rahul',
+        now: now.add(const Duration(seconds: 1)),
+      );
+
+      expect(match?.event.id, 'pending-unique');
+      expect(buffer.lastMatchAmbiguous, isFalse);
+      buffer.dispose();
+    });
+  });
+
   group('Bill payment tracking', () {
     test(
       'trusted PhonePe credit with a short notification updates a ten-rupee bill',
