@@ -1,4 +1,5 @@
 import '../../../live_translated_text.dart';
+import '../../../low_memory_performance.dart';
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
@@ -182,11 +183,14 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Outer pulsing rings
-              if (widget.state == VoiceState.listening)
+              // Use a static indicator on entry-level devices. The mic remains
+              // fully functional; only decorative continuous repainting is removed.
+              if (!LowMemoryPerformance.useReducedMotion &&
+                  widget.state == VoiceState.listening)
                 ...List.generate(3, (index) {
                   return AnimatedBuilder(
                     animation: _pulseAnimation,
+                    child: const SizedBox.shrink(),
                     builder: (context, child) {
                       final delay = index * 0.3;
                       final value = (_pulseAnimation.value + delay) % 1.0;
@@ -205,64 +209,71 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
                   );
                 }),
 
-              // Wave animation
-              if (widget.state == VoiceState.listening)
+              if (!LowMemoryPerformance.useReducedMotion &&
+                  widget.state == VoiceState.listening)
                 AnimatedBuilder(
                   animation: _waveAnimation,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      size: const Size(180, 180),
-                      painter: WavePainter(
-                        _waveAnimation.value,
-                        _getStateColor(),
-                      ),
-                    );
-                  },
+                  child: const SizedBox.shrink(),
+                  builder: (context, child) => CustomPaint(
+                    size: const Size(180, 180),
+                    painter: WavePainter(
+                      _waveAnimation.value,
+                      _getStateColor(),
+                    ),
+                  ),
                 ),
 
-              // Rotating ring for processing
               if (widget.state == VoiceState.processing)
-                AnimatedBuilder(
-                  animation: _rotateAnimation,
-                  builder: (context, child) {
-                    return Transform.rotate(
-                      angle: _rotateAnimation.value,
-                      child: Container(
+                (LowMemoryPerformance.useReducedMotion
+                    ? SizedBox(
                         width: 100,
                         height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _getStateColor(),
-                            width: 3,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(_getStateColor()),
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : AnimatedBuilder(
+                        animation: _rotateAnimation,
+                        child: const SizedBox.shrink(),
+                        builder: (context, child) => Transform.rotate(
+                          angle: _rotateAnimation.value,
+                          child: Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _getStateColor(),
+                                width: 3,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(_getStateColor()),
+                                strokeWidth: 2,
+                              ),
+                            ),
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(_getStateColor()),
-                            strokeWidth: 2,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                      )),
 
-              // Main mic icon container
               Container(
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
                   color: _getStateColor(),
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: _getStateColor().withOpacity(0.5),
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ],
+                  boxShadow: LowMemoryPerformance.useReducedMotion
+                      ? const []
+                      : [
+                          BoxShadow(
+                            color: _getStateColor().withOpacity(0.5),
+                            blurRadius: 20,
+                            spreadRadius: 5,
+                          ),
+                        ],
                 ),
                 child: Icon(
                   _getStateIcon(),
