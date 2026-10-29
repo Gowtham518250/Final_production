@@ -18,7 +18,7 @@ const String _kSmsQueuePrefix = 'bg_sms_';
 
 const MethodChannel _nativeChannel = MethodChannel('com.retail_mind/sms_receiver');
 
-int? _smsSourceTimestampMillis(SmsMessage message) {
+int? smsSourceTimestampMillis(SmsMessage message) {
   try {
     final value = (message as dynamic).date;
     if (value is int && value > 0) return value;
@@ -37,7 +37,7 @@ int? _smsSourceTimestampMillis(SmsMessage message) {
 }
 
 DateTime _smsSourceTimestamp(SmsMessage message) {
-  final millis = _smsSourceTimestampMillis(message);
+  final millis = smsSourceTimestampMillis(message);
   return millis != null
       ? DateTime.fromMillisecondsSinceEpoch(millis)
       : DateTime.now();
@@ -45,8 +45,8 @@ DateTime _smsSourceTimestamp(SmsMessage message) {
 
 /// Stable identity of a source SMS across listener/background-isolate replays.
 /// A queue arrival ID is deliberately not used: it changes on every replay.
-String? _smsSourceEventKey(SmsMessage message, String sender, String body) {
-  final millis = _smsSourceTimestampMillis(message);
+String? smsSourceEventKey(SmsMessage message, String sender, String body) {
+  final millis = smsSourceTimestampMillis(message);
   if (millis == null) return null;
   final idValue = (() {
     try {
@@ -79,7 +79,7 @@ Future<void> smsBackgroundHandler(SmsMessage message) async {
   // detector restarts. Preserve the SMS's own receive timestamp when the
   // platform exposes it, rather than stamping the replay time on history.
   final sourceReceivedAt = _smsSourceTimestamp(message);
-  final sourceEventKey = _smsSourceEventKey(message, sender, body);
+  final sourceEventKey = smsSourceEventKey(message, sender, body);
 
   developer.log(
     'SMS received in background: from=$sender, length=${body.length}',
