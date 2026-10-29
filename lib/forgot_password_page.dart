@@ -222,6 +222,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage>
     }
   }
 
+  void _goBackToPreviousPage() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+
+    // Also support opening this screen directly, without a login route below it.
+    navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -297,9 +308,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // Back
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Container(
+                      Tooltip(
+                        message: 'Back to previous page',
+                        child: GestureDetector(
+                          onTap: _goBackToPreviousPage,
+                          child: Container(
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
@@ -322,6 +335,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage>
                               color: Colors.white.withValues(alpha: 0.85),
                               size: 18,
                             ),
+                          ),
                           ),
                         ),
                       ),
