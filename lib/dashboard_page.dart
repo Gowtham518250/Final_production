@@ -1956,8 +1956,10 @@ class _DashboardPageState extends State<DashboardPage>
       // mirror before this event is published.
       final refreshed = await LocalStorageService.loadSales();
       if (!mounted) return;
+      final flattenedSales = await _flattenLocalSales(refreshed);
+      if (!mounted) return;
       setState(() {
-        sales = _flattenLocalSales(refreshed);
+        sales = flattenedSales;
         _cachedTodaySales = null;
         _cachedTodayOrders = null;
         _cachedTodayOnlineOrders = null;
@@ -1995,8 +1997,10 @@ class _DashboardPageState extends State<DashboardPage>
       if (invoicesChanged) {
         final refreshed = await LocalStorageService.loadSales();
         if (!mounted) return;
+        final flattenedSales = await _flattenLocalSales(refreshed);
+        if (!mounted) return;
         setState(() {
-          sales = _flattenLocalSales(refreshed);
+          sales = flattenedSales;
           _cachedTodaySales = null;
           _cachedTodayOrders = null;
           _cachedTodayOnlineOrders = null;
@@ -4408,12 +4412,22 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  List<Map<String, dynamic>> _flattenLocalSales(List<dynamic> localHistory) {
+  Future<List<Map<String, dynamic>>> _flattenLocalSales(
+    List<dynamic> localHistory,
+  ) async {
     final List<Map<String, dynamic>> flattened = [];
     final List<Map<String, dynamic>> pending = [];
     final Set<String> seenFingerprints = {};
+    var processedTransactions = 0;
 
     for (var tx in localHistory) {
+      processedTransactions++;
+      if (processedTransactions % 40 == 0) {
+        // Yield between chunks so very large histories do not monopolize the
+        // UI isolate and drop frames on 2GB-class devices.
+        await Future<void>.delayed(Duration.zero);
+        if (!mounted) return flattened;
+      }
       final List<dynamic> items = tx['items'] ?? [];
       final date =
           tx['business_date'] ??
@@ -4563,6 +4577,10 @@ class _DashboardPageState extends State<DashboardPage>
           : items;
 
       for (int idx = 0; idx < constrainedItems.length; idx++) {
+        if (idx > 0 && idx % 100 == 0) {
+          await Future<void>.delayed(Duration.zero);
+          if (!mounted) return flattened;
+        }
         final rawItem = constrainedItems[idx];
         // Normalize item for consistent parsing
         final double price =
@@ -4731,7 +4749,7 @@ class _DashboardPageState extends State<DashboardPage>
 
       List<Map<String, dynamic>> localSalesFlattened = [];
       try {
-        localSalesFlattened = _flattenLocalSales(history);
+        localSalesFlattened = await _flattenLocalSales(history);
       } catch (e) {
         debugPrint('Local sales decode error: $e');
         localSalesFlattened = [];
@@ -4789,8 +4807,10 @@ class _DashboardPageState extends State<DashboardPage>
               final refreshed = await LocalStorageService.loadSales();
               if (!mounted) return;
               if (refreshed.isNotEmpty || changed) {
+                final flattenedSales = await _flattenLocalSales(refreshed);
+                if (!mounted) return;
                 setState(() {
-                  sales = _flattenLocalSales(refreshed);
+                  sales = flattenedSales;
                   _cachedTodaySales = null;
                   _cachedTodayOrders = null;
                   _cachedTodayOnlineOrders = null;
@@ -4816,8 +4836,10 @@ class _DashboardPageState extends State<DashboardPage>
                 if (restore['success'] == true && mounted) {
                   final restored = await LocalStorageService.loadSales();
                   if (restored.isNotEmpty) {
+                    final flattenedSales = await _flattenLocalSales(restored);
+                    if (!mounted) return;
                     setState(() {
-                      sales = _flattenLocalSales(restored);
+                      sales = flattenedSales;
                       _cachedTodaySales = null;
                       _cachedTodayOrders = null;
                       _cachedTodayOnlineOrders = null;
