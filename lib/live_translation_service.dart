@@ -61,9 +61,11 @@ class LiveTranslationService {
     required String targetLanguageCode,
   }) {
     final key = '$targetLanguageCode\\u0000${text.trim()}';
-    if (!_deferred.contains(key)) return false;
+    final hasDeferredRequest = _deferred.contains(key);
+    final hasCachedResult = _cache.containsKey(key);
+    if (!hasDeferredRequest && !hasCachedResult) return false;
     final lowEnd = DeviceCapabilityService.instance.isLowEndDevice;
-    return _cache.containsKey(key) ||
+    return hasCachedResult ||
         _inFlight.length < DynamicTranslationLoadPolicy.maxPending(
           lowEndDevice: lowEnd,
         );
