@@ -3,13 +3,14 @@ import 'dart:math' as math;
 
 class VoiceNlpService {
   /// Enhanced voice cleaning rules - removes unwanted words as per requirements
+  // Remove filler phrases only when they are standalone words. Do not strip
+  // short language particles ("ka", "ki", "lo", "di") globally: they can be
+  // part of a product name or affect quantity/price meaning in Indian speech.
   static const List<String> _voiceCleanupWords = [
     'rupees', 'rs', 'rupee', 'only', 'price', 'cost', 'please', 'thank you',
-    'can i get', 'i want', 'i need', 'give me', 'get me', 'wala', 'wali',
-    'ka', 'ke', 'ki', 'rupye', 'rupya', 'bakse', 'dabba', 'packet', 'piece', 'pcs',
-    'kilo', 'kg', 'grams', 'gram', 'gm', 'liter', 'litre', 'ml',
-    'cheyyandi', 'istundi', 'undali', 'kavali', 'marchandi',
-    'daggara', 'ki', 'ku', 'lo', 'ni', 'nu', 'di', 'du'
+    'can i get', 'i want', 'i need', 'give me', 'get me',
+    'wala', 'wali', 'rupye', 'rupya', 'bakse', 'cheyyandi', 'istundi',
+    'undali', 'kavali', 'marchandi',
   ];
 
   /// 🔧 ADVANCED: Product synonyms for better recognition
@@ -174,31 +175,37 @@ class VoiceNlpService {
 
     if (numMatches.isNotEmpty) {
       if (numMatches.length == 1) {
-        double val = double.parse(numMatches.first.group(0)!);
-        // 🔧 ADVANCED: Better heuristics for qty vs price detection
-        if (val > 1000 || (val > 100 && val % 10 == 0)) {
-          // Likely a price (large amounts or round numbers)
-          price = val;
-        } else if (val < 10 && val > 0) {
-          // Likely a quantity (small numbers)
-          qty = val;
+        final valueText = numMatches.first.group(0)!;
+        final value = double.parse(valueText);
+        final lower = phrase.toLowerCase();
+        final hasExplicitPriceMarker =
+            RegExp(r'(?:₹|\\brs\\.?\\b|\\binr\\b|\\brupees?\\b|\\brupee\\b)')
+                .hasMatch(lower);
+        final hasQuantityMarker =
+            RegExp(r'\\b(?:qty|quantity|kg|g|gram|grams|gm|l|litre|liter|ml|packet|piece|pcs|dozen)\\b')
+                .hasMatch(lower);
+        // A lone number without explicit context is ambiguous (e.g. "rice 3"
+        // may mean 3 kg or ₹3). Do not guess from magnitude; ask the cashier
+        // to verify in the draft instead.
+        if (hasExplicitPriceMarker) {
+          price = value;
+        } else if (hasQuantityMarker) {
+          qty = value;
         } else {
-          // Ambiguous - check for price indicators in phrase
-          if (phrase.contains('rs') || phrase.contains('rupee') || phrase.contains('₹')) {
-            price = val;
-          } else {
-            qty = val;
-          }
+          return null;
         }
       } else if (numMatches.length >= 2) {
-        // Typically: Qty [Item] Price
-        qty = double.parse(numMatches[0].group(0)!);
-        price = double.parse(numMatches[1].group(0)!);
+        // Multi-number phrases follow the documented local format:
+        // quantity [unit] product price. Ambiguous/nonstandard speech should
+        // use the catalog-backed production endpoint instead.
+        qty = double.parse(numMatches.first.group(0)!);
+        price = double.parse(numMatches.last.group(0)!);
       }
 
-      // Remove the matched numbers to extract the item name
-      for (var match in numMatches) {
-        itemStr = itemStr.replaceFirst(match.group(0)!, '');
+      // Remove matched numbers from right to left so repeated digits cannot
+      // remove an earlier different occurrence by mistake.
+      for (final match in numMatches.reversed) {
+        itemStr = itemStr.replaceRange(match.start, match.end, '');
       }
     }
 
@@ -244,7 +251,7 @@ class VoiceNlpService {
 
   /// 🔧 ADVANCED: Enhanced fuzzy matching with multiple algorithms
   static Map<String, dynamic>? _findBestMatch(String query, List<Map<String, dynamic>> inventory) {
-    if (inventory.isEmpty) return null;
+    if (inventory.isEmpty || query.trim().isEmpty) return null;
     
     double bestScore = 0.0;
     Map<String, dynamic>? bestItem;
