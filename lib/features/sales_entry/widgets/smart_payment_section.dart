@@ -1,4 +1,5 @@
 import '../../../live_translated_text.dart';
+import '../../../low_memory_performance.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +23,12 @@ class _SmartPaymentSectionState extends State<SmartPaymentSection>
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
+    );
+    // Decorative pulsing adds continuous frame work. Keep the amount and QR
+    // visible, but leave the animation stopped on low-memory devices.
+    if (!LowMemoryPerformance.useReducedMotion) {
+      _pulseController.repeat(reverse: true);
+    }
   }
 
   @override
