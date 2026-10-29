@@ -179,7 +179,7 @@ class VoiceNlpService {
         final value = double.parse(valueText);
         final lower = phrase.toLowerCase();
         final hasExplicitPriceMarker = RegExp(
-          r'(?:₹|\brs\.?\b|\binr\b|\brupees?\b|\brupee\b|\brupye\b|\brupya\b|\bprice\b|\bcost\b)',
+          r'(?:₹|\brs\b|\binr\b|\brupees?\b|\brupee\b|\brupye\b|\brupya\b|\bprice\b|\bcost\b)',
           caseSensitive: false,
         ).hasMatch(lower);
         final hasQuantityMarker = RegExp(
