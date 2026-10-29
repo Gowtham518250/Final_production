@@ -60,7 +60,7 @@ class LiveTranslationService {
     String text, {
     required String targetLanguageCode,
   }) {
-    final key = '$targetLanguageCode\\u0000${text.trim()}';
+    final key = '$targetLanguageCode\u0000${text.trim()}';
     final hasDeferredRequest = _deferred.contains(key);
     final hasCachedResult = _cache.containsKey(key);
     if (!hasDeferredRequest && !hasCachedResult) return false;
@@ -86,7 +86,7 @@ class LiveTranslationService {
     // labels still resolve synchronously in LiveTranslatedText.
     await _ensurePersistentCacheLoaded();
 
-    final key = '$targetLanguageCode\\u0000$trimmed';
+    final key = '$targetLanguageCode\u0000$trimmed';
     final cached = _cache.remove(key);
     if (cached != null) {
       _cache[key] = cached;
