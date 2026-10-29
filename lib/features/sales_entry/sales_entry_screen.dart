@@ -329,7 +329,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<SalesEntryProvider>();
+    final provider = context.read<SalesEntryProvider>();
     final selectedLocale = context.watch<LanguageProvider>().locale;
 
     return Scaffold(
@@ -353,7 +353,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
           )
         ],
       ),
-      body: Stack(
+      body: ListenableBuilder(
+        listenable: provider,
+        builder: (context, _) => Stack(
         children: [
           SingleChildScrollView(
             padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 200),
@@ -430,7 +432,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                             ),
                             const SizedBox(height: 4),
                             LiveTranslatedText(
-                              context.watch<SalesEntryProvider>().isVoiceProcessing
+                              provider.isVoiceProcessing
                                   ? 'Groq is transcribing and matching your inventory…'
                                   : _isListening
                                       ? 'Recording… $_recordSeconds s. Tap the mic to finish.'
@@ -897,6 +899,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
             ),
           )
         ],
+      ),
       ),
     );
   }
