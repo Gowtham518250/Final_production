@@ -978,6 +978,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     if (kDebugMode) debugPrint('📱 App lifecycle changed: $state');
 
+    // Avoid periodic performance sampling while the app is backgrounded.
+    if (!kIsWeb && state != AppLifecycleState.resumed) {
+      PerformanceMonitorService.instance.stopMonitoring();
+    }
+
     // Cancel any ongoing sync operations when app goes to background
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
@@ -987,6 +992,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.resumed:
+        if (!kIsWeb) {
+          unawaited(PerformanceMonitorService.instance.startMonitoring());
+        }
         _handleAppResumed();
         break;
       case AppLifecycleState.paused:
