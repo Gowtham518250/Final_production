@@ -4,17 +4,17 @@ import 'package:retail_mind/dynamic_translation_load_policy.dart';
 void main() {
   group('DynamicTranslationLoadPolicy', () {
     test('bounds pending unique translations on low-end devices', () {
-      expect(DynamicTranslationLoadPolicy.maxPending(lowEndDevice: true), 40);
+      expect(DynamicTranslationLoadPolicy.maxPending(lowEndDevice: true), 12);
       expect(
         DynamicTranslationLoadPolicy.shouldAccept(
-          pendingUniqueRequests: 39,
+          pendingUniqueRequests: 11,
           lowEndDevice: true,
         ),
         isTrue,
       );
       expect(
         DynamicTranslationLoadPolicy.shouldAccept(
-          pendingUniqueRequests: 40,
+          pendingUniqueRequests: 12,
           lowEndDevice: true,
         ),
         isFalse,
