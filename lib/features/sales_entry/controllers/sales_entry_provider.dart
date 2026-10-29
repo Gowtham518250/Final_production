@@ -23,6 +23,9 @@ class SalesEntryProvider extends ChangeNotifier {
   bool isSaving = false;
   bool isGeneratingBill = false;
   bool isVoiceProcessing = false;
+  // Ignore rapid duplicate starts; this is a UI-level guard only, while
+  // accounting idempotency remains enforced by the sale/backend pipeline.
+  bool _voiceRecordingInFlight = false;
   String? lastVoiceMessage;
   String? lastVoiceTranscript;
   String? lastVoiceInterpretation;
@@ -251,6 +254,13 @@ class SalesEntryProvider extends ChangeNotifier {
     String audioPath, {
     String languageCode = 'auto',
   }) async {
+    if (_voiceRecordingInFlight || isVoiceProcessing) {
+      lastVoiceMessage = 'Voice billing is already processing. Please wait.';
+      notifyListeners();
+      return;
+    }
+
+    _voiceRecordingInFlight = true;
     isVoiceProcessing = true;
     lastVoiceMessage = null;
     lastVoiceTranscript = null;
@@ -304,6 +314,7 @@ class SalesEntryProvider extends ChangeNotifier {
       }
       notifyListeners();
     } finally {
+      _voiceRecordingInFlight = false;
       isVoiceProcessing = false;
       notifyListeners();
     }
