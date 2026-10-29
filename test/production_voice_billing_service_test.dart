@@ -172,6 +172,25 @@ void main() {
     expect(result.lines.single.catalogMatched, isTrue);
   });
 
+  test('parses Roman Telugu amount words through the full production parser', () async {
+    final result = await ProductionVoiceBillingService.parse(
+      transcript: '2 kg biyyam moodu vandalu',
+      localeCode: 'te-IN',
+      catalogService: catalog,
+      knownProducts: const [
+        {'name': 'Rice', 'price': 50, 'unit': 'kg', 'barcode': '890000000001'},
+      ],
+    );
+
+    expect(result.lines, hasLength(1));
+    expect(result.lines.single.name.toLowerCase(), 'rice');
+    expect(result.lines.single.quantity, 2);
+    // The spoken price must be preserved even when the catalog price differs.
+    expect(result.lines.single.price, 300);
+    expect(result.lines.single.priceSource, 'spoken');
+    expect(result.lines.single.catalogMatched, isTrue);
+  });
+
   test('merges genuine duplicate product lines', () async {
     final result = await ProductionVoiceBillingService.parse(
       transcript: 'rice 50 and rice 50',
