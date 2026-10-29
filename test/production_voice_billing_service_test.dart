@@ -153,6 +153,25 @@ void main() {
     expect(result.lines.single.toMap()['price_missing'], isTrue);
   });
 
+  test('parses Telugu spoken hundreds through the production bill parser', () async {
+    final result = await ProductionVoiceBillingService.parse(
+      transcript: '2 kg biyyam moodu vandalu',
+      localeCode: 'te-IN',
+      catalogService: catalog,
+      knownProducts: const [
+        {'name': 'Rice', 'price': 50, 'unit': 'kg', 'barcode': '890000000001'},
+      ],
+    );
+
+    expect(result.lines, hasLength(1));
+    expect(result.lines.single.name.toLowerCase(), 'rice');
+    expect(result.lines.single.quantity, 2);
+    // Spoken amount is authoritative, even when it differs from catalog price.
+    expect(result.lines.single.price, 300);
+    expect(result.lines.single.priceSource, 'spoken');
+    expect(result.lines.single.catalogMatched, isTrue);
+  });
+
   test('merges genuine duplicate product lines', () async {
     final result = await ProductionVoiceBillingService.parse(
       transcript: 'rice 50 and rice 50',
