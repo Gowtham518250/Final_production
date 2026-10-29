@@ -43,7 +43,7 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     private Context context;
     private Activity mActivity;
 
-    private Result pendingResult;
+    private Result pendingNotificationPermissionResult;
     final int REQUEST_CODE_FOR_NOTIFICATIONS = 1199;
 
     @Override
@@ -57,15 +57,26 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
-        pendingResult = result;
         if (call.method.equals("isPermissionGranted")) {
             result.success(isPermissionGranted(context));
         } else if (call.method.equals("requestPermission")) {
+            if (mActivity == null) {
+                result.error("ACTIVITY_UNAVAILABLE", "Notification settings require a foreground activity", null);
+                return;
+            }
+            if (pendingNotificationPermissionResult != null) {
+                result.error("REQUEST_IN_PROGRESS", "A notification-access request is already in progress", null);
+                return;
+            }
+
             Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+            pendingNotificationPermissionResult = result;
             try {
+                // Complete the Dart Future only when Android returns from Settings.
+                // The caller then receives the actual permission state, not null.
                 mActivity.startActivityForResult(intent, REQUEST_CODE_FOR_NOTIFICATIONS);
-                result.success(null);
             } catch (ActivityNotFoundException e) {
+                pendingNotificationPermissionResult = null;
                 Log.e("NotificationPlugin", "ActivityNotFoundException: " + e.getMessage());
                 result.error("ACTIVITY_NOT_FOUND", "No activity found to handle notification listener settings", null);
             }
@@ -203,12 +214,12 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
     @Override
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQUEST_CODE_FOR_NOTIFICATIONS) {
-            if (resultCode == Activity.RESULT_OK) {
-                pendingResult.success(true);
-            } else if (resultCode == Activity.RESULT_CANCELED) {
-                pendingResult.success(isPermissionGranted(context));
-            } else {
-                pendingResult.success(false);
+            Result permissionResult = pendingNotificationPermissionResult;
+            pendingNotificationPermissionResult = null;
+            if (permissionResult != null) {
+                // Activity result codes vary across Android versions/OEMs.
+                // Check the actual notification-listener permission instead.
+                permissionResult.success(isPermissionGranted(context));
             }
             return true;
         }
