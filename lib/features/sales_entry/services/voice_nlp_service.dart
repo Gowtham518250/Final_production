@@ -7,10 +7,11 @@ class VoiceNlpService {
   // short language particles ("ka", "ki", "lo", "di") globally: they can be
   // part of a product name or affect quantity/price meaning in Indian speech.
   static const List<String> _voiceCleanupWords = [
-    'rupees', 'rs', 'rupee', 'only', 'price', 'cost', 'please', 'thank you',
-    'can i get', 'i want', 'i need', 'give me', 'get me',
-    'wala', 'wali', 'rupye', 'rupya', 'bakse', 'cheyyandi', 'istundi',
-    'undali', 'kavali', 'marchandi',
+    // Preserve currency and unit markers until quantity/price context is read.
+    // They are removed from the final product name only after parsing.
+    'only', 'please', 'thank you', 'can i get', 'i want', 'i need',
+    'give me', 'get me', 'wala', 'wali', 'bakse', 'cheyyandi',
+    'istundi', 'undali', 'kavali', 'marchandi',
   ];
 
   /// 🔧 ADVANCED: Product synonyms for better recognition
@@ -178,12 +179,14 @@ class VoiceNlpService {
         final valueText = numMatches.first.group(0)!;
         final value = double.parse(valueText);
         final lower = phrase.toLowerCase();
-        final hasExplicitPriceMarker =
-            RegExp(r'(?:₹|\\brs\\.?\\b|\\binr\\b|\\brupees?\\b|\\brupee\\b)')
-                .hasMatch(lower);
-        final hasQuantityMarker =
-            RegExp(r'\\b(?:qty|quantity|kg|g|gram|grams|gm|l|litre|liter|ml|packet|piece|pcs|dozen)\\b')
-                .hasMatch(lower);
+        final hasExplicitPriceMarker = RegExp(
+          r'(?:₹|\\brs\\.?\\b|\\binr\\b|\\brupees?\\b|\\brupee\\b|\\brupye\\b|\\brupya\\b|\\bprice\\b|\\bcost\\b)',
+          caseSensitive: false,
+        ).hasMatch(lower);
+        final hasQuantityMarker = RegExp(
+          r'\\b(?:qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\\b',
+          caseSensitive: false,
+        ).hasMatch(lower);
         // A lone number without explicit context is ambiguous (e.g. "rice 3"
         // may mean 3 kg or ₹3). Do not guess from magnitude; ask the cashier
         // to verify in the draft instead.
@@ -209,7 +212,17 @@ class VoiceNlpService {
       }
     }
 
-    itemStr = itemStr.trim();
+    // Remove context tokens only after price/quantity markers were inspected.
+    itemStr = itemStr
+        .replaceAll(
+          RegExp(
+            r'\\b(?:rupees?|rupee|rs\\.?|inr|rupye|rupya|price|cost|qty|quantity|kg|kilo|kilos|kilogram|kilograms|g|gram|grams|gm|l|litre|liter|liters|litres|ml|packet|packets|piece|pieces|pcs|pc|dozen)\\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\\s+'), ' ')
+        .trim();
     if (itemStr.isEmpty) return null;
 
     // 🔧 ADVANCED: Apply synonym expansion before matching
