@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'live_translation_web.dart'
     if (dart.library.io) 'live_translation_native.dart' as platform;
@@ -35,39 +39,86 @@ class LiveTranslationService {
   int _cachedTextCharacters = 0;
   bool _pumpScheduled = false;
 
-  Future<String> translateForDisplay(
+  static const String _persistentCacheKey =
+      'retail_mind_dynamic_translation_cache_v1';
+  static const int _maxDeferredUniqueRequests = 600;
+  static const int _maxRetryCooldownEntries = 240;
+  static const Duration _translationRetryCooldown = Duration(seconds: 45);
+
+  final Set<String> _deferred = <String>{};
+  final LinkedHashMap<String, DateTime> _retryAfter =
+      LinkedHashMap<String, DateTime>();
+  final ValueNotifier<int> _capacityRevision = ValueNotifier<int>(0);
+  Future<void>? _persistentCacheLoad;
+  Timer? _persistCacheTimer;
+
+  /// Widgets use this to retry strings that were deferred because the queue
+  /// was full. It is not a broadcast of every translation result.
+  ValueListenable<int> get capacityChanges => _capacityRevision;
+
+  bool isDeferredAndRetryable(
     String text, {
     required String targetLanguageCode,
   }) {
+    final key = '$targetLanguageCode\\u0000${text.trim()}';
+    if (!_deferred.contains(key)) return false;
+    final lowEnd = DeviceCapabilityService.instance.isLowEndDevice;
+    return _cache.containsKey(key) ||
+        _inFlight.length < DynamicTranslationLoadPolicy.maxPending(
+          lowEndDevice: lowEnd,
+        );
+  }
+
+  Future<String> translateForDisplay(
+    String text, {
+    required String targetLanguageCode,
+  }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty ||
         targetLanguageCode == 'en' ||
         !_containsTranslatableLetters(trimmed, targetLanguageCode)) {
-      return Future<String>.value(text);
+      return text;
     }
 
-    final key = '$targetLanguageCode\u0000$trimmed';
+    // Disk I/O is only used for unmatched dynamic strings; curated/local UI
+    // labels still resolve synchronously in LiveTranslatedText.
+    await _ensurePersistentCacheLoaded();
+
+    final key = '$targetLanguageCode\\u0000$trimmed';
     final cached = _cache.remove(key);
     if (cached != null) {
-      // A bounded LRU cache keeps frequently used labels hot without allowing
-      // old dynamic data from long sessions to accumulate indefinitely.
       _cache[key] = cached;
-      return Future<String>.value(cached);
+      _deferred.remove(key);
+      return cached;
     }
 
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
 
-    // Local dictionary-backed UI copy never reaches this queue. Bound the
-    // remaining dynamic strings so a large screen cannot enqueue hundreds of
-    // remote/on-device translation tasks on a low-memory phone.
+    final retryAfter = _retryAfter[key];
+    if (retryAfter != null) {
+      if (retryAfter.isAfter(DateTime.now())) {
+        _deferred.remove(key);
+        return text;
+      }
+      _retryAfter.remove(key);
+    }
+
     if (!DynamicTranslationLoadPolicy.shouldAccept(
       pendingUniqueRequests: _inFlight.length,
       lowEndDevice: DeviceCapabilityService.instance.isLowEndDevice,
     )) {
-      return Future<String>.value(text);
+      // Keep a small retry marker rather than an unbounded list of futures.
+      // LiveTranslatedText retries these markers as capacity becomes available.
+      if (_deferred.length < _maxDeferredUniqueRequests) {
+        _deferred.add(key);
+      }
+      return text;
     }
 
+    // Do not remove an existing deferred marker until the request successfully
+    // lands in cache. Other widgets with the same text can then pick up the
+    // cached value instead of remaining stuck on the original string.
     final completer = Completer<String>();
     _inFlight[key] = completer.future;
     _queue.add(
@@ -80,6 +131,55 @@ class LiveTranslationService {
     );
     _schedulePump();
     return completer.future;
+  }
+
+  Future<void> _ensurePersistentCacheLoaded() {
+    return _persistentCacheLoad ??= _loadPersistentCache();
+  }
+
+  Future<void> _loadPersistentCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = prefs.getString(_persistentCacheKey);
+      if (encoded == null || encoded.isEmpty) return;
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) return;
+
+      for (final entry in decoded.entries) {
+        if (entry.key is String && entry.value is String) {
+          _storeCachedTranslation(
+            entry.key as String,
+            entry.value as String,
+            persist: false,
+          );
+        }
+      }
+    } catch (_) {
+      // Corrupt or unavailable cache must never stop the original text showing.
+    }
+  }
+
+  void _scheduleCachePersistence() {
+    _persistCacheTimer?.cancel();
+    _persistCacheTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _persistentCacheKey,
+          jsonEncode(_cache),
+        );
+      } catch (_) {
+        // Dynamic translations remain in memory for this session.
+      }
+    });
+  }
+
+  void _markRetryCooldown(String key) {
+    _retryAfter.remove(key);
+    _retryAfter[key] = DateTime.now().add(_translationRetryCooldown);
+    while (_retryAfter.length > _maxRetryCooldownEntries) {
+      _retryAfter.remove(_retryAfter.keys.first);
+    }
   }
 
   void _schedulePump() {
@@ -123,22 +223,32 @@ class LiveTranslationService {
         // screen rebuild can retry once the session or connection is restored.
         if (value.trim() != task.text.trim()) {
           _storeCachedTranslation(task.key, value);
+        } else {
+          // Avoid retrying unchanged/failed results every time queue capacity
+          // changes during a poor connection or an unavailable language model.
+          _markRetryCooldown(task.key);
         }
         if (!task.completer.isCompleted) task.completer.complete(value);
         _inFlight.remove(task.key);
       }
     } catch (_) {
       for (final task in batch) {
+        _markRetryCooldown(task.key);
         if (!task.completer.isCompleted) task.completer.complete(task.text);
         _inFlight.remove(task.key);
       }
     } finally {
       _activeBatches--;
+      _capacityRevision.value = _capacityRevision.value + 1;
       if (_queue.isNotEmpty) _schedulePump();
     }
   }
 
-  void _storeCachedTranslation(String key, String value) {
+  void _storeCachedTranslation(
+    String key,
+    String value, {
+    bool persist = true,
+  }) {
     final existing = _cache.remove(key);
     if (existing != null) {
       _cachedTextCharacters -= key.length + existing.length;
@@ -151,6 +261,8 @@ class LiveTranslationService {
 
     _cache[key] = value;
     _cachedTextCharacters += entryCharacters;
+    _deferred.remove(key);
+    _retryAfter.remove(key);
     while (_cache.isNotEmpty &&
         (_cache.length > _maxCachedTranslations ||
             _cachedTextCharacters > _maxCachedTextCharacters)) {
@@ -158,6 +270,7 @@ class LiveTranslationService {
       final oldestValue = _cache.remove(oldestKey)!;
       _cachedTextCharacters -= oldestKey.length + oldestValue.length;
     }
+    if (persist) _scheduleCachePersistence();
   }
 
   bool _containsTranslatableLetters(String value, String targetCode) {
