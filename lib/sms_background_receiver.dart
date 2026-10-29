@@ -7,6 +7,7 @@ import 'dart:ui' show DartPluginRegistrant;
 import 'package:flutter/services.dart';
 import 'package:telephony/telephony.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crypto/crypto.dart';
 import 'dart:developer' as developer;
 import 'dart:convert';
 import 'dart:math' as math;
@@ -17,31 +18,55 @@ const String _kSmsQueuePrefix = 'bg_sms_';
 
 const MethodChannel _nativeChannel = MethodChannel('com.retail_mind/sms_receiver');
 
-DateTime _smsSourceTimestamp(SmsMessage message) {
+int? smsSourceTimestampMillis(SmsMessage message) {
   try {
-    // The date field is exposed by Telephony's SmsMessage on Android. Use
-    // dynamic access so an older plugin build without this optional field
-    // safely falls back to the actual callback time.
     final value = (message as dynamic).date;
-    if (value is int && value > 0) {
-      return DateTime.fromMillisecondsSinceEpoch(value);
-    }
-    if (value is num && value > 0) {
-      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
-    }
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
     if (value is String) {
       final numeric = int.tryParse(value.trim());
-      if (numeric != null && numeric > 0) {
-        return DateTime.fromMillisecondsSinceEpoch(numeric);
-      }
+      if (numeric != null && numeric > 0) return numeric;
       final parsed = DateTime.tryParse(value);
-      if (parsed != null) return parsed;
+      if (parsed != null) return parsed.millisecondsSinceEpoch;
     }
-    if (value is DateTime) return value;
+    if (value is DateTime) return value.millisecondsSinceEpoch;
   } catch (_) {
-    // Optional on some telephony versions.
+    // Optional on some Telephony versions.
   }
-  return DateTime.now();
+  return null;
+}
+
+DateTime _smsSourceTimestamp(SmsMessage message) {
+  final millis = smsSourceTimestampMillis(message);
+  return millis != null
+      ? DateTime.fromMillisecondsSinceEpoch(millis)
+      : DateTime.now();
+}
+
+/// Stable identity of a source SMS across listener/background-isolate replays.
+/// A queue arrival ID is deliberately not used: it changes on every replay.
+String? smsSourceEventKey(SmsMessage message, String sender, String body) {
+  final millis = smsSourceTimestampMillis(message);
+  if (millis == null) return null;
+  final idValue = (() {
+    try {
+      final raw = (message as dynamic).id;
+      if (raw == null) return '';
+      final text = raw.toString().trim();
+      return text == 'null' ? '' : text;
+    } catch (_) {
+      return '';
+    }
+  })();
+  final senderHash = sha256.convert(utf8.encode(sender.trim())).toString();
+  final bodyHash = sha256.convert(utf8.encode(body.trim())).toString();
+  // If the telephony provider omits the row ID, retain body identity inside
+  // the stable part of the key because the generic source-key parser strips
+  // only the final payload hash.
+  final stableId = idValue.isNotEmpty
+      ? 'id_$idValue'
+      : 'sender_${senderHash}_body_${bodyHash}';
+  return 'sms|$stableId|$millis|$bodyHash';
 }
 
 /// This handler is invoked when SMS is received in the background
@@ -59,6 +84,7 @@ Future<void> smsBackgroundHandler(SmsMessage message) async {
   // detector restarts. Preserve the SMS's own receive timestamp when the
   // platform exposes it, rather than stamping the replay time on history.
   final sourceReceivedAt = _smsSourceTimestamp(message);
+  final sourceEventKey = smsSourceEventKey(message, sender, body);
 
   developer.log(
     'SMS received in background: from=$sender, length=${body.length}',
@@ -79,6 +105,7 @@ Future<void> smsBackgroundHandler(SmsMessage message) async {
       'sender': sender,
       'body': body,
       'time': sourceReceivedAt.millisecondsSinceEpoch,
+      if (sourceEventKey != null) 'source_event_key': sourceEventKey,
       'queued_at': queuedAtMillis,
     });
     
@@ -172,6 +199,7 @@ Future<List<Map<String, String>>> getPendingBackgroundSms() async {
             'sender': (decoded['sender'] ?? '').toString(),
             'body': (decoded['body'] ?? '').toString(),
             'time': (decoded['time'] ?? '').toString(),
+            'source_event_key': (decoded['source_event_key'] ?? '').toString(),
           });
           keysToRemove.add(key);
         }

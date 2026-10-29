@@ -515,12 +515,14 @@ Future<bool> onStart(ServiceInstance service) async {
           final body = (message['body'] ?? '').trim();
           if (sender.isEmpty || body.isEmpty) continue;
           final receivedAtMillis = int.tryParse(message['time'] ?? '');
+          final sourceEventKey = (message['source_event_key'] ?? '').trim();
           pds.handleSms(
             sender,
             body,
             receivedAt: receivedAtMillis == null
                 ? null
                 : DateTime.fromMillisecondsSinceEpoch(receivedAtMillis),
+            sourceEventKey: sourceEventKey.isEmpty ? null : sourceEventKey,
           );
         }
         if (pendingMessages.isNotEmpty) {

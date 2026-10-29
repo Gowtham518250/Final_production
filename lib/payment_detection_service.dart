@@ -1209,7 +1209,8 @@ class PdsStateStore {
         // Android listener/background-isolate restarts.
         if ((fp.startsWith('utr:') ||
                 fp.startsWith('utr_') ||
-                fp.startsWith('notification-event:')) &&
+                fp.startsWith('notification-event:') ||
+                fp.startsWith('source_event_')) &&
             expiry.isAfter(now)) {
           toSave[fp] = expiry.toIso8601String();
         }
@@ -2464,6 +2465,10 @@ class _PendingEntry {
 class PendingPaymentBuffer {
   final _buffer = ListQueue<_PendingEntry>();
 
+  /// True when the latest SMS had plausible candidates but not enough evidence
+  /// to identify exactly one transaction safely.
+  bool lastMatchAmbiguous = false;
+
   void add(PaymentEvent e, {bool voiceSpoken = false}) {
     if (_buffer.length >= PdsConfig.pendingBufferMax) _buffer.removeFirst();
     final entry = _PendingEntry(e, voiceSpoken: voiceSpoken);
@@ -2488,49 +2493,68 @@ class PendingPaymentBuffer {
     required DateTime now,
   }) {
     _evict();
-    for (final e in _buffer) {
-      if (e.confirmed) continue;
+    lastMatchAmbiguous = false;
 
-      // UTR match — strongest signal, always sufficient alone
-      if (utr != null &&
-          utr.isNotEmpty &&
-          e.event.referenceId != null &&
-          e.event.referenceId == utr) {
-        e.confirmed = true;
-        PdsLogger.i('TCM', 'UTR_MATCH ₹${e.event.amount}');
-        return e;
+    final pending = _buffer.where((entry) => !entry.confirmed).toList();
+    final normalizedUtr = utr?.trim().toUpperCase();
+    if (normalizedUtr != null && normalizedUtr.isNotEmpty) {
+      final utrMatches = pending.where((entry) =>
+        entry.event.normalizedReferenceId == normalizedUtr
+      ).toList();
+      if (utrMatches.length == 1) {
+        final candidate = utrMatches.single;
+        if ((candidate.event.amount - amount).abs() < 0.01) {
+          candidate.confirmed = true;
+          PdsLogger.i('TCM', 'UTR_MATCH ₹${candidate.event.amount}');
+          return candidate;
+        }
+        // A shared reference with a conflicting amount is a review conflict,
+        // never a duplicate/corroboration match.
+        lastMatchAmbiguous = true;
+        PdsLogger.w('TCM', 'UTR_AMOUNT_CONFLICT');
+        return null;
+      }
+      if (utrMatches.length > 1) {
+        lastMatchAmbiguous = true;
+        PdsLogger.w('TCM', 'AMBIGUOUS_DUPLICATE_UTR_CANDIDATES');
+        return null;
+      }
+    }
+
+    final possible = <_PendingEntry>[];
+    final strong = <_PendingEntry>[];
+    for (final entry in pending) {
+      final existingUtr = entry.event.normalizedReferenceId;
+      if (normalizedUtr != null && normalizedUtr.isNotEmpty &&
+          existingUtr != null && existingUtr.isNotEmpty &&
+          existingUtr != normalizedUtr) {
+        continue;
       }
 
-      // FIX-21: require minimum 2-of-3 signals (amount, time, name)
-      // amount+time alone is no longer enough — keeps LIKELY, not CONFIRMED
-      final timeDiff = now.difference(e.arrivedAt).abs();
-      final amountMatch = (e.event.amount - amount).abs() < 1.0;
-      final timeMatch = timeDiff <= PdsConfig.tcmSmsMatchWindow(e.event.amount);
-      final nameMatch = _nameMatch(e.event.payerName, payerName);
+      final amountMatch = (entry.event.amount - amount).abs() < 0.01;
+      final timeMatch = now.difference(entry.event.timestamp).abs() <=
+          PdsConfig.tcmSmsMatchWindow(entry.event.amount);
+      if (!amountMatch || !timeMatch) continue;
 
-      int signalsMatched = 0;
-      if (amountMatch) signalsMatched++;
-      if (timeMatch) signalsMatched++;
-      if (nameMatch) signalsMatched++;
+      possible.add(entry);
+      if (_nameMatch(entry.event.payerName, payerName)) strong.add(entry);
+    }
 
-      if (signalsMatched >= 2) {
-        if (!amountMatch) continue; // amount must always be one of the signals
-        e.confirmed = true;
-        final matchType = nameMatch ? 'AMOUNT+TIME+NAME' : 'AMOUNT+TIME';
-        PdsLogger.i(
-          'TCM',
-          'FIX-21 $matchType ₹${e.event.amount} signals=$signalsMatched',
-        );
-        return e;
-      }
-
-      // Single signal (amount+time only) — log but do NOT confirm
-      if (amountMatch && timeMatch && !nameMatch) {
-        PdsLogger.d(
-          'TCM',
-          'FIX-21 AMOUNT+TIME_ONLY — keeping LIKELY ₹${e.event.amount}',
-        );
-      }
+    // Never select the first of several plausible events based on queue order.
+    // A unique payer+amount+time match can corroborate a pending event, but an
+    // amount/time-only match is ambiguous and must remain a separate candidate.
+    if (strong.length == 1 && possible.length == 1) {
+      strong.single.confirmed = true;
+      PdsLogger.i('TCM', 'MATCH AMOUNT+TIME+PAYER ₹${strong.single.event.amount}');
+      return strong.single;
+    }
+    if (possible.isNotEmpty &&
+        (strong.length != 1 || possible.length != 1)) {
+      lastMatchAmbiguous = true;
+      PdsLogger.w(
+        'TCM',
+        'AMBIGUOUS_SMS_MATCH candidates=${possible.length} strong=${strong.length}',
+      );
     }
     return null;
   }
@@ -2972,6 +2996,19 @@ class PaymentDetectionService {
   @visibleForTesting
   void debugHandleNotification(ServiceNotificationEvent event) =>
       _handleNotification(event);
+
+  @visibleForTesting
+  void debugHandleSms(
+    String sender,
+    String body, {
+    DateTime? receivedAt,
+    String? sourceEventKey,
+  }) => handleSms(
+    sender,
+    body,
+    receivedAt: receivedAt,
+    sourceEventKey: sourceEventKey,
+  );
 
   @visibleForTesting
   Future<void> debugEmitForTesting(PaymentEvent event) => _emit(event);
@@ -4064,7 +4101,20 @@ class PaymentDetectionService {
 
       PdsLogger.t('ATTACHED', 'channel=sms');
       Telephony.instance.listenIncomingSms(
-        onNewMessage: (m) => handleSms(m.address ?? '', m.body ?? ''),
+        onNewMessage: (m) {
+          final sender = m.address ?? '';
+          final body = m.body ?? '';
+          final sourceEventKey = smsSourceEventKey(m, sender, body);
+          final sourceMillis = smsSourceTimestampMillis(m);
+          handleSms(
+            sender,
+            body,
+            receivedAt: sourceMillis == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(sourceMillis),
+            sourceEventKey: sourceEventKey,
+          );
+        },
         onBackgroundMessage: smsBackgroundHandler,
         listenInBackground: true,
       );
@@ -4533,14 +4583,25 @@ class PaymentDetectionService {
     }
   }
 
-  /// [receivedAt] is supplied when an SMS was saved by the native receiver
-  /// while the detection service was down and is now being replayed.
-  void handleSms(String sender, String body, {DateTime? receivedAt}) {
+  /// [receivedAt] is the original SMS receive time, if known. [sourceEventKey]
+  /// is the stable per-SMS identity carried across foreground/background paths.
+  void handleSms(
+    String sender,
+    String body, {
+    DateTime? receivedAt,
+    String? sourceEventKey,
+  }) {
+    final previousPostedAt = _sourcePostedAt;
+    final previousEventKey = _sourceEventKey;
     _sourcePostedAt = receivedAt;
+    _sourceEventKey = sourceEventKey?.trim().isNotEmpty == true
+        ? sourceEventKey!.trim()
+        : null;
     try {
       _handleSmsCore(sender, body);
     } finally {
-      _sourcePostedAt = null;
+      _sourcePostedAt = previousPostedAt;
+      _sourceEventKey = previousEventKey;
     }
   }
 
@@ -4566,16 +4627,19 @@ class PaymentDetectionService {
         return;
       }
 
-      // Deduplication check (BUG-S2)
-      final hashId = sha256
-          .convert(utf8.encode('$normalizedSender|$body'))
-          .toString();
-      if (_processedSmsCache.contains(hashId)) {
-        PdsLogger.i('L2', 'Duplicate SMS dropped: $normalizedSender');
-        return;
+      // Deduplicate only exact source-message replays. Sender + body is not a
+      // transaction identity: two genuine payments can produce identical bank
+      // SMS text, and both must remain independently reviewable.
+      final sourceKey = _sourceEventKey?.trim();
+      if (sourceKey != null && sourceKey.isNotEmpty) {
+        final hashId = sha256.convert(utf8.encode(sourceKey)).toString();
+        if (_processedSmsCache.contains(hashId)) {
+          PdsLogger.i('L2', 'Repeated SMS source event ignored');
+          return;
+        }
+        _processedSmsCache.add(hashId);
+        if (_processedSmsCache.length > 100) _processedSmsCache.removeAt(0);
       }
-      _processedSmsCache.add(hashId);
-      if (_processedSmsCache.length > 100) _processedSmsCache.removeAt(0);
 
       _watchdog.recordSms();
       // A structurally credible incoming SMS for the currently active bill
@@ -4816,6 +4880,8 @@ class PaymentDetectionService {
     try {
       // Layer 4.7: TCM Matching
       _PendingEntry? matched;
+      // An earlier ambiguous credit must not mute a later debit or unrelated SMS.
+      _pendingBuffer.lastMatchAmbiguous = false;
       if (source == 'sms' && !isDebit) {
         matched = _pendingBuffer.matchSms(
           amount: amount,
@@ -5262,6 +5328,28 @@ class PaymentDetectionService {
       }
 
       if (source == 'sms') {
+        if (_pendingBuffer.lastMatchAmbiguous) {
+          final ambiguousEvent = requireMerchantConfirmation(
+            event.copyWith(
+              confidenceScore: math.min(
+                event.confidenceScore,
+                PdsConfig.confirmedThreshold - 0.01,
+              ),
+              decision: PaymentDecision.likely,
+              detectionSource: '${event.detectionSource}:ambiguous_cross_source_match',
+            ),
+          );
+          consumedByUser = true;
+          PdsLogger.w(
+            'TCM',
+            'AMBIGUOUS SMS correlation retained as provisional and muted',
+          );
+          unawaited(
+            _emit(ambiguousEvent, isBillSettlement: false, forceMute: true),
+          );
+          return;
+        }
+
         if (matched != null && (matched.emitted || matched.voiceSpoken)) {
           // Genuine duplicate of an already-announced payment: keep dedup.
           consumedByUser = true;
@@ -5507,7 +5595,11 @@ class PaymentDetectionService {
     event = requireMerchantConfirmation(event);
     // Preserve the native fallback marker as payment events cross isolates.
     // Classification/history still run, but later Flutter speech/alerts are muted.
-    if (_sourceNativeAnnouncementHandled && _sourceEventKey != null) {
+    if (_sourceNativeAnnouncementHandled) {
+      // The native listener's explicit marker is sufficient to prevent a second
+      // Flutter announcement, even when older/plugin-generated events have no
+      // durable event key. Preserve the key when one is available for replay
+      // tracking, but never condition speech suppression on that key existing.
       event = event.copyWith(
         sourceEventKey: event.sourceEventKey ?? _sourceEventKey,
         nativeAnnouncementHandled: true,
