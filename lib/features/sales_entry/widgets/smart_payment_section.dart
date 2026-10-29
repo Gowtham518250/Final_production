@@ -39,8 +39,15 @@ class _SmartPaymentSectionState extends State<SmartPaymentSection>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SalesEntryProvider>(
-      builder: (context, provider, child) {
+    return Selector<SalesEntryProvider, String>(
+      // The payment area does not need rebuilding for every product-name edit
+      // while Cash is selected. For UPI, include amount/shop name so the QR
+      // updates when its actual payment payload changes.
+      selector: (_, state) => state.isOnlinePayment
+          ? 'upi:${state.shopName}:${state.totalAmount.toStringAsFixed(2)}'
+          : 'cash',
+      builder: (context, _, child) {
+        final provider = context.read<SalesEntryProvider>();
         return Container(
           decoration: BoxDecoration(
             color: const Color(0xFFF9FAFB),
