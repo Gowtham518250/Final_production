@@ -153,9 +153,6 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
 
   @override
   void didChangeDependencies() {
-
-  @override
-  void didChangeDependencies() {
     super.didChangeDependencies();
     // Localizations.localeOf subscribes this widget to MaterialApp locale
     // changes without requiring the page to know about a particular provider.
