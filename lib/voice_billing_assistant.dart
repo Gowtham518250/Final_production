@@ -1978,6 +1978,13 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           cleanTranscript != phoneticTranscript) {
         parsedResult = await _parseWithGroq(cleanTranscript);
       }
+      parsedResult = await _applyDeterministicScaleCorrection(
+        transcriptBeforeNormalization: correctedOrOriginal,
+        normalizedTranscript: cleanTranscript,
+        aiItems: parsedResult.items,
+        aiWarnings: parsedResult.warnings,
+        interpretedText: parsedResult.interpretedText,
+      );
 
       if (!mounted) return;
       _clearEditControllers();
@@ -2062,6 +2069,129 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     } catch (_) {}
   }
 
+  Future<({List<ParsedItem> items, List<String> warnings, String interpretedText})>
+      _applyDeterministicScaleCorrection({
+    required String transcriptBeforeNormalization,
+    required String normalizedTranscript,
+    required List<ParsedItem> aiItems,
+    required List<String> aiWarnings,
+    required String interpretedText,
+  }) async {
+    final unchanged = (
+      items: aiItems,
+      warnings: aiWarnings,
+      interpretedText: interpretedText,
+    );
+    if (transcriptBeforeNormalization.trim() == normalizedTranscript.trim()) {
+      return unchanged;
+    }
+
+    const reviewWarning =
+        'A spoken hundred-scale amount was normalized. Verify the product and price before adding it to the bill.';
+    final safeWarnings = <String>[
+      ...aiWarnings,
+      if (!aiWarnings.contains(reviewWarning)) reviewWarning,
+    ];
+
+    try {
+      final local = await ProductionVoiceBillingService.parse(
+        transcript: normalizedTranscript,
+        localeCode: _selectedLang.code,
+        catalogService: _catalog,
+        knownProducts: widget.knownProducts ?? const [],
+      );
+      if (local.lines.isEmpty || local.lines.length != aiItems.length) {
+        return (
+          items: aiItems,
+          warnings: safeWarnings,
+          interpretedText: interpretedText,
+        );
+      }
+
+      // Override AI values only when every local line maps to a product in
+      // this shop's inventory and the amount was explicitly recognized from
+      // the normalized transcript. Unknown or ambiguous lines remain the AI
+      // draft and must be reviewed by the merchant.
+      final corrected = <ParsedItem>[];
+      for (final line in local.lines) {
+        if (!line.catalogMatched ||
+            line.priceSource != 'spoken' ||
+            line.price <= 0 ||
+            !line.price.isFinite ||
+            line.quantity <= 0 ||
+            !line.quantity.isFinite) {
+          return (
+            items: aiItems,
+            warnings: safeWarnings,
+            interpretedText: interpretedText,
+          );
+        }
+
+        final product = _findKnownProduct(line.name);
+        if (product == null) {
+          return (
+            items: aiItems,
+            warnings: safeWarnings,
+            interpretedText: interpretedText,
+          );
+        }
+        final canonicalName = (product['product_name'] ??
+                product['name'] ??
+                product['productName'] ??
+                product['itemName'] ??
+                line.name)
+            .toString()
+            .trim();
+        if (canonicalName.isEmpty) {
+          return (
+            items: aiItems,
+            warnings: safeWarnings,
+            interpretedText: interpretedText,
+          );
+        }
+
+        corrected.add(
+          ParsedItem(
+            name: canonicalName,
+            qty: line.quantity,
+            unit: line.unit,
+            price: line.price,
+            confidence: line.confidence.clamp(0.0, 1.0).toDouble(),
+            catalogMatched: true,
+            productId: (product['id'] ?? product['product_id'])?.toString(),
+            priceSource: 'spoken',
+            barcode: line.barcode ?? product['barcode']?.toString(),
+            gst: line.gst ??
+                double.tryParse(
+                  (product['gst_percent'] ?? product['gst'] ?? '').toString(),
+                ),
+            priceWarning: line.priceWarning ??
+                'Price recovered from the normalized spoken amount. Verify before billing.',
+            isConfirmed: false,
+          ),
+        );
+      }
+
+      return (
+        items: corrected,
+        warnings: <String>[
+          ...aiWarnings,
+          'Corrected a spoken hundred-scale amount using the local shop catalogue. Review each item before billing.',
+        ],
+        interpretedText: interpretedText,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Voice scale correction skipped safely: $error');
+      }
+      return (
+        items: aiItems,
+        warnings: safeWarnings,
+        interpretedText: interpretedText,
+      );
+    }
+  }
+
   Future<void> _doProcess(String text, {bool commit = false}) async {
     if (text.trim().isEmpty) return;
     if (_isProcessing && !commit) return;
@@ -2092,6 +2222,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           languageCode: _selectedLang.code,
         );
       }
+      final transcriptBeforeScaleNormalization = clean;
       clean = RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
         clean,
       );
@@ -2104,9 +2235,16 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         // each item only against this shop's authenticated product catalog.
         // This is a draft-only call; saving the sale remains a separate action.
         final groqResult = await _parseWithGroq(clean);
-        items = groqResult.items;
-        warnings = groqResult.warnings;
-        interpretedText = groqResult.interpretedText;
+        final correctedResult = await _applyDeterministicScaleCorrection(
+          transcriptBeforeNormalization: transcriptBeforeScaleNormalization,
+          normalizedTranscript: clean,
+          aiItems: groqResult.items,
+          aiWarnings: groqResult.warnings,
+          interpretedText: groqResult.interpretedText,
+        );
+        items = correctedResult.items;
+        warnings = correctedResult.warnings;
+        interpretedText = correctedResult.interpretedText;
       } catch (error) {
         // HTTP/API failures and malformed responses are not treated as a valid
         // local AI parse: that fallback can mistake untranslated words for items.
