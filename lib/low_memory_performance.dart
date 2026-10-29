@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/widgets.dart';
 
+import 'device_capability_service.dart';
+
 /// Runtime safeguards for entry-level Android devices.
 ///
 /// Limits retained decoded images (which can be much larger in memory than
@@ -37,6 +39,12 @@ class LowMemoryPerformance {
         .clamp(minPixels, maxPixels)
         .toInt();
   }
+
+  /// Use fewer continuous visual effects on entry-level devices.
+  /// Device capability detection defaults to low-end until it completes, which
+  /// keeps the first frame inexpensive on 2GB-class phones.
+  static bool get useReducedMotion =>
+      DeviceCapabilityService.instance.isLowEndDevice;
 
   static bool _configured = false;
   static final _memoryPressureObserver = _MemoryPressureObserver();
