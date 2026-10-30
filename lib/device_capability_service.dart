@@ -69,11 +69,18 @@ class DeviceCapabilityService {
         capabilities.deviceModel = iosInfo.model;
       }
       
-      // Get available memory
-      capabilities.availableRAM = await _getAvailableMemory();
-      
-      // Get performance metrics
+      // Use Android's live MemAvailable counter where available. Other
+      // platforms use a clearly-labelled estimate instead of presenting a
+      // percentage of total RAM as a live measurement.
+      capabilities.availableRAM = await _getAvailableMemory(
+        totalRAM: capabilities.totalRAM,
+        capabilities: capabilities,
+      );
+
+      // This portable service does not currently sample CPU counters. Mark
+      // the placeholder explicitly so callers cannot mistake it for telemetry.
       capabilities.cpuUsage = await _getCpuUsage();
+      capabilities.cpuUsageIsEstimated = true;
       
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Error getting device info: $e');
@@ -140,20 +147,54 @@ class DeviceCapabilityService {
     }
   }
 
-  /// Get available memory
-  Future<double> _getAvailableMemory() async {
-    try {
-      // This is a simplified estimation
-      // In production, you'd use platform-specific methods
-      if (_capabilities != null) {
-        return _capabilities!.totalRAM * 0.6; // Assume 60% available
+  /// Get available memory in GiB.
+  ///
+  /// Android exposes a live estimate of reclaimable/available memory through
+  /// /proc/meminfo. iOS and web use a conservative estimate because this
+  /// service has no native memory-counter bridge for those platforms.
+  Future<double> _getAvailableMemory({
+    required double totalRAM,
+    required DeviceCapabilities capabilities,
+  }) async {
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final file = File('/proc/meminfo');
+        if (await file.exists()) {
+          final available = parseMemAvailableGiB(await file.readAsLines());
+          if (available != null && available > 0) {
+            capabilities.availableRAMIsEstimated = false;
+            return available;
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ Could not read Android MemAvailable: $e');
+        }
       }
-      return 1.0;
-    } catch (e) {
-      return 1.0;
     }
+
+    capabilities.availableRAMIsEstimated = true;
+    return totalRAM > 0 ? totalRAM * 0.6 : 1.0;
   }
-  
+
+  /// Parse Linux /proc/meminfo MemAvailable (reported in kB) into GiB.
+  /// Returns null for missing, malformed, zero, or non-finite values.
+  @visibleForTesting
+  static double? parseMemAvailableGiB(Iterable<String> lines) {
+    for (final line in lines) {
+      final match = RegExp(
+        r'^MemAvailable:\s*(\d+)\s*kB$',
+        caseSensitive: false,
+      ).firstMatch(line.trim());
+      if (match == null) continue;
+      final kib = double.tryParse(match.group(1)!);
+      if (kib == null || !kib.isFinite || kib <= 0) return null;
+      final gib = kib / (1024 * 1024);
+      return gib.isFinite && gib > 0 ? gib : null;
+    }
+    return null;
+  }
+
   /// Estimate iOS RAM based on device model
   double _estimateIOSRAM(String machine) {
     // Simplified estimation based on common iOS devices
@@ -274,12 +315,16 @@ class DeviceCapabilityService {
 
 /// Device capabilities
 class DeviceCapabilities {
-  double totalRAM = 0.0; // in GB
-  double availableRAM = 0.0; // in GB
+  double totalRAM = 0.0; // in GiB
+  double availableRAM = 0.0; // in GiB
+  /// False only when read from Android's live MemAvailable counter.
+  bool availableRAMIsEstimated = true;
   int cpuCores = 0;
   int? androidSdkVersion;
   String? deviceModel;
   double cpuUsage = 0.0;
+  /// The current cross-platform implementation uses a placeholder, not a sample.
+  bool cpuUsageIsEstimated = true;
 }
 
 /// Performance mode
