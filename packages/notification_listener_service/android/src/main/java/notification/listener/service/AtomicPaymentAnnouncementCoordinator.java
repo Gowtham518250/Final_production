@@ -41,6 +41,9 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
     private static final long TRUECALLER_CROSS_APP_MS = 8_000L;
     private static final long SMS_ECHO_MS = 3L * 60L * 60L * 1000L;
     private static final long EXACT_TEXT_REPLAY_MS = 2000L;
+    // App notification + bank SMS for one transfer usually land within a
+    // minute but share no payer/account/UTR. Pair one-to-one only.
+    private static final long WEAK_MODALITY_MS = 60_000L;
     private static final int MAX_ROWS = 500;
     private static final Pattern ACCOUNT_PATTERN = Pattern.compile(
             "(?:account|a/c|acct)[^0-9]{0,12}(?:x{2,})?([0-9]{4})|x{2,}([0-9]{4})",
@@ -171,17 +174,19 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                     continue;
                 }
 
-                if (notEmpty(referenceHash) || notEmpty(old.referenceHash)) {
+                if (notEmpty(referenceHash) && notEmpty(old.referenceHash)) {
                     // A shared reference plus compatible amount/direction is
                     // enough even if one source cannot infer the direction.
-                    // Known credit/debit contradictions remain independently reviewable.
-                    if (notEmpty(referenceHash) && referenceHash.equals(old.referenceHash)
+                    // Two different references are always two payments.
+                    if (referenceHash.equals(old.referenceHash)
                             && identityDirectionCompatible) {
                         db.setTransactionSuccessful();
                         return true;
                     }
                     continue;
                 }
+                // A reference on only one side neither proves nor disproves
+                // identity: fall through to the strict cross-channel checks.
 
                 // Fuzzy cross-source matching is stricter: both sides must
                 // agree on a known direction, in addition to payer/account evidence.
@@ -218,7 +223,11 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                         currentTruecaller != oldTruecaller
                                 && age <= TRUECALLER_CROSS_APP_MS
                                 && isTrustedTruecallerEchoCounterpart(counterpartChannel);
-                if (!sameAccount && !samePayer && !truecallerCrossAppEcho) continue;
+                boolean weakModalityPair = age <= WEAK_MODALITY_MS
+                        && (("sms".equals(origin) && "notification".equals(old.origin))
+                                || ("notification".equals(origin) && "sms".equals(old.origin)));
+                if (!sameAccount && !samePayer && !truecallerCrossAppEcho
+                        && !weakModalityPair) continue;
                 if (old.claimedChannels.contains(channel)) continue;
 
                 if (uniqueCandidate != null && uniqueCandidate.id != old.id) {
