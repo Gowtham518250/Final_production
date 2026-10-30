@@ -7,9 +7,13 @@ name: Release Build (Android AAB + Web)
 # FIREBASE_AUTH_DOMAIN, FIREBASE_STORAGE_BUCKET, FIREBASE_SENDER_ID
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/announcement-dedup-review-20261030
 
 permissions:
   contents: read
+  artifact-metadata: write
 
 jobs:
   android-release:
@@ -24,7 +28,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.47.x"
+          flutter-version: "3.47.8"
           cache: true
       - name: Inject Firebase Android config and upload key
         env:
@@ -67,11 +71,15 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build appbundle --release
+        run: |
+          flutter build appbundle --release
+          flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
-          name: retail-mind-release-aab
-          path: build/app/outputs/bundle/release/app-release.aab
+          name: retail-mind-release-android
+          path: |
+            build/app/outputs/bundle/release/app-release.aab
+            build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
   web-release:
@@ -82,7 +90,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.47.x"
+          flutter-version: "3.47.8"
           cache: true
       - name: Build Flutter web with Firebase configuration
         env:
