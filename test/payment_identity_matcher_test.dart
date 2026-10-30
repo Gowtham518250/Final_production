@@ -94,6 +94,15 @@ void main() {
       expect(d.reason, 'weak_modality_pair');
     });
 
+    test('one-sided reference with shared account is not fuzzy-paired', () {
+      final d = PaymentIdentityMatcher.compare(
+        sms('s', reference: '412345678901', sec: 5, account: '4222'),
+        sig('n', account: '4222'),
+      );
+      expect(d.verdict, IdentityVerdict.distinct);
+      expect(d.reason, 'one_sided_reference_not_fuzzy_matched');
+    });
+
     test('weak pair expires after 60 seconds', () {
       final d = PaymentIdentityMatcher.compare(sms('s', sec: 61), sig('n'));
       expect(d.verdict, IdentityVerdict.distinct);
