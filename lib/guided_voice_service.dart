@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +23,7 @@ class GuidedVoiceService extends ChangeNotifier {
   bool _isSpeaking = false;
   bool _isStarting = false;
   int _requestVersion = 0;
+  int _screenGeneration = 0;
   final Map<String, Future<String?>> _localeTasks = {};
   Future<void>? _engineSetup;
 
@@ -558,14 +561,25 @@ class GuidedVoiceService extends ChangeNotifier {
   }
 
   Future<void> speakStepIfGuided(String step, String languageCode) async {
+    // A route may change while preferences are being loaded. Only start the
+    // prompt if the screen that requested it is still the active screen.
+    final screenGeneration = _screenGeneration;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (screenGeneration != _screenGeneration) return;
       if (prefs.getBool(guidedModePreferenceKey) ?? false) {
         await speakStep(step, languageCode);
       }
     } catch (error) {
       debugPrint('Unable to load guided voice preference: $error');
     }
+  }
+
+  /// Cancel screen guidance whenever the navigator moves to another route.
+  /// Payment announcements use a separate service and are not stopped here.
+  Future<void> cancelForRouteChange() async {
+    _screenGeneration++;
+    await stop();
   }
 
   String? _matchAvailableLocale(
@@ -601,5 +615,44 @@ class GuidedVoiceService extends ChangeNotifier {
     } finally {
       _updatePlaybackState(speaking: false);
     }
+  }
+
+}
+
+/// Stops screen-specific guidance when the visible route changes. This does
+/// not touch PaymentAnnouncementService, which owns background payment alerts.
+class GuidedVoiceRouteObserver extends NavigatorObserver {
+  GuidedVoiceRouteObserver({Future<void> Function()? stopGuidance})
+      : _stopGuidance =
+            stopGuidance ?? GuidedVoiceService.instance.cancelForRouteChange;
+
+  final Future<void> Function() _stopGuidance;
+
+  void _cancelCurrentScreenGuidance() {
+    unawaited(_stopGuidance());
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _cancelCurrentScreenGuidance();
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _cancelCurrentScreenGuidance();
+    super.didPop(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    _cancelCurrentScreenGuidance();
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _cancelCurrentScreenGuidance();
+    super.didRemove(route, previousRoute);
   }
 }
