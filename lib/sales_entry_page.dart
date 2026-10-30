@@ -1341,7 +1341,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // First strip currency words so they don't pollute item name
     // e.g. "tomato 100 rupees" → strip "rupees" → price=100, item=tomato
     final RegExp currencyWords = RegExp(
-      r'\b(rupees?|rupaiye?|rupaya?|rs\.?|inr|paise?|bucks?|रुपये|रुपया)\b',
+      r'\b(rupees?|rupaiye?|rupaya?|rs\.?|inr|paise?|bucks?)\b|(?:^|[\s,;])(?:रुपये|रुपया)(?=$|[\s,;])',
       caseSensitive: false,
     );
     command = command.replaceAll(currencyWords, ' ');
