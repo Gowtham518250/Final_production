@@ -62,7 +62,7 @@ String neutralPaymentAlert(String languageKey, String amountText) {
     case 'malayalam':
       return '$amountText ഇടപാട് അറിയിപ്പ്. ക്രെഡിറ്റ് ആണോ ഡെബിറ്റ് ആണോ എന്ന് പരിശോധിക്കുക.';
     default:
-      return 'Payment alert of $amountText. Could not tell if it was credited '
-          'or debited. Please check.';
+      return 'Payment of $amountText detected. The app could not tell whether '
+          'it was credited or debited. Please check.';
   }
 }
