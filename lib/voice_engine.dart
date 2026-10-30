@@ -147,6 +147,21 @@ class VoiceEngine {
       await _tts.setPitch(1.0);
       await _tts.awaitSpeakCompletion(true);
 
+      if (Platform.isAndroid) {
+        // Speak as guidance, not media, so a payment is audible over music and
+        // on a locked screen; queue (don't flush) back-to-back payments.
+        try {
+          await _tts.setAudioAttributesForNavigation();
+        } catch (e) {
+          _log.w('TTS audio attributes unavailable: $e');
+        }
+        try {
+          await _tts.setQueueMode(1);
+        } catch (e) {
+          _log.w('TTS queue mode unavailable: $e');
+        }
+      }
+
       _tts.setStartHandler(() {
         _setSpeaking(true);
         _startAmpTimer();
