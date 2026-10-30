@@ -709,6 +709,7 @@ class _DashboardPageState extends State<DashboardPage>
             // Also sound the OS notification for a pending-review reminder after
             // the overnight cooldown, so it is not silent when TTS is muted.
             silent: !audibleFallback,
+            notificationId: event.id.hashCode & 0x7fffffff,
           );
         }
         try {
@@ -3883,6 +3884,7 @@ class _DashboardPageState extends State<DashboardPage>
     bool isPositive, {
     bool localOnly = false,
     bool silent = false,
+    int? notificationId,
   }) async {
     if (localOnly) {
       // Payment events must not launch WhatsApp or create a second sound
@@ -3892,6 +3894,7 @@ class _DashboardPageState extends State<DashboardPage>
         body: body,
         payload: 'realtime',
         silent: silent,
+        notificationId: notificationId,
       );
       return;
     }
