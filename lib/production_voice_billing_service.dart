@@ -239,6 +239,27 @@ class ProductionVoiceBillingService {
         .where((token) => token.length >= 3)
         .toSet();
 
+    // A narrow catalog-aware correction for a known Whisper/Android STT
+    // confusion: "bubt" can be emitted for the shop product "Boost". Expand
+    // only the catalog/query comparison tokens; never rewrite the displayed
+    // transcript or silently select a non-catalog item.
+    const spokenCatalogAliases = <String, Set<String>>{
+      'boost': {'bubt'},
+    };
+
+    Set<String> catalogTokens(String value) {
+      final result = tokens(value);
+      for (final entry in spokenCatalogAliases.entries) {
+        if (result.contains(entry.key) ||
+            result.any(entry.value.contains)) {
+          result
+            ..add(entry.key)
+            ..addAll(entry.value);
+        }
+      }
+      return result;
+    }
+
     final query = normalize(spokenName);
 
     // Exact shop-product name first.
@@ -253,7 +274,7 @@ class ProductionVoiceBillingService {
       if (names.any((name) => name == query)) return product;
     }
 
-    final queryTokens = tokens(query);
+    final queryTokens = catalogTokens(query);
     if (queryTokens.isEmpty) return null;
 
     final scored = <MapEntry<Map<String, dynamic>, double>>[];
@@ -268,7 +289,7 @@ class ProductionVoiceBillingService {
 
       var best = 0.0;
       for (final name in names) {
-        final productTokens = tokens(name);
+        final productTokens = catalogTokens(name);
         if (productTokens.isEmpty) continue;
 
         final overlap = queryTokens.intersection(productTokens);
