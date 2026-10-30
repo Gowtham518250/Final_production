@@ -188,6 +188,10 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
             for (Map<String, Object> item : service.getActiveNotificationData()) {
                 Object key = item.get("eventKey");
                 if (key != null && pendingEventKeys.contains(String.valueOf(key))) continue;
+                // Already routed by Dart before this (re)attach: replaying it
+                // would re-detect, and possibly re-announce, the same payment.
+                if (key != null && NotificationRelayReceiver.wasAcknowledged(
+                        context, String.valueOf(key))) continue;
                 HashMap<String, Object> replay = new HashMap<>(item);
                 replay.put("hasRemoved", false);
                 replay.put("canReply", false);
