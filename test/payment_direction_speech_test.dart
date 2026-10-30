@@ -45,7 +45,7 @@ void main() {
       'english': ['received', 'got', 'came', 'arrived'],
       'hindi': ['मिला', 'मिले', 'आया'],
       'tamil': ['வந்தது'],
-      'telugu': ['వచ్చింది', 'వచ్చాయÃf'],
+      'telugu': ['వచ్చింది', 'వచ్చాయి'],
       'kannada': ['ಬಂತು', 'ಬಂದಿದೆ'],
       'marathi': ['आले', 'मिळाले'],
       'gujarati': ['મળ્યા'],
