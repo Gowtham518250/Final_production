@@ -324,8 +324,27 @@ class ProductionVoiceBillingService {
       if (names.any((name) => name == query)) return product;
     }
 
+    final rawQueryTokens = tokens(query);
+    final usesBoostAlias =
+        rawQueryTokens.contains('bubt') && !rawQueryTokens.contains('boost');
     final queryTokens = catalogTokens(query);
     if (queryTokens.isEmpty) return null;
+
+    // A phonetic alias alone cannot distinguish multiple shop pack sizes.
+    // Require exactly one current-inventory product that carries Boost.
+    if (usesBoostAlias) {
+      final boostMatches = products.where((product) {
+        if (product['source'] == 'Sales History') return false;
+        final names = [
+          product['name'],
+          product['product_name'],
+          product['canonical_name'],
+        ].whereType<String>().map(normalize).where((v) => v.isNotEmpty);
+        return names.any((name) => catalogTokens(name).contains('boost'));
+      }).length;
+      if (boostMatches != 1) return null;
+    }
+
 
     final scored = <MapEntry<Map<String, dynamic>, double>>[];
 
