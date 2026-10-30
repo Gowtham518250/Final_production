@@ -172,6 +172,45 @@ void main() {
     expect(result.lines.single.catalogMatched, isTrue);
   });
 
+  test('maps the known Romanized ASR variant to the shop Boost item', () async {
+    final result = await ProductionVoiceBillingService.parse(
+      transcript: '3 vandalu bubt',
+      localeCode: 'te-IN',
+      catalogService: catalog,
+      knownProducts: const [
+        {
+          'name': 'Boost',
+          'price': 45,
+          'unit': 'bottle',
+          'barcode': '890000000004',
+        },
+      ],
+    );
+
+    expect(result.lines, hasLength(1));
+    expect(result.normalizedTranscript, contains('300'));
+    expect(result.lines.single.name, 'Boost');
+    expect(result.lines.single.price, 300);
+    expect(result.lines.single.priceSource, 'spoken');
+    expect(result.lines.single.catalogMatched, isTrue);
+    expect(result.lines.single.barcode, '890000000004');
+  });
+
+  test('does not apply the Boost speech alias to an unrelated catalog item', () async {
+    final result = await ProductionVoiceBillingService.parse(
+      transcript: '3 vandalu bubt',
+      localeCode: 'te-IN',
+      catalogService: catalog,
+      knownProducts: const [
+        {'name': 'Butter', 'price': 50, 'unit': 'packet'},
+      ],
+    );
+
+    expect(result.lines, hasLength(1));
+    expect(result.lines.single.catalogMatched, isFalse);
+    expect(result.lines.single.price, 300);
+  });
+
   test('merges genuine duplicate product lines', () async {
     final result = await ProductionVoiceBillingService.parse(
       transcript: 'rice 50 and rice 50',
