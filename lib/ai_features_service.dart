@@ -89,18 +89,23 @@ class ChatbotContextService {
         'Ask a question about your sales, invoices, inventory, or shop operations.';
   }
 
-  /// Send business questions through the available, authenticated ask-query API.
-  /// The backend scopes the query to the authenticated owner's shop.
-  static Future<String> sendMessageWithContext(String userMessage) async {
+  /// Send support chat through the authenticated conversation endpoint.
+  /// The backend routes live shop-data questions to its tenant-scoped query engine.
+  static Future<String> sendMessageWithContext(
+    String userMessage, {
+    String languageCode = 'en',
+    List<Map<String, String>> conversationHistory = const [],
+  }) async {
     final question = userMessage.trim();
-    if (question.isEmpty) return 'Please enter a question.';
+    if (question.isEmpty) return 'Please enter a message.';
 
     try {
       final response = await ApiClient.postForm(
-        ApiClient.askQueryEndpoint,
+        ApiClient.chatbotMessageEndpoint,
         {
-          'query': question,
-          'language_code': 'en',
+          'message': question,
+          'language_code': languageCode.trim().isEmpty ? 'en' : languageCode,
+          'conversation_history': jsonEncode(conversationHistory.take(8).toList()),
         },
       );
 
@@ -118,7 +123,7 @@ class ChatbotContextService {
             return answer.toString();
           }
         }
-        return 'The assistant returned an empty answer. Please try rephrasing your question.';
+        return 'The assistant returned an empty answer. Please try again.';
       }
 
       if (decoded is Map) {
@@ -127,8 +132,9 @@ class ChatbotContextService {
           return detail.toString();
         }
       }
-      return 'The assistant service is temporarily unavailable (HTTP ${response.statusCode}).';
-    } catch (error) {
+      return 'The assistant service is temporarily unavailable (HTTP ' +
+          response.statusCode.toString() + ').';
+    } catch (_) {
       return 'Could not reach the assistant service. Check your connection and try again.';
     }
   }
