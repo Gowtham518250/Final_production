@@ -2079,7 +2079,11 @@ class PriorityVoiceQueue {
       }
       // One-sided reference: not proof, not disproof. Use the checks below.
 
-      final age = now.difference(old.timestamp).abs();
+      // Compare the two source event timestamps, not wall-clock now.
+      // Notifications/SMS can be replayed late, and tests may use historical
+      // or future event times; using now made a payment five minutes later
+      // look simultaneous and allowed weak SMS↔notification pairing.
+      final age = event.timestamp.difference(old.timestamp).abs();
       if (age > _crossSourceEchoWindow) continue;
 
       final oldChannel = PaymentDetectionService._channelKey(old);
