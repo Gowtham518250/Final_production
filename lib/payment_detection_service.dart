@@ -2620,6 +2620,9 @@ class PendingPaymentBuffer {
           : PdsConfig.tcmSmallDrain;
       if (age > drainAge) {
         e.emitted = true;
+        // The UI/voice pipeline already emitted this notification event.
+        // Retire it without publishing a second payment event from the TCM drain.
+        if (e.voiceSpoken) continue;
         if (e.isLarge) {
           toEmit.add(
             e.event.copyWith(
