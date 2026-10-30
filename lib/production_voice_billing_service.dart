@@ -263,7 +263,7 @@ class ProductionVoiceBillingService {
 
   static bool _startsWithSpokenScaleAmount(String transcript) =>
       RegExp(
-        r'^\s*(?:[0-9]+(?:\.[0-9]+)?|one|two|three|four|five|six|seven|eight|nine|ten|rendu|moodu|mudu|nalugu|naalugu|aidu|ayidu|aaru|iravai|muppai|nalabhai|yabhai|yaabhai|एक|दो|तीन|चार|पांच|पाँच|ఒకటి|రెండు|మూడు|నాలుగు)\s+(?:hundred|hundreds|sau|vanda|vandu|vandalu|vandala|vandlu|vandulu|vandallu|వంద|వందలు|వందల)(?=\s|$)',
+        r'^\s*(?:[0-9]+(?:\.[0-9]+)?|one|two|three|four|five|six|seven|eight|nine|ten|rendu|moodu|mudu|nalugu|naalugu|aidu|ayidu|aaru|iravai|muppai|nalabhai|yabhai|yaabhai|एक|दो|तीन|चार|पांच|पाँच|ఒకటి|రెండు|మూడు|నాలుగు)\s+(?:hundred|hundreds|sau|vanda|vandu|vandalu|vandala|vandlu|vandulu|vandallu|వంద|వందలు|వందల|thousand|thousands|hazar|hazaar|vela|velu|velalu|వేలు|వేల)(?=[\\s,;.!?]|$)',
         caseSensitive: false,
       ).hasMatch(transcript.trim());
 
