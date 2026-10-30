@@ -27,6 +27,8 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
     private static final String PREFS = "retailmind_notification_relay";
     private static final String PENDING = "pending_notification_events";
     private static final int MAX_PENDING_EVENTS = 300;
+    private static final String ACKED = "acked_event_keys";
+    private static final int MAX_ACKED_KEYS = 300;
     private static final Object LOCK = new Object();
 
     @Override
@@ -39,8 +41,18 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
             return;
         }
 
+        // Android may re-deliver a posted notification during listener reconnects.
+        // Make the acknowledgement check and enqueue atomic against Dart's ack.
         Map<String, Object> event = toFlutterEvent(intent, eventKey);
-        if (!persistPendingEvent(context, event)) {
+        boolean persisted;
+        synchronized (LOCK) {
+            if (wasAcknowledged(context, eventKey)) {
+                Log.d(TAG, "Ignoring previously acknowledged notification event");
+                return;
+            }
+            persisted = persistPendingEvent(context, event);
+        }
+        if (!persisted) {
             // Best-effort live delivery remains available; active-notification
             // recovery can also recover it if the notification stays visible.
             Log.w(TAG, "Could not persist notification event; forwarding live");
@@ -184,6 +196,23 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
         }
     }
 
+    /** True if Dart already acknowledged (fully routed) this exact notification version. */
+    public static boolean wasAcknowledged(Context context, String eventKey) {
+        if (eventKey == null || eventKey.trim().isEmpty()) return false;
+        synchronized (LOCK) {
+            try {
+                SharedPreferences preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+                JSONArray acked = new JSONArray(preferences.getString(ACKED, "[]"));
+                for (int i = 0; i < acked.length(); i++) {
+                    if (eventKey.equals(acked.optString(i))) return true;
+                }
+            } catch (JSONException | RuntimeException error) {
+                Log.e(TAG, "Unable to read acknowledged keys", error);
+            }
+            return false;
+        }
+    }
+
     /** Delete a queued event only after Dart has synchronously processed it. */
     public static boolean acknowledge(Context context, String eventKey) {
         if (eventKey == null || eventKey.trim().isEmpty()) return false;
@@ -202,7 +231,25 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
                         remaining.put(item);
                     }
                 }
-                boolean saved = preferences.edit().putString(PENDING, remaining.toString()).commit();
+                // Remember every acknowledged key (even one that was not pending,
+                // e.g. a replayed active notification) so a later stream
+                // re-attach does not feed an already-processed payment back in.
+                JSONArray acked = new JSONArray(preferences.getString(ACKED, "[]"));
+                boolean known = false;
+                for (int i = 0; i < acked.length(); i++) {
+                    if (eventKey.equals(acked.optString(i))) { known = true; break; }
+                }
+                if (!known) {
+                    JSONArray trimmed = new JSONArray();
+                    int start = Math.max(0, acked.length() - MAX_ACKED_KEYS + 1);
+                    for (int i = start; i < acked.length(); i++) trimmed.put(acked.optString(i));
+                    trimmed.put(eventKey);
+                    acked = trimmed;
+                }
+                boolean saved = preferences.edit()
+                        .putString(PENDING, remaining.toString())
+                        .putString(ACKED, acked.toString())
+                        .commit();
                 return saved && removed;
             } catch (JSONException | RuntimeException error) {
                 Log.e(TAG, "Unable to acknowledge notification event", error);

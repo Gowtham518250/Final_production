@@ -27,6 +27,7 @@ class RomanIndianVoiceNormalizer {
     'vandalu': 100,
     'vandala': 100,
     'vandlu': 100,
+    'vandulu': 100,
     'vandallu': 100,
     'వంద': 100,
     'వందలు': 100,

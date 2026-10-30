@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 
 import 'payment_event.dart';
+import 'payment_identity_matcher.dart';
 
 /// Shared, short-lived one-to-one cross-source suppression for payment alerts.
 ///
@@ -22,48 +24,10 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
   static const String _storageKey = 'pds_cross_isolate_announcement_v1';
   static const int _maxEntries = 100;
   static const Duration _smsWindow = Duration(hours: 3);
-  static const Duration _crossAppWindow = Duration(minutes: 10);
   // Accessibility can emit repeated updates from a static payment screen.
   // Exact-text fallback is intentionally bounded; distinct native notification
   // identities are exempted below.
   static const Duration _sameChannelReplayWindow = Duration(minutes: 3);
-  static const Duration _truecallerCrossSourceEchoWindow =
-      Duration(seconds: 8);
-
-  static const Set<String> _truecallerEchoTrustedSources = {
-    'googlepay',
-    'phonepe',
-    'paytm',
-    'amazonpay',
-    'bhim',
-    'payzapp',
-    'icici',
-    'sbiyono',
-    'axis',
-    'hdfc',
-    'banksms',
-    'bankapp',
-    'com.google.android.apps.nbu.paisa.user',
-    'com.google.android.apps.nbu.paisa.merchant',
-    'net.one97.paytm',
-    'com.paytm.business',
-    'com.phonepe.app',
-    'com.phonepe.app.business',
-    'com.phonepe.app.merchant',
-    'com.phonepe.business',
-    'in.org.npci.upiapp',
-    'com.dreamplug.androidapp',
-    'com.hdfcbank.payzapp',
-    'com.icicibank.imobile',
-    'com.sbi.imobile',
-    'com.axis.mobile',
-    'com.hdfcbank.smartbuy',
-    'com.indusind.mobilebanking',
-    'com.yes.mobile',
-    'com.baroda.mpassbook',
-    'com.canarabank.mobility',
-    'com.kotak.mobile.banking',
-  };
 
   // Serialize callers within one isolate. SharedPreferences reload makes the
   // most recent stored list visible when another isolate processed a signal.
@@ -145,135 +109,84 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     final channel = _channelKey(event);
     final origin = _origin(event.detectionSource);
     final reference = event.normalizedReferenceId;
-    final sourceFingerprint = event.sourceEventFingerprint;
     final text = _normalizeText(event.rawText);
     final payer = _normalizePayer(event.payerName);
     final account = _normalizeAccount(event.accountSuffix);
-    Map<String, dynamic>? uniqueEchoCandidate;
-    var ambiguousCandidates = false;
-
-    for (var i = 0; i < stored.length; i++) {
-      final previous = stored[i];
-      final previousAmount = (previous['amount'] as num?)?.toDouble();
-      if (previousAmount == null ||
-          !previousAmount.isFinite ||
-          (previousAmount - event.amount).abs() >= 0.01 ||
-          (previous['direction'] ?? 'unknown').toString() != direction) {
-        continue;
-      }
-
-      final previousSourceFingerprint =
-          (previous['sourceEventFingerprint'] ?? '').toString();
-      if (sourceFingerprint != null &&
-          sourceFingerprint.isNotEmpty &&
-          sourceFingerprint == previousSourceFingerprint) {
-        final previousSourceReference =
-            (previous['reference'] ?? '').toString().trim();
-        if (reference != null &&
-            previousSourceReference.isNotEmpty &&
-            reference != previousSourceReference) {
-          continue;
-        }
-        return true;
-      }
-
-      final previousReference =
-          (previous['reference'] ?? '').toString().trim();
-      if (reference != null || previousReference.isNotEmpty) {
-        // A shared reference is the strongest cross-source identity. A
-        // reference missing on one side or a different reference never pairs.
-        if (reference == null || previousReference.isEmpty) continue;
-        if (reference != previousReference) continue;
-        return true;
-      }
-
-      final previousChannel = (previous['channel'] ?? '').toString();
-      final previousOrigin = (previous['origin'] ?? '').toString();
-      final previousSeenAt =
-          DateTime.tryParse((previous['seenAt'] ?? '').toString());
-      if (previousSeenAt == null) continue;
-      final age = now.difference(previousSeenAt).abs();
-
-      if (previousChannel == channel) {
-        // When either signal has native identity, only that same identity
-        // can prove a replay. Different or missing identities stay separate.
-        if (sourceFingerprint != null || previousSourceFingerprint.isNotEmpty) {
-          continue;
-        }
-        final previousText = (previous['text'] ?? '').toString();
-        if (reference == null &&
-            previousReference.isEmpty &&
-            age <= _sameChannelReplayWindow &&
-            text.isNotEmpty &&
-            text == previousText) {
-          await prefs.setString(_storageKey, jsonEncode(stored));
-          return true;
-        }
-        continue;
-      }
-
-      final involvesSms = _isSmsOrigin(origin) || _isSmsOrigin(previousOrigin);
-      final allowedAge = involvesSms ? _smsWindow : _crossAppWindow;
-      if (age > allowedAge) continue;
-
-      final previousAccount = (previous['account'] ?? '').toString();
-      final previousPayer = (previous['payer'] ?? '').toString();
-      final differentAccounts = account.isNotEmpty &&
-          previousAccount.isNotEmpty &&
-          account != previousAccount;
-      final differentPayers = payer.isNotEmpty &&
-          previousPayer.isNotEmpty &&
-          !_payersCompatible(payer, previousPayer);
-      if (differentAccounts || differentPayers) continue;
-
-      final sameAccount =
-          account.isNotEmpty && account == previousAccount;
-      final samePayer =
-          payer.isNotEmpty &&
-          previousPayer.isNotEmpty &&
-          _payersCompatible(payer, previousPayer);
-
-      // Truecaller may mirror a trusted UPI/bank notification but omit its
-      // payer, masked account, and UTR. Coalesce only a UNIQUE cross-channel
-      // candidate within 8 seconds, with matching known amount/direction and
-      // no conflicting payer/account evidence. Ordinary amount-only matching
-      // remains disabled so unrelated same-value payments are not merged.
-      final truecallerCrossAppEcho =
-          age <= _truecallerCrossSourceEchoWindow &&
-          ((origin == 'truecaller_notification' &&
-                  previousOrigin != 'truecaller_notification' &&
-                  _isTrustedTruecallerEchoCounterpart(previousChannel)) ||
-              (previousOrigin == 'truecaller_notification' &&
-                  origin != 'truecaller_notification' &&
-                  _isTrustedTruecallerEchoCounterpart(channel)));
-      if (!sameAccount && !samePayer && !truecallerCrossAppEcho) continue;
-
-      final claimedChannels = (previous['claimedChannels'] is List)
-          ? (previous['claimedChannels'] as List)
-              .map((value) => value.toString())
-              .toSet()
-          : <String>{};
-      if (claimedChannels.contains(channel)) continue;
-
-      if (uniqueEchoCandidate != null &&
-          !identical(uniqueEchoCandidate, previous)) {
-        ambiguousCandidates = true;
-        break;
-      }
-      uniqueEchoCandidate = previous;
+    String? nonEmpty(Object? value) {
+      final v = (value ?? '').toString().trim();
+      return v.isEmpty ? null : v;
     }
 
-    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
-      final claimedChannels = (uniqueEchoCandidate['claimedChannels'] is List)
-          ? (uniqueEchoCandidate['claimedChannels'] as List)
-              .map((value) => value.toString())
-              .toSet()
+    // All matching rules live in PaymentIdentityMatcher; this class only owns
+    // persistence. Rebuild the stored observations as identities and ask it.
+    final previous = <SignalIdentity>[];
+    final claims = <String, Set<String>>{};
+    for (final entry in stored) {
+      final amount = (entry['amount'] as num?)?.toDouble();
+      final seenAt = DateTime.tryParse((entry['seenAt'] ?? '').toString());
+      if (amount == null || !amount.isFinite || seenAt == null) continue;
+      final id = (entry['id'] ?? '').toString();
+      previous.add(
+        SignalIdentity(
+          id: id,
+          amount: amount,
+          direction: (entry['direction'] ?? 'unknown').toString(),
+          channel: (entry['channel'] ?? '').toString(),
+          origin: (entry['origin'] ?? '').toString(),
+          at: seenAt,
+          reference: nonEmpty(entry['reference']),
+          payer: nonEmpty(entry['payer']),
+          account: nonEmpty(entry['account']),
+          sourceIdentity: nonEmpty(entry['sourceEventFingerprint']),
+          text: (entry['text'] ?? '').toString(),
+        ),
+      );
+      claims[id] = (entry['claimedChannels'] is List)
+          ? (entry['claimedChannels'] as List).map((v) => v.toString()).toSet()
           : <String>{};
-      claimedChannels.add(channel);
-      uniqueEchoCandidate['claimedChannels'] = claimedChannels.toList();
-      final id = uniqueEchoCandidate['id'];
-      final index = stored.indexWhere((entry) => entry['id'] == id);
-      if (index >= 0) stored[index] = uniqueEchoCandidate;
+    }
+
+    final current = SignalIdentity(
+      id: event.id,
+      amount: event.amount,
+      direction: direction,
+      channel: channel,
+      origin: origin,
+      at: now,
+      reference: reference,
+      payer: nonEmpty(payer),
+      account: nonEmpty(account),
+      sourceIdentity: event.sourceEventFingerprint,
+      text: text,
+    );
+
+    final resolution = PaymentIdentityMatcher.resolve(
+      current,
+      previous,
+      claims: claims,
+      // Accessibility can repeat an identical static payment screen; this
+      // layer has always tolerated exact-text repeats for a few minutes.
+      sameChannelReplayWindow: _sameChannelReplayWindow,
+    );
+    developer.log(
+      resolution.describe(event.id),
+      name: 'PAYMENT_DEDUP',
+    );
+
+    if (resolution.isEcho) {
+      final claimChannel = resolution.claimChannel;
+      if (claimChannel != null) {
+        final index = stored.indexWhere((e) => e['id'] == resolution.matchedId);
+        if (index >= 0) {
+          final claimed = (stored[index]['claimedChannels'] is List)
+              ? (stored[index]['claimedChannels'] as List)
+                  .map((v) => v.toString())
+                  .toSet()
+              : <String>{};
+          claimed.add(claimChannel);
+          stored[index]['claimedChannels'] = claimed.toList();
+        }
+      }
       await prefs.setString(_storageKey, jsonEncode(stored));
       return true;
     }
@@ -329,17 +242,6 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     return value.split(':').first;
   }
 
-  static bool _isSmsOrigin(String origin) =>
-      origin == 'sms' || origin == 'notification+sms';
-
-  static bool _isTrustedTruecallerEchoCounterpart(String channel) {
-    final parts = channel.toLowerCase().split('|');
-    if (parts.isEmpty) return false;
-    final origin = parts.first;
-    if (origin == 'sms' || origin == 'notification+sms') return true;
-    return _truecallerEchoTrustedSources.contains(parts.last);
-  }
-
   static String _channelKey(PaymentEvent event) =>
       '${_origin(event.detectionSource)}|${event.app.name}';
 
@@ -393,8 +295,4 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
   static String _normalizeAccount(String? value) =>
       (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
 
-  static bool _payersCompatible(String current, String previous) =>
-      current == previous ||
-      current.contains(previous) ||
-      previous.contains(current);
 }

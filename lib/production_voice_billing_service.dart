@@ -108,8 +108,53 @@ class ProductionVoiceBillingService {
       locale: localeCode,
     ).trim();
 
+    var parserTranscript = normalized;
+
+    // Amount-first retail speech such as "3 vandalu Boost" becomes
+    // "300 Boost" after scale normalization, while the NLP parser expects
+    // product-before-price. Reorder only after this shop's catalog uniquely
+    // identifies the spoken product. Otherwise ask for a manual selection.
+    if (_startsWithSpokenScaleAmount(raw)) {
+      final leadingAmount = RegExp(
+        r'^([0-9]+(?:\.[0-9]+)?)\s+(.+)$',
+      ).firstMatch(normalized);
+      if (leadingAmount != null) {
+        final catalogProduct = _findShopProduct(
+          knownProducts,
+          leadingAmount.group(2)!,
+        );
+        if (catalogProduct == null) {
+          return VoiceBillingParseResult(
+            normalizedTranscript: normalized,
+            languageCode: localeCode,
+            lines: const [],
+            warnings: const [
+              'I heard the amount, but could not safely match the spoken product to this shop catalog. Please say the product name again or select it manually.',
+            ],
+          );
+        }
+        final canonical = (catalogProduct['name'] ??
+                catalogProduct['product_name'] ??
+                catalogProduct['canonical_name'] ??
+                '')
+            .toString()
+            .trim();
+        if (canonical.isEmpty) {
+          return VoiceBillingParseResult(
+            normalizedTranscript: normalized,
+            languageCode: localeCode,
+            lines: const [],
+            warnings: const [
+              'The matching shop product has no usable name. Please select the product manually.',
+            ],
+          );
+        }
+        parserTranscript = canonical + ' ' + leadingAmount.group(1)!;
+      }
+    }
+
     final parsed = VoiceNlpEngineV2.parse(
-      normalized,
+      parserTranscript,
       localeCode,
       catalog: knownProducts,
       deduplicate: false,
@@ -125,7 +170,6 @@ class ProductionVoiceBillingService {
         ],
       );
     }
-
     final enriched = <VoiceBillingLine>[];
     final warnings = <String>[];
 
@@ -217,6 +261,12 @@ class ProductionVoiceBillingService {
     );
   }
 
+  static bool _startsWithSpokenScaleAmount(String transcript) =>
+      RegExp(
+        r'^\s*(?:[0-9]+(?:\.[0-9]+)?|one|two|three|four|five|six|seven|eight|nine|ten|rendu|moodu|mudu|nalugu|naalugu|aidu|ayidu|aaru|iravai|muppai|nalabhai|yabhai|yaabhai|एक|दो|तीन|चार|पांच|पाँच|ఒకటి|రెండు|మూడు|నాలుగు)\s+(?:hundred|hundreds|sau|vanda|vandu|vandalu|vandala|vandlu|vandulu|vandallu|వంద|వందలు|వందల|thousand|thousands|hazar|hazaar|vela|velu|velalu|వేలు|వేల)(?=[\s,;.!?]|$)',
+        caseSensitive: false,
+
+      ).hasMatch(transcript.trim());
   static Map<String, dynamic>? _findShopProduct(
     List<Map<String, dynamic>> products,
     String spokenName,
@@ -239,6 +289,27 @@ class ProductionVoiceBillingService {
         .where((token) => token.length >= 3)
         .toSet();
 
+    // A narrow catalog-aware correction for a known Whisper/Android STT
+    // confusion: "bubt" can be emitted for the shop product "Boost". Expand
+    // only the catalog/query comparison tokens; never rewrite the displayed
+    // transcript or silently select a non-catalog item.
+    const spokenCatalogAliases = <String, Set<String>>{
+      'boost': {'bubt'},
+    };
+
+    Set<String> catalogTokens(String value) {
+      final result = tokens(value);
+      for (final entry in spokenCatalogAliases.entries) {
+        if (result.contains(entry.key) ||
+            result.any(entry.value.contains)) {
+          result
+            ..add(entry.key)
+            ..addAll(entry.value);
+        }
+      }
+      return result;
+    }
+
     final query = normalize(spokenName);
 
     // Exact shop-product name first.
@@ -253,8 +324,27 @@ class ProductionVoiceBillingService {
       if (names.any((name) => name == query)) return product;
     }
 
-    final queryTokens = tokens(query);
+    final rawQueryTokens = tokens(query);
+    final usesBoostAlias =
+        rawQueryTokens.contains('bubt') && !rawQueryTokens.contains('boost');
+    final queryTokens = catalogTokens(query);
     if (queryTokens.isEmpty) return null;
+
+    // A phonetic alias alone cannot distinguish multiple shop pack sizes.
+    // Require exactly one current-inventory product that carries Boost.
+    if (usesBoostAlias) {
+      final boostMatches = products.where((product) {
+        if (product['source'] == 'Sales History') return false;
+        final names = [
+          product['name'],
+          product['product_name'],
+          product['canonical_name'],
+        ].whereType<String>().map(normalize).where((v) => v.isNotEmpty);
+        return names.any((name) => catalogTokens(name).contains('boost'));
+      }).length;
+      if (boostMatches != 1) return null;
+    }
+
 
     final scored = <MapEntry<Map<String, dynamic>, double>>[];
 
@@ -268,7 +358,7 @@ class ProductionVoiceBillingService {
 
       var best = 0.0;
       for (final name in names) {
-        final productTokens = tokens(name);
+        final productTokens = catalogTokens(name);
         if (productTokens.isEmpty) continue;
 
         final overlap = queryTokens.intersection(productTokens);

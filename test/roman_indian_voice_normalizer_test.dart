@@ -44,6 +44,12 @@ void main() {
         '300 బియ్యం',
       );
     });
+    test('normalizes the vandulu spelling without changing the product token', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('3 vandulu bubt'),
+        '300 bubt',
+      );
+    });
     test('supports a remainder after a spoken hundred', () {
       expect(
         RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('3 vandalu yabhai rupees'),

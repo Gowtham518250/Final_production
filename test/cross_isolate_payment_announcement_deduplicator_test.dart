@@ -486,4 +486,43 @@ void main() {
       isFalse,
     );
   });
+  test('same amount and payer with opposite direction is not a cross-source echo', () async {
+    final time = DateTime(2026, 10, 30, 10, 0);
+    final credit = _event(
+      id: 'credit-500',
+      timestamp: time,
+      source: 'notification',
+      app: PaymentApp.phonePe,
+      rawText: 'Ravi sent INR 500 to your account',
+      amount: 500,
+      payerName: 'Ravi Kumar',
+      direction: PaymentTransactionDirection.incomingCredit,
+    );
+    final debit = _event(
+      id: 'debit-500',
+      timestamp: time.add(const Duration(seconds: 4)),
+      source: 'sms',
+      app: PaymentApp.bankSms,
+      rawText: 'INR 500 debited from your account to Ravi Kumar',
+      amount: 500,
+      payerName: 'Ravi Kumar',
+      direction: PaymentTransactionDirection.outgoingDebit,
+    );
+
+    expect(
+      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+        credit,
+        now: time,
+      ),
+      isFalse,
+    );
+    expect(
+      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+        debit,
+        now: time.add(const Duration(seconds: 4)),
+      ),
+      isFalse,
+    );
+  });
+
 }
