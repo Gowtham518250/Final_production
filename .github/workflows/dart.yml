@@ -2,7 +2,7 @@ name: Flutter CI
 
 on:
   push:
-    branches: [ "clean-retailmind-20261023" ]
+    branches: [ "clean-retailmind-20261023", "feature/ai-help-support-screen-guidance-20261030" ]
   pull_request:
     branches: [ "clean-retailmind-20261023" ]
 
