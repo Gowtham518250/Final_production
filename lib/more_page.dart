@@ -20,7 +20,7 @@ class MorePage extends StatelessWidget {
     _MoreAction(title: 'Inventory', subtitle: 'Products and stock', icon: Icons.inventory_2_rounded, color: Color(0xFF0891B2), route: '/inventory'),
     _MoreAction(title: 'Reports & analytics', subtitle: 'Business performance', icon: Icons.analytics_rounded, color: Color(0xFFDB2777), route: '/analytics'),
     _MoreAction(title: 'Transactions', subtitle: 'Recent activity', icon: Icons.receipt_long_rounded, color: Color(0xFF475569), route: '/recent-transactions'),
-    _MoreAction(title: 'Help & support', subtitle: 'Guides and assistance', icon: Icons.support_agent_rounded, color: Color(0xFFEA580C), route: '/chatbot-help'),
+    _MoreAction(title: 'Help & support', subtitle: 'Chat with the AI assistant', icon: Icons.support_agent_rounded, color: Color(0xFFEA580C), route: '/chatbot-help'),
   ];
 
   @override

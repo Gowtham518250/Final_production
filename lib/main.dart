@@ -1701,6 +1701,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                                   : startupRoute));
                   return MaterialApp(
                     navigatorKey: globalNavigatorKey,
+                    navigatorObservers: [GuidedVoiceRouteObserver()],
                     builder: (context, child) => GuidedDictationOverlay(
                       child: child ?? const SizedBox.shrink(),
                     ),
