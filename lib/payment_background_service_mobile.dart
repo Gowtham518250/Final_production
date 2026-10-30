@@ -588,7 +588,20 @@ Future<bool> onStart(ServiceInstance service) async {
   return true;
 }
 
-Future<void> initializeBackgroundService() async {
+// main.dart and the dashboard (twice) can all call this during startup. Share
+// one in-flight start, and never start a second detector while one is alive:
+// two detectors listening to the same notifications double-detect every payment.
+Future<void>? _backgroundInitInFlight;
+bool _fallbackDetectorStarted = false;
+
+Future<void> initializeBackgroundService() {
+  return _backgroundInitInFlight ??=
+      _initializeBackgroundServiceOnce().whenComplete(() {
+    _backgroundInitInFlight = null;
+  });
+}
+
+Future<void> _initializeBackgroundServiceOnce() async {
   try {
     final service = FlutterBackgroundService();
 
@@ -622,15 +635,29 @@ Future<void> initializeBackgroundService() async {
     );
 
     _listenForBackgroundPayments(service);
+    if (await service.isRunning()) {
+      debugPrint('ℹ️ Background payment service already running; not restarting');
+      return;
+    }
     await service.startService();
     debugPrint('✅ Background service started successfully (foreground=true)');
   } catch (e) {
     debugPrint('⚠️ Failed to start background service: $e');
+    var serviceAlive = false;
+    try {
+      serviceAlive = await FlutterBackgroundService().isRunning();
+    } catch (_) {}
+    if (serviceAlive) {
+      debugPrint('ℹ️ Service is alive despite the error; skipping UI-isolate fallback');
+      return;
+    }
     await _initializeFallback();
   }
 }
 
 Future<void> _initializeFallback() async {
+  if (_fallbackDetectorStarted) return;
+  _fallbackDetectorStarted = true;
   try {
     await PaymentAnnouncementService().init(
       config: const AnnouncementConfig(volume: 1.0),
@@ -662,6 +689,7 @@ Future<void> _initializeFallback() async {
     await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     debugPrint('✅ Payment services initialized (fallback mode)');
   } catch (e) {
+    _fallbackDetectorStarted = false; // allow a later retry
     debugPrint('⚠️ Failed fallback initialization: $e');
   }
 }
