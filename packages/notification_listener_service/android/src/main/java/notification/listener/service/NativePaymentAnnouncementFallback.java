@@ -2,6 +2,9 @@ package notification.listener.service;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.media.AudioAttributes;
+import android.os.Build;
+import android.os.PowerManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
@@ -41,6 +44,7 @@ final class NativePaymentAnnouncementFallback {
     private static TextToSpeech tts;
     private static boolean ttsInitializing;
     private static boolean ttsReady;
+    private static PowerManager.WakeLock announcementWakeLock;
 
     private static final Set<String> PAYMENT_PACKAGES = new HashSet<String>(Arrays.asList(
             "com.google.android.apps.nbu.paisa.user",
@@ -105,6 +109,16 @@ final class NativePaymentAnnouncementFallback {
             "\\b(?:otp|one.time.password|verification code|collect request|payment request|request received|pending|processing|initiated|failed|declined|reversed|refund|will be credited|to be credited)\\b",
             Pattern.CASE_INSENSITIVE);
 
+    // Own-account cues, mirrored from lib/payment_direction_speech.dart. A bank
+    // SMS can say "debited from A/c ... credited to <beneficiary>": the cue on
+    // the user's own account decides, so a debit is never spoken as a credit.
+    private static final Pattern OWN_DEBIT_PATTERN = Pattern.compile(
+            "\\b(?:debited|deducted|withdrawn)\\b[^.]{0,50}?\\bfrom\\s+(?:your\\b|a/c|acct|account)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern OWN_CREDIT_PATTERN = Pattern.compile(
+            "\\bcredited\\b[^.]{0,30}?\\b(?:to|in)\\s+your\\b",
+            Pattern.CASE_INSENSITIVE);
+
     private NativePaymentAnnouncementFallback() {}
 
     static void schedule(Context context, String eventKey) {
@@ -137,8 +151,28 @@ final class NativePaymentAnnouncementFallback {
                 return;
             }
 
+            // Acquire a short wake lock only after this notification passed amount/status/direction parsing.
+            holdCpuForAnnouncement(appContext);
             queueSpeak(appContext, eventKey, announcement, event);
         }, FALLBACK_DELAY_MS);
+    }
+
+    private static void holdCpuForAnnouncement(Context context) {
+        try {
+            synchronized (LOCK) {
+                if (announcementWakeLock == null) {
+                    PowerManager manager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                    if (manager == null) return;
+                    announcementWakeLock = manager.newWakeLock(
+                            PowerManager.PARTIAL_WAKE_LOCK, "retailmind:payment-announcement");
+                    announcementWakeLock.setReferenceCounted(false);
+                }
+                if (announcementWakeLock.isHeld()) announcementWakeLock.release();
+                announcementWakeLock.acquire(30_000L);
+            }
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Could not hold CPU awake for payment speech", error);
+        }
     }
 
     private static String value(Object raw) {
@@ -166,22 +200,57 @@ final class NativePaymentAnnouncementFallback {
 
         boolean credit = CREDIT_PATTERN.matcher(raw).find();
         boolean debit = DEBIT_PATTERN.matcher(raw).find();
-        // Ambiguous wording is not spoken as a direction. The full Dart
-        // classifier will still receive it when available.
-        if (credit == debit) return null;
+        // No direction cue at all (offers, reminders): stay silent.
+        if (!credit && !debit) return null;
+        String direction;
+        if (credit != debit) {
+            direction = credit ? "credit" : "debit";
+        } else {
+            // Both cues in one message: let the user's own-account cue decide.
+            boolean ownDebit = OWN_DEBIT_PATTERN.matcher(raw).find();
+            boolean ownCredit = OWN_CREDIT_PATTERN.matcher(raw).find();
+            if (ownDebit && !ownCredit) direction = "debit";
+            else if (ownCredit && !ownDebit) direction = "credit";
+            else direction = "unknown"; // say so; never guess "received"
+        }
 
         String lang = languageTag == null ? "en" : languageTag.split("[-_]", 2)[0].toLowerCase(Locale.ROOT);
-        String phrase = localizedMessage(lang, amount, credit);
-        String english = credit
-                ? "Payment notification reports " + amount + " rupees received. Please verify in your bank or UPI app."
-                : "Payment notification reports " + amount + " rupees debited. Please verify in your bank or UPI app.";
+        String phrase;
+        String english;
+        if ("unknown".equals(direction)) {
+            phrase = neutralMessage(lang, amount);
+            english = neutralMessage("en", amount);
+        } else {
+            boolean isCredit = "credit".equals(direction);
+            phrase = localizedMessage(lang, amount, isCredit);
+            english = isCredit
+                    ? "Payment notification reports " + amount + " rupees received. Please verify in your bank or UPI app."
+                    : "Payment notification reports " + amount + " rupees debited. Please verify in your bank or UPI app.";
+        }
         Matcher referenceMatcher = REFERENCE_PATTERN.matcher(raw);
         String referenceId = referenceMatcher.find()
                 ? referenceMatcher.group(1).replaceAll("[^A-Z0-9]", "").toUpperCase(Locale.ROOT)
                 : null;
         return new Announcement(
                 phrase, english, lang, referenceId, numericAmount,
-                credit ? "credit" : "debit", raw);
+                direction, raw);
+    }
+
+    /** Direction-neutral alert. Mirrors lib/payment_direction_speech.dart. */
+    private static String neutralMessage(String lang, String amount) {
+        switch (lang) {
+            case "hi": return amount + " रुपये का भुगतान संदेश। जमा हुआ या कटा, ऐप में जांचें।";
+            case "ta": return amount + " ரூபாய் பணப் பரிவர்த்தனை அறிவிப்பு. வரவா அல்லது பற்றா என்று சரிபார்க்கவும்.";
+            case "te": return amount + " రూపాయల లావాదేవీ నోటిఫికేషన్. జమ అయిందో డెబిట్ అయిందో చెక్ చేయండి.";
+            case "kn": return amount + " ರೂಪಾಯಿ ವಹಿವಾಟು ಸೂಚನೆ. ಜಮಾ ಆಗಿದೆಯೇ ಅಥವಾ ಡೆಬಿಟ್ ಆಗಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ.";
+            case "mr": return amount + " रुपये व्यवहाराची सूचना. जमा झाले की वजा झाले ते तपासा.";
+            case "gu": return amount + " રૂપિયા વ્યવહારની સૂચના. જમા થયું કે કપાયું તે ચકાસો.";
+            case "bn": return amount + " টাকা লেনদেনের বিজ্ঞপ্তি। জমা হয়েছে নাকি কাটਾ হয়েছే যਾচাই করুন।";
+            case "pa": return amount + " ਰੁਪਏ ਲੈਣ-ਦੇਣ ਦੀ ਸੂਚਨਾ। ਜਮ੍ਹਾਂ ਹੋਈ ਜਾਂ ਕੱਟੀ ਗਈ, ਜਾਂਚ ਕਰੋ।";
+            case "ml": return amount + " രൂപ ഇടപാട് അറിയിപ്പ്. ക്രെഡിറ്റ് ആണോ ഡെബിറ്റ് ആണോ എന്ന് പരിശോധിക്കുക.";
+            default:
+                return "Payment alert of " + amount + " rupees. Could not tell if it was credited or debited. Please check.";
+        }
     }
 
     private static String localizedMessage(String lang, String amount, boolean credit) {
@@ -240,6 +309,14 @@ final class NativePaymentAnnouncementFallback {
                     synchronized (LOCK) {
                         ttsInitializing = false;
                         ttsReady = status == TextToSpeech.SUCCESS && tts != null;
+                        if (ttsReady && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            // Speak as guidance, not media: audible over a playing
+                            // song and on a locked screen.
+                            tts.setAudioAttributes(new AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build());
+                        }
                         if (!ttsReady) {
                             for (SpeakRequest request : WAITING) SCHEDULED.remove(request.eventKey);
                             WAITING.clear();
