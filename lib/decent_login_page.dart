@@ -207,6 +207,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
 
   @override
   void dispose() {
+    unawaited(GuidedVoiceService.instance.cancelForRouteChange());
     _cardController.dispose();
     emailController.dispose();
     passwordController.dispose();
