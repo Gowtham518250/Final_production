@@ -101,7 +101,9 @@ import 'package:notification_listener_service/notification_event.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telephony/telephony.dart';
+import 'payment_direction_speech.dart';
 import 'payment_event.dart';
+import 'payment_identity_matcher.dart';
 import 'cross_isolate_payment_announcement_deduplicator.dart';
 import 'sms_background_receiver.dart';
 import 'local_storage_service.dart';
@@ -205,13 +207,31 @@ class PaymentUiState {
   /// Build precise voice text with explicit credit/debit direction.
   String voiceText(VoiceLanguage lang) {
     if (isFailed) return VoiceBuilder.failed(amount, lang);
+
+    // Trust the direction the event was classified with; only re-read the raw
+    // text when that is unknown. The two classifiers used to disagree.
+    final spoken = switch (this.direction) {
+      PaymentTransactionDirection.incomingCredit => PaymentDirection.credited,
+      PaymentTransactionDirection.outgoingDebit => PaymentDirection.debited,
+      PaymentTransactionDirection.unknown =>
+        VoiceBuilder.detectDirectionForSpeech(rawText),
+    };
+
+    // A debit is never a partial receipt or a bill match, even if its amount
+    // happens to fit an open bill.
+    if (spoken == PaymentDirection.debited) {
+      return decision == PaymentDecision.confirmed && isUserConfirmed
+          ? VoiceBuilder.receivedDirectional(amount, payerName, lang, spoken)
+          : VoiceBuilder.detectedDirectional(amount, lang, spoken);
+    }
+
     if (isPartial) {
       return decision == PaymentDecision.confirmed && isUserConfirmed
           ? VoiceBuilder.partial(amount, shortfall ?? 0, lang)
           : VoiceBuilder.partialDetected(amount, shortfall ?? 0, lang);
     }
 
-    final direction = VoiceBuilder.detectDirection(rawText);
+    final direction = spoken;
     switch (decision) {
       case PaymentDecision.confirmed:
         return isUserConfirmed
@@ -324,6 +344,23 @@ abstract class VoiceBuilder {
     return credit ? PaymentDirection.credited : PaymentDirection.debited;
   }
 
+  /// Direction for SPEAKING only. Starts from the conservative classifier and,
+  /// when it gives up because the text mentions both sides of one transfer,
+  /// lets the cue attached to the user's own account decide. Never use this
+  /// for accounting.
+  static PaymentDirection detectDirectionForSpeech(String text) {
+    final base = detectDirection(text);
+    if (base != PaymentDirection.unknown) return base;
+    switch (ownAccountDirection(text)) {
+      case 'credit':
+        return PaymentDirection.credited;
+      case 'debit':
+        return PaymentDirection.debited;
+      default:
+        return PaymentDirection.unknown;
+    }
+  }
+
   // ── received ─────────────────────────────────────────────────────────────────
   static String received(double amount, String? name, VoiceLanguage lang) {
     final a = _amt(amount, lang);
@@ -387,28 +424,28 @@ abstract class VoiceBuilder {
       case PaymentDirection.debited:
         switch (lang) {
           case VoiceLanguage.hindi:
-            return 'खाते से राशि कट गई। $a$f';
+            return 'खाते से राशि कट गई। $a';
           case VoiceLanguage.tamil:
-            return 'கணக்கிலிருந்து பணம் கழிக்கப்பட்டது. $a$f';
+            return 'கணக்கிலிருந்து பணம் கழிக்கப்பட்டது. $a';
           case VoiceLanguage.telugu:
-            return 'ఖాతా నుంచి డబ్బు డెబిట్ అయింది. $a$f';
+            return 'ఖాతా నుంచి డబ్బు డెబిట్ అయింది. $a';
           case VoiceLanguage.kannada:
-            return 'ಖಾತೆಯಿಂದ ಹಣ ಕಡಿತವಾಗಿದೆ. $a$f';
+            return 'ಖಾತೆಯಿಂದ ಹಣ ಕಡಿತವಾಗಿದೆ. $a';
           case VoiceLanguage.marathi:
-            return 'खात्यातून रक्कम वजा झाली. $a$f';
+            return 'खात्यातून रक्कम वजा झाली. $a';
           case VoiceLanguage.gujarati:
-            return 'ખાતામાંથી રકમ કપાઈ. $a$f';
+            return 'ખાતામાંથી રકમ કપાઈ. $a';
           case VoiceLanguage.bengali:
-            return 'অ্যাকাউন্ট থেকে টাকা কেটে নেওয়া হয়েছে। $a$f';
+            return 'অ্যাকাউন্ট থেকে টাকা কেটে নেওয়া হয়েছে। $a';
           case VoiceLanguage.punjabi:
-            return 'ਖਾਤੇ ਵਿੱਚੋਂ ਰਕਮ ਕੱਟੀ ਗਈ। $a$f';
+            return 'ਖਾਤੇ ਵਿੱਚੋਂ ਰਕਮ ਕੱਟੀ ਗਈ। $a';
           case VoiceLanguage.malayalam:
-            return 'അക്കൗണ്ടിൽ നിന്ന് തുക ഡെബിറ്റ് ചെയ്തു. $a$f';
+            return 'അക്കൗണ്ടിൽ നിന്ന് തുക ഡെബിറ്റ് ചെയ്തു. $a';
           default:
-            return 'Payment debited. $a$f';
+            return 'Payment debited. $a';
         }
       case PaymentDirection.unknown:
-        return detected(amount, lang) + f;
+        return detected(amount, lang);
     }
   }
 
@@ -471,31 +508,11 @@ abstract class VoiceBuilder {
     }
   }
 
-  static String detected(double amount, VoiceLanguage lang) {
-    final a = _amt(amount, lang);
-    switch (lang) {
-      case VoiceLanguage.hindi:
-        return '$a मिला, एक बार जांचें';
-      case VoiceLanguage.tamil:
-        return '$a வந்தது, ஒருமுறை சரிபார்க்கவும்';
-      case VoiceLanguage.telugu:
-        return '$a వచ్చింది, ఒకసారి చెక్ చేయండి';
-      case VoiceLanguage.kannada:
-        return '$a ಬಂತು, ಒಮ್ಮೆ ಪರಿಶೀಲಿಸಿ';
-      case VoiceLanguage.marathi:
-        return '$a आले, एकदा तपासा';
-      case VoiceLanguage.gujarati:
-        return '$a મળ્યા, એક વખત ચકાસો';
-      case VoiceLanguage.bengali:
-        return '$a এসেছে, একবার যাচাই করুন';
-      case VoiceLanguage.punjabi:
-        return '$a ਮਿਲਿਆ, ਇੱਕ ਵਾਰ ਜਾਂਚ ਕਰੋ';
-      case VoiceLanguage.malayalam:
-        return '$a ലഭിച്ചു, ഒന്ന് പരിശോധിക്കൂ';
-      default:
-        return '$a detected. Please confirm.';
-    }
-  }
+  /// Spoken when credit vs debit could not be determined. Must stay
+  /// direction-neutral: it used to say "received/came" in nine languages, so a
+  /// debit that the classifier could not read was announced as money in.
+  static String detected(double amount, VoiceLanguage lang) =>
+      neutralPaymentAlert(lang.name, _amt(amount, lang));
 
   // ── FIX-1: failed — all 10 languages ────────────────────────────────────────
   static String failed(double amount, VoiceLanguage lang) {
@@ -1950,9 +1967,15 @@ class _VI implements Comparable<_VI> {
   final _VP priority;
   final double? amount;
   final String? payerName;
+  final PaymentDirection direction;
   final DateTime at;
-  _VI(this.text, this.priority, {this.amount, this.payerName})
-    : at = DateTime.now();
+  _VI(
+    this.text,
+    this.priority, {
+    this.amount,
+    this.payerName,
+    this.direction = PaymentDirection.unknown,
+  }) : at = DateTime.now();
   @override
   int compareTo(_VI o) {
     final p = priority.index.compareTo(o.priority.index);
@@ -2047,14 +2070,14 @@ class PriorityVoiceQueue {
       if (event.id == old.id) return true;
 
       final priorReference = old.normalizedReferenceId;
-      if (currentReference != null || priorReference != null) {
-        if (currentReference == null || priorReference == null) continue;
+      if (currentReference != null && priorReference != null) {
         if (currentReference != priorReference ||
             event.hasReferenceConflictWith(old)) {
           continue;
         }
         return true;
       }
+      // One-sided reference: not proof, not disproof. Use the checks below.
 
       final age = now.difference(old.timestamp).abs();
       if (age > _crossSourceEchoWindow) continue;
@@ -2137,7 +2160,11 @@ class PriorityVoiceQueue {
       if (claimedChannels != null && claimedChannels.contains(currentChannel)) {
         continue;
       }
-      if (!sameAccount && !sameKnownPayer) continue;
+      final weakModalityPair = PaymentIdentityMatcher.isWeakModalityPair(
+          PaymentDetectionService._eventOrigin(event.detectionSource),
+          PaymentDetectionService._eventOrigin(old.detectionSource),
+        );
+      if (!sameAccount && !sameKnownPayer && !weakModalityPair) continue;
 
       // More than one plausible same-value event is ambiguous; preserve the
       // current announcement rather than suppress a possibly distinct payment.
@@ -2246,7 +2273,19 @@ class PriorityVoiceQueue {
         : e.amount >= 1000
         ? _VP.high
         : _VP.normal;
-    _queue.add(_VI(text, priority, amount: e.amount, payerName: e.payerName));
+    _queue.add(
+      _VI(
+        text,
+        priority,
+        amount: e.amount,
+        payerName: e.payerName,
+        direction: ui.direction == PaymentTransactionDirection.incomingCredit
+            ? PaymentDirection.credited
+            : ui.direction == PaymentTransactionDirection.outgoingDebit
+            ? PaymentDirection.debited
+            : VoiceBuilder.detectDirectionForSpeech(e.rawText),
+      ),
+    );
     _recentTs.add(DateTime.now());
     _cleanTs();
     _schedule();
@@ -2281,7 +2320,14 @@ class PriorityVoiceQueue {
     _cleanTs();
 
     // FIX-H: burst with payer names
-    final normals = _queue.where((i) => i.priority == _VP.normal).toList();
+    // A burst summary says "received", so only confirmed credits may join it.
+    // Debits and unclassified alerts are always spoken individually.
+    final normals = _queue
+        .where(
+          (i) =>
+              i.priority == _VP.normal && i.direction == PaymentDirection.credited,
+        )
+        .toList();
     if (_recentTs.length >= PdsConfig.voiceBurstCount &&
         normals.length >= PdsConfig.voiceBurstCount) {
       for (final item in normals) _queue.remove(item);
@@ -2886,6 +2932,15 @@ class PaymentDetectionService {
   /// Bank SMS can arrive long after the payment-app notification (20+ min,
   /// sometimes over an hour when the operator queues DLT messages).
   static const Duration _smsEchoWindow = Duration(hours: 3);
+
+  /// A bank SMS and a payment-app notification for the SAME transfer usually
+  /// land within a minute of each other but share no payer, account or UTR
+  /// (app text has the payer, SMS text has the masked account and UTR). When
+  /// the two signals come from different modalities (SMS vs non-SMS), have the
+  /// same amount and direction, show no conflicting evidence, and match only
+  /// one earlier payment, treat them as one transfer. Kept deliberately short:
+  /// outside this window amount alone is never identity.
+  static const Duration _weakEchoWindow = Duration(seconds: 60);
 
   /// Merchant-confirmed payments kept so the confirmation dialog can warn when
   /// a new alert may be the late SMS of a payment that was already confirmed.
@@ -5470,13 +5525,15 @@ class PaymentDetectionService {
       }
 
       final oldReference = old.normalizedReferenceId;
-      if (currentReference != null || oldReference != null) {
-        // References only prove identity when both sides expose the same ID.
-        if (currentReference == null || oldReference == null) continue;
+      if (currentReference != null && oldReference != null) {
+        // Two different references are two payments; equal ones are one.
         if (currentReference != oldReference) continue;
         if (event.hasReferenceConflictWith(old)) continue;
         return true;
       }
+      // Exactly one side has a reference: it cannot prove identity, but it
+      // does not disprove it either. Fall through to the strict cross-channel
+      // checks below (payer/account, or the short weak-pair window).
 
       final age = now.difference(old.timestamp).abs();
       final oldChannel = _channelKey(old);
@@ -5531,8 +5588,14 @@ class PaymentDetectionService {
           !sameKnownPayer;
       if (differentAccounts || differentKnownPayers) continue;
 
-      // Amount + direction alone are not transaction identity.
-      if (!sameAccount && !sameKnownPayer) continue;
+      // Amount + direction alone are not transaction identity, except for a
+      // different-modality pair (SMS vs app/notification) inside the short
+      // weak-pair window with no conflicting evidence on either side.
+      final weakModalityPair = PaymentIdentityMatcher.isWeakModalityPair(
+          _eventOrigin(event.detectionSource),
+          _eventOrigin(old.detectionSource),
+        );
+      if (!sameAccount && !sameKnownPayer && !weakModalityPair) continue;
 
       // If several earlier payments could explain this signal, the match is
       // ambiguous. Keep the event instead of hiding a potentially real payment.
