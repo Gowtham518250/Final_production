@@ -665,13 +665,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               children:
                   [
                         {'code': 'en-IN', 'name': 'English'},
-                        {'code': 'hi-IN', 'name': 'Hindi / à¤¹à¤¿à¤¨à¥à¤¦à¥€'},
+                        {'code': 'hi-IN', 'name': 'Hindi / हिन्दी'},
                         {
                           'code': 'te-IN',
-                          'name': 'Telugu / à°¤à±†à°²à±à°—à±',
+                          'name': 'Telugu / తెలుగు',
                         },
-                        {'code': 'ta-IN', 'name': 'Tamil / à®¤à®®à®¿à®´à¯'},
-                        {'code': 'mr-IN', 'name': 'Marathi / à¤®à¤°à¤¾à¤ à¥€'},
+                        {'code': 'ta-IN', 'name': 'Tamil / தமிழ்'},
+                        {'code': 'mr-IN', 'name': 'Marathi / मराठी'},
                       ]
                       .map(
                         (l) => ActionChip(
@@ -1023,7 +1023,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
     // Split on conjunctions, commas, and Indic danda
     final splitPattern = RegExp(
-      r'(?:\s*(?:,|;|ØŒ|ï¼Œ|\||\u0964)\s*)|\s+(?:and|aur|phir|then|also|plus|à¤¤à¤¥à¤¾|à¤”à¤°)\s+',
+      r'(?:\s*(?:,|;|،|，|\||\u0964)\s*)|\s+(?:and|aur|phir|then|also|plus|तथा|और)\s+',
       caseSensitive: false,
     );
 
@@ -1341,7 +1341,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // First strip currency words so they don't pollute item name
     // e.g. "tomato 100 rupees" → strip "rupees" → price=100, item=tomato
     final RegExp currencyWords = RegExp(
-      r'\b(rupees?|rupaiye?|rupaya?|rs\.?|inr|paise?|bucks?|à¤°à¥à¤ªà¤¯à¥‡|à¤°à¥à¤ªà¤¯à¤¾)\b',
+      r'\b(rupees?|rupaiye?|rupaya?|rs\.?|inr|paise?|bucks?|रुपये|रुपया)\b',
       caseSensitive: false,
     );
     command = command.replaceAll(currencyWords, ' ');
