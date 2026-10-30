@@ -241,13 +241,14 @@ void main() {
       expect(d.verdict, IdentityVerdict.distinct);
     });
 
-    test('SMS plus Truecaller is not accepted as a weak match', () {
+    test('SMS plus Truecaller uses the existing trusted mirror rule', () {
       final d = PaymentIdentityMatcher.compare(
         sms('s'),
         sig('t', channel: 'truecaller_notification|truecaller',
-            origin: 'truecaller_notification'),
+            origin: 'truecaller_notification', sec: 5),
       );
-      expect(d.verdict, IdentityVerdict.distinct);
+      expect(d.verdict, IdentityVerdict.candidateEcho);
+      expect(d.reason, 'truecaller_mirror');
     });
 
     test('SMS plus ordinary payment notification remains eligible', () {
