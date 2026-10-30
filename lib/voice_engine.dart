@@ -121,6 +121,8 @@ class VoiceEngine {
   // ── Priority queue ───────────────────────────────────────────────────────
   final _queue   = <_SpeechJob>[];
   bool  _running = false;
+  int _generation = 0;
+  _SpeechJob? _activeJob;
 
   // ── Amplitude timer ──────────────────────────────────────────────────────
   Timer? _ampTimer;
@@ -252,7 +254,19 @@ class VoiceEngine {
   }
 
   Future<void> stop() async {
+    // Invalidate the active drain. It retains the queue mutex until its
+    // current await unwinds, preventing a second _runNext from overlapping it.
+    _generation++;
+    for (final queuedJob in _queue) {
+      if (!queuedJob.completer.isCompleted) queuedJob.completer.complete();
+    }
     _queue.clear();
+
+    final activeJob = _activeJob;
+    if (activeJob != null && !activeJob.completer.isCompleted) {
+      activeJob.completer.complete();
+    }
+
     try {
       await _tts.stop();
       await _audioPlayer.stop();
@@ -261,7 +275,8 @@ class VoiceEngine {
     }
     _setSpeaking(false);
     _stopAmpTimer();
-    _running = false;
+    // Do not set _running=false here. The in-flight drain releases the mutex
+    // in _runNext's finally block after it observes the generation change.
   }
 
   // ── Voice selection ───────────────────────────────────────────────────────
@@ -326,7 +341,14 @@ class VoiceEngine {
   // ── Private: queue scheduler ──────────────────────────────────────────────
 
   void _interruptAndPrepend(_SpeechJob job) {
-    // Stop current speech immediately, push job to front
+    // Invalidate the currently executing job and let its drain unwind before
+    // starting the high-priority job. Completing its waiter unblocks callers,
+    // but _running remains true until the old async operation actually exits.
+    _generation++;
+    final activeJob = _activeJob;
+    if (activeJob != null && !activeJob.completer.isCompleted) {
+      activeJob.completer.complete();
+    }
     _tts.stop().catchError((_) {});
     _audioPlayer.stop().catchError((_) {});
     _queue.insert(0, job);
@@ -335,80 +357,98 @@ class VoiceEngine {
   void _scheduleNext() {
     if (_running || _queue.isEmpty) return;
     _running = true;
-    _runNext();
+    final generation = _generation;
+    unawaited(_runNext(generation));
   }
 
-  Future<void> _runNext() async {
-    while (_queue.isNotEmpty) {
-      // Sort: critical > high > normal > low (stable sort — FIFO within same priority)
-      _queue.sort((a, b) => b.priority.index.compareTo(a.priority.index));
+  Future<void> _runNext(int generation) async {
+    try {
+      while (generation == _generation && _queue.isNotEmpty) {
+        // Sort: critical > high > normal > low.
+        _queue.sort((a, b) => b.priority.index.compareTo(a.priority.index));
 
-      final job = _queue.removeAt(0);
-      try {
-        await _executeJob(job);
-        if (!job.completer.isCompleted) job.completer.complete();
-      } catch (e, st) {
-        _log.e('Speech job failed', error: e, stackTrace: st);
-        if (!job.completer.isCompleted) job.completer.completeError(e, st);
+        final job = _queue.removeAt(0);
+        _activeJob = job;
+        try {
+          await _executeJob(job, generation);
+          if (!job.completer.isCompleted) job.completer.complete();
+        } catch (e, st) {
+          _log.e('Speech job failed', error: e, stackTrace: st);
+          if (!job.completer.isCompleted) job.completer.completeError(e, st);
+        } finally {
+          if (identical(_activeJob, job)) _activeJob = null;
+        }
       }
+    } finally {
+      // Only this drain releases the mutex. New jobs queued while an old job
+      // unwinds are picked up by a fresh drain using the current generation.
+      _activeJob = null;
+      _running = false;
+      if (_queue.isNotEmpty) _scheduleNext();
     }
-    _running = false;
   }
 
-  Future<void> _executeJob(_SpeechJob job) async {
-    // Audio cue first
+  bool _isCurrentGeneration(int generation) =>
+      generation == _generation;
+
+  Future<void> _executeJob(_SpeechJob job, int generation) async {
+    if (!_isCurrentGeneration(generation)) return;
+
+    // Audio cue first.
     if (job.audioPath != null && job.audioPath!.isNotEmpty) {
-      await _playAudioFile(job.audioPath!);
+      await _playAudioFile(job.audioPath!, generation: generation);
+      if (!_isCurrentGeneration(generation)) return;
     }
 
-    // After Android/OEM restarts, platform TTS can bind after the first queued
-    // payment announcement. Wait for a bounded readiness query before locale
-    // checks so the first event of the morning is not silently skipped.
-    await _ensureEngineReady();
+    // A stop/interrupt can occur while Android is binding the TTS engine.
+    await _ensureEngineReady(generation: generation);
+    if (!_isCurrentGeneration(generation)) return;
 
     if (_useStitchedVoice) {
-      await _playStitchedSequence(job.result.text, job.locale);
+      await _playStitchedSequence(job.result.text, job.locale, generation);
       return;
     }
 
     var effectiveLocale = job.locale;
-    if (!await _safeSetLocale(effectiveLocale)) {
-      // Never stay silent for a payment: fall back to an installed English
-      // voice (digits and amounts are still understandable).
+    if (!await _safeSetLocale(effectiveLocale, generation: generation)) {
+      if (!_isCurrentGeneration(generation)) return;
       _log.w('Locale ${job.locale} unavailable; trying English fallback');
       var fellBack = false;
       for (final fallback in const ['en-IN', 'en-US', 'en-GB']) {
+        if (!_isCurrentGeneration(generation)) return;
         if (fallback == job.locale) continue;
-        if (await _safeSetLocale(fallback)) {
+        if (await _safeSetLocale(fallback, generation: generation)) {
           effectiveLocale = fallback;
           fellBack = true;
           break;
         }
       }
+      if (!_isCurrentGeneration(generation)) return;
       if (!fellBack) {
-        // Last resort: speak with the engine's current/default voice rather
-        // than silently discarding a payment announcement when locale queries
-        // are unavailable during cold start.
+        // Last resort: use the engine's current/default voice.
         _log.w('No TTS locale confirmed; speaking with engine default voice');
         effectiveLocale = _currentLocale ?? job.locale;
       }
     }
 
-    // Apply locale-aware rate/pitch modifiers
+    if (!_isCurrentGeneration(generation)) return;
     final profile = _localeProfiles[effectiveLocale] ?? const _LocaleProfile(1.0, 0.0);
-    final finalRate  = (job.result.rate  * profile.rateMultiplier).clamp(0.1, 1.0);
+    final finalRate = (job.result.rate * profile.rateMultiplier).clamp(0.1, 1.0);
     final finalPitch = (job.result.pitch + profile.pitchOffset).clamp(0.5, 2.0);
 
     await _tts.setPitch(finalPitch);
+    if (!_isCurrentGeneration(generation)) return;
     await _tts.setSpeechRate(finalRate);
+    if (!_isCurrentGeneration(generation)) return;
 
-    // SSML-lite: split on [PAUSE] markers
     final parts = job.result.text.split('[PAUSE]');
     if (parts.length > 1) {
-      for (int i = 0; i < parts.length; i++) {
+      for (var i = 0; i < parts.length; i++) {
+        if (!_isCurrentGeneration(generation)) return;
         if (parts[i].trim().isNotEmpty) {
-          await _safeTtsSpeak(parts[i].trim(), retries: 2);
+          await _safeTtsSpeak(parts[i].trim(), retries: 2, generation: generation);
         }
+        if (!_isCurrentGeneration(generation)) return;
         if (i < parts.length - 1) {
           await Future<void>.delayed(const Duration(milliseconds: 300));
         }
@@ -416,12 +456,17 @@ class VoiceEngine {
       return;
     }
 
-    // Standard chunk playback
     if (job.result.chunks.length <= 1) {
-      await _safeTtsSpeak(job.result.text, retries: 2);
+      await _safeTtsSpeak(job.result.text, retries: 2, generation: generation);
     } else {
-      for (int i = 0; i < job.result.chunks.length; i++) {
-        await _safeTtsSpeak(job.result.chunks[i], retries: 1);
+      for (var i = 0; i < job.result.chunks.length; i++) {
+        if (!_isCurrentGeneration(generation)) return;
+        await _safeTtsSpeak(
+          job.result.chunks[i],
+          retries: 1,
+          generation: generation,
+        );
+        if (!_isCurrentGeneration(generation)) return;
         if (i < job.result.chunks.length - 1) {
           await Future<void>.delayed(const Duration(milliseconds: 220));
         }
@@ -462,13 +507,18 @@ class VoiceEngine {
 
   /// Wait for a bounded response from the native TTS service. Don't hold a
   /// payment announcement forever if the device's speech engine is unavailable.
-  Future<void> _ensureEngineReady() async {
-    if (_engineWarm) return;
+  bool _engineGenerationIsCurrent(int? generation) =>
+      generation == null || generation == _generation;
+
+  Future<void> _ensureEngineReady({int? generation}) async {
+    if (_engineWarm || !_engineGenerationIsCurrent(generation)) return;
     for (var attempt = 0; attempt < 4; attempt++) {
+      if (!_engineGenerationIsCurrent(generation)) return;
       try {
         final engines = await _tts.getEngines.timeout(
           const Duration(seconds: 3),
         );
+        if (!_engineGenerationIsCurrent(generation)) return;
         if (engines is List && engines.isNotEmpty) {
           _engineWarm = true;
           return;
@@ -476,18 +526,24 @@ class VoiceEngine {
       } catch (_) {
         // Platform TTS may still be binding; retry below.
       }
+      if (!_engineGenerationIsCurrent(generation)) return;
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
-    _log.w('TTS engine did not answer in time; continuing with default voice');
+    if (_engineGenerationIsCurrent(generation)) {
+      _log.w('TTS engine did not answer in time; continuing with default voice');
+    }
   }
 
-  Future<bool> _safeSetLocale(String locale) async {
+  Future<bool> _safeSetLocale(String locale, {int? generation}) async {
     for (int attempt = 0; attempt < 2; attempt++) {
+      if (!_engineGenerationIsCurrent(generation)) return false;
       try {
         final availability = await _tts.isLanguageAvailable(locale).timeout(
           const Duration(seconds: 2),
           onTimeout: () => false,
         );
+        if (!_engineGenerationIsCurrent(generation)) return false;
+
         final available =
             availability == true ||
             (availability is num && availability > 0);
@@ -497,6 +553,7 @@ class VoiceEngine {
         }
 
         final languageResult = await _tts.setLanguage(locale);
+        if (!_engineGenerationIsCurrent(generation)) return false;
         final languageSelected =
             languageResult == true ||
             (languageResult is num && languageResult > 0);
@@ -507,16 +564,18 @@ class VoiceEngine {
 
         if (_cachedVoiceName != null && _cachedVoiceLocale == locale) {
           await _applyVoice(_cachedVoiceName!, _cachedVoiceLocale!);
+          if (!_engineGenerationIsCurrent(generation)) return false;
         }
         _currentLocale = locale;
         return true;
       } catch (e, st) {
+        if (!_engineGenerationIsCurrent(generation)) return false;
         _log.w('_safeSetLocale attempt $attempt failed: $locale', error: e, stackTrace: st);
         await Future<void>.delayed(Duration(milliseconds: 80 * (attempt + 1)));
       }
     }
 
-    _currentLocale = null;
+    if (_engineGenerationIsCurrent(generation)) _currentLocale = null;
     return false;
   }
 
@@ -538,8 +597,13 @@ class VoiceEngine {
 
   // ── Private: TTS with retry ────────────────────────────────────────────────
 
-  Future<void> _safeTtsSpeak(String text, {int retries = 0}) async {
+  Future<void> _safeTtsSpeak(
+    String text, {
+    int retries = 0,
+    int? generation,
+  }) async {
     for (int i = 0; i <= retries; i++) {
+      if (!_engineGenerationIsCurrent(generation)) return;
       final attemptClock = Stopwatch()..start();
       try {
         await _tts.speak(text).timeout(
@@ -551,15 +615,17 @@ class VoiceEngine {
             return 0;
           },
         );
+        if (!_engineGenerationIsCurrent(generation)) return;
         return;
       } catch (e, st) {
-        // Retry only an immediate engine/setup failure. A late error may
-        // have occurred after playback started, so replaying could duplicate it.
+        if (!_engineGenerationIsCurrent(generation)) return;
+        // A late failure may happen after speech became audible. Only retry an
+        // immediate engine/setup failure, where playback has not had time to start.
         if (i < retries && attemptClock.elapsedMilliseconds < 400) {
           _log.w('TTS speak attempt $i failed, retrying…');
           await Future<void>.delayed(Duration(milliseconds: 120 * (i + 1)));
         } else {
-          _log.e('TTS speak failed after ${retries + 1} attempts: '
+          _log.e('TTS speak failed after ${i + 1} attempts: '
               '"${text.substring(0, text.length.clamp(0, 40))}"',
               error: e, stackTrace: st);
           rethrow;
@@ -570,60 +636,74 @@ class VoiceEngine {
 
   // ── Private: audio file ────────────────────────────────────────────────────
 
-  Future<void> _playAudioFile(String path) async {
+  Future<void> _playAudioFile(String path, {int? generation}) async {
+    StreamSubscription<PlayerState>? sub;
     try {
+      if (!_engineGenerationIsCurrent(generation)) return;
       if (!await File(path).exists()) return;
+      if (!_engineGenerationIsCurrent(generation)) return;
+
       final completer = Completer<void>();
-      final sub = _audioPlayer.onPlayerStateChanged.listen((state) {
+      sub = _audioPlayer.onPlayerStateChanged.listen((state) {
         if (state == PlayerState.completed || state == PlayerState.stopped) {
           if (!completer.isCompleted) completer.complete();
         }
       });
       await _audioPlayer.play(DeviceFileSource(path));
+      if (!_engineGenerationIsCurrent(generation)) return;
       await completer.future.timeout(
         const Duration(seconds: 5),
         onTimeout: () => _log.w('Audio file timeout: $path'),
       );
-      await sub.cancel();
     } catch (e, st) {
       _log.e('_playAudioFile failed: $path', error: e, stackTrace: st);
+    } finally {
+      await sub?.cancel();
     }
   }
 
   // ── Private: stitched voice ───────────────────────────────────────────────
 
-  Future<void> _playStitchedSequence(String message, String locale) async {
+  Future<void> _playStitchedSequence(
+    String message,
+    String locale,
+    int generation,
+  ) async {
+    if (!_isCurrentGeneration(generation)) return;
     final match = RegExp(r'(\d+\.?\d*)').firstMatch(message);
     if (match == null) {
-      if (!await _safeSetLocale(locale)) {
-        _log.w('Skipping announcement because locale $locale is unavailable');
-        return;
-      }
-      await _safeTtsSpeak(message);
+      if (!await _safeSetLocale(locale, generation: generation)) return;
+      if (!_isCurrentGeneration(generation)) return;
+      await _safeTtsSpeak(message, generation: generation);
       return;
     }
 
     final amount = double.tryParse(match.group(1)!) ?? 0.0;
-    final words  = _getNumberWords(amount, locale);
-    final dir    = await getApplicationDocumentsDirectory();
+    final words = _getNumberWords(amount, locale);
+    final dir = await getApplicationDocumentsDirectory();
+    if (!_isCurrentGeneration(generation)) return;
     final studio = p.join(dir.path, 'voice_studio');
 
     final allExist = (await Future.wait(
-      words.map((w) => File(p.join(studio, '$w.m4a')).exists()),
-    )).every((e) => e);
+      words.map((word) => File(p.join(studio, '$word.m4a')).exists()),
+    )).every((exists) => exists);
+    if (!_isCurrentGeneration(generation)) return;
 
     if (!allExist) {
       _log.d('Stitch files incomplete — TTS fallback');
-      if (!await _safeSetLocale(locale)) {
-        _log.w('Skipping announcement because locale $locale is unavailable');
-        return;
-      }
-      await _safeTtsSpeak(message);
+      if (!await _safeSetLocale(locale, generation: generation)) return;
+      if (!_isCurrentGeneration(generation)) return;
+      await _safeTtsSpeak(message, generation: generation);
       return;
     }
 
     for (final word in words) {
-      await _playAudioFile(p.join(studio, '$word.m4a'));
+      if (!_isCurrentGeneration(generation)) return;
+      await _playAudioFile(
+        p.join(studio, '$word.m4a'),
+        generation: generation,
+      );
+      if (!_isCurrentGeneration(generation)) return;
     }
   }
 
