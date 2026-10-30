@@ -290,6 +290,22 @@ class PaymentIdentityMatcher {
       return const IdentityDecision(IdentityVerdict.distinct, 'payer_conflict');
     }
 
+    // When a reference exists on only one signal, a shared masked account or
+    // payer is not enough to prove that the two observations are the same
+    // transfer. Keep them separate instead of letting fuzzy evidence override
+    // the one-sided transaction identity. A reference-free weak modality pair
+    // is still allowed inside the dedicated 60-second window below.
+    final oneSidedReference =
+        (current.reference == null) != (previous.reference == null);
+    if (oneSidedReference &&
+        ((current.account != null && current.account == previous.account) ||
+            (current.payer != null && previous.payer != null))) {
+      return const IdentityDecision(
+        IdentityVerdict.distinct,
+        'one_sided_reference_not_fuzzy_matched',
+      );
+    }
+
     if (current.account != null && current.account == previous.account) {
       return const IdentityDecision(IdentityVerdict.candidateEcho, 'same_account');
     }
