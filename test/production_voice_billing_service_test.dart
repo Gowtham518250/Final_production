@@ -206,9 +206,9 @@ void main() {
       ],
     );
 
-    expect(result.lines, hasLength(1));
-    expect(result.lines.single.catalogMatched, isFalse);
-    expect(result.lines.single.price, 300);
+    expect(result.lines, isEmpty);
+    expect(result.warnings, isNotEmpty);
+    expect(result.warnings.join(' '), contains('could not safely match'));
   });
 
   test('merges genuine duplicate product lines', () async {
