@@ -161,6 +161,64 @@ void main() {
       expect(events, hasLength(2));
     });
 
+    test('app notification (payer only) + bank SMS (UTR only) within 60s = 1',
+        () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500),
+        _credit(
+          id: 's1',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now.add(const Duration(seconds: 20)),
+          amount: 500,
+          ref: '412345678901',
+        ),
+      ]);
+      expect(events, hasLength(1));
+    });
+
+    test('same pair 5 minutes apart with no shared evidence stays 2', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500),
+        _credit(
+          id: 's1',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now.add(const Duration(minutes: 5)),
+          amount: 500,
+        ),
+      ]);
+      expect(events, hasLength(2));
+    });
+
+    test('two same-amount app notifications 10s apart stay 2 (same modality)',
+        () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500,
+            sourceEventKey: 'com.phonepe.app|1|1000|aa'),
+        _credit(id: 'n2', app: PaymentApp.googlePay, source: 'notification',
+            at: now.add(const Duration(seconds: 10)), amount: 500,
+            sourceEventKey: 'com.google.android.apps.nbu.paisa.user|2|2000|bb'),
+      ]);
+      expect(events, hasLength(2));
+    });
+
+    test('one SMS cannot swallow two earlier notifications (ambiguous = keep)',
+        () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500),
+        _credit(id: 'n2', app: PaymentApp.googlePay, source: 'notification',
+            at: now.add(const Duration(seconds: 5)), amount: 500),
+        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms',
+            at: now.add(const Duration(seconds: 15)), amount: 500),
+      ]);
+      expect(events.length, greaterThanOrEqualTo(2));
+    });
+
     test('same reference on two channels is one payment', () async {
       final now = DateTime.now();
       final events = await emitAll([
