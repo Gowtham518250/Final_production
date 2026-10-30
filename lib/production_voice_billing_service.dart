@@ -110,15 +110,66 @@ class ProductionVoiceBillingService {
 
     var parserTranscript = normalized;
 
-    // Shopkeepers can say the total before the product name ("3 vandalu
-    // Boost"). The scale normalizer correctly yields "300 boost", but the NLP
-    // parser expects product-before-price. Reorder only a leading spoken-scale
-    // amount when the remaining words uniquely match this shop's catalog.
-    // If the product cannot be safely identified, do not create a malformed
-    // custom line or attach the amount to an unrelated inventory item.
+    // Shopkeepers can say the total before the product name (for example,
+    // "3 vandalu Boost"). The scale normalizer yields "300 Boost", while
+    // the NLP parser expects product-before-price. Reorder only when the
+    // remaining words uniquely match this shop's own catalog.
     if (_startsWithSpokenScaleAmount(raw)) {
       final leadingAmount = RegExp(
-        r'^([0-9]+(?:\.[0-9]+)?)\s+(.+)
+        r'^([0-9]+(?:\.[0-9]+)?)\s+(.+)$',
+      ).firstMatch(normalized);
+      if (leadingAmount != null) {
+        final catalogProduct = _findShopProduct(
+          knownProducts,
+          leadingAmount.group(2)!,
+        );
+        if (catalogProduct == null) {
+          return VoiceBillingParseResult(
+            normalizedTranscript: normalized,
+            languageCode: localeCode,
+            lines: const [],
+            warnings: const [
+              'I heard the amount, but could not safely match the spoken product to this shop catalog. Please say the product name again or select it manually.',
+            ],
+          );
+        }
+        final canonical = (catalogProduct['name'] ??
+                catalogProduct['product_name'] ??
+                catalogProduct['canonical_name'] ??
+                '')
+            .toString()
+            .trim();
+        if (canonical.isEmpty) {
+          return VoiceBillingParseResult(
+            normalizedTranscript: normalized,
+            languageCode: localeCode,
+            lines: const [],
+            warnings: const [
+              'The matching shop product has no usable name. Please select the product manually.',
+            ],
+          );
+        }
+        parserTranscript = canonical + ' ' + leadingAmount.group(1)!;
+      }
+    }
+
+    final parsed = VoiceNlpEngineV2.parse(
+      parserTranscript,
+      localeCode,
+      catalog: knownProducts,
+      deduplicate: false,
+    );
+
+    if (parsed.isEmpty) {
+      return VoiceBillingParseResult(
+        normalizedTranscript: normalized,
+        languageCode: localeCode,
+        lines: const [],
+        warnings: const [
+          'I could not confidently identify a bill item. Try: "2 kg rice 50" or "sugar 60".'
+        ],
+      );
+    }
     final enriched = <VoiceBillingLine>[];
     final warnings = <String>[];
 
