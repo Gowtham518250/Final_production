@@ -206,7 +206,18 @@ class PaymentAnnouncementService {
         time:     DateTime.now(),
       );
       final anomaly = _intel.recordTransaction(tx);
-      if (anomaly != null) _handleAnomaly(anomaly, language, effectiveStyle);
+      if (anomaly != null) {
+        if (anomaly.type == AnomalyType.quietPeriodBroken) {
+          // The regular announcement below already says the amount; only
+          // soften its tone. Speaking a separate alert repeated the payment.
+          effectiveStyle = VoiceStyle.friendly;
+        } else if (_handleAnomaly(anomaly, language, effectiveStyle)) {
+          // The anomaly alert already states the amount. Do not follow it with
+          // the normal receipt (or queue it into a burst): that announced one
+          // payment twice.
+          return;
+        }
+      }
     }
 
     if (!isPartial && mode == AnnouncementMode.shopkeeper) {
@@ -458,17 +469,19 @@ class PaymentAnnouncementService {
     );
   }
 
-  void _handleAnomaly(AnomalyEvent anomaly, String language, VoiceStyle style) {
-    if (anomaly.type == AnomalyType.firstOfDay) return;
+  /// Speaks an anomaly alert that REPLACES the normal receipt announcement.
+  /// Returns true when an alert (which includes the amount) was queued.
+  bool _handleAnomaly(AnomalyEvent anomaly, String language, VoiceStyle style) {
+    if (anomaly.type != AnomalyType.largeTx &&
+        anomaly.type != AnomalyType.rapidRepeat) {
+      return false;
+    }
 
     final lang = _lang.resolve(language);
-
-    final raw = switch (anomaly.type) {
-      AnomalyType.largeTx       => lang.anomalyAlert(_fmt(anomaly.tx.amount)),
-      AnomalyType.rapidRepeat   => _rapidRepeatWarning(lang.langKey, _fmt(anomaly.tx.amount)),
-      AnomalyType.quietPeriodBroken => lang.success(_fmt(anomaly.tx.amount), VoiceStyle.friendly),
-      _                         => lang.success(_fmt(anomaly.tx.amount), style),
-    };
+    final amount = _fmt(anomaly.tx.amount);
+    final raw = anomaly.type == AnomalyType.largeTx
+        ? lang.anomalyAlert(amount)
+        : _rapidRepeatWarning(lang.langKey, amount);
 
     final result = _human.process(
       rawText:    raw,
@@ -476,6 +489,11 @@ class PaymentAnnouncementService {
       langKey:    lang.langKey,
       isCritical: anomaly.type == AnomalyType.largeTx,
     );
+
+    // Record it so the 3-second voice-dedup also covers this payment.
+    _lastSpeakTime   = DateTime.now();
+    _lastSpokenEvent =
+        '${anomaly.tx.amount.toStringAsFixed(2)}_${anomaly.tx.payerName ?? "anon"}_F';
 
     _enqueueItem(
       priority:  AnnouncementPriority.critical,
@@ -486,7 +504,9 @@ class PaymentAnnouncementService {
       result:    result,
       locale:    lang.locale,
     );
+    return true;
   }
+
 
   String _rapidRepeatWarning(String langKey, String amt) {
     switch (langKey) {
@@ -527,6 +547,13 @@ class PaymentAnnouncementService {
       priority:   priority,
       ttsText:    ttsText,
       timeoutSec: timeout,
+      // Cancel stale speech when the queue deadline expires; otherwise the
+      // VoiceEngine job could complete later and speak after newer payments.
+      onTimeout: () async {
+        await _voice
+            .stop()
+            .timeout(const Duration(seconds: 2), onTimeout: () {});
+      },
       task: () async {
         await _voice.playAnnouncement(
           audioPath: audioPath,

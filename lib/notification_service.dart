@@ -208,6 +208,7 @@ class NotificationService {
     required String body,
     String? payload,
     required bool silent,
+    int? notificationId,
   }) async {
     try {
       final plugin = NotificationService()._notificationsPlugin;
@@ -248,8 +249,10 @@ class NotificationService {
         presentBadge: false,
         presentSound: !silent,
       );
+      // A stable caller-supplied ID lets the foreground alert replace the
+      // same payment's background notification instead of creating a duplicate.
       await plugin.show(
-        _nextLocalNotificationId(),
+        notificationId ?? _nextLocalNotificationId(),
         title,
         body,
         NotificationDetails(android: androidDetails, iOS: iosDetails),

@@ -79,6 +79,7 @@ class QueueManager {
       // while the screen is locked, leaving the entire queue blocked until the
       // shopkeeper unlocks the phone. Expire and cancel stale speech explicitly.
       for (var attempt = 1; attempt <= 3 && !success; attempt++) {
+        final attemptClock = Stopwatch()..start();
         try {
           await item.task().timeout(
             Duration(seconds: item.timeoutSec.clamp(1, 60).toInt()),
@@ -99,6 +100,9 @@ class QueueManager {
           success = true;
         } catch (error, stackTrace) {
           _log.e('Task attempt $attempt/3 failed', error: error, stackTrace: stackTrace);
+          // Speech is not idempotent: a late failure may happen after audio
+          // became audible. Do not replay the same payment in that case.
+          if (attemptClock.elapsedMilliseconds >= 400) break;
           if (attempt < 3) {
             await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
           }

@@ -540,6 +540,7 @@ class VoiceEngine {
 
   Future<void> _safeTtsSpeak(String text, {int retries = 0}) async {
     for (int i = 0; i <= retries; i++) {
+      final attemptClock = Stopwatch()..start();
       try {
         await _tts.speak(text).timeout(
           const Duration(seconds: 8),
@@ -552,7 +553,9 @@ class VoiceEngine {
         );
         return;
       } catch (e, st) {
-        if (i < retries) {
+        // Retry only an immediate engine/setup failure. A late error may
+        // have occurred after playback started, so replaying could duplicate it.
+        if (i < retries && attemptClock.elapsedMilliseconds < 400) {
           _log.w('TTS speak attempt $i failed, retrying…');
           await Future<void>.delayed(Duration(milliseconds: 120 * (i + 1)));
         } else {
