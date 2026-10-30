@@ -72,7 +72,7 @@ class ChatbotContextService {
     };
   }
 
-  /// Build the assistant context locally. No /api/chatbot endpoint is needed.
+  /// Build local preview context; the backend builds its own scoped system prompt.
   static Future<String> getChatbotSystemPrompt() async {
     final context = await _localShopContext();
     return 'You are the Retail Mind assistant for ${context['shop_name']}. '
