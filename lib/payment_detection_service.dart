@@ -5530,7 +5530,9 @@ class PaymentDetectionService {
       // does not disprove it either. Fall through to the strict cross-channel
       // checks below (payer/account, or the short weak-pair window).
 
-      final age = now.difference(old.timestamp).abs();
+      // Weak pairing is based on when the two source signals occurred,
+      // not on the wall clock when the detector happens to process them.
+      final age = event.timestamp.difference(old.timestamp).abs();
       final oldChannel = _channelKey(old);
 
       if (oldChannel == channel) {
