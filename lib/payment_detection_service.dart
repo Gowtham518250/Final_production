@@ -5582,10 +5582,12 @@ class PaymentDetectionService {
       // Amount + direction alone are not transaction identity, except for a
       // different-modality pair (SMS vs app/notification) inside the short
       // weak-pair window with no conflicting evidence on either side.
-      final weakModalityPair = PaymentIdentityMatcher.isWeakModalityPair(
-          _eventOrigin(event.detectionSource),
-          _eventOrigin(old.detectionSource),
-        );
+      final weakModalityPair =
+          age <= PaymentIdentityMatcher.weakModalityWindow &&
+          PaymentIdentityMatcher.isWeakModalityPair(
+            _eventOrigin(event.detectionSource),
+            _eventOrigin(old.detectionSource),
+          );
       if (!sameAccount && !sameKnownPayer && !weakModalityPair) continue;
 
       // If several earlier payments could explain this signal, the match is
