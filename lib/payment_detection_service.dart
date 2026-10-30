@@ -2933,15 +2933,6 @@ class PaymentDetectionService {
   /// sometimes over an hour when the operator queues DLT messages).
   static const Duration _smsEchoWindow = Duration(hours: 3);
 
-  /// A bank SMS and a payment-app notification for the SAME transfer usually
-  /// land within a minute of each other but share no payer, account or UTR
-  /// (app text has the payer, SMS text has the masked account and UTR). When
-  /// the two signals come from different modalities (SMS vs non-SMS), have the
-  /// same amount and direction, show no conflicting evidence, and match only
-  /// one earlier payment, treat them as one transfer. Kept deliberately short:
-  /// outside this window amount alone is never identity.
-  static const Duration _weakEchoWindow = Duration(seconds: 60);
-
   /// Merchant-confirmed payments kept so the confirmation dialog can warn when
   /// a new alert may be the late SMS of a payment that was already confirmed.
   final List<PaymentEvent> _recentConfirmed = [];
