@@ -1,6 +1,9 @@
 name: Flutter Android Build Smoke
 
 on:
+  push:
+    branches:
+      - feature/ai-help-support-screen-guidance-20261030
   pull_request:
     branches:
       - clean-retailmind-20261023

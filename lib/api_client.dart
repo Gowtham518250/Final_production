@@ -118,6 +118,7 @@ class ApiClient {
   static const String ragListEndpoint = '/rag/list_files';
   static const String sqlAnalystEndpoint = '/sql_analyst/analysis/';
   static const String chatbotEndpoint = '/chatbot/';
+  static const String chatbotMessageEndpoint = '/chatbot/message';
   static const String billGenerateEndpoint = '/bill/Generate/Bill';
   static const String billScanEndpoint = '/bill/scan/';
   static const String billQrEndpoint = '/bill/qr/';
