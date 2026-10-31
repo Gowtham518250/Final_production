@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../api_client.dart';
+import '../../api_client.dart';
 
 
 /// Structured API error. FastAPI may place a string or an object in "detail".
