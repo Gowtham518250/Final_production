@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_cashfree_pg_sdk/api/cfpayment/cfsubscriptioncheckoutpayment.dart';
+import 'package:flutter_cashfree_pg_sdk/api/cfpaymentgateway/cfpaymentgatewayservice.dart';
+import 'package:flutter_cashfree_pg_sdk/api/cfsession/cfsubssession.dart';
+import 'package:flutter_cashfree_pg_sdk/api/cftheme/cftheme.dart';
+import 'package:flutter_cashfree_pg_sdk/api/cferrorresponse/cferrorresponse.dart';
+import 'package:flutter_cashfree_pg_sdk/utils/cfenums.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -19,6 +26,8 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
   late Future<Map<String, dynamic>> _subscriptionFuture;
   late Future<AiUsageSnapshot> _usageFuture;
   String? _busyPlan;
+  String _billingInterval = 'MONTHLY';
+  final CFPaymentGatewayService _cashfree = CFPaymentGatewayService();
 
   @override
   void initState() {
@@ -37,25 +46,70 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
     await Future.wait([_plansFuture, _subscriptionFuture, _usageFuture]);
   }
 
+  void _onSubscriptionVerify(String subscriptionId) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Mandate authorization completed. Retail Mind is confirming the subscription payment.'),
+    ));
+    _refresh();
+  }
+
+  void _onSubscriptionFailure(CFErrorResponse errorResponse, String data) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(errorResponse.getMessage()),
+    ));
+  }
+
   Future<void> _selectPlan(RetailMindSubscriptionPlan plan) async {
+    if (plan.code == 'FREE') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Free Starter is available automatically for every shop.'),
+      ));
+      return;
+    }
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Cashfree subscription checkout is currently available in the Android/iOS app.'),
+      ));
+      return;
+    }
     setState(() => _busyPlan = plan.code);
     try {
-      final result = await RetailMindBillingService.createSubscription(plan.code);
+      final result = await RetailMindBillingService.createSubscription(
+        plan.code,
+        billingInterval: _billingInterval,
+      );
       if (!mounted) return;
-      final checkoutUrl = (result['checkout_url'] ?? result['payment_link'] ?? result['url'] ?? '').toString();
-      final checkoutSessionId = (result['subscription_session_id'] ?? result['session_id'] ?? '').toString();
-      if (checkoutUrl.isNotEmpty) {
-        // Checkout URL is created by the trusted backend. The host app can
-        // add Cashfree's SDK/URL launcher after the backend contract is live.
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Checkout created. Complete payment in the secure Cashfree checkout.')));
-      } else if (checkoutSessionId.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Secure checkout session created.')));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Subscription request created. Refresh status after checkout.')));
+      final subscriptionId = (result['subscription_id'] ?? '').toString();
+      final sessionId = (result['subscription_session_id'] ?? '').toString();
+      if (subscriptionId.isEmpty || sessionId.isEmpty) {
+        throw Exception('Cashfree did not return a valid subscription checkout session.');
       }
-      await _refresh();
+      final environment = (result['environment'] ?? 'sandbox').toString().toLowerCase() == 'production'
+          ? CFEnvironment.PRODUCTION
+          : CFEnvironment.SANDBOX;
+      final session = CFSubscriptionSessionBuilder()
+          .setEnvironment(environment)
+          .setSubscriptionId(subscriptionId)
+          .setSubscriptionSessionId(sessionId)
+          .build();
+      final theme = CFThemeBuilder()
+          .setNavigationBarBackgroundColorColor('#FFFFFF')
+          .setNavigationBarTextColor('#172554')
+          .build();
+      final payment = CFSubscriptionPaymentBuilder()
+          .setSession(session)
+          .setTheme(theme)
+          .build();
+      _cashfree.setCallback(_onSubscriptionVerify, _onSubscriptionFailure);
+      _cashfree.doPayment(payment);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ));
+      }
     } finally {
       if (mounted) setState(() => _busyPlan = null);
     }
@@ -82,6 +136,14 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
             const SizedBox(height: 5),
             Text('Plans and included features are managed by Retail Mind.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
             const SizedBox(height: 12),
+            Align(alignment: Alignment.centerLeft, child: ToggleButtons(
+              isSelected: [_billingInterval == 'MONTHLY', _billingInterval == 'YEARLY'],
+              onPressed: (index) => setState(() => _billingInterval = index == 0 ? 'MONTHLY' : 'YEARLY'),
+              borderRadius: BorderRadius.circular(12),
+              constraints: const BoxConstraints(minHeight: 40, minWidth: 112),
+              children: const [Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Monthly')), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Yearly'))],
+            )),
+            const SizedBox(height: 12),
             FutureBuilder<List<RetailMindSubscriptionPlan>>(
               future: _plansFuture,
               builder: (context, snapshot) {
@@ -104,7 +166,7 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
     future: _usageFuture,
     builder: (context, snapshot) {
       final usage = snapshot.data;
-      final limit = usage?.limit ?? 7;
+      final limit = usage?.limit ?? 0;
       final used = usage?.used ?? 0;
       final remaining = usage?.remaining ?? limit;
       final progress = limit <= 0 ? 0.0 : (used / limit).clamp(0.0, 1.0);
@@ -124,6 +186,25 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
     },
   );
 
+  Future<void> _cancelCurrentSubscription(int id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel subscription?'),
+        content: const Text('Cashfree will be asked to stop future renewals. Your paid access should remain until the current paid period ends.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep plan')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await RetailMindBillingService.cancelSubscription(id);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cancellation request sent to Cashfree.')));
+      await _refresh();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
+
   Widget _currentSubscriptionCard() => FutureBuilder<Map<String, dynamic>>(
     future: _subscriptionFuture,
     builder: (context, snapshot) {
@@ -135,14 +216,16 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
         Row(children: [const Icon(Icons.verified_user_outlined, color: Color(0xFF4454C7)), const SizedBox(width: 9), Text('Current subscription', style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: const Color(0xFF172554))), const Spacer(), Text(status.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF596579)))]),
         const SizedBox(height: 8), Text(plan, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800)),
         if (renewal != null) Text('Next renewal: $renewal', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+        if (status.toUpperCase() == 'ACTIVE' && data['id'] is num && data['cancel_at_period_end'] != true)
+          Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () => _cancelCurrentSubscription((data['id'] as num).toInt()), child: const Text('Cancel renewal'))),
         if (snapshot.hasError) const Text('Subscription status is unavailable.', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
       ]));
     },
   );
 
   Widget _planCard(RetailMindSubscriptionPlan plan) {
-    final interval = plan.interval.toLowerCase().contains('year') || plan.interval.toLowerCase().contains('annual') ? 'year' : 'month';
-    final price = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(plan.amount);
+    final interval = _billingInterval == 'YEARLY' ? 'year' : 'month';
+    final price = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(plan.amountFor(_billingInterval));
     return Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(17), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: plan.recommended ? const Color(0xFF7161D8) : const Color(0xFFE2E8F0), width: plan.recommended ? 1.7 : 1)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Expanded(child: Text(plan.name, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF172554)))), if (plan.recommended) const Chip(label: Text('Popular', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact)]),
       const SizedBox(height: 4),
@@ -151,7 +234,7 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       _featureLine(Icons.auto_awesome, '${plan.dailyAiQueryLimit} AI queries per day'),
       for (final feature in plan.features) _featureLine(Icons.check_circle_outline, feature),
       const SizedBox(height: 13),
-      SizedBox(width: double.infinity, child: FilledButton(onPressed: _busyPlan == null ? () => _selectPlan(plan) : null, child: _busyPlan == plan.code ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Choose plan'))),
+      SizedBox(width: double.infinity, child: FilledButton(onPressed: _busyPlan == null ? () => _selectPlan(plan) : null, child: _busyPlan == plan.code ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : Text(plan.code == 'FREE' ? 'Included' : 'Continue to checkout'))),
     ]));
   }
 

@@ -125,7 +125,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
 
   Widget _buildDailyAiUsage() {
     final usage = _aiUsage;
-    final limit = usage?.limit ?? 7;
+    final limit = usage?.limit ?? 0;
     final used = usage?.used ?? 0;
     final remaining = usage?.remaining ?? limit;
     final progress = limit <= 0 ? 0.0 : (used / limit).clamp(0.0, 1.0);
