@@ -101,7 +101,7 @@ void main() {
       expect(OnlineOrderService.countDistinctOnlineOrdersFromSales(rows), 1);
     });
 
-    test('does not count cancelled orders or their stale sales rows', () {
+    test('counts cancelled orders in the lifetime online order total', () {
       final rows = <Map<String, dynamic>>[
         {
           'source': 'ONLINE_ORDER',
@@ -117,7 +117,7 @@ void main() {
         },
       ];
 
-      expect(OnlineOrderService.countDistinctOnlineOrdersFromSales(rows), 0);
+      expect(OnlineOrderService.countDistinctOnlineOrdersFromSales(rows), 1);
     });
 
     test('excludes stale paid invoices linked to cancelled cloud orders', () {
