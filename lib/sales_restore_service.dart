@@ -42,7 +42,23 @@ class SalesRestoreService {
     final userId = await _currentRestoreUserId();
     if (userId == null) return false;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_fullHistoryRestoreKey(userId)) ?? false;
+    final markerKey = _fullHistoryRestoreKey(userId);
+    if (!(prefs.getBool(markerKey) ?? false)) return false;
+
+    final expectedSales = prefs.getInt('${markerKey}_sales_count') ?? 0;
+    final expectedInvoices = prefs.getInt('${markerKey}_invoice_count') ?? 0;
+    if (expectedSales == 0 && expectedInvoices == 0) return true;
+
+    // Detect a cleared local Hive cache even when SharedPreferences survived
+    // an in-app data reset. A prior successful restore is not proof that the
+    // records are still present on this device.
+    final sales = await LocalStorageService.loadSales();
+    final invoices = await LocalStorageService.loadLocalInvoices();
+    if (sales.isEmpty && invoices.isEmpty) {
+      await prefs.setBool(markerKey, false);
+      return false;
+    }
+    return true;
   }
 
   /// Ensures the full invoice/sales history has been restored before a screen
@@ -54,7 +70,7 @@ class SalesRestoreService {
 
     final prefs = await SharedPreferences.getInstance();
     final markerKey = _fullHistoryRestoreKey(userId);
-    if (!force && (prefs.getBool(markerKey) ?? false)) return true;
+    if (!force && await isFullHistoryRestored()) return true;
 
     final active = _fullHistoryRestoreInFlight[userId];
     if (active != null) return active;
@@ -79,6 +95,8 @@ class SalesRestoreService {
         '${markerKey}_at',
         DateTime.now().toUtc().toIso8601String(),
       );
+      await prefs.setInt('${markerKey}_sales_count', sales.length);
+      await prefs.setInt('${markerKey}_invoice_count', invoices.length);
       await prefs.setBool(markerKey, true);
       if (kDebugMode) {
         debugPrint(
