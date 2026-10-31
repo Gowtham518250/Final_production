@@ -22,6 +22,7 @@ class GuidedVoiceService extends ChangeNotifier {
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
   bool _isStarting = false;
+  String? _activeStep;
   int _requestVersion = 0;
   int _screenGeneration = 0;
   final Map<String, Future<String?>> _localeTasks = {};
@@ -455,7 +456,16 @@ class GuidedVoiceService extends ChangeNotifier {
   Future<void> speakScreenGuide(String step, String languageCode) async {
     final localized = instructionForScreenGuide(step, languageCode);
     if (localized.isEmpty) return;
+    _activeStep = step;
     await _speakText(localized, languageCode);
+  }
+
+  /// Restart the active screen instruction in the newly selected language.
+  /// This keeps language switching from leaving an in-progress guide silent.
+  Future<void> continueCurrentSpeechInLanguage(String languageCode) async {
+    final step = _activeStep;
+    if (step == null || (!_isSpeaking && !_isStarting)) return;
+    await speakScreenGuide(step, languageCode);
   }
 
   Future<void> _speakText(String text, String languageCode) async {
@@ -554,11 +564,8 @@ class GuidedVoiceService extends ChangeNotifier {
     }
   }
 
-  Future<void> speakStep(String step, String languageCode) async {
-    final localized = instructionForScreenGuide(step, languageCode);
-    if (localized.isEmpty) return;
-    await _speakText(localized, languageCode);
-  }
+  Future<void> speakStep(String step, String languageCode) =>
+      speakScreenGuide(step, languageCode);
 
   Future<void> speakStepIfGuided(String step, String languageCode) async {
     // A route may change while preferences are being loaded. Only start the
@@ -604,6 +611,7 @@ class GuidedVoiceService extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    _activeStep = null;
     _requestVersion++;
     _isStarting = false;
     _isSpeaking = false;
