@@ -1976,8 +1976,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           featureCode: 'online_orders', child: const OnlineStoreManagerPage()),
                         '/online-orders': (context) => RetailMindFeatureGate(
                           featureCode: 'online_orders', child: const OnlineOrdersTab()),
-                        '/online-payment-history': (context) =>
-                            const OnlinePaymentHistoryPage(),
+                        '/online-payment-history': (context) => RetailMindFeatureGate(
+                          featureCode: 'online_orders', child: const OnlinePaymentHistoryPage()),
                         '/online-shopping-config': (context) => RetailMindFeatureGate(
                           featureCode: 'online_orders', child: const OnlineShoppingConfigPage()),
                         '/register': (context) {
