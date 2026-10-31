@@ -933,12 +933,11 @@ class SyncService {
       // 2. Ensure the complete invoice history is available before any
       // screen trusts the local Hive cache. The legacy /api/invoices list call
       // below is only a bounded recent page and cannot rebuild a cleared cache.
-      final fullHistoryRestored =
-          await SalesRestoreService.ensureFullHistoryRestored();
+      await SalesRestoreService.ensureFullHistoryRestored();
 
-      // 3. Fetch a recent invoice page for older backends / failed full restores.
-      if (!fullHistoryRestored) {
-        try {
+      // 3. Always reconcile the latest invoice page after the one-time full
+      // restore, so new sales/payment-state changes from another device arrive.
+      try {
         final token = await SecureTokenStorage.getToken() ?? '';
         if (token.isNotEmpty) {
           final List<dynamic> allApiItems = [];
@@ -1326,13 +1325,12 @@ class SyncService {
             _refreshNotifier.add(null);
           }
         }
-        } catch (e) {
-          await ErrorLogHelper.logException(
-            e,
-            StackTrace.current,
-            context: 'SyncService.downloadSales',
-          );
-        }
+      } catch (e) {
+        await ErrorLogHelper.logException(
+          e,
+          StackTrace.current,
+          context: 'SyncService.downloadSales',
+        );
       }
 
       // Option B: always run one-time dedupe after cloud fetch
