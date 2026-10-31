@@ -19,6 +19,7 @@ import 'agent_debug_log.dart';
 import 'attendance_offline_service.dart';
 import 'services/order_history_service.dart';
 import 'online_order_service.dart';
+import 'sales_restore_service.dart';
 
 class SyncService {
   static DateTime? _lastServerTime;
@@ -929,8 +930,14 @@ class SyncService {
         );
       }
 
-      // 2. Fetch Invoices/Sales (to populate Dashboard and Credit Book)
-      try {
+      // 2. Ensure the complete invoice history is available before any
+      // screen trusts the local Hive cache. The legacy /api/invoices list call
+      // below is only a bounded recent page and cannot rebuild a cleared cache.
+      final fullHistoryRestored =
+          await SalesRestoreService.ensureFullHistoryRestored();
+
+      // 3. Fetch a recent invoice page for older backends / failed full restores.
+      if (!fullHistoryRestored) try {
         final token = await SecureTokenStorage.getToken() ?? '';
         if (token.isNotEmpty) {
           final List<dynamic> allApiItems = [];
