@@ -59,6 +59,7 @@ import 'gst_compliance.dart';
 import 'session_management.dart';
 import 'scoped_shared_preferences.dart';
 import 'features/ai_query/widgets/dashboard_ai_card.dart';
+import 'features/billing/retailmind_billing_service.dart';
 
 import 'charts/bar_chart.dart';
 import 'charts/line_chart.dart';
@@ -605,6 +606,9 @@ class _DashboardPageState extends State<DashboardPage>
 
       // Begin non-critical network and maintenance work only after first-screen
       // hydration and any required security gate have completed.
+      // Warm subscription entitlement data off the critical dashboard path so
+      // Online Store and AI Query route gates do not wait on first tap.
+      unawaited(RetailMindBillingService.prefetchCommonFeatureAccess());
       unawaited(_loadDeferredDashboardData());
     });
 
