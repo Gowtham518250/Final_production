@@ -97,8 +97,8 @@ class SalesRestoreService {
         '${markerKey}_at',
         DateTime.now().toUtc().toIso8601String(),
       );
-      await prefs.setInt('${markerKey}_sales_count', sales.length);
-      await prefs.setInt('${markerKey}_invoice_count', invoices.length);
+      await prefs.setInt('${markerKey}_sales_count', salesCount);
+      await prefs.setInt('${markerKey}_invoice_count', invoiceCount);
       await prefs.setBool(markerKey, true);
       if (kDebugMode) {
         debugPrint(
