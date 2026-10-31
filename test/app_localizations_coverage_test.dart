@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/app_localizations.dart';
+import 'package:retail_mind/language_provider.dart';
 
 void main() {
   test('all supported locales have the same dictionary keys', () {
@@ -66,27 +67,26 @@ void main() {
     );
 
     final englishPhrases = AppLocalizations.screenTextTranslations['en']!;
-    for (final locale in AppLocalizations.supportedLocales) {
-      final phrases =
-          AppLocalizations.screenTextTranslations[locale.languageCode]!;
+    for (final languageCode in supportedLanguageCodes) {
+      final phrases = AppLocalizations.screenTextTranslations[languageCode]!;
       expect(
         phrases.keys.toSet(),
         equals(englishPhrases.keys.toSet()),
         reason:
-            'Screen copy must have matching entries for ${locale.languageCode}.',
+            'Screen copy must have matching entries for ${languageCode}.',
       );
       for (final entry in englishPhrases.entries) {
         expect(
           phrases[entry.key],
           isNotEmpty,
-          reason: '${entry.key} must be translated for ${locale.languageCode}.',
+          reason: '${entry.key} must be translated for ${languageCode}.',
         );
-        if (locale.languageCode != 'en') {
+        if (languageCode != 'en') {
           expect(
             phrases[entry.key],
             isNot(entry.value),
             reason:
-                '${entry.key} must not fall back to English for ${locale.languageCode}.',
+                '${entry.key} must not fall back to English for ${languageCode}.',
           );
         }
       }
@@ -94,17 +94,38 @@ void main() {
         expect(
           phrases[heading],
           isNotNull,
-          reason: '$heading must resolve for ${locale.languageCode}',
+          reason: '$heading must resolve for ${languageCode}',
         );
-        if (locale.languageCode != 'en') {
+        if (languageCode != 'en') {
           expect(
             phrases[heading],
             isNot(heading),
             reason:
-                '$heading must not remain English for ${locale.languageCode}',
+                '$heading must not remain English for ${languageCode}',
           );
         }
       }
     }
   });
+  test('voice picker supports 23 languages independently of UI dictionaries', () {
+    final selectableLanguageCodes = LanguageProvider.languages
+        .map((language) => language['code']!)
+        .toSet();
+
+    expect(selectableLanguageCodes, containsAll(<String>{
+      'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
+      'or', 'as', 'brx', 'doi', 'ks', 'kok', 'mai', 'mni', 'ne',
+      'sa', 'sat', 'sd', 'ur',
+    }));
+    expect(selectableLanguageCodes, hasLength(23));
+
+    final curatedUiCodes = AppLocalizations.supportedLocales
+        .map((locale) => locale.languageCode)
+        .toSet();
+    expect(curatedUiCodes, containsAll(<String>{
+      'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
+    }));
+    expect(curatedUiCodes.length, 10);
+  });
+
 }

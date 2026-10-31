@@ -21,6 +21,7 @@ import '../widgets/suggestion_chip.dart';
 import 'ai_query_history_screen.dart';
 import 'voice_language_option.dart';
 import '../../../language_provider.dart';
+import '../../../app_localizations.dart';
 import '../../billing/retailmind_billing_service.dart';
 
 /// Ask Retail Mind: text or voice in an Indian language, followed by the
@@ -1126,6 +1127,20 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
                                 _selectedLanguage = language;
                                 _inputLanguageCode = language.code;
                               });
+                              // Voice input/output supports all picker languages.
+                              // Change the app-wide UI locale only when a curated
+                              // offline dictionary exists for that language.
+                              final hasCuratedLocale =
+                                  AppLocalizations.supportedLocales.any(
+                                (locale) => locale.languageCode == language.code,
+                              );
+                              if (hasCuratedLocale) {
+                                unawaited(
+                                  context.read<LanguageProvider>().setLanguage(
+                                    language.code,
+                                  ),
+                                );
+                              }
                             }
                           },
                   ),
