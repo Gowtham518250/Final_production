@@ -2225,6 +2225,10 @@ class PriorityVoiceQueue {
   static const Duration _spokenMemory = Duration(hours: 6);
   static const String _kSpokenPrefs = 'pds_spoken_v1';
 
+  // Spoken payment IDs persist across app/service restarts.
+  static const Duration _spokenMemory = Duration(hours: 6);
+  static const String _kSpokenPrefs = 'pds_spoken_v1';
+
   void _markSpoken(String fp) {
     _spokenFps[fp] = DateTime.now().add(_spokenMemory);
     _spokenFps.removeWhere((_, exp) => DateTime.now().isAfter(exp));
@@ -2260,7 +2264,6 @@ class PriorityVoiceQueue {
       await prefs.setString(_kSpokenPrefs, jsonEncode(out));
     } catch (_) {}
   }
-
   void enqueue(PaymentEvent e, PaymentUiState ui) {
     if (!PdsConfig.isVoiceEnabled) return;
     if (e.isDuplicate || e.hasReferenceConflict) {
