@@ -274,7 +274,7 @@ class PaymentAnnouncementService {
 
   void speakSimple(String message, String language) {
     if (_config.volume <= 0) return;
-    final spokenKey = '$language|${message.trim()}';
+    final spokenKey = '$language|' + message.trim();
     final spokenAt = DateTime.now();
     if (_lastSimpleMessage == spokenKey &&
         _lastSimpleAt != null &&
