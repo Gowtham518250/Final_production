@@ -2,21 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/app_localizations.dart';
 import 'package:retail_mind/language_provider.dart';
 
+const supportedLanguageCodes = <String>{
+  'en',
+  'te',
+  'hi',
+  'ta',
+  'kn',
+  'ml',
+  'mr',
+  'gu',
+  'pa',
+  'bn',
+};
+
+
 void main() {
   test('all supported locales have the same dictionary keys', () {
-    const supportedLanguageCodes = <String>{
-      'en',
-      'te',
-      'hi',
-      'ta',
-      'kn',
-      'ml',
-      'mr',
-      'gu',
-      'pa',
-      'bn',
-    };
-
     expect(
       AppLocalizations.translations.keys.toSet(),
       equals(supportedLanguageCodes),
