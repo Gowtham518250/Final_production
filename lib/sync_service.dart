@@ -937,7 +937,8 @@ class SyncService {
           await SalesRestoreService.ensureFullHistoryRestored();
 
       // 3. Fetch a recent invoice page for older backends / failed full restores.
-      if (!fullHistoryRestored) try {
+      if (!fullHistoryRestored) {
+        try {
         final token = await SecureTokenStorage.getToken() ?? '';
         if (token.isNotEmpty) {
           final List<dynamic> allApiItems = [];
@@ -1325,12 +1326,13 @@ class SyncService {
             _refreshNotifier.add(null);
           }
         }
-      } catch (e) {
-        await ErrorLogHelper.logException(
-          e,
-          StackTrace.current,
-          context: 'SyncService.downloadSales',
-        );
+        } catch (e) {
+          await ErrorLogHelper.logException(
+            e,
+            StackTrace.current,
+            context: 'SyncService.downloadSales',
+          );
+        }
       }
 
       // Option B: always run one-time dedupe after cloud fetch
