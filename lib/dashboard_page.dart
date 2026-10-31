@@ -606,9 +606,11 @@ class _DashboardPageState extends State<DashboardPage>
 
       // Begin non-critical network and maintenance work only after first-screen
       // hydration and any required security gate have completed.
-      // Warm subscription entitlement data off the critical dashboard path so
+      // Warm owner feature entitlements off the critical dashboard path so
       // Online Store and AI Query route gates do not wait on first tap.
-      unawaited(RetailMindBillingService.prefetchCommonFeatureAccess());
+      if (!(scopedPrefsCheck ?? false)) {
+        unawaited(RetailMindBillingService.prefetchCommonFeatureAccess());
+      }
       unawaited(_loadDeferredDashboardData());
     });
 
