@@ -63,4 +63,31 @@ void main() {
       );
     });
   });
+    test('normalizes common Telugu ASR variants before scale parsing', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
+          'ఇండు కిలో పంచేదారా ఆరవే రూపాయలు',
+        ),
+        'రెండు కిలో పంచదార అరవై రూపాయలు',
+      );
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
+          'ఒక బిరియాని ఆయ్దు ఉందలు',
+        ),
+        'ఒక బిరియాని 500',
+      );
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
+          'ఒక బిరియాని రేణు ఉందలు',
+        ),
+        'ఒక బిరియాని 200',
+      );
+    });
+    test('preserves Renu as a name outside a price expression', () {
+      expect(
+        RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases('రేణు కిలో'),
+        'రేణు కిలో',
+      );
+    });
+
 }
