@@ -122,6 +122,7 @@ class RetailMindBillingService {
 
   static final Map<int, _FeatureAccessSnapshotCache> _featureAccessCache = {};
   static final Map<int, Future<Map<String, bool>>> _featureAccessInFlight = {};
+  static final Map<int, Map<String, Future<bool>>> _singleFeatureAccessInFlight = {};
 
   static String featureAccessPath(String featureCode) =>
       '/api/billing/feature-access/${Uri.encodeComponent(featureCode)}';
@@ -208,7 +209,16 @@ class RetailMindBillingService {
 
   static Future<void> prefetchCommonFeatureAccess() async {
     try {
-      await fetchFeatureAccessSnapshot();
+      final snapshot = await fetchFeatureAccessSnapshot();
+      if (snapshot.isEmpty) {
+        // Older backend deployments expose only the per-feature endpoint.
+        // Warm both decisions concurrently so the first screen tap is still
+        // served from memory while backend/frontend roll out independently.
+        await Future.wait([
+          _checkSingleFeatureAccess('online_orders'),
+          _checkSingleFeatureAccess('ai_queries'),
+        ]);
+      }
     } catch (error) {
       if (kDebugMode) {
         debugPrint('Feature entitlement prefetch deferred: $error');
@@ -230,9 +240,50 @@ class RetailMindBillingService {
     );
     final cachedDecision = snapshot[featureCode];
     if (cachedDecision != null) return cachedDecision;
+    return _checkSingleFeatureAccess(featureCode);
+  }
 
-    // Compatibility with a backend version that has only the single-feature
-    // route during a rolling deployment.
+  static Future<bool> _checkSingleFeatureAccess(String featureCode) async {
+    final ownerId = await _currentOwnerId();
+    if (ownerId == null) {
+      return _requestSingleFeatureAccess(featureCode, expectedOwnerId: null);
+    }
+
+    final cached = _featureAccessCache[ownerId];
+    if (cached != null &&
+        DateTime.now().difference(cached.fetchedAt) < featureAccessCacheTtl &&
+        cached.features.containsKey(featureCode)) {
+      return cached.features[featureCode]!;
+    }
+
+    final ownerRequests = _singleFeatureAccessInFlight.putIfAbsent(
+      ownerId,
+      () => <String, Future<bool>>{},
+    );
+    final existing = ownerRequests[featureCode];
+    if (existing != null) return existing;
+
+    final request = _requestSingleFeatureAccess(
+      featureCode,
+      expectedOwnerId: ownerId,
+    );
+    ownerRequests[featureCode] = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(ownerRequests[featureCode], request)) {
+        ownerRequests.remove(featureCode);
+      }
+      if (ownerRequests.isEmpty) {
+        _singleFeatureAccessInFlight.remove(ownerId);
+      }
+    }
+  }
+
+  static Future<bool> _requestSingleFeatureAccess(
+    String featureCode, {
+    required int? expectedOwnerId,
+  }) async {
     final response = await ApiClient.getJson(featureAccessPath(featureCode))
         .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
@@ -249,12 +300,12 @@ class RetailMindBillingService {
     }
 
     final allowed = body['allowed'] as bool;
-    final ownerId = await _currentOwnerId();
-    if (ownerId != null) {
-      final existing = _featureAccessCache[ownerId];
+    final currentOwnerId = await _currentOwnerId();
+    if (expectedOwnerId != null && currentOwnerId == expectedOwnerId) {
+      final existing = _featureAccessCache[expectedOwnerId];
       final features = <String, bool>{...?existing?.features};
       features[featureCode] = allowed;
-      _featureAccessCache[ownerId] = _FeatureAccessSnapshotCache(
+      _featureAccessCache[expectedOwnerId] = _FeatureAccessSnapshotCache(
         features: Map<String, bool>.unmodifiable(features),
         fetchedAt: DateTime.now(),
       );
