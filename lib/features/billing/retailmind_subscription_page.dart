@@ -186,6 +186,25 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
     },
   );
 
+  Future<void> _cancelCurrentSubscription(int id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel subscription?'),
+        content: const Text('Cashfree will be asked to stop future renewals. Your paid access should remain until the current paid period ends.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep plan')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await RetailMindBillingService.cancelSubscription(id);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cancellation request sent to Cashfree.')));
+      await _refresh();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
+
   Widget _currentSubscriptionCard() => FutureBuilder<Map<String, dynamic>>(
     future: _subscriptionFuture,
     builder: (context, snapshot) {
@@ -197,6 +216,8 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
         Row(children: [const Icon(Icons.verified_user_outlined, color: Color(0xFF4454C7)), const SizedBox(width: 9), Text('Current subscription', style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: const Color(0xFF172554))), const Spacer(), Text(status.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF596579)))]),
         const SizedBox(height: 8), Text(plan, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800)),
         if (renewal != null) Text('Next renewal: $renewal', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+        if (status.toUpperCase() == 'ACTIVE' && data['id'] is num && data['cancel_at_period_end'] != true)
+          Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () => _cancelCurrentSubscription((data['id'] as num).toInt()), child: const Text('Cancel renewal'))),
         if (snapshot.hasError) const Text('Subscription status is unavailable.', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
       ]));
     },
