@@ -829,6 +829,12 @@ class LocalStorageService {
       'all_sales',
       typedSales.map((sale) => sale.toJson()).toList(),
     );
+    if (userId != null) {
+      await _updateFullHistoryRestoreCounts(
+        userId,
+        salesCount: typedSales.length,
+      );
+    }
     if (kDebugMode) {
       debugPrint(
         '💾 [LocalStorage] Replaced sales with ${typedSales.length} deduplicated records for user: $userId',
@@ -840,6 +846,7 @@ class LocalStorageService {
   /// Use this only when the caller has already reconciled stable identities.
   static Future<void> replaceSalesCanonical(List<dynamic> salesHistory) async {
     if (!await _hasValidUserId()) return;
+    final userId = await _getUserId();
     final box = await _getBox(_salesBoxBase, encrypted: true);
     final typedSales = salesHistory.whereType<Map>().map<StoredSale>((sale) {
       return StoredSale.fromJson(Map<String, dynamic>.from(sale));
@@ -848,6 +855,29 @@ class LocalStorageService {
       'all_sales',
       typedSales.map((sale) => sale.toJson()).toList(),
     );
+    if (userId != null) {
+      await _updateFullHistoryRestoreCounts(
+        userId,
+        salesCount: typedSales.length,
+      );
+    }
+  }
+
+  static Future<void> _updateFullHistoryRestoreCounts(
+    int userId, {
+    int? salesCount,
+    int? invoiceCount,
+  }) async {
+    if (userId <= 0 || (salesCount == null && invoiceCount == null)) return;
+    final prefs = await SharedPreferences.getInstance();
+    final markerKey = 'sales_history_full_restore_v1_$userId';
+    if (!(prefs.getBool(markerKey) ?? false)) return;
+    if (salesCount != null) {
+      await prefs.setInt('${markerKey}_sales_count', salesCount);
+    }
+    if (invoiceCount != null) {
+      await prefs.setInt('${markerKey}_invoice_count', invoiceCount);
+    }
   }
 
   /// Read the persisted sales record count without deserializing the full
@@ -1021,6 +1051,13 @@ class LocalStorageService {
       ...invoices,
     ]);
     await box.put('manual_invoices', dedupedInvoices);
+    final userId = await _getUserId();
+    if (userId != null) {
+      await _updateFullHistoryRestoreCounts(
+        userId,
+        invoiceCount: dedupedInvoices.length,
+      );
+    }
 
     if (kDebugMode) {
       debugPrint(
@@ -1039,6 +1076,13 @@ class LocalStorageService {
     final box = await _getBox(_invoicesBoxBase);
     final canonical = InvoiceDedupHelper.canonicalizeInvoices(invoices);
     await box.put('manual_invoices', canonical);
+    final userId = await _getUserId();
+    if (userId != null) {
+      await _updateFullHistoryRestoreCounts(
+        userId,
+        invoiceCount: canonical.length,
+      );
+    }
   }
 
   static Future<List<dynamic>> loadLocalInvoices() async {
