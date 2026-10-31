@@ -24,7 +24,7 @@ class AiUsageSnapshot {
     final used = _asInt(raw['used'] ?? raw['queries_used'], 0);
     final remaining = _asInt(raw['remaining'] ?? raw['queries_remaining'], (limit - used).clamp(0, limit));
     final resetRaw = raw['resets_at'] ?? raw['reset_at'] ?? raw['period_end'];
-    return AiUsageSnapshot(limit: limit, used: used, remaining: remaining.clamp(0, limit), resetsAt: resetRaw == null ? null : DateTime.tryParse(resetRaw.toString()), planCode: json['plan_code']?.toString() ?? raw['plan_code']?.toString(), planName: json['plan_name']?.toString() ?? raw['plan_name']?.toString(), subscriptionStatus: json['subscription_status']?.toString() ?? raw['subscription_status']?.toString());
+    return AiUsageSnapshot(limit: limit, used: used, remaining: remaining < 0 ? 0 : (remaining > limit ? limit : remaining), resetsAt: resetRaw == null ? null : DateTime.tryParse(resetRaw.toString()), planCode: json['plan_code']?.toString() ?? raw['plan_code']?.toString(), planName: json['plan_name']?.toString() ?? raw['plan_name']?.toString(), subscriptionStatus: json['subscription_status']?.toString() ?? raw['subscription_status']?.toString());
   }
 
   static int _asInt(dynamic value, int fallback) => value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
@@ -57,7 +57,7 @@ class RetailMindSubscriptionPlan {
     final yearlyRaw = json['yearly_amount_paise'] ?? 0;
     final monthly = monthlyRaw is num ? monthlyRaw.round() : int.tryParse(monthlyRaw.toString()) ?? 0;
     final yearly = yearlyRaw is num ? yearlyRaw.round() : int.tryParse(yearlyRaw.toString()) ?? 0;
-    return RetailMindSubscriptionPlan(code: (json['plan_code'] ?? json['code'] ?? json['id'] ?? '').toString(), name: (json['name'] ?? json['display_name'] ?? 'Retail Mind Plan').toString(), amountPaise: monthly > 0 ? monthly : (minor ? amount.round() : (amount * 100).round()), monthlyAmountPaise: monthly, yearlyAmountPaise: yearly, currency: (json['currency'] ?? 'INR').toString(), interval: (json['billing_interval'] ?? json['interval'] ?? 'month').toString(), dailyAiQueryLimit: _asInt(json['daily_ai_query_limit'] ?? json['ai_queries_per_day'] ?? json['daily_query_limit'], 7), features: features is List ? features.map((value) => value.toString()).toList() : const [], recommended: json['recommended'] == true || json['is_popular'] == true);
+    return RetailMindSubscriptionPlan(code: (json['plan_code'] ?? json['code'] ?? json['id'] ?? '').toString(), name: (json['name'] ?? json['display_name'] ?? 'Retail Mind Plan').toString(), amountPaise: monthly > 0 ? monthly : (minor ? amount.round() : (amount * 100).round()), monthlyAmountPaise: monthly, yearlyAmountPaise: yearly, currency: (json['currency'] ?? 'INR').toString(), interval: (json['billing_interval'] ?? json['interval'] ?? 'month').toString(), dailyAiQueryLimit: _asInt(json['daily_ai_query_limit'] ?? json['ai_queries_per_day'] ?? json['daily_query_limit'], 0), features: features is List ? features.map((value) => value.toString()).toList() : const [], recommended: json['recommended'] == true || json['is_popular'] == true);
   }
 
   static int _asInt(dynamic value, int fallback) => value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
