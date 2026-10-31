@@ -174,7 +174,7 @@ class RetailMindBillingService {
     if (response.statusCode != 200) {
       throw RetailMindBillingException.fromResponse(
         response,
-        fallback: 'Unable to verify plan access (\${response.statusCode}).',
+        fallback: 'Unable to verify plan access (${response.statusCode}).',
       );
     }
     final body = _decode(response);
