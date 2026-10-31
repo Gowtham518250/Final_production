@@ -37,8 +37,9 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
     _accessFuture = RetailMindFeatureAccess.allows(widget.featureCode);
   }
 
-  void _retry() {
-    unawaited(RetailMindBillingService.invalidateFeatureAccessCache());
+  Future<void> _retry() async {
+    await RetailMindBillingService.invalidateFeatureAccessCache();
+    if (!mounted) return;
     setState(_loadAccess);
   }
 
