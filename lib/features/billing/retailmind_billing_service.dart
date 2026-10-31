@@ -5,6 +5,53 @@ import 'package:http/http.dart' as http;
 
 import '../../../api_client.dart';
 
+
+/// Structured API error. FastAPI may place a string or an object in "detail".
+class RetailMindBillingException implements Exception {
+  final int statusCode;
+  final String code;
+  final String message;
+
+  const RetailMindBillingException({
+    required this.statusCode,
+    required this.code,
+    required this.message,
+  });
+
+  factory RetailMindBillingException.fromResponse(
+    http.Response response, {
+    required String fallback,
+  }) {
+    Map<String, dynamic> body = const {};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) body = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Keep the endpoint-specific fallback for non-JSON proxy responses.
+    }
+
+    final detail = body['detail'];
+    final detailMap = detail is Map
+        ? Map<String, dynamic>.from(detail)
+        : const <String, dynamic>{};
+    final rawCode = body['code'] ?? detailMap['code'];
+    final rawMessage = detailMap['message'] ??
+        detailMap['detail'] ??
+        (detail is String ? detail : null) ??
+        body['message'];
+    final message = rawMessage?.toString().trim();
+
+    return RetailMindBillingException(
+      statusCode: response.statusCode,
+      code: rawCode?.toString() ?? '',
+      message: message == null || message.isEmpty ? fallback : message,
+    );
+  }
+
+  @override
+  String toString() => message;
+}
+
 /// Server-authoritative snapshot of the shop's daily AI allowance.
 @immutable
 class AiUsageSnapshot {
@@ -69,6 +116,8 @@ class RetailMindBillingService {
   static const currentPath = '/api/billing/subscriptions/current';
   static const usagePath = '/api/billing/usage';
   static const createSubscriptionPath = '/api/billing/subscriptions';
+  static String featureAccessPath(String featureCode) =>
+      '/api/billing/feature-access/${Uri.encodeComponent(featureCode)}';
 
   static Map<String, dynamic> _decode(http.Response response) {
     final value = jsonDecode(response.body);
@@ -78,7 +127,7 @@ class RetailMindBillingService {
 
   static Future<List<RetailMindSubscriptionPlan>> fetchPlans() async {
     final response = await ApiClient.getJson(plansPath).timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) throw Exception('Unable to load subscription plans (${response.statusCode}).');
+    if (response.statusCode != 200) throw RetailMindBillingException.fromResponse(response, fallback: 'Unable to load subscription plans (${response.statusCode}).');
     final body = _decode(response);
     final raw = body['plans'] ?? body['items'] ?? body['data'];
     if (raw is! List) return const [];
@@ -87,33 +136,52 @@ class RetailMindBillingService {
 
   static Future<AiUsageSnapshot> fetchUsage() async {
     final response = await ApiClient.getJson(usagePath).timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) throw Exception('Unable to load AI usage (${response.statusCode}).');
+    if (response.statusCode != 200) throw RetailMindBillingException.fromResponse(response, fallback: 'Unable to load AI usage (${response.statusCode}).');
     return AiUsageSnapshot.fromJson(_decode(response));
   }
 
   static Future<Map<String, dynamic>> fetchCurrentSubscription() async {
     final response = await ApiClient.getJson(currentPath).timeout(const Duration(seconds: 15));
     if (response.statusCode == 404) return const {};
-    if (response.statusCode != 200) throw Exception('Unable to load subscription (${response.statusCode}).');
+    if (response.statusCode != 200) throw RetailMindBillingException.fromResponse(response, fallback: 'Unable to load subscription (${response.statusCode}).');
     return _decode(response);
   }
 
   static Future<void> cancelSubscription(int subscriptionId) async {
     final response = await ApiClient.postJson('/api/billing/subscriptions/$subscriptionId/cancel', const {}).timeout(const Duration(seconds: 25));
     if (response.statusCode != 200 && response.statusCode != 201) {
-      var message = 'Unable to cancel subscription (${response.statusCode}).';
-      try { final body = _decode(response); message = (body['detail'] ?? body['message'] ?? message).toString(); } catch (_) {}
-      throw Exception(message);
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to cancel subscription (${response.statusCode}).',
+      );
     }
   }
 
   static Future<Map<String, dynamic>> createSubscription(String planCode, {String billingInterval = 'MONTHLY'}) async {
     final response = await ApiClient.postJson(createSubscriptionPath, {'plan_code': planCode, 'billing_interval': billingInterval}).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200 && response.statusCode != 201) {
-      var message = 'Unable to start subscription (${response.statusCode}).';
-      try { final body = _decode(response); message = (body['detail'] ?? body['message'] ?? message).toString(); } catch (_) {}
-      throw Exception(message);
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to start subscription (${response.statusCode}).',
+      );
     }
     return _decode(response);
   }
+
+  static Future<bool> checkFeatureAccess(String featureCode) async {
+    final response = await ApiClient.getJson(featureAccessPath(featureCode))
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to verify plan access (\${response.statusCode}).',
+      );
+    }
+    final body = _decode(response);
+    if (body['allowed'] is! bool) {
+      throw const FormatException('The billing service returned an invalid access response.');
+    }
+    return body['allowed'] as bool;
+  }
+
 }
