@@ -2429,11 +2429,14 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       if (item.name.trim().isEmpty ||
           !item.qty.isFinite ||
           item.qty <= 0 ||
-          !item.price.isFinite ||
-          item.price <= 0) {
+          !item.price.isFinite) {
         rejectedCount++;
         continue;
       }
+      // A zero price means "not detected yet", not an invalid product.
+      // Keep the reviewed line so SalesEntryPage can request a manual price.
+      // The final invoice validation still blocks saving until a positive
+      // selling price has been entered.
 
       // Only catalogue-backed products may carry a product ID or deduct stock.
       // A cashier-reviewed, positively-priced custom line is nevertheless a
@@ -2444,12 +2447,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       if (knownProduct == null) {
         final validCustomLine = !item.catalogMatched &&
             item.productId == null &&
-            (item.priceSource == 'spoken' || item.priceSource == 'manual') &&
+            item.isConfirmed &&
             item.name.trim().isNotEmpty &&
             item.qty.isFinite &&
             item.qty > 0 &&
-            item.price.isFinite &&
-            item.price > 0;
+            item.price.isFinite;
         if (!validCustomLine) {
           rejectedCount++;
           final warning = item.price <= 0
@@ -2464,7 +2466,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             name: item.name.trim(),
             qty: item.qty,
             unit: item.unit.trim().isEmpty ? 'pc' : item.unit.trim(),
-            price: item.price,
+            price: item.price > 0 ? item.price : 0,
             confidence: item.confidence,
             catalogMatched: false,
             productId: null,
@@ -2506,10 +2508,12 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         itemPrice: item.price,
         cataloguePrice: catalogPrice,
       );
-      if (!finalPrice.isFinite || finalPrice <= 0) {
+      if (!finalPrice.isFinite) {
         rejectedCount++;
         continue;
       }
+      // Keep zero-price catalogue matches too. The bill editor will collect
+      // the shop's selling price before invoice confirmation.
 
       final productId = (knownProduct['id'] ??
               knownProduct['product_id'] ??
