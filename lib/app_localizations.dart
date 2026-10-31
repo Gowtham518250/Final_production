@@ -4629,16 +4629,8 @@ class AppLocalizations {
   // ten primary locales; other supported locales use LiveTranslatedText's
   // bounded dynamic translation fallback.
   static const List<Locale> supportedLocales = [
-    Locale('en'),
-    Locale('te'),
-    Locale('hi'),
-    Locale('ta'),
-    Locale('kn'),
-    Locale('ml'),
-    Locale('mr'),
-    Locale('gu'),
-    Locale('pa'),
-    Locale('bn'),
+    Locale('en'), Locale('te'), Locale('hi'), Locale('ta'), Locale('kn'),
+    Locale('ml'), Locale('mr'), Locale('gu'), Locale('pa'), Locale('bn'),
   ];
 
   static const LocalizationsDelegate<AppLocalizations> delegate =
