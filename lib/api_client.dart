@@ -131,6 +131,16 @@ class ApiClient {
   static const String askQueryTranslateAnswerEndpoint =
       '/askquery/translate-answer';
 
+  // Retail Mind subscription and AI daily quota APIs.
+  static const String billingPlansEndpoint = '/api/billing/plans';
+  static const String billingCurrentSubscriptionEndpoint =
+      '/api/billing/subscriptions/current';
+  static const String billingUsageEndpoint = '/api/billing/usage';
+  static const String billingEntitlementsEndpoint =
+      '/api/billing/entitlements';
+  static const String billingCreateSubscriptionEndpoint =
+      '/api/billing/subscriptions';
+
   // Inventory
   static const String inventoryPrefix = '/api/inventory';
   static const String inventoryProducts = '/api/inventory/products';
