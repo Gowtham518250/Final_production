@@ -75,7 +75,14 @@ class _LanguageSwitcherState extends State<LanguageSwitcher> {
 
   Future<void> _loadSavedLanguage() async {
     final prefs = await SharedPreferences.getInstance();
-    _currentLanguage = prefs.getString('app_language') ?? 'en';
+    final languageProvider = context.read<LanguageProvider>();
+    await languageProvider.initialized;
+    if (!mounted) return;
+
+    // LanguageProvider is the single source of truth for both the UI locale
+    // and speech output. Keep app_language only as a compatibility mirror.
+    _currentLanguage = languageProvider.locale.languageCode;
+    await prefs.setString('app_language', _currentLanguage);
     if (mounted) setState(() {});
   }
 
@@ -85,26 +92,26 @@ class _LanguageSwitcherState extends State<LanguageSwitcher> {
     setState(() => _isChanging = true);
     HapticFeedback.lightImpact();
 
-    // Save language preference
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('app_language', languageCode);
+    try {
+      // Update the provider used by localization and TTS before updating the
+      // compatibility preference. This keeps future announcements in sync.
+      await context.read<LanguageProvider>().setLanguage(languageCode);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('app_language', languageCode);
+      if (!mounted) return;
 
-    // Simulate language change delay for smooth transition
-    await Future.delayed(const Duration(milliseconds: 300));
+      setState(() => _currentLanguage = languageCode);
+      widget.onLanguageChanged?.call(languageCode);
 
-    _currentLanguage = languageCode;
-    setState(() => _isChanging = false);
-
-    // Notify parent
-    widget.onLanguageChanged?.call(languageCode);
-
-    // Announce to screen readers
-    if (mounted) {
       final langInfo = _languages[languageCode];
       AccessibilityHelper.announce(
         'Language changed to ${langInfo?.nativeName ?? languageCode}',
         context,
       );
+    } finally {
+      if (mounted && _isChanging) {
+        setState(() => _isChanging = false);
+      }
     }
   }
 
