@@ -360,7 +360,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }
 
   Widget _buildBrandHeader() {
-    final localizations = AppLocalizations.of(context);
     return SizedBox(
       height: 185,
       child: Stack(
