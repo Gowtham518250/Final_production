@@ -2222,9 +2222,6 @@ class PriorityVoiceQueue {
     return true;
   }
 
-  static const Duration _spokenMemory = Duration(hours: 6);
-  static const String _kSpokenPrefs = 'pds_spoken_v1';
-
   // Spoken payment IDs persist across app/service restarts.
   static const Duration _spokenMemory = Duration(hours: 6);
   static const String _kSpokenPrefs = 'pds_spoken_v1';
