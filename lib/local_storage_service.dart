@@ -850,8 +850,31 @@ class LocalStorageService {
     );
   }
 
+  /// Read the persisted sales record count without deserializing the full
+  /// history. Used only to validate the one-time cloud-restore marker.
+  static Future<int> getSalesCount() async {
+    final userId = await _getUserId();
+    if (userId == null || userId <= 0) return 0;
+    final box = await _getBox(
+      _salesBoxBase,
+      encrypted: true,
+      authenticatedUserId: userId,
+    );
+    final rows = box.get('all_sales', defaultValue: const <dynamic>[]);
+    return rows is Iterable ? rows.length : 0;
+  }
+
+  /// Read invoice-ledger count without canonicalizing or materializing every
+  /// record, so opening Dashboard/Khata does not duplicate large collections.
+  static Future<int> getLocalInvoiceCount() async {
+    if (!await _hasValidUserId()) return 0;
+    final box = await _getBox(_invoicesBoxBase);
+    final rows = box.get('manual_invoices', defaultValue: const <dynamic>[]);
+    return rows is Iterable ? rows.length : 0;
+  }
+
   static Future<List<dynamic>> loadSales() async {
-    // Read the user ID once here rather than validating it and then reading it
+    // Read the user ID once here rather than validating it and then reading the
     // again just to log the result. _getBox still performs its own access check.
     final userId = await _getUserId();
     if (userId == null || userId <= 0) {
