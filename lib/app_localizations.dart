@@ -4624,17 +4624,17 @@ class AppLocalizations {
       translations['en']?['backup'] ??
       'Backup & Restore';
 
+  // Every language offered by the voice-language picker is also a valid
+  // application locale. Curated offline dictionaries currently cover the
+  // ten primary locales; other supported locales use LiveTranslatedText's
+  // bounded dynamic translation fallback.
   static const List<Locale> supportedLocales = [
-    Locale('en'),
-    Locale('te'),
-    Locale('hi'),
-    Locale('ta'),
-    Locale('kn'),
-    Locale('ml'),
-    Locale('mr'),
-    Locale('gu'),
-    Locale('pa'),
-    Locale('bn'),
+    Locale('en'), Locale('te'), Locale('hi'), Locale('ta'),
+    Locale('kn'), Locale('ml'), Locale('bn'), Locale('mr'),
+    Locale('gu'), Locale('pa'), Locale('or'), Locale('as'),
+    Locale('brx'), Locale('doi'), Locale('ks'), Locale('kok'),
+    Locale('mai'), Locale('mni'), Locale('ne'), Locale('sa'),
+    Locale('sat'), Locale('sd'), Locale('ur'),
   ];
 
   static const LocalizationsDelegate<AppLocalizations> delegate =
@@ -4647,18 +4647,9 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) {
-    return [
-      'en',
-      'te',
-      'hi',
-      'ta',
-      'kn',
-      'ml',
-      'mr',
-      'gu',
-      'pa',
-      'bn',
-    ].contains(locale.languageCode);
+    return supportedLocales.any(
+      (supported) => supported.languageCode == locale.languageCode,
+    );
   }
 
   @override
