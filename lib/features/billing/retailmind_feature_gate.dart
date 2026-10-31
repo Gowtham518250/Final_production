@@ -38,6 +38,7 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
   }
 
   void _retry() {
+    unawaited(RetailMindBillingService.invalidateFeatureAccessCache());
     setState(_loadAccess);
   }
 
