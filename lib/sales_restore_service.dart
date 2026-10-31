@@ -605,6 +605,10 @@ class SalesRestoreService {
       if (kDebugMode) debugPrint('💾 Saved ${salesHistory.length} sales and ${localInvoicesList.length} invoices (merged restored with local)');
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to save restored sales/invoices: $e');
+      // A restore is not complete until both the sales mirror and invoice
+      // ledger have been persisted. Propagate this so the per-user completion
+      // marker is not written for a partial restore.
+      rethrow;
     }
   }
   
