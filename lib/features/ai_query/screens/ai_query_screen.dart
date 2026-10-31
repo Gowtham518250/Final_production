@@ -21,6 +21,7 @@ import '../widgets/suggestion_chip.dart';
 import 'ai_query_history_screen.dart';
 import 'voice_language_option.dart';
 import '../../../language_provider.dart';
+import '../../billing/retailmind_billing_service.dart';
 
 /// Ask Retail Mind: text or voice in an Indian language, followed by the
 /// existing authenticated RAG -> SQL -> result pipeline.
@@ -57,6 +58,8 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
   );
   Timer? _recordTimer;
   int _recordSeconds = 0;
+  AiUsageSnapshot? _aiUsage;
+  bool _usageLoading = false;
 
   @override
   void didChangeDependencies() {
@@ -79,6 +82,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
   void initState() {
     super.initState();
     _configureAnswerTts();
+    _refreshAiUsage();
     if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
       _queryController.text = widget.initialQuery!.trim();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -104,6 +108,49 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
     );
     if (!mounted || selectedQuery == null || selectedQuery.trim().isEmpty) return;
     _executeQuery(selectedQuery);
+  }
+
+  Future<void> _refreshAiUsage() async {
+    if (_usageLoading) return;
+    _usageLoading = true;
+    try {
+      final snapshot = await RetailMindBillingService.fetchUsage();
+      if (mounted) setState(() => _aiUsage = snapshot);
+    } catch (error) {
+      if (kDebugMode) debugPrint('AI usage refresh unavailable: $error');
+    } finally {
+      _usageLoading = false;
+    }
+  }
+
+  Widget _buildDailyAiUsage() {
+    final usage = _aiUsage;
+    final limit = usage?.limit ?? 7;
+    final used = usage?.used ?? 0;
+    final remaining = usage?.remaining ?? limit;
+    final progress = limit <= 0 ? 0.0 : (used / limit).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xFFDDE5F4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.auto_awesome_rounded, color: Color(0xFF635BDB), size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: LiveTranslatedText('Daily AI queries', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF1F2D50)))),
+          Text('$remaining left', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: remaining == 0 ? const Color(0xFFDC2626) : const Color(0xFF168252))),
+        ]),
+        const SizedBox(height: 9),
+        ClipRRect(borderRadius: BorderRadius.circular(8), child: LinearProgressIndicator(value: progress, minHeight: 7, backgroundColor: const Color(0xFFE8ECF6), valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6558D9)))),
+        const SizedBox(height: 6),
+        Text('$used of $limit successful questions used today', style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500)),
+        if (usage?.planName != null && usage!.planName!.isNotEmpty)
+          Text('Plan: ${usage.planName}', style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+      ]),
+    );
   }
 
   Future<void> _executeQuery(
@@ -132,6 +179,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
         cleanQuery,
         languageCode: requestLanguageCode,
       );
+      if (response.isSuccess) unawaited(_refreshAiUsage());
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -557,6 +605,8 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
       children: [
         _buildHero(),
         const SizedBox(height: 16),
+        _buildDailyAiUsage(),
+        const SizedBox(height: 12),
         _buildLanguagePicker(),
         const SizedBox(height: 14),
         _buildPipelineHint(),
