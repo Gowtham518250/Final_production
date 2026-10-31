@@ -619,6 +619,13 @@ class _DashboardPageState extends State<DashboardPage>
         }
       }
 
+      // Warm owner feature entitlements after the dashboard is visible. The
+      // Online Store and AI Query gates can then use the short-lived snapshot
+      // instead of making the owner wait on a network request after every tap.
+      if (!(scopedPrefsCheck ?? false)) {
+        unawaited(RetailMindBillingService.prefetchCommonFeatureAccess());
+      }
+
       // Begin non-critical network and maintenance work only after first-screen
       // hydration and any required security gate have completed.
       unawaited(_loadDeferredDashboardData());
