@@ -1126,6 +1126,13 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
                                 _selectedLanguage = language;
                                 _inputLanguageCode = language.code;
                               });
+                              // The selector controls both speech language and
+                              // the visible app locale on this screen.
+                              unawaited(
+                                context.read<LanguageProvider>().setLanguage(
+                                  language.code,
+                                ),
+                              );
                             }
                           },
                   ),
