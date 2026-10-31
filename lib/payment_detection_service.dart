@@ -1991,6 +1991,8 @@ class _RecentVoicePayment {
 
 class PriorityVoiceQueue {
   static const Duration _crossSourceEchoWindow = Duration(minutes: 12);
+  static const Duration _echoNearWindow = Duration(seconds: 75);
+  static const Duration _echoFarWindow = Duration(seconds: 150);
   // Truecaller can update one active notification's text as its service
   // enriches it. For unreferenced candidates, suppress only the duplicate
   // sound when the same payer or receiving account also matches. The event
@@ -2061,8 +2063,7 @@ class PriorityVoiceQueue {
     _echoClaims.removeWhere((id, _) => !liveVoiceEventIds.contains(id));
     final currentReference = event.normalizedReferenceId;
     final currentChannel = PaymentDetectionService._channelKey(event);
-    PaymentEvent? uniqueEchoCandidate;
-    var ambiguousCandidates = false;
+    final echoCandidates = <PaymentEvent>[];
 
     for (final previous in _recentPayments) {
       final old = previous.event;
@@ -2172,21 +2173,32 @@ class PriorityVoiceQueue {
 
       // More than one plausible same-value event is ambiguous; preserve the
       // current announcement rather than suppress a possibly distinct payment.
-      if (uniqueEchoCandidate != null &&
-          uniqueEchoCandidate.id != old.id) {
-        ambiguousCandidates = true;
-        break;
-      }
-      uniqueEchoCandidate = old;
+      echoCandidates.add(old);
     }
 
-    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
-      (_echoClaims[uniqueEchoCandidate.id] ??= <String>{})
-          .add(currentChannel);
+    PaymentEvent? echoOf;
+    if (echoCandidates.length == 1) {
+      echoOf = echoCandidates.single;
+    } else if (echoCandidates.length > 1) {
+      final byAge = [...echoCandidates]..sort(
+          (a, b) => event.timestamp
+              .difference(a.timestamp)
+              .abs()
+              .compareTo(event.timestamp.difference(b.timestamp).abs()),
+        );
+      final nearest = event.timestamp.difference(byAge[0].timestamp).abs();
+      final next = event.timestamp.difference(byAge[1].timestamp).abs();
+      if (nearest <= _echoNearWindow && next > _echoFarWindow) {
+        echoOf = byAge[0];
+      }
+    }
+
+    if (echoOf != null) {
+      (_echoClaims[echoOf.id] ??= <String>{}).add(currentChannel);
       PdsLogger.d('VOICE', 'Unique cross-channel echo suppressed');
       return true;
     }
-    if (ambiguousCandidates) {
+    if (echoCandidates.length > 1) {
       PdsLogger.d('VOICE', 'Ambiguous cross-channel match kept as separate');
     }
     return false;
@@ -2210,13 +2222,45 @@ class PriorityVoiceQueue {
     return true;
   }
 
+  // Spoken payment IDs persist across app/service restarts.
+  static const Duration _spokenMemory = Duration(hours: 6);
+  static const String _kSpokenPrefs = 'pds_spoken_v1';
+
   void _markSpoken(String fp) {
-    // Expire after 5 minutes — same as the fingerprint time bucket
-    _spokenFps[fp] = DateTime.now().add(const Duration(minutes: 5));
-    // Cleanup old entries to avoid memory growth
+    _spokenFps[fp] = DateTime.now().add(_spokenMemory);
     _spokenFps.removeWhere((_, exp) => DateTime.now().isAfter(exp));
+    unawaited(_persistSpoken());
   }
 
+  Future<void> restoreSpoken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final raw = prefs.getString(_kSpokenPrefs);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final now = DateTime.now();
+      decoded.forEach((fp, iso) {
+        final expiry = DateTime.tryParse(iso as String);
+        if (expiry != null && expiry.isAfter(now)) {
+          final current = _spokenFps[fp];
+          if (current == null || expiry.isAfter(current)) _spokenFps[fp] = expiry;
+        }
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _persistSpoken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      final out = <String, String>{};
+      _spokenFps.forEach((fp, exp) {
+        if (exp.isAfter(now)) out[fp] = exp.toIso8601String();
+      });
+      await prefs.setString(_kSpokenPrefs, jsonEncode(out));
+    } catch (_) {}
+  }
   void enqueue(PaymentEvent e, PaymentUiState ui) {
     if (!PdsConfig.isVoiceEnabled) return;
     if (e.isDuplicate || e.hasReferenceConflict) {
@@ -2240,12 +2284,19 @@ class PriorityVoiceQueue {
     // identified per event: the detection layer (_emit) already pairs echoes
     // one-to-one, so a second Rs 5 from the same customer must still be
     // announced instead of being swallowed by an amount+5-minute-slot bucket.
+    final sourceIdentity = e.sourceEventFingerprint;
     final baseFingerprint = e.normalizedReferenceId != null
         ? e.voiceFingerprint
-        : 'voice_event_${e.id}';
-    final fingerprint = e.isMerchantConfirmed
-        ? '${baseFingerprint}_merchant_confirmed'
-        : baseFingerprint;
+        : (sourceIdentity != null
+              ? 'voice_${sourceIdentity}'
+              : 'voice_event_${e.id}');
+    final fingerprint = baseFingerprint;
+    final postedAt = e.sourceTimestamp;
+    if (postedAt != null &&
+        DateTime.now().difference(postedAt) > _spokenMemory) {
+      PdsLogger.t('DROP', 'reason=voice_stale_notification');
+      return;
+    }
     final repeatedFingerprint = _isAlreadySpoken(fingerprint);
     final crossSourceEcho = _isRecentCrossSourceEcho(e);
     if (repeatedFingerprint || crossSourceEcho) {
@@ -3837,6 +3888,7 @@ class PaymentDetectionService {
     _voice.getLanguage = () => _voiceLanguage;
 
     await PdsStateStore.loadDedup(_dedupStore);
+    await _voice.restoreSpoken();
     if (persistedPaymentHistory.isNotEmpty) {
       await syncDedupWindowsFromPaymentHistory(persistedPaymentHistory);
     }
@@ -5507,8 +5559,7 @@ class PaymentDetectionService {
     final currentReference = event.normalizedReferenceId;
     final currentText = _echoText(event.rawText);
     final currentIsSms = _eventOrigin(event.detectionSource).contains('sms');
-    PaymentEvent? uniqueEchoCandidate;
-    var ambiguousCandidates = false;
+    final echoCandidates = <PaymentEvent>[];
 
     for (final old in _recentEmittedPayments) {
       if (old.isMerchantConfirmed ||
@@ -5601,20 +5652,33 @@ class PaymentDetectionService {
 
       // If several earlier payments could explain this signal, the match is
       // ambiguous. Keep the event instead of hiding a potentially real payment.
-      if (uniqueEchoCandidate != null &&
-          uniqueEchoCandidate.id != old.id) {
-        ambiguousCandidates = true;
-        break;
-      }
-      uniqueEchoCandidate = old;
+      echoCandidates.add(old);
     }
 
-    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
-      (_echoClaims[uniqueEchoCandidate.id] ??= <String>{}).add(channel);
+    PaymentEvent? echoOf;
+    if (echoCandidates.length == 1) {
+      echoOf = echoCandidates.single;
+    } else if (echoCandidates.length > 1) {
+      final byAge = [...echoCandidates]..sort(
+          (a, b) => event.timestamp
+              .difference(a.timestamp)
+              .abs()
+              .compareTo(event.timestamp.difference(b.timestamp).abs()),
+        );
+      final nearest = event.timestamp.difference(byAge[0].timestamp).abs();
+      final next = event.timestamp.difference(byAge[1].timestamp).abs();
+      if (nearest <= PriorityVoiceQueue._echoNearWindow &&
+          next > PriorityVoiceQueue._echoFarWindow) {
+        echoOf = byAge[0];
+      }
+    }
+
+    if (echoOf != null) {
+      (_echoClaims[echoOf.id] ??= <String>{}).add(channel);
       PdsLogger.t('DROP', 'reason=unique_echo_paired');
       return true;
     }
-    if (ambiguousCandidates) {
+    if (echoCandidates.length > 1) {
       PdsLogger.t(
         'KEEP',
         'reason=ambiguous_cross_source_match; preserving distinct payment candidate',

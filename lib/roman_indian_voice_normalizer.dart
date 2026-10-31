@@ -13,7 +13,40 @@
 // existing STT, NLP, catalog matching, confidence, or billing validation.
 // =============================================================================
 
+
 class RomanIndianVoiceNormalizer {
+  static const Map<String, String> _teluguAsrVariants = <String, String>{
+    'ఇండు': 'రెండు', 'రెండూ': 'రెండు', 'రేండు': 'రెండు', 'రేణ్డు': 'రెండు',
+    'మూడూ': 'మూడు', 'నాల్గు': 'నాలుగు', 'నాలుగూ': 'నాలుగు',
+    'ఆయ్దు': 'ఐదు', 'అయ్దు': 'ఐదు', 'ఐదూ': 'ఐదు', 'ఆయిదు': 'ఐదు',
+    'ఆరవే': 'అరవై', 'అరవయ్': 'అరవై', 'అరవయి': 'అరవై', 'ఆరవై': 'అరవై',
+    'యాభయ్': 'యాభై', 'యాభయి': 'యాభై', 'డెబ్భై': 'డెబ్బై',
+    'ఉందలు': 'వందలు', 'ఒందలు': 'వందలు', 'వందాలు': 'వందలు',
+    'వందులు': 'వందలు', 'వందలూ': 'వందలు', 'వంద్లు': 'వందలు',
+    'పంచేదారా': 'పంచదార', 'పంచేదార': 'పంచదార', 'పంచదారా': 'పంచదార',
+    'పంచదరా': 'పంచదార', 'పంచదర': 'పంచదార',
+    'నూనే': 'నూనె', 'నూనై': 'నూనె',
+    'బిర్యాని': 'బిరియాని', 'బిర్యానీ': 'బిరియాని', 'బిరియానీ': 'బిరియాని',
+    'బిరియానీలు': 'బిరియాని',
+  };
+
+  static String _correctTeluguAsrVariants(String input) {
+    final tokens = input.split(RegExp(r'\s+'));
+    for (var i = 0; i < tokens.length; i++) {
+      final key = _cleanToken(tokens[i]);
+      final fixed = _teluguAsrVariants[key];
+      if (fixed != null) {
+        tokens[i] = fixed;
+      } else if (key == 'రేణు' &&
+          i + 1 < tokens.length &&
+          (_spokenScaleWords[_cleanToken(tokens[i + 1])] != null ||
+              _teluguAsrVariants[_cleanToken(tokens[i + 1])] == 'వందలు')) {
+        tokens[i] = 'రెండు';
+      }
+    }
+    return tokens.join(' ');
+  }
+
   const RomanIndianVoiceNormalizer._();
 
   // Scale words spoken by Telugu-speaking shopkeepers and common mixed-language
@@ -650,7 +683,7 @@ class RomanIndianVoiceNormalizer {
   static String normalizeSpokenScalePhrases(String input) {
     if (input.trim().isEmpty) return input;
 
-    final tokens = input.trim().split(RegExp(r'\s+'));
+    final tokens = _correctTeluguAsrVariants(input.trim()).split(RegExp(r'\s+'));
     final out = <String>[];
     var i = 0;
 

@@ -1300,6 +1300,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         final name = (raw['product_name'] ?? raw['name'] ?? raw['item'] ?? '')
             .toString()
             .trim();
+        final serverLocalName = (raw['product_name_local'] ?? '').toString().trim();
+        if (name.isNotEmpty && serverLocalName.isNotEmpty) {
+          _serverLocalNames[name.toLowerCase()] = serverLocalName;
+        }
         final quantity = double.tryParse(
           (raw['quantity'] ?? raw['qty'] ?? '').toString(),
         );
@@ -2661,11 +2665,78 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: LiveTranslatedText(msg, locale: _selectedDisplayLocale),
+      content: _localizedMessage(msg),
       backgroundColor: isError ? Colors.deepOrange : const Color(0xFF00C853),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
+  }
+
+  static const Map<String, Map<String, String>> _itemNameLocal = {
+    'te': {'sugar': 'పంచదార', 'rice': 'బియ్యం', 'oil': 'నూనె', 'salt': 'ఉప్పు', 'milk': 'పాలు', 'dal': 'పప్పు', 'egg': 'గుడ్డు', 'onion': 'ఉల్లిపాయ', 'tomato': 'టమాటా', 'potato': 'బంగాళదుంప', 'tea': 'టీ', 'coffee': 'కాఫీ', 'biryani': 'బిరియాని', 'chicken': 'చికెన్', 'mutton': 'మటన్', 'wheat flour': 'గోధుమ పిండి', 'soap': 'సబ్బు', 'biscuit': 'బిస్కెట్'},
+    'hi': {'sugar': 'चीनी', 'rice': 'चावल', 'oil': 'तेल', 'salt': 'नमक', 'milk': 'दूध', 'dal': 'दाल', 'egg': 'अंडा', 'onion': 'प्याज़', 'tomato': 'टमाटर', 'potato': 'आलू', 'tea': 'चाय', 'coffee': 'कॉफ़ी', 'biryani': 'बिरयानी', 'chicken': 'चिकन', 'mutton': 'मटन', 'wheat flour': 'आटा', 'soap': 'साबुन', 'biscuit': 'बिस्कुट'},
+    'ta': {'sugar': 'சர்க்கரை', 'rice': 'அரிசி', 'oil': 'எண்ணெய்', 'salt': 'உப்பு', 'milk': 'பால்', 'dal': 'பருப்பு', 'egg': 'முட்டை', 'onion': 'வெங்காயம்', 'tomato': 'தக்காளி', 'potato': 'உருளைக்கிழங்கு', 'tea': 'தேநீர்', 'coffee': 'காபி', 'biryani': 'பிரியாணி', 'chicken': 'சிக்கன்', 'mutton': 'மட்டன்', 'wheat flour': 'கோதுமை மாவு', 'soap': 'சோப்பு', 'biscuit': 'பிஸ்கட்'},
+  };
+
+  static const Map<String, List<String>> _warningTemplates = {
+    'te': [
+      '"{name}" ఈ దుకాణ కేటలాగ్‌లో లేదు. దీన్ని స్టాక్ తగ్గించకుండా కస్టమ్ వస్తువుగా బిల్ చేయవచ్చు; పేరు, ధర సరిచూడండి.',
+      '"{name}" ఈ దుకాణ కేటలాగ్‌లో లేదు, ధర కూడా గుర్తించలేదు. పేరు సరిచూసి అమ్మకం ధర నమోదు చేయండి; స్టాక్ తగ్గదు.',
+      'దయచేసి "{name}" మళ్లీ చెప్పండి లేదా చేతితో ఎంచుకోండి; దీన్ని సురక్షితంగా ధృవీకరించలేకపోయాను.',
+    ],
+    'hi': [
+      '"{name}" इस दुकान की सूची में नहीं है। इसे स्टॉक घटाए बिना कस्टम आइटम के रूप में बिल किया जा सकता है; नाम और कीमत जाँचें।',
+      '"{name}" इस दुकान की सूची में नहीं है और कीमत भी नहीं मिली। नाम जाँचकर बिक्री मूल्य दर्ज करें; स्टॉक नहीं घटेगा।',
+      'कृपया "{name}" दोबारा बोलें या हाथ से चुनें; मैं इसे सुरक्षित रूप से सत्यापित नहीं कर सका।',
+    ],
+  };
+
+  final Map<String, String> _serverLocalNames = <String, String>{};
+
+  String? _localizeWarningOffline(String warning) {
+    final templates = _warningTemplates[_selectedDisplayLocale.languageCode];
+    if (templates == null) return null;
+    final patterns = <RegExp>[
+      RegExp(r'^"(.+)" is not in this shop catalogue\. It can be billed as a custom item with no stock deduction; verify its name and price\.$'),
+      RegExp(r'^"(.+)" is not in this shop catalogue and no price was detected\. Review the name and enter a selling price; no stock will be deducted\.$'),
+      RegExp(r'^Please repeat or manually select "(.+)"; I could not safely verify it\.$'),
+    ];
+    final source = warning.trim();
+    for (var i = 0; i < patterns.length; i++) {
+      final match = patterns[i].firstMatch(source);
+      if (match != null && i < templates.length) {
+        final name = _localizedItemName(match.group(1)!.trim());
+        return templates[i].replaceAll('{name}', name);
+      }
+    }
+    return null;
+  }
+
+  String _localizedItemName(String name) {
+    final key = name.trim().toLowerCase();
+    return _serverLocalNames[key] ??
+        _itemNameLocal[_selectedDisplayLocale.languageCode]?[key] ??
+        name;
+  }
+
+  Widget _localizedMessage(
+    String message, {
+    TextStyle? style,
+    int? maxLines,
+    TextOverflow? overflow,
+  }) {
+    final warning = _localizeWarningOffline(message);
+    final item = _localizedItemName(message);
+    if (warning != null || item != message) {
+      return Text(warning ?? item, style: style, maxLines: maxLines, overflow: overflow);
+    }
+    return LiveTranslatedText(
+      message,
+      locale: _selectedDisplayLocale,
+      style: style,
+      maxLines: maxLines,
+      overflow: overflow,
+    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
