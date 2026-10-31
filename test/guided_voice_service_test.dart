@@ -123,6 +123,54 @@ void main() {
     });
 
     test(
+      'active guidance resumes in the newly selected language',
+      () async {
+        final service = GuidedVoiceService.instance;
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        var speechCount = 0;
+        final selectedLocales = <String>[];
+        messenger.setMockMethodCallHandler(const MethodChannel('flutter_tts'), (
+          call,
+        ) async {
+          switch (call.method) {
+            case 'getLanguages':
+              return <String>['en-IN', 'te-IN'];
+            case 'isLanguageAvailable':
+              return true;
+            case 'setLanguage':
+              selectedLocales.add(call.arguments.toString());
+              return true;
+            case 'speak':
+              speechCount++;
+              return 1;
+            default:
+              return 1;
+          }
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(
+            const MethodChannel('flutter_tts'),
+            null,
+          );
+        });
+
+        await service.stop();
+        await service.speakStep('login', 'en');
+        expect(service.isSpeaking, isTrue);
+        expect(speechCount, 1);
+
+        await service.continueCurrentSpeechInLanguage('te');
+
+        expect(speechCount, 2);
+        expect(selectedLocales.last, 'te-IN');
+        expect(service.isSpeaking, isTrue);
+
+        await service.stop();
+      },
+    );
+
+    test(
       'one guidance request speaks once and exposes playback state',
       () async {
         final service = GuidedVoiceService.instance;
