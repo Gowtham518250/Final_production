@@ -499,6 +499,20 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  Future<void> _prefetchOwnerFeatureAccess() async {
+    try {
+      final isStaff =
+          await ScopedSharedPreferences.getBool('is_staff_mode') ?? false;
+      if (!isStaff) {
+        await RetailMindBillingService.prefetchCommonFeatureAccess();
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Owner feature access prefetch skipped: $error');
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -549,6 +563,7 @@ class _DashboardPageState extends State<DashboardPage>
     _scrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_speakDashboardGuideOncePerAccount());
+      unawaited(_prefetchOwnerFeatureAccess());
     });
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
@@ -606,11 +621,6 @@ class _DashboardPageState extends State<DashboardPage>
 
       // Begin non-critical network and maintenance work only after first-screen
       // hydration and any required security gate have completed.
-      // Warm owner feature entitlements off the critical dashboard path so
-      // Online Store and AI Query route gates do not wait on first tap.
-      if (!(scopedPrefsCheck ?? false)) {
-        unawaited(RetailMindBillingService.prefetchCommonFeatureAccess());
-      }
       unawaited(_loadDeferredDashboardData());
     });
 
