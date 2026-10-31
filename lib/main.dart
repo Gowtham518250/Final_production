@@ -33,6 +33,7 @@ import 'sales_entry_page.dart';
 import 'data_upload_page.dart';
 import 'features/ai_query/screens/ai_query_screen.dart';
 import 'features/billing/retailmind_subscription_page.dart';
+import 'features/billing/retailmind_feature_gate.dart';
 import 'visual_widgets.dart';
 import 'forgot_password_page.dart';
 import 'decent_login_page.dart';
@@ -1966,18 +1967,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           final legacy = args as List<Map<String, dynamic>>?;
                           return CustomerCartPage(cartItems: legacy ?? []);
                         },
-                        '/online-store': (context) =>
-                            const OnlineStoreHubPage(),
+                        '/online-store': (context) => RetailMindFeatureGate(
+                          featureCode: 'online_orders', child: const OnlineStoreHubPage()),
                         '/retail-growth': (context) =>
                             const RetailGrowthSuitePage(),
                         '/growth-agent': (context) => const GrowthAgentPage(),
-                        '/online-store-manager': (context) =>
-                            const OnlineStoreManagerPage(),
-                        '/online-orders': (context) => const OnlineOrdersTab(),
+                        '/online-store-manager': (context) => RetailMindFeatureGate(
+                          featureCode: 'online_orders', child: const OnlineStoreManagerPage()),
+                        '/online-orders': (context) => RetailMindFeatureGate(
+                          featureCode: 'online_orders', child: const OnlineOrdersTab()),
                         '/online-payment-history': (context) =>
                             const OnlinePaymentHistoryPage(),
-                        '/online-shopping-config': (context) =>
-                            const OnlineShoppingConfigPage(),
+                        '/online-shopping-config': (context) => RetailMindFeatureGate(
+                          featureCode: 'online_orders', child: const OnlineShoppingConfigPage()),
                         '/register': (context) {
                           final arguments = ModalRoute.of(
                             context,
@@ -2001,15 +2003,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         '/system-mgmt': (context) =>
                             const SystemManagementPage(),
                         // Canonical online-order screen. Keep the legacy route name working for old navigation links.
-                        '/owner-orders': (context) => const OnlineOrdersTab(),
+                        '/owner-orders': (context) => RetailMindFeatureGate(
+                          featureCode: 'online_orders', child: const OnlineOrdersTab()),
                         '/shop-browser': (context) => const ShopBrowserPage(),
                         '/geometric-registration': (context) =>
                             const GeometricRegistrationPage(),
                         '/sales-entry': (context) => const SalesEntryPage(),
                         '/data-upload': (context) => const DataUploadPage(),
-                        '/query': (context) => const AiQueryScreen(),
-                        '/ai-query': (context) => const AiQueryScreen(),
-                        '/ask-retail-mind': (context) => const AiQueryScreen(),
+                        '/query': (context) => RetailMindFeatureGate(
+                          featureCode: 'ai_queries', child: const AiQueryScreen()),
+                        '/ai-query': (context) => RetailMindFeatureGate(
+                          featureCode: 'ai_queries', child: const AiQueryScreen()),
+                        '/ask-retail-mind': (context) => RetailMindFeatureGate(
+                          featureCode: 'ai_queries', child: const AiQueryScreen()),
                          '/subscriptions': (context) => const RetailMindSubscriptionPage(),
                          '/billing': (context) => const RetailMindSubscriptionPage(),
                         '/forgot-password': (context) =>
