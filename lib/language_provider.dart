@@ -155,6 +155,9 @@ class LanguageProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language_code', safeCode);
     await _syncSpeechLanguage(prefs, safeCode);
+    // If spoken guidance is in progress, restart that same instruction using
+    // the newly selected language instead of leaving speech stopped.
+    await GuidedVoiceService.instance.continueCurrentSpeechInLanguage(safeCode);
     final scopedKey = _preferenceKeyFor(prefs);
     if (scopedKey != 'language_code') {
       await prefs.setString(scopedKey, safeCode);
