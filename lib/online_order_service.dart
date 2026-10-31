@@ -216,45 +216,33 @@ class OnlineOrderService {
 
   static Future<List<Map<String, dynamic>>>
   fetchCancelledOrdersForCloudRestore() async {
-    final cancelledOrders = <Map<String, dynamic>>[];
-    var skip = 0;
-    const pageSize = 200;
-    var expectedTotal = 0;
+    // Sales/Khata restoration must not depend on access to the paid Online
+    // Orders management screen. The restore API exposes only this owner's
+    // cancelled order identifiers, which is enough to exclude cancelled
+    // online invoices without fetching customer/order details.
+    final response = await ApiClient.getJson(
+      '/api/sales-restore/cancelled-order-identifiers',
+    ).timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Could not verify cancelled online orders for sales restoration '
+        '(HTTP ${response.statusCode}).',
+      );
+    }
 
-    do {
-      final response = await ApiClient.getJson(
-        '/store/owner/orders?skip=$skip&limit=$pageSize',
-      ).timeout(const Duration(seconds: 12));
-      if (response.statusCode != 200) {
-        throw Exception(
-          'Could not check cancelled orders before cloud restore '
-          '(HTTP ${response.statusCode}).',
-        );
-      }
+    final decoded = jsonDecode(response.body);
+    final rawOrders = decoded is Map ? decoded['orders'] : decoded;
+    if (rawOrders is! List) {
+      throw const FormatException(
+        'Cancelled-order identifier response is not a list.',
+      );
+    }
 
-      final decoded = jsonDecode(response.body);
-      final rawOrders = decoded is Map ? decoded['orders'] : decoded;
-      if (rawOrders is! List) {
-        throw const FormatException('Owner orders response is not a list.');
-      }
-      if (skip == 0) {
-        final total = decoded is Map ? decoded['total'] : null;
-        expectedTotal = total is num
-            ? total.toInt()
-            : int.tryParse(total?.toString() ?? '') ?? rawOrders.length;
-      }
-
-      for (final raw in rawOrders) {
-        if (raw is! Map) continue;
-        final order = Map<String, dynamic>.from(raw);
-        if (isCancelledOrder(order)) cancelledOrders.add(order);
-      }
-
-      if (rawOrders.isEmpty || rawOrders.length < pageSize) break;
-      skip += rawOrders.length;
-    } while (skip < expectedTotal);
-
-    return cancelledOrders;
+    return rawOrders
+        .whereType<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
+        .where(isCancelledOrder)
+        .toList(growable: false);
   }
 
   /// Permanently remove invoice and sale records tied to a successfully
