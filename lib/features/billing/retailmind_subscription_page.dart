@@ -57,7 +57,7 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
   void _onSubscriptionFailure(CFErrorResponse errorResponse, String data) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(errorResponse.getMessage()),
+      content: Text(errorResponse.getMessage() ?? 'Subscription failed. Please try again.'),
     ));
   }
 
