@@ -98,6 +98,15 @@ class RetailMindBillingService {
     return _decode(response);
   }
 
+  static Future<void> cancelSubscription(int subscriptionId) async {
+    final response = await ApiClient.postJson('/api/billing/subscriptions/$subscriptionId/cancel', const {}).timeout(const Duration(seconds: 25));
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      var message = 'Unable to cancel subscription (${response.statusCode}).';
+      try { final body = _decode(response); message = (body['detail'] ?? body['message'] ?? message).toString(); } catch (_) {}
+      throw Exception(message);
+    }
+  }
+
   static Future<Map<String, dynamic>> createSubscription(String planCode, {String billingInterval = 'MONTHLY'}) async {
     final response = await ApiClient.postJson(createSubscriptionPath, {'plan_code': planCode, 'billing_interval': billingInterval}).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200 && response.statusCode != 201) {
