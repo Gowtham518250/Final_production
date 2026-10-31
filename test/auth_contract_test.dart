@@ -5,13 +5,22 @@ import 'package:retail_mind/api_client.dart';
 
 void main() {
   group('owner auth contract', () {
-    test('uses username in the login payload for the backend contract', () {
+    test('uses email for email-shaped identifiers', () {
+      final payload = ApiClient.buildOwnerLoginPayload(
+        'owner@example.com',
+        'secret',
+      );
+
+      expect(payload, {'email': 'owner@example.com', 'password': 'secret'});
+    });
+
+    test('uses username for a non-email identifier', () {
       final payload = ApiClient.buildOwnerLoginPayload('Gowtham', 'secret');
 
       expect(payload, {'username': 'Gowtham', 'password': 'secret'});
     });
 
-    test('falls back to email only when the identifier is email shaped', () {
+    test('compatibility fallback uses the same supported request shape', () {
       final emailPayload = ApiClient.buildOwnerLoginFallbackPayload(
         'owner@example.com',
         'secret',
