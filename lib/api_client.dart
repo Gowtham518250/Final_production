@@ -404,20 +404,10 @@ class ApiClient {
   // Lock for thread-safe rate limiter operations
   static final _rateLimiterLock = Lock();
 
-  /// Backend auth contract currently expects the owner login payload to use the
-  /// `username` field instead of `email`.
+  /// Send email-shaped identifiers as `email` and legacy display names as
+  /// `username`. The backend accepts either field, so email login needs no
+  /// deliberate 422-and-retry round trip.
   static Map<String, String> buildOwnerLoginPayload(
-    String identifier,
-    String password,
-  ) {
-    final safeIdentifier = identifier.trim();
-    return {'username': safeIdentifier, 'password': password.trim()};
-  }
-
-  /// Some older deployments still accept email-based login. Keep the new
-  /// contract as the primary path, but gracefully fall back when the backend
-  /// explicitly rejects the username field.
-  static Map<String, String> buildOwnerLoginFallbackPayload(
     String identifier,
     String password,
   ) {
@@ -425,8 +415,16 @@ class ApiClient {
     if (safeIdentifier.contains('@')) {
       return {'email': safeIdentifier, 'password': password.trim()};
     }
-    return buildOwnerLoginPayload(safeIdentifier, password);
+    return {'username': safeIdentifier, 'password': password.trim()};
   }
+
+  /// Compatibility helper retained for callers that previously retried an
+  /// email-shaped identifier after a validation response.
+  static Map<String, String> buildOwnerLoginFallbackPayload(
+    String identifier,
+    String password,
+  ) =>
+      buildOwnerLoginPayload(identifier, password);
 
   static int extractUserIdFromJwtToken(
     String? accessToken, {
