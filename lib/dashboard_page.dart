@@ -4834,61 +4834,43 @@ class _DashboardPageState extends State<DashboardPage>
           _salesReconciliationInProgress = true;
           unawaited(() async {
             try {
-            final changed = await _fetchInvoicesFromBackend();
-            if ((changed || localWasEmptyAtBoot) && mounted) {
-              final refreshed = await LocalStorageService.loadSales();
-              if (!mounted) return;
-              if (refreshed.isNotEmpty || changed) {
-                final flattenedSales = await _flattenLocalSales(refreshed);
-                if (!mounted) return;
-                setState(() {
-                  sales = flattenedSales;
-                  _cachedTodaySales = null;
-                  _cachedTodayOrders = null;
-                  _cachedTodayOnlineOrders = null;
-                  _lastMetricsCacheDate = null;
-                  _recalculateAnalytics();
-                });
-                _recomputeDailyHealthScore();
-              }
-            }
-
-            // GET /api/invoices is the normal quick path. If its response was
-            // empty/unusable and this is a fresh local cache (common after a
-            // reinstall or same-user recovery), use the canonical restore endpoint
-            // to restore both invoice headers and line items without stock replay.
-            if (localWasEmptyAtBoot &&
-                !changed &&
-                !_emptySalesRestoreInProgress) {
-              _emptySalesRestoreInProgress = true;
-              try {
-                final restore = await SalesRestoreService.restoreAllSales(
-                  includeStockImpact: false,
-                );
-                if (restore['success'] == true && mounted) {
-                  final restored = await LocalStorageService.loadSales();
-                  if (restored.isNotEmpty) {
-                    final flattenedSales = await _flattenLocalSales(restored);
-                    if (!mounted) return;
-                    setState(() {
-                      sales = flattenedSales;
-                      _cachedTodaySales = null;
-                      _cachedTodayOrders = null;
-                      _cachedTodayOnlineOrders = null;
-                      _lastMetricsCacheDate = null;
-                      _recalculateAnalytics();
-                    });
-                    _recomputeDailyHealthScore();
-                  }
-                } else if (kDebugMode && restore['success'] != true) {
-                  debugPrint(
-                    '⚠️ Empty-cache sales restore deferred: ${restore['error'] ?? restore['message'] ?? 'unknown error'}',
-                  );
+              // A non-empty local cache is not necessarily complete (the
+              // invoices list endpoint returns one bounded page). Restore the
+              // canonical full history once per owner before relying on it.
+              var changed = false;
+              if (!await SalesRestoreService.isFullHistoryRestored() &&
+                  !_emptySalesRestoreInProgress) {
+                _emptySalesRestoreInProgress = true;
+                try {
+                  changed = await SalesRestoreService.ensureFullHistoryRestored();
+                } finally {
+                  _emptySalesRestoreInProgress = false;
                 }
-              } finally {
-                _emptySalesRestoreInProgress = false;
               }
-            }
+
+              // After the one-time full restore, keep the existing lightweight
+              // recent-invoice reconciliation for new sales and payment updates.
+              if (!changed) {
+                changed = await _fetchInvoicesFromBackend();
+              }
+
+              if ((changed || localWasEmptyAtBoot) && mounted) {
+                final refreshed = await LocalStorageService.loadSales();
+                if (!mounted) return;
+                if (refreshed.isNotEmpty || changed) {
+                  final flattenedSales = await _flattenLocalSales(refreshed);
+                  if (!mounted) return;
+                  setState(() {
+                    sales = flattenedSales;
+                    _cachedTodaySales = null;
+                    _cachedTodayOrders = null;
+                    _cachedTodayOnlineOrders = null;
+                    _lastMetricsCacheDate = null;
+                    _recalculateAnalytics();
+                  });
+                  _recomputeDailyHealthScore();
+                }
+              }
             } catch (e) {
               if (kDebugMode) {
                 debugPrint('⚠️ Background dashboard reconciliation failed: $e');
