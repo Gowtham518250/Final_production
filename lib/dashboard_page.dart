@@ -181,6 +181,7 @@ class _DashboardPageState extends State<DashboardPage>
   bool loading = false;
   bool _salesLoadInProgress = false;
   bool _salesLoadedOnce = false;
+  bool _salesHistoryHydrating = false;
   bool insightLoading = false;
   bool showInsight = false;
   String todayInsight = '';
@@ -4767,6 +4768,11 @@ class _DashboardPageState extends State<DashboardPage>
       // Never block the dashboard on the network. A background reconciliation
       // runs after the local dashboard has rendered.
       final List<dynamic> history = await LocalStorageService.loadSales();
+      final historyComplete =
+          await SalesRestoreService.isFullHistoryRestored();
+      if (history.isEmpty && !historyComplete && mounted) {
+        setState(() => _salesHistoryHydrating = true);
+      }
       // #region agent log
       AgentDebugLog.log(
         location: 'dashboard_page.dart:_loadSales',
@@ -4876,6 +4882,9 @@ class _DashboardPageState extends State<DashboardPage>
                 debugPrint('⚠️ Background dashboard reconciliation failed: $e');
               }
             } finally {
+              if (mounted && _salesHistoryHydrating) {
+                setState(() => _salesHistoryHydrating = false);
+              }
               _salesReconciliationInProgress = false;
             }
           }());
@@ -12799,6 +12808,15 @@ class _DashboardPageState extends State<DashboardPage>
     // only as a fallback when the online analytics request is unavailable.
     final totalOnlineOrders =
         _cachedTotalOnlineOrders ?? _calculateTotalOnlineOrders();
+    // Avoid presenting a misleading ₹0 / 0 while a cleared local history is
+    // being hydrated from the canonical cloud invoice snapshot.
+    final salesMetricValue = _salesHistoryHydrating
+        ? '…'
+        : '₹${_formatCompactNumber(totalSales)}';
+    final ordersMetricValue =
+        _salesHistoryHydrating ? '…' : totalOrders.toString();
+    final onlineOrdersMetricValue =
+        _salesHistoryHydrating ? '…' : totalOnlineOrders.toString();
     final lowStockCount = _lowStockProducts.length;
 
     return Container(
@@ -12888,7 +12906,7 @@ class _DashboardPageState extends State<DashboardPage>
                   Expanded(
                     child: _buildMetricCard(
                       'Total Sales',
-                      '₹${_formatCompactNumber(totalSales)}',
+                      salesMetricValue,
                       Icons.attach_money,
                       const Color(0xFF10B981),
                     ), // 🔒 CHANGED: "Today's Revenue" to "Total Sales"
@@ -12897,7 +12915,7 @@ class _DashboardPageState extends State<DashboardPage>
                   Expanded(
                     child: _buildMetricCard(
                       'Total Orders',
-                      totalOrders.toString(),
+                      ordersMetricValue,
                       Icons.shopping_cart,
                       const Color(0xFF3B82F6),
                     ), // 🔒 CHANGED: "Today's Orders" to "Total Bills"
@@ -12910,7 +12928,7 @@ class _DashboardPageState extends State<DashboardPage>
                   Expanded(
                     child: _buildMetricCard(
                       'Total Online Orders',
-                      totalOnlineOrders.toString(),
+                      onlineOrdersMetricValue,
                       Icons.language,
                       const Color(0xFF6366F1),
                     ), // 🔒 NEW: Added Online Orders
