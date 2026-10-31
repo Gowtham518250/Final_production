@@ -12844,6 +12844,11 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
               ),
               const Spacer(),
+              IconButton(
+                tooltip: 'Subscription plans',
+                onPressed: () => Navigator.pushNamed(context, '/subscriptions'),
+                icon: const Icon(Icons.workspace_premium_rounded, color: Color(0xFF4F46E5)),
+              ),
               _buildUserAvatar(),
             ],
           ),

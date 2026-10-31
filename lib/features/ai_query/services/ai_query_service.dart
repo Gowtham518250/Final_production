@@ -331,6 +331,19 @@ class AiQueryService {
     }
   }
 
+  /// Reads the server-side subscription usage. This is display-only; the backend
+  /// must enforce limits and calculate remaining credits.
+  static Future<Map<String, dynamic>> fetchDailyAiUsage() async {
+    final response = await ApiClient.getJson(ApiClient.billingUsageEndpoint)
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw Exception('Unable to load AI usage (${response.statusCode}).');
+    }
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) throw const FormatException('Invalid AI usage response.');
+    return Map<String, dynamic>.from(decoded);
+  }
+
   /// Executes a natural-language business query against the backend.
   ///
   /// The user question is sent as-is without manual date conversion or SQL generation.

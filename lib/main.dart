@@ -32,6 +32,7 @@ import 'geometric_registration_page.dart';
 import 'sales_entry_page.dart';
 import 'data_upload_page.dart';
 import 'features/ai_query/screens/ai_query_screen.dart';
+import 'features/billing/retailmind_subscription_page.dart';
 import 'visual_widgets.dart';
 import 'forgot_password_page.dart';
 import 'decent_login_page.dart';
@@ -2009,6 +2010,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         '/query': (context) => const AiQueryScreen(),
                         '/ai-query': (context) => const AiQueryScreen(),
                         '/ask-retail-mind': (context) => const AiQueryScreen(),
+                         '/subscriptions': (context) => const RetailMindSubscriptionPage(),
+                         '/billing': (context) => const RetailMindSubscriptionPage(),
                         '/forgot-password': (context) =>
                             const ForgotPasswordPage(),
                         '/reset-password': (context) =>
