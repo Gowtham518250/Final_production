@@ -951,6 +951,10 @@ class OnlinePaymentHistoryService {
 
   static Future<List<Map<String, dynamic>>> load() async {
     final prefs = await SharedPreferences.getInstance();
+    // Notification listeners/background services can write through a separate
+    // isolate. Reload the platform preference store before rendering history so
+    // the foreground page does not show an older in-memory snapshot.
+    await prefs.reload();
     final userId = await _currentUserId(prefs);
     final prefix = _userPrefix(userId);
     final entries = <Map<String, dynamic>>[];
