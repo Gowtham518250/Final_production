@@ -6,6 +6,7 @@ import 'local_storage_service.dart';
 import 'inventory_sync_service.dart';
 import 'sales_dedup_helper.dart';
 import 'online_order_service.dart';
+import 'cache_consistency_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 
@@ -22,6 +23,81 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Called after app reinstall to recover all data from backend.
 /// 
 class SalesRestoreService {
+  // A complete cloud snapshot is restored once per signed-in owner. A local
+  // cache can contain only recent records, so "non-empty" is not proof that
+  // history is complete. The marker is user-scoped and written only after the
+  // restore response has been validated and persisted.
+  static final Map<int, Future<bool>> _fullHistoryRestoreInFlight = {};
+
+  static String _fullHistoryRestoreKey(int userId) =>
+      'sales_history_full_restore_v1_$userId';
+
+  static Future<int?> _currentRestoreUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
+    return userId > 0 ? userId : null;
+  }
+
+  static Future<bool> isFullHistoryRestored() async {
+    final userId = await _currentRestoreUserId();
+    if (userId == null) return false;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_fullHistoryRestoreKey(userId)) ?? false;
+  }
+
+  /// Ensures the full invoice/sales history has been restored before a screen
+  /// treats the local Hive cache as complete. Concurrent dashboard and Khata
+  /// requests share one restore operation per owner.
+  static Future<bool> ensureFullHistoryRestored({bool force = false}) async {
+    final userId = await _currentRestoreUserId();
+    if (userId == null) return false;
+
+    final prefs = await SharedPreferences.getInstance();
+    final markerKey = _fullHistoryRestoreKey(userId);
+    if (!force && (prefs.getBool(markerKey) ?? false)) return true;
+
+    final active = _fullHistoryRestoreInFlight[userId];
+    if (active != null) return active;
+
+    final request = () async {
+      final result = await restoreAllSales(includeStockImpact: false);
+      if (result['success'] != true) return false;
+
+      // Do not set this before restoreAllSales has saved both canonical invoice
+      // history and the dashboard sales mirror successfully.
+      final sales = await LocalStorageService.loadSales();
+      final invoices = await LocalStorageService.loadLocalInvoices();
+      await CacheConsistencyService.markRemoteRefresh(
+        'sales',
+        recordCount: sales.length,
+      );
+      await CacheConsistencyService.markRemoteRefresh(
+        'invoices',
+        recordCount: invoices.length,
+      );
+      await prefs.setString(
+        '${markerKey}_at',
+        DateTime.now().toUtc().toIso8601String(),
+      );
+      await prefs.setBool(markerKey, true);
+      if (kDebugMode) {
+        debugPrint(
+          '✅ Full owner history restored: sales=${sales.length}, invoices=${invoices.length}',
+        );
+      }
+      return true;
+    }();
+
+    _fullHistoryRestoreInFlight[userId] = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_fullHistoryRestoreInFlight[userId], request)) {
+        _fullHistoryRestoreInFlight.remove(userId);
+      }
+    }
+  }
+
   
   /// Restore all sales from backend after app reinstall
   static Future<Map<String, dynamic>> restoreAllSales({
