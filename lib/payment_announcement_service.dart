@@ -264,8 +264,25 @@ class PaymentAnnouncementService {
     );
   }
 
+  // Last line of defence against one payment being spoken twice by two code
+  // paths in the same isolate: identical text within a few seconds is one
+  // announcement. Genuinely separate payments are normally further apart, and
+  // earlier layers already tell distinct payments apart.
+  static const Duration _identicalSpeechWindow = Duration(seconds: 4);
+  String? _lastSimpleMessage;
+  DateTime? _lastSimpleAt;
+
   void speakSimple(String message, String language) {
     if (_config.volume <= 0) return;
+    final spokenKey = '$language|${message.trim()}';
+    final spokenAt = DateTime.now();
+    if (_lastSimpleMessage == spokenKey &&
+        _lastSimpleAt != null &&
+        spokenAt.difference(_lastSimpleAt!) < _identicalSpeechWindow) {
+      return;
+    }
+    _lastSimpleMessage = spokenKey;
+    _lastSimpleAt = spokenAt;
     final lang = _lang.resolve(language);
     final calculatedTimeout =
         _voice.calculateTimeout(message, _config.budgetDeviceTimeoutMultiplier);
