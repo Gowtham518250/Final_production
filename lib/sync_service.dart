@@ -2712,6 +2712,14 @@ class SyncService {
   /// records reconcile by updated_at rather than blindly replacing the cache.
   static Future<bool> refreshSalesCacheFromBackend() async {
     try {
+      // Analytics must not be the first screen that happens to hydrate a
+      // cleared/partial local cache. Use the same complete, idempotent restore
+      // used by Dashboard and Khata before falling back to the legacy feed.
+      if (!await SalesRestoreService.isFullHistoryRestored()) {
+        final restored = await SalesRestoreService.ensureFullHistoryRestored();
+        if (restored) return true;
+      }
+
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) return false;
 
