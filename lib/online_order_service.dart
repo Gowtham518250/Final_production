@@ -337,27 +337,14 @@ class OnlineOrderService {
   /// Count distinct online orders in legacy sales rows without confusing a
   /// line-item row ID or currency amount with an order ID. Online orders write
   /// one sales row per item, so reference_order_id is the canonical grouping key.
+  /// Count every distinct online order regardless of lifecycle status.
+  /// Revenue/sales calculations may exclude cancelled or returned records, but
+  /// the dashboard's lifetime order count must retain those orders.
   static int countDistinctOnlineOrdersFromSales(
     Iterable<Map<String, dynamic>> rows,
   ) {
-    final cancelledOrderIds = <String>{};
-    for (final row in rows) {
-      if (!AnalyticsEngine.isVoidedSale(row)) continue;
-      final referenceOrderId =
-          (row['reference_order_id'] ??
-                  row['online_order_id'] ??
-                  row['order_id'] ??
-                  '')
-              .toString()
-              .trim();
-      if (referenceOrderId.isNotEmpty) {
-        cancelledOrderIds.add(referenceOrderId.toLowerCase());
-      }
-    }
-
     final orderIds = <String>{};
     for (final row in rows) {
-      if (AnalyticsEngine.isVoidedSale(row)) continue;
       final source = (row['source'] ?? row['order_source'] ?? 'OFFLINE')
           .toString()
           .trim()
@@ -372,7 +359,7 @@ class OnlineOrderService {
               .toString()
               .trim();
       final isOnline =
-          const {'ONLINE', 'ONLINE_ORDER', 'WEB', 'APP'}.contains(source) ||
+          const {'ONLINE', 'ONLINE_ORDER', 'WEB', 'APP', 'ONLINE_STORE'}.contains(source) ||
           invoiceKey.toUpperCase().startsWith('ONL');
       if (!isOnline) continue;
 
@@ -380,14 +367,12 @@ class OnlineOrderService {
           (row['reference_order_id'] ??
                   row['online_order_id'] ??
                   row['order_id'] ??
+                  row['source_order_id'] ??
                   '')
               .toString()
               .trim();
-      if (cancelledOrderIds.contains(referenceOrderId.toLowerCase())) {
-        continue;
-      }
       if (referenceOrderId.isNotEmpty) {
-        orderIds.add('order:$referenceOrderId');
+        orderIds.add('order:${referenceOrderId.toLowerCase()}');
       } else if (invoiceKey.isNotEmpty) {
         orderIds.add('invoice:${invoiceKey.toUpperCase()}');
       }
@@ -570,6 +555,46 @@ class OnlineOrderService {
       };
     } catch (e) {
       if (kDebugMode) debugPrint('getAnalytics: ' + e.toString());
+
+      // The order-management endpoint can return 403 when the shop does not
+      // have the Online Orders entitlement. Dashboard lifetime counts are
+      // still historical business data, so read the minimal owner-scoped
+      // count from the sales-restore API (which is intentionally independent
+      // of that feature gate).
+      try {
+        final fallback = await ApiClient.getJson(
+          '/api/sales-restore/cancelled-order-identifiers',
+          headers: headers,
+        ).timeout(const Duration(seconds: 8));
+        if (fallback.statusCode == 200) {
+          final decoded = jsonDecode(fallback.body);
+          if (decoded is Map) {
+            final rawCount = decoded['totalCount'] ?? decoded['total'];
+            final totalCount = rawCount is num
+                ? rawCount.toInt()
+                : int.tryParse(rawCount?.toString() ?? '');
+            if (totalCount != null && totalCount >= 0) {
+              final rawCancelled = decoded['cancelledCount'];
+              final rawRejected = decoded['rejectedCount'];
+              return {
+                ...empty,
+                'totalCount': totalCount,
+                'cancelledCount': rawCancelled is num
+                    ? rawCancelled.toInt()
+                    : int.tryParse(rawCancelled?.toString() ?? '') ?? 0,
+                'rejectedCount': rawRejected is num
+                    ? rawRejected.toInt()
+                    : int.tryParse(rawRejected?.toString() ?? '') ?? 0,
+                'available': true,
+              };
+            }
+          }
+        }
+      } catch (fallbackError) {
+        if (kDebugMode) {
+          debugPrint('getAnalytics count fallback failed: $fallbackError');
+        }
+      }
       return Map<String, dynamic>.from(empty);
     }
   }
