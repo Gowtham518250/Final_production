@@ -4937,6 +4937,7 @@ class _DashboardPageState extends State<DashboardPage>
       if (mounted) {
         setState(() {
           loading = false;
+          _salesHistoryHydrating = false;
         });
       }
     } finally {
