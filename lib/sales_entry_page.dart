@@ -281,21 +281,133 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       setState(() => _isVoiceAssistantOpen = false);
       calculateTotal();
       if (customItems.isNotEmpty) {
-        final missingPriceText = customItemsMissingPrice.isEmpty
-            ? ''
-            : ' Enter a selling price for: '
-                '${customItemsMissingPrice.take(3).join(', ')}.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: LiveTranslatedText(
               'Added custom bill item(s): ${customItems.take(3).join(', ')}. '
-              'Not in inventory; no stock will be deducted. Review before saving.'
-              '$missingPriceText',
+              'Not in inventory; no stock will be deducted. Review before saving.',
             ),
             backgroundColor: Colors.orange.shade800,
             duration: const Duration(seconds: 6),
           ),
         );
+      }
+
+      // Missing price must not cause a recognized product to be discarded.
+      // Offer a quick manual-price step after the lines have been added to the
+      // bill draft. The user may skip it and enter prices in the normal fields.
+      final hasMissingPrices = entries.any((entry) {
+        final name = entry['item']?.text.trim() ?? '';
+        final price = double.tryParse(entry['price']?.text.trim() ?? '');
+        return name.isNotEmpty && (price == null || !price.isFinite || price <= 0);
+      });
+      if (hasMissingPrices) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showMissingVoicePricesDialog());
+        });
+      }
+    }
+  }
+
+  Future<void> _showMissingVoicePricesDialog() async {
+    if (!mounted) return;
+
+    final missingRows = entries.where((entry) {
+      final name = entry['item']?.text.trim() ?? '';
+      final price = double.tryParse(entry['price']?.text.trim() ?? '');
+      return name.isNotEmpty && (price == null || !price.isFinite || price <= 0);
+    }).toList();
+
+    if (missingRows.isEmpty) return;
+
+    final priceControllers = <TextEditingController, Map<String, TextEditingController>>{};
+    for (final row in missingRows) {
+      priceControllers[TextEditingController()] = row;
+    }
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) => AlertDialog(
+          title: const LiveTranslatedText('Add selling prices'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: priceControllers.entries.map((entry) {
+                  final row = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          row['item']?.text.trim() ?? 'Product',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: entry.key,
+                          autofocus: priceControllers.keys.first == entry.key,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            prefixText: '₹ ',
+                            labelText: 'Selling price per unit',
+                            hintText: 'Enter price',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const LiveTranslatedText('Add later'),
+            ),
+            FilledButton(
+              onPressed: () {
+                var applied = 0;
+                for (final entry in priceControllers.entries) {
+                  final value = double.tryParse(entry.key.text.trim());
+                  if (value != null && value.isFinite && value > 0) {
+                    entry.value['price']?.text = value.toStringAsFixed(
+                      value == value.roundToDouble() ? 0 : 2,
+                    );
+                    applied++;
+                  }
+                }
+                if (applied > 0 && mounted) {
+                  setState(() {
+                    calculateTotal();
+                    message = '';
+                  });
+                }
+                Navigator.of(dialogContext).pop();
+                if (applied == 0 && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: LiveTranslatedText(
+                        'No prices entered. The products remain in your draft; add prices before confirming the bill.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const LiveTranslatedText('Apply prices'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      for (final controller in priceControllers.keys) {
+        controller.dispose();
       }
     }
   }
