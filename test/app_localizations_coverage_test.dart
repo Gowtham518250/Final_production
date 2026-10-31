@@ -109,7 +109,7 @@ void main() {
   });
   test('every voice language is registered as an application locale', () {
     final appLanguageCodes = AppLocalizations.supportedLocales
-        .map((locale) => languageCode)
+        .map((locale) => locale.languageCode)
         .toSet();
     final selectableLanguageCodes = LanguageProvider.languages
         .map((language) => language['code']!)
