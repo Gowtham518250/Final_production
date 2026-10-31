@@ -79,14 +79,14 @@ void main() {
         expect(
           phrases[entry.key],
           isNotEmpty,
-          reason: '${entry.key} must be translated for ${locale.languageCode}.',
+          reason: '${entry.key} must be translated for ${languageCode}.',
         );
-        if (locale.languageCode != 'en') {
+        if (languageCode != 'en') {
           expect(
             phrases[entry.key],
             isNot(entry.value),
             reason:
-                '${entry.key} must not fall back to English for ${locale.languageCode}.',
+                '${entry.key} must not fall back to English for ${languageCode}.',
           );
         }
       }
@@ -94,14 +94,14 @@ void main() {
         expect(
           phrases[heading],
           isNotNull,
-          reason: '$heading must resolve for ${locale.languageCode}',
+          reason: '$heading must resolve for ${languageCode}',
         );
-        if (locale.languageCode != 'en') {
+        if (languageCode != 'en') {
           expect(
             phrases[heading],
             isNot(heading),
             reason:
-                '$heading must not remain English for ${locale.languageCode}',
+                '$heading must not remain English for ${languageCode}',
           );
         }
       }
@@ -109,7 +109,7 @@ void main() {
   });
   test('every voice language is registered as an application locale', () {
     final appLanguageCodes = AppLocalizations.supportedLocales
-        .map((locale) => locale.languageCode)
+        .map((locale) => languageCode)
         .toSet();
     final selectableLanguageCodes = LanguageProvider.languages
         .map((language) => language['code']!)
