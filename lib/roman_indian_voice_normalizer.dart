@@ -13,6 +13,8 @@
 // existing STT, NLP, catalog matching, confidence, or billing validation.
 // =============================================================================
 
+
+class RomanIndianVoiceNormalizer {
   static const Map<String, String> _teluguAsrVariants = <String, String>{
     'ఇండు': 'రెండు', 'రెండూ': 'రెండు', 'రేండు': 'రెండు', 'రేణ్డు': 'రెండు',
     'మూడూ': 'మూడు', 'నాల్గు': 'నాలుగు', 'నాలుగూ': 'నాలుగు',
@@ -45,7 +47,6 @@
     return tokens.join(' ');
   }
 
-class RomanIndianVoiceNormalizer {
   const RomanIndianVoiceNormalizer._();
 
   // Scale words spoken by Telugu-speaking shopkeepers and common mixed-language
