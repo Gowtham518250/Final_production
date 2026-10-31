@@ -26,6 +26,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   int _currentStep = 1; // 1: Email, 2: OTP, 3: New Password
   String _errorMessage = '';
   bool _otpVerified = false;
+  bool _passwordVisible = false;
+  bool _confirmPasswordVisible = false;
 
   @override
   void initState() {
@@ -199,88 +201,284 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    const headerHeight = 235.0;
+    const overlap = 36.0;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Material(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(13),
-                        child: InkWell(
-                          onTap: _goBackToPreviousPage,
-                          borderRadius: BorderRadius.circular(13),
-                          child: const SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Icon(Icons.arrow_back_rounded,
-                                color: Color(0xFF334155)),
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      _ResetLanguageButton(),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(26),
-                      border: Border.all(color: const Color(0xFFE5EAF3)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF172554).withValues(alpha: 0.06),
-                          blurRadius: 24,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        if (_currentStep <= 3) ...[
-                          _buildStepProgress(),
-                          const SizedBox(height: 22),
-                          const Divider(height: 1, color: Color(0xFFEFF2F7)),
-                          const SizedBox(height: 22),
-                        ],
-                        _buildStageContent(),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.shield_outlined,
-                          size: 15, color: Color(0xFF64748B)),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          'Never share your password or verification code.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            color: const Color(0xFF64748B),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+      backgroundColor: const Color(0xFFE9EFFA),
+      body: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: topInset + headerHeight + overlap,
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0F2447),
+                    Color(0xFF1B3A6B),
+                    Color(0xFF0A1628),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
+          SafeArea(
+            bottom: false,
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Material(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                            child: InkWell(
+                              onTap: _goBackToPreviousPage,
+                              borderRadius: BorderRadius.circular(999),
+                              child: const SizedBox(
+                                width: 42,
+                                height: 42,
+                                child: Icon(
+                                  Icons.arrow_back_rounded,
+                                  color: Colors.white,
+                                  size: 21,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          const _ResetLanguageButton(),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBrandHeader(),
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF0F2447).withValues(alpha: 0.14),
+                              blurRadius: 30,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_currentStep <= 3) ...[
+                              _buildStepProgress(),
+                              const SizedBox(height: 18),
+                              const Divider(
+                                height: 1,
+                                color: Color(0xFFE6EAF5),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                            _buildStageContent(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        height: 78,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Image.asset(
+                              'assets/shop_bottom_left.png',
+                              width: 124,
+                              height: 74,
+                              cacheWidth: 380,
+                              cacheHeight: 230,
+                              fit: BoxFit.contain,
+                              alignment: Alignment.bottomLeft,
+                              excludeFromSemantics: true,
+                            ),
+                            Image.asset(
+                              'assets/bag_bottom_right.png',
+                              width: 76,
+                              height: 78,
+                              cacheWidth: 230,
+                              cacheHeight: 240,
+                              fit: BoxFit.contain,
+                              alignment: Alignment.bottomRight,
+                              excludeFromSemantics: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2, bottom: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.verified_user_rounded,
+                              size: 15,
+                              color: Color(0xFF16A34A),
+                            ),
+                            const SizedBox(width: 7),
+                            Flexible(
+                              child: Text(
+                                'Your account recovery is protected and secure.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF64748B),
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBrandHeader() {
+    final localizations = AppLocalizations.of(context);
+    return SizedBox(
+      height: 185,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 10,
+            top: 8,
+            right: 118,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(13),
+                    child: Image.asset(
+                      'assets/shop_logo.png',
+                      cacheWidth: 160,
+                      cacheHeight: 160,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.storefront_rounded,
+                        color: Colors.white,
+                        size: 27,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 9),
+                RichText(
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  text: TextSpan(
+                    style: GoogleFonts.inter(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.35,
+                    ),
+                    children: const [
+                      TextSpan(
+                        text: 'RETAIL ',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      TextSpan(
+                        text: 'MIND',
+                        style: TextStyle(color: Color(0xFF2DD4BF)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                LiveTranslatedText(
+                  'Smart Analytics & Billing Platform',
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5,
+                    color: Colors.white.withValues(alpha: 0.84),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 11),
+                LiveTranslatedText(
+                  'Recover your account securely',
+                  style: GoogleFonts.dancingScript(
+                    fontSize: 18,
+                    height: 1.12,
+                    color: Colors.white.withValues(alpha: 0.94),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  width: 86,
+                  height: 2.5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2DD4BF),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: SizedBox(
+              width: 122,
+              height: 158,
+              child: Image.asset(
+                'assets/shop_keeper.png',
+                cacheWidth: 340,
+                cacheHeight: 440,
+                fit: BoxFit.contain,
+                alignment: Alignment.bottomCenter,
+                errorBuilder: (_, __, ___) => Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: 94,
+                    height: 94,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.lock_person_rounded,
+                      color: Colors.white70,
+                      size: 54,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -316,17 +514,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         LiveTranslatedText(
           'Password reset complete',
           textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontSize: 22,
             fontWeight: FontWeight.w800,
-            color: const Color(0xFF172554),
+            color: const Color(0xFF0F2447),
           ),
         ),
         const SizedBox(height: 10),
         LiveTranslatedText(
           'Your password has been updated. You can now sign in using your new password.',
           textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontSize: 13,
             color: const Color(0xFF64748B),
             height: 1.6,
@@ -339,7 +537,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           child: FilledButton(
             onPressed: _goBackToPreviousPage,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5),
+              backgroundColor: const Color(0xFF1E3A6E),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(15),
@@ -347,7 +545,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             ),
             child: LiveTranslatedText(
               AppLocalizations.of(context).login,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
               ),
@@ -369,11 +567,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 CircleAvatar(
                   radius: 14,
                   backgroundColor: index + 1 <= _currentStep
-                      ? const Color(0xFF4F46E5)
-                      : const Color(0xFFE2E8F0),
+                      ? const Color(0xFF1E3A6E)
+                      : const Color(0xFFE6EAF5),
                   child: Text(
                     (index + 1).toString(),
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
                       color: index + 1 <= _currentStep
                           ? Colors.white
                           : const Color(0xFF64748B),
@@ -385,7 +583,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 const SizedBox(height: 6),
                 Text(
                   labels[index],
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                     color: index + 1 <= _currentStep
                         ? const Color(0xFF334155)
                         : const Color(0xFF94A3B8),
@@ -416,17 +614,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         LiveTranslatedText(
           title,
           textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontSize: 23,
             fontWeight: FontWeight.w800,
-            color: const Color(0xFF172554),
+            color: const Color(0xFF0F2447),
           ),
         ),
         const SizedBox(height: 8),
         LiveTranslatedText(
           subtitle,
           textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontSize: 12,
             color: const Color(0xFF64748B),
             height: 1.55,
@@ -457,7 +655,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           Expanded(
             child: LiveTranslatedText(
               _errorMessage,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
                 color: const Color(0xFFB91C1C),
                 fontSize: 11,
                 height: 1.45,
@@ -494,8 +692,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           onTap: _goBackToPreviousPage,
           child: LiveTranslatedText(
             AppLocalizations.of(context).signIn,
-            style: GoogleFonts.poppins(
-              color: const Color(0xFF818CF8),
+            style: GoogleFonts.inter(
+              color: const Color(0xFF4F46E5),
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -537,7 +735,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               Expanded(
                 child: LiveTranslatedText(
                   'Open the secure confirmation link in the same email first. Then enter the 6-digit OTP here. Both checks are required before a password-reset token is issued.',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
                     color: const Color(0xFF475569),
                     fontSize: 11,
                     height: 1.45,
@@ -563,8 +761,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           onPressed: () => setState(() => _currentStep = 1),
           child: LiveTranslatedText(
             'Change Email',
-            style: GoogleFonts.poppins(
-              color: const Color(0xFF818CF8),
+            style: GoogleFonts.inter(
+              color: const Color(0xFF4F46E5),
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -588,6 +786,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           hint: 'New Password',
           icon: Icons.lock_outline_rounded,
           isPassword: true,
+          passwordVisible: _passwordVisible,
+          onTogglePasswordVisibility: () => setState(
+            () => _passwordVisible = !_passwordVisible,
+          ),
         ),
         const SizedBox(height: 16),
         _buildInputField(
@@ -595,6 +797,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           hint: 'Confirm Password',
           icon: Icons.lock_clock_outlined,
           isPassword: true,
+          passwordVisible: _confirmPasswordVisible,
+          onTogglePasswordVisibility: () => setState(
+            () => _confirmPasswordVisible = !_confirmPasswordVisible,
+          ),
         ),
         const SizedBox(height: 28),
         _buildSubmitButton(
@@ -611,36 +817,50 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     required IconData icon,
     TextInputType type = TextInputType.text,
     bool isPassword = false,
+    bool passwordVisible = false,
+    VoidCallback? onTogglePasswordVisibility,
   }) {
-    return TextField(
-      controller: controller,
-      keyboardType: type,
-      obscureText: isPassword,
-      style: GoogleFonts.poppins(
-        color: const Color(0xFF172554),
-        fontSize: 13,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FE),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE6EAF5)),
       ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: GoogleFonts.poppins(
-          color: const Color(0xFF94A3B8),
-          fontSize: 12,
+      child: TextField(
+        controller: controller,
+        enabled: !_isLoading,
+        keyboardType: type,
+        obscureText: isPassword && !passwordVisible,
+        style: GoogleFonts.inter(
+          color: const Color(0xFF0F172A),
+          fontSize: 14.5,
         ),
-        prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.4),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.inter(
+            color: const Color(0xFF94A3B8),
+            fontSize: 14,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          prefixIcon: Icon(
+            icon,
+            color: const Color(0xFF64748B),
+            size: 21,
+          ),
+          suffixIcon: isPassword
+              ? IconButton(
+                  tooltip: passwordVisible ? 'Hide password' : 'Show password',
+                  onPressed: _isLoading ? null : onTogglePasswordVisibility,
+                  icon: Icon(
+                    passwordVisible
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    color: const Color(0xFF64748B),
+                    size: 20,
+                  ),
+                )
+              : null,
         ),
       ),
     );
@@ -652,38 +872,47 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }) {
     return SizedBox(
       width: double.infinity,
-      height: 52,
-      child: FilledButton(
+      height: 54,
+      child: ElevatedButton(
         onPressed: _isLoading ? null : onTap,
-        style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFF4F46E5),
-          disabledBackgroundColor: const Color(0xFFA5B4FC),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1E3A6E),
           foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xFF7890B8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(16),
           ),
+          elevation: 0,
         ),
         child: _isLoading
             ? const SizedBox(
-                width: 21,
-                height: 21,
+                width: 22,
+                height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: Colors.white,
                 ),
               )
-            : LiveTranslatedText(
-                label,
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  letterSpacing: 0.6,
-                ),
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  LiveTranslatedText(
+                    label,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_rounded, size: 19),
+                ],
               ),
       ),
     );
   }
+
 }
 
 class _ResetLanguageButton extends StatelessWidget {
@@ -693,56 +922,97 @@ class _ResetLanguageButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
     final currentCode = languageProvider.locale.languageCode;
+    final current = LanguageProvider.languages.firstWhere(
+      (language) => language['code'] == currentCode,
+      orElse: () => LanguageProvider.languages.first,
+    );
 
-    return PopupMenuButton<String>(
-      tooltip: 'Choose language',
-      color: Colors.white,
-      elevation: 8,
-      onSelected: (code) => languageProvider.setLanguage(code),
-      itemBuilder: (context) => LanguageProvider.languages
-          .map(
-            (lang) => PopupMenuItem<String>(
-              value: lang['code']!,
-              child: Row(
-                children: [
-                  Text(lang['nativeName']!,
-                      style: const TextStyle(color: Color(0xFF172554))),
-                  const SizedBox(width: 8),
-                  Text(lang['name']!,
-                      style: const TextStyle(color: Color(0xFF64748B))),
-                  const Spacer(),
-                  if (lang['code'] == currentCode)
-                    const Icon(Icons.check, size: 16, color: Color(0xFF4F46E5)),
-                ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE6EAF5)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F2447).withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: PopupMenuButton<String>(
+        tooltip: 'Choose language',
+        color: Colors.white,
+        elevation: 8,
+        onSelected: (code) => languageProvider.setLanguage(code),
+        itemBuilder: (context) => LanguageProvider.languages
+            .map(
+              (language) => PopupMenuItem<String>(
+                value: language['code']!,
+                child: Row(
+                  children: [
+                    LiveTranslatedText(
+                      language['nativeName']!,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      language['name']!,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (language['code'] == currentCode)
+                      const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Color(0xFF4F46E5),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          )
-          .toList(),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.language_rounded,
-                size: 17, color: Color(0xFF4F46E5)),
-            const SizedBox(width: 6),
-            LiveTranslatedText(
-              AppLocalizations.of(context).language,
-              style: GoogleFonts.poppins(
-                color: const Color(0xFF334155),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+            )
+            .toList(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.language_rounded,
+                size: 19,
+                color: Color(0xFF0F2447),
               ),
-            ),
-            const SizedBox(width: 3),
-            const Icon(Icons.arrow_drop_down_rounded,
-                size: 18, color: Color(0xFF64748B)),
-          ],
+              const SizedBox(width: 7),
+              LiveTranslatedText(
+                AppLocalizations.of(context).language,
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF0F2447),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 7),
+              LiveTranslatedText(
+                current['nativeName']!,
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF64748B),
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 19,
+                color: Color(0xFF0F2447),
+              ),
+            ],
+          ),
         ),
       ),
     );
