@@ -19,6 +19,7 @@ import 'visual_widgets.dart';
 import 'paid_invoices_page.dart';
 import 'invoice_dedup_helper.dart';
 import 'invoice_analytics_snapshot.dart';
+import 'sales_restore_service.dart';
 
 class KhataPage extends StatefulWidget {
   final String? focusPhone;
@@ -529,6 +530,11 @@ class _KhataPageState extends State<KhataPage>
     // Reconcile in the background. Never replace the local view merely because
     // a remote endpoint is temporarily empty or unavailable.
     try {
+      // Do not rely solely on the shared sync coordinator here: it can already
+      // be busy with dashboard startup and coalesce this request. The restore
+      // service itself coalesces concurrent calls and guarantees one complete
+      // per-owner invoice/sales snapshot for Khata and Invoice Analytics.
+      await SalesRestoreService.ensureFullHistoryRestored();
       await SyncService.downloadUserDataSafe();
       await _loadKhataLocalFallback();
       _applyFilter();
