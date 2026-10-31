@@ -52,9 +52,9 @@ class SalesRestoreService {
     // Detect a cleared local Hive cache even when SharedPreferences survived
     // an in-app data reset. A prior successful restore is not proof that the
     // records are still present on this device.
-    final sales = await LocalStorageService.loadSales();
-    final invoices = await LocalStorageService.loadLocalInvoices();
-    if (sales.isEmpty && invoices.isEmpty) {
+    final salesCount = await LocalStorageService.getSalesCount();
+    final invoiceCount = await LocalStorageService.getLocalInvoiceCount();
+    if (salesCount == 0 && invoiceCount == 0) {
       await prefs.setBool(markerKey, false);
       return false;
     }
@@ -81,15 +81,15 @@ class SalesRestoreService {
 
       // Do not set this before restoreAllSales has saved both canonical invoice
       // history and the dashboard sales mirror successfully.
-      final sales = await LocalStorageService.loadSales();
-      final invoices = await LocalStorageService.loadLocalInvoices();
+      final salesCount = await LocalStorageService.getSalesCount();
+      final invoiceCount = await LocalStorageService.getLocalInvoiceCount();
       await CacheConsistencyService.markRemoteRefresh(
         'sales',
-        recordCount: sales.length,
+        recordCount: salesCount,
       );
       await CacheConsistencyService.markRemoteRefresh(
         'invoices',
-        recordCount: invoices.length,
+        recordCount: invoiceCount,
       );
       await prefs.setString(
         '${markerKey}_at',
@@ -100,7 +100,7 @@ class SalesRestoreService {
       await prefs.setBool(markerKey, true);
       if (kDebugMode) {
         debugPrint(
-          '✅ Full owner history restored: sales=${sales.length}, invoices=${invoices.length}',
+          '✅ Full owner history restored: sales=$salesCount, invoices=$invoiceCount',
         );
       }
       return true;
