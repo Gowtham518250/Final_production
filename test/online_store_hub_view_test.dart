@@ -66,6 +66,7 @@ void main() {
     expect(find.text('3'), findsWidgets);
     expect(find.text('Waiting orders'), findsOneWidget);
     expect(find.text('₹4,250'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('View new orders'), 240);
     await tester.tap(find.text('View new orders'));
     expect(opened, 1);
     expect(tester.takeException(), isNull);
@@ -111,6 +112,7 @@ void main() {
       onOpenSetup: () {},
     )));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Manage inventory'), 240);
     await tester.tap(find.text('Manage inventory'));
     expect(opened, 1);
   });
