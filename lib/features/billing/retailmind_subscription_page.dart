@@ -107,7 +107,7 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          content: Text(error.toString().replaceFirst('Exception: ', '') ?? 'An unexpected error occurred. Please try again.'),
         ));
       }
     } finally {
