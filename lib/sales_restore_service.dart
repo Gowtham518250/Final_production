@@ -54,7 +54,9 @@ class SalesRestoreService {
     // records are still present on this device.
     final salesCount = await LocalStorageService.getSalesCount();
     final invoiceCount = await LocalStorageService.getLocalInvoiceCount();
-    if (salesCount == 0 && invoiceCount == 0) {
+    final salesMissing = expectedSales > 0 && salesCount == 0;
+    final invoicesMissing = expectedInvoices > 0 && invoiceCount == 0;
+    if (salesMissing || invoicesMissing) {
       await prefs.setBool(markerKey, false);
       return false;
     }
