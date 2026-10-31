@@ -434,6 +434,33 @@ class OnlineOrderService {
     if (token.isEmpty) return Map<String, dynamic>.from(empty);
     final headers = {'Authorization': 'Bearer $token'};
 
+    // Fetch the lifetime total independently of the paged Online Orders screen.
+    // That screen may be feature-gated or have a narrower visibility policy;
+    // the dashboard count must include every lifecycle status.
+    int? lifetimeOrderCount;
+    try {
+      final countResponse = await ApiClient.getJson(
+        '/api/sales-restore/cancelled-order-identifiers',
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
+      if (countResponse.statusCode == 200) {
+        final countDecoded = jsonDecode(countResponse.body);
+        if (countDecoded is Map) {
+          final rawCount = countDecoded['totalCount'] ?? countDecoded['total'];
+          final parsedCount = rawCount is num
+              ? rawCount.toInt()
+              : int.tryParse(rawCount?.toString() ?? '');
+          if (parsedCount != null && parsedCount >= 0) {
+            lifetimeOrderCount = parsedCount;
+          }
+        }
+      }
+    } catch (countError) {
+      if (kDebugMode) {
+        debugPrint('getAnalytics lifetime count request failed: $countError');
+      }
+    }
+
     try {
       // Derive revenue from order rows so cancelled/returned statuses cannot
       // be hidden by an opaque aggregate response. Fetch every page to avoid
@@ -546,7 +573,9 @@ class OnlineOrderService {
         'todayRevenue': todayRevenue,
         'paidCount': paidCount,
         'todayPaidCount': paidCount,
-        'totalCount': ordersById.length,
+        // Prefer the separate owner-scoped lifetime count, which includes
+        // cancelled/rejected/returned rows even when other order APIs change.
+        'totalCount': lifetimeOrderCount ?? ordersById.length,
         'totalRevenue': totalRevenue,
         'totalPaidCount': totalPaidCount,
         'rejectedCount': rejectedCount,
