@@ -36,7 +36,7 @@ void main() {
             expect(
               value,
               isNot(english.translate(key)),
-              reason: '$key fell back to English in ${language['code']}',
+              reason: '$key fell back to English in ${locale.languageCode}',
             );
           }
         }
