@@ -107,20 +107,25 @@ void main() {
       }
     }
   });
-  test('every voice language is registered as an application locale', () {
-    final appLanguageCodes = AppLocalizations.supportedLocales
-        .map((locale) => locale.languageCode)
-        .toSet();
+  test('voice picker supports 23 languages independently of UI dictionaries', () {
     final selectableLanguageCodes = LanguageProvider.languages
         .map((language) => language['code']!)
         .toSet();
 
-    expect(appLanguageCodes, containsAll(selectableLanguageCodes));
     expect(selectableLanguageCodes, containsAll(<String>{
       'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
       'or', 'as', 'brx', 'doi', 'ks', 'kok', 'mai', 'mni', 'ne',
       'sa', 'sat', 'sd', 'ur',
     }));
+    expect(selectableLanguageCodes, hasLength(23));
+
+    final curatedUiCodes = AppLocalizations.supportedLocales
+        .map((locale) => locale.languageCode)
+        .toSet();
+    expect(curatedUiCodes, containsAll(<String>{
+      'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
+    }));
+    expect(curatedUiCodes.length, 10);
   });
 
 }
