@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api_client.dart';
 
@@ -116,8 +117,150 @@ class RetailMindBillingService {
   static const currentPath = '/api/billing/subscriptions/current';
   static const usagePath = '/api/billing/usage';
   static const createSubscriptionPath = '/api/billing/subscriptions';
+  static const featureAccessSnapshotPath = '/api/billing/feature-access';
+  static const Duration featureAccessCacheTtl = Duration(minutes: 3);
+
+  static final Map<int, _FeatureAccessSnapshotCache> _featureAccessCache = {};
+  static final Map<int, Future<Map<String, bool>>> _featureAccessInFlight = {};
+
   static String featureAccessPath(String featureCode) =>
       '/api/billing/feature-access/${Uri.encodeComponent(featureCode)}';
+
+  static Future<int?> _currentOwnerId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.get('user_id') ?? prefs.get('userId');
+    final id = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+    return id != null && id > 0 ? id : null;
+  }
+
+  /// Fetch all feature decisions with one server query and reuse them briefly
+  /// while the owner moves between gated screens. The backend remains the
+  /// authority for every protected operation.
+  static Future<Map<String, bool>> fetchFeatureAccessSnapshot({
+    bool forceRefresh = false,
+  }) async {
+    final ownerId = await _currentOwnerId();
+    if (ownerId == null) {
+      return _requestFeatureAccessSnapshot();
+    }
+
+    final cached = _featureAccessCache[ownerId];
+    if (!forceRefresh &&
+        cached != null &&
+        DateTime.now().difference(cached.fetchedAt) < featureAccessCacheTtl) {
+      return Map<String, bool>.unmodifiable(cached.features);
+    }
+
+    if (forceRefresh) _featureAccessCache.remove(ownerId);
+
+    final existing = _featureAccessInFlight[ownerId];
+    if (existing != null) return existing;
+
+    final request = _requestFeatureAccessSnapshot();
+    _featureAccessInFlight[ownerId] = request;
+    try {
+      final features = await request;
+      if (features.isNotEmpty) {
+        _featureAccessCache[ownerId] = _FeatureAccessSnapshotCache(
+          features: Map<String, bool>.unmodifiable(features),
+          fetchedAt: DateTime.now(),
+        );
+      }
+      return features;
+    } finally {
+      if (identical(_featureAccessInFlight[ownerId], request)) {
+        _featureAccessInFlight.remove(ownerId);
+      }
+    }
+  }
+
+  static Future<Map<String, bool>> _requestFeatureAccessSnapshot() async {
+    final response = await ApiClient.getJson(featureAccessSnapshotPath)
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode == 404) return const {};
+    if (response.statusCode != 200) {
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to verify plan access (${response.statusCode}).',
+      );
+    }
+
+    final body = _decode(response);
+    final rawFeatures = body['features'];
+    if (rawFeatures is! Map) {
+      throw const FormatException(
+        'The billing service returned an invalid feature-access response.',
+      );
+    }
+
+    final features = <String, bool>{
+      for (final entry in rawFeatures.entries)
+        entry.key.toString(): entry.value == true,
+    };
+    final rawLimit = body['daily_ai_query_limit'];
+    final dailyAiLimit = rawLimit is num
+        ? rawLimit.toInt()
+        : int.tryParse(rawLimit?.toString() ?? '') ?? 0;
+    features['ai_queries'] = dailyAiLimit > 0;
+    features['online_orders'] = features['online_orders'] == true;
+    return features;
+  }
+
+  static Future<void> prefetchCommonFeatureAccess() async {
+    try {
+      await fetchFeatureAccessSnapshot();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Feature entitlement prefetch deferred: $error');
+      }
+    }
+  }
+
+  static Future<void> invalidateFeatureAccessCache() async {
+    final ownerId = await _currentOwnerId();
+    if (ownerId != null) _featureAccessCache.remove(ownerId);
+  }
+
+  static Future<bool> checkFeatureAccess(
+    String featureCode, {
+    bool forceRefresh = false,
+  }) async {
+    final snapshot = await fetchFeatureAccessSnapshot(
+      forceRefresh: forceRefresh,
+    );
+    final cachedDecision = snapshot[featureCode];
+    if (cachedDecision != null) return cachedDecision;
+
+    // Compatibility with a backend version that has only the single-feature
+    // route during a rolling deployment.
+    final response = await ApiClient.getJson(featureAccessPath(featureCode))
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to verify plan access (${response.statusCode}).',
+      );
+    }
+    final body = _decode(response);
+    if (body['allowed'] is! bool) {
+      throw const FormatException(
+        'The billing service returned an invalid access response.',
+      );
+    }
+
+    final allowed = body['allowed'] as bool;
+    final ownerId = await _currentOwnerId();
+    if (ownerId != null) {
+      final existing = _featureAccessCache[ownerId];
+      final features = <String, bool>{...?existing?.features};
+      features[featureCode] = allowed;
+      _featureAccessCache[ownerId] = _FeatureAccessSnapshotCache(
+        features: Map<String, bool>.unmodifiable(features),
+        fetchedAt: DateTime.now(),
+      );
+    }
+    return allowed;
+  }
 
   static Map<String, dynamic> _decode(http.Response response) {
     final value = jsonDecode(response.body);
@@ -168,20 +311,17 @@ class RetailMindBillingService {
     return _decode(response);
   }
 
-  static Future<bool> checkFeatureAccess(String featureCode) async {
-    final response = await ApiClient.getJson(featureAccessPath(featureCode))
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) {
-      throw RetailMindBillingException.fromResponse(
-        response,
-        fallback: 'Unable to verify plan access (${response.statusCode}).',
-      );
-    }
-    final body = _decode(response);
-    if (body['allowed'] is! bool) {
-      throw const FormatException('The billing service returned an invalid access response.');
-    }
-    return body['allowed'] as bool;
-  }
 
+
+}
+
+
+class _FeatureAccessSnapshotCache {
+  const _FeatureAccessSnapshotCache({
+    required this.features,
+    required this.fetchedAt,
+  });
+
+  final Map<String, bool> features;
+  final DateTime fetchedAt;
 }
