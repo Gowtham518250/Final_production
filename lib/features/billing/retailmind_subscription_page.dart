@@ -42,8 +42,65 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(_reload);
-    await Future.wait([_plansFuture, _subscriptionFuture, _usageFuture]);
+    try {
+      await Future.wait([_plansFuture, _subscriptionFuture, _usageFuture]);
+    } catch (_) {
+      // Each FutureBuilder renders its own error state; keep pull-to-refresh usable.
+    }
+  }
+
+
+  Future<void> _showCheckoutError(Object error) async {
+    if (!mounted) return;
+
+    var title = 'Unable to start checkout';
+    var message = error.toString().replaceFirst('Exception: ', '');
+
+    if (error is RetailMindBillingException) {
+      switch (error.code) {
+        case 'ACTIVE_SUBSCRIPTION_EXISTS':
+          title = 'A paid plan is already active';
+          message = error.message;
+          break;
+        case 'SUBSCRIPTION_CHECKOUT_BLOCKED':
+        case 'PENDING_CASHFREE_CHECKOUT':
+          title = 'Previous checkout needs attention';
+          message = error.message;
+          break;
+        case 'CHECKOUT_CREATION_IN_PROGRESS':
+          title = 'Checkout is being prepared';
+          message = error.message;
+          break;
+        case 'CASHFREE_SESSION_MISSING':
+        case 'CASHFREE_CHECKOUT_OUTCOME_UNKNOWN':
+          title = 'Payment status needs verification';
+          message = error.message;
+          break;
+        default:
+          message = error.message;
+      }
+    }
+
+    final refresh = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message.isEmpty ? 'Please try again.' : message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Refresh status'),
+          ),
+        ],
+      ),
+    );
+    if (refresh == true && mounted) await _refresh();
   }
 
   void _onSubscriptionVerify(String subscriptionId) {
@@ -105,11 +162,7 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       _cashfree.setCallback(_onSubscriptionVerify, _onSubscriptionFailure);
       _cashfree.doPayment(payment);
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '') ?? 'An unexpected error occurred. Please try again.'),
-        ));
-      }
+      if (mounted) await _showCheckoutError(error);
     } finally {
       if (mounted) setState(() => _busyPlan = null);
     }
@@ -208,18 +261,195 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
   Widget _currentSubscriptionCard() => FutureBuilder<Map<String, dynamic>>(
     future: _subscriptionFuture,
     builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE3E8F2)),
+          ),
+          child: const Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Loading subscription status...'),
+            ],
+          ),
+        );
+      }
+
+      if (snapshot.hasError) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE3E8F2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Current subscription status is unavailable.',
+                style: TextStyle(color: Colors.redAccent),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry status'),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
       final data = snapshot.data ?? const <String, dynamic>{};
-      final status = (data['status'] ?? data['subscription_status'] ?? 'No active plan').toString().replaceAll('_', ' ');
-      final plan = (data['plan_name'] ?? data['name'] ?? 'Subscription').toString();
-      final renewal = data['next_charge_at'] ?? data['current_period_end'] ?? data['renewal_at'];
-      return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE3E8F2))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [const Icon(Icons.verified_user_outlined, color: Color(0xFF4454C7)), const SizedBox(width: 9), Text('Current subscription', style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: const Color(0xFF172554))), const Spacer(), Text(status.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF596579)))]),
-        const SizedBox(height: 8), Text(plan, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800)),
-        if (renewal != null) Text('Next renewal: $renewal', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-        if (status.toUpperCase() == 'ACTIVE' && data['id'] is num && data['cancel_at_period_end'] != true)
-          Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () => _cancelCurrentSubscription((data['id'] as num).toInt()), child: const Text('Cancel renewal'))),
-        if (snapshot.hasError) const Text('Subscription status is unavailable.', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
-      ]));
+      final statusCode = (data['status'] ??
+              data['subscription_status'] ??
+              'FREE')
+          .toString()
+          .toUpperCase();
+      final status = statusCode.replaceAll('_', ' ');
+      final plan = (data['plan_name'] ?? data['name'] ?? 'Free Starter')
+          .toString();
+      final renewal = data['next_charge_at'] ??
+          data['current_period_end'] ??
+          data['renewal_at'];
+      final rawId = data['id'];
+      final subscriptionId = rawId is num
+          ? rawId.toInt()
+          : int.tryParse(rawId?.toString() ?? '');
+      final cancelAtPeriodEnd = data['cancel_at_period_end'] == true;
+
+      String statusMessage;
+      switch (statusCode) {
+        case 'PENDING_AUTH':
+          statusMessage =
+              'A previous Cashfree checkout is awaiting authorization. When you retry a plan, Retail Mind will first try to close that pending checkout safely.';
+          break;
+        case 'CREATING':
+          statusMessage =
+              'A checkout is still being created. Please wait briefly before trying again.';
+          break;
+        case 'ACTIVE':
+          statusMessage = cancelAtPeriodEnd
+              ? 'Renewal cancellation has been requested. Your current paid access remains until the paid period ends.'
+              : 'Your paid plan is active. A second recurring mandate is blocked to prevent duplicate charges.';
+          break;
+        case 'GRACE_PERIOD':
+          statusMessage =
+              'Your subscription is in its payment grace period. Resolve the existing subscription before starting another plan.';
+          break;
+        case 'CREATE_FAILED':
+          statusMessage =
+              'The previous checkout could not be created. You can try starting a new checkout.';
+          break;
+        case 'CANCELLED':
+          statusMessage =
+              'This subscription is cancelled. Check the paid-through date before starting another plan.';
+          break;
+        default:
+          statusMessage = 'Your shop currently uses the Free Starter plan.';
+      }
+
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE3E8F2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.verified_user_outlined,
+                  color: Color(0xFF4454C7),
+                ),
+                const SizedBox(width: 9),
+                Text(
+                  'Current subscription',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF172554),
+                  ),
+                ),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    status,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF596579),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              plan,
+              style: GoogleFonts.inter(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              statusMessage,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                height: 1.45,
+              ),
+            ),
+            if (renewal != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Paid-through / renewal date: $renewal',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ],
+            if ((statusCode == 'ACTIVE' || statusCode == 'GRACE_PERIOD') &&
+                subscriptionId != null &&
+                !cancelAtPeriodEnd)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _cancelCurrentSubscription(subscriptionId),
+                  child: const Text('Cancel renewal'),
+                ),
+              ),
+            if (cancelAtPeriodEnd)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Renewal cancellation requested',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
     },
   );
 
