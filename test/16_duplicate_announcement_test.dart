@@ -451,22 +451,21 @@ void main() {
       );
       expect(service.similarRecentlyConfirmed(other), isNull);
     });
+  test('SMS echo of second same-value payment pairs with nearest notification', () async {
+        final now = DateTime.now();
+        final events = await emitAll([
+          _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification',
+              at: now, amount: 500, accountSuffix: '4222',
+              sourceEventKey: 'com.phonepe.app|1|1000|aa'),
+          _credit(id: 'n2', app: PaymentApp.phonePe, source: 'notification',
+              at: now.add(const Duration(minutes: 5)), amount: 500,
+              accountSuffix: '4222',
+              sourceEventKey: 'com.phonepe.app|2|2000|bb'),
+          _credit(id: 's2', app: PaymentApp.bankSms, source: 'sms',
+              at: now.add(const Duration(minutes: 5, seconds: 20)), amount: 500,
+              accountSuffix: '4222'),
+        ]);
+        expect(events, hasLength(2));
+      });
   });
-    test('SMS echo of second same-value payment pairs with nearest notification', () async {
-      final now = DateTime.now();
-      final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification',
-            at: now, amount: 500, accountSuffix: '4222',
-            sourceEventKey: 'com.phonepe.app|1|1000|aa'),
-        _credit(id: 'n2', app: PaymentApp.phonePe, source: 'notification',
-            at: now.add(const Duration(minutes: 5)), amount: 500,
-            accountSuffix: '4222',
-            sourceEventKey: 'com.phonepe.app|2|2000|bb'),
-        _credit(id: 's2', app: PaymentApp.bankSms, source: 'sms',
-            at: now.add(const Duration(minutes: 5, seconds: 20)), amount: 500,
-            accountSuffix: '4222'),
-      ]);
-      expect(events, hasLength(2));
-    });
-
 }
