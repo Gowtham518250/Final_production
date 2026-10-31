@@ -43,6 +43,8 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
 
   Future<void> _refresh() async {
     if (!mounted) return;
+    await RetailMindBillingService.invalidateFeatureAccessCache();
+    if (!mounted) return;
     setState(_reload);
     try {
       await Future.wait([_plansFuture, _subscriptionFuture, _usageFuture]);
