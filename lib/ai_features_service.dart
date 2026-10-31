@@ -126,14 +126,22 @@ class ChatbotContextService {
         return 'The assistant returned an empty answer. Please try again.';
       }
 
+      // A missing support route is a deployment/API-contract issue, not a
+      // meaningful assistant answer. Never show FastAPI's raw "Not Found" text.
+      if (response.statusCode == 404) {
+        return 'The Help & Support service is being updated. Please try again shortly.';
+      }
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        return 'Your session may have expired. Please sign in again and retry.';
+      }
       if (decoded is Map) {
         final detail = decoded['detail'] ?? decoded['message'] ?? decoded['error'];
         if (detail != null && detail.toString().trim().isNotEmpty) {
           return detail.toString();
         }
       }
-      return 'The assistant service is temporarily unavailable (HTTP ' +
-          response.statusCode.toString() + ').';
+      return 'The assistant is temporarily unavailable (HTTP ' +
+          response.statusCode.toString() + '). Please try again.';
     } catch (_) {
       return 'Could not reach the assistant service. Check your connection and try again.';
     }
