@@ -105,7 +105,7 @@ class InventoryStockHelper {
   static String _normalizeProductIdentity(Object? value) {
     return (value?.toString() ?? '')
         .trim()
-        .replaceAll(RegExp(r'[ \\t\\r\\n]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .toLowerCase();
   }
 
