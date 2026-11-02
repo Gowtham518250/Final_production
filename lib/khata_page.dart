@@ -700,10 +700,7 @@ class _KhataPageState extends State<KhataPage>
         prefs.getString('shop_name') ??
         prefs.getString('user_name') ??
         'Our Store';
-    final upiId =
-        prefs.getString('upi_id') ??
-        prefs.getString('shop_upi_id') ??
-        prefs.getString('upi_vpa');
+    final upiId = await WhatsAppMessageService.resolveShopUpiId(prefs: prefs);
 
     final success = await WhatsAppMessageService.sendPaymentReminderWithUPI(
       phone: phone,

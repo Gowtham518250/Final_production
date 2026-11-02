@@ -222,6 +222,35 @@ class PaymentEvent {
     return 'source_event_${sha256.convert(utf8.encode(identity))}';
   }
 
+  static const Duration notificationUpdateWindow = Duration(seconds: 30);
+
+  /// Identity of a notification slot, independent of post time and payload.
+  String? get sourceNotificationStream {
+    if (!detectionSource.toLowerCase().contains('notification')) return null;
+    final key = sourceEventKey?.trim();
+    if (key == null || key.isEmpty) return null;
+    final parts = key.split('|');
+    if (parts.length < 4 ||
+        int.tryParse(parts[parts.length - 2]) == null) {
+      return null;
+    }
+    final slot = parts.take(parts.length - 2).join('|');
+    if (slot.isEmpty) return null;
+    return 'source_stream_${sha256.convert(utf8.encode(slot))}';
+  }
+
+  /// Normalized payer evidence for notification-update matching. Preserve
+  /// Unicode letters so Indian-script names remain useful conflict evidence.
+  String? get notificationPayerIdentity {
+    final value = payerName?.toLowerCase().trim();
+    if (value == null || value.isEmpty) return null;
+    final normalized = value
+        .replaceAll(RegExp(r'[^\p{L}\p{N} ]', unicode: true), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
   static String _transactionDirection(String text) {
     final t = text.toLowerCase();
 

@@ -41,6 +41,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
     private static final long TRUECALLER_CROSS_APP_MS = 8_000L;
     private static final long SMS_ECHO_MS = 3L * 60L * 60L * 1000L;
     private static final long EXACT_TEXT_REPLAY_MS = 2000L;
+    private static final long NOTIFICATION_UPDATE_MS = 30_000L;
     // App notification + bank SMS for one transfer usually land within a
     // minute but share no payer/account/UTR. Pair one-to-one only.
     private static final long WEAK_MODALITY_MS = 60_000L;
@@ -188,6 +189,44 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                 // A reference on only one side neither proves nor disproves
                 // identity: fall through to the strict cross-channel checks.
 
+                long currentPostTime = notificationPostTime(sourceIdentity);
+                long previousPostTime = notificationPostTime(old.sourceIdentity);
+                boolean notificationAccountConflict = notEmpty(accountHash)
+                    && notEmpty(old.accountHash)
+                    && !accountHash.equals(old.accountHash);
+                boolean notificationPayerConflict = notEmpty(payerHash)
+                    && notEmpty(old.payerHash)
+                    && !payerHash.equals(old.payerHash);
+                boolean sameNotificationAccount = notEmpty(accountHash)
+                    && accountHash.equals(old.accountHash);
+                boolean sameNotificationPayer = notEmpty(payerHash)
+                    && payerHash.equals(old.payerHash);
+                if (sameDirection
+                    && !"unknown".equals(direction)
+                    && !notEmpty(referenceHash)
+                    && !notEmpty(old.referenceHash)
+                    && isNotificationUpdate(sourceIdentity, old.sourceIdentity)
+                    && currentPostTime > 0L
+                    && previousPostTime > 0L
+                    && Math.abs(currentPostTime - previousPostTime)
+                        <= NOTIFICATION_UPDATE_MS
+                    && !notificationAccountConflict
+                    && !notificationPayerConflict
+                    && (sameNotificationAccount || sameNotificationPayer)) {
+                    // This gate suppresses speech only; Flutter retains the
+                    // event for payment history and merchant review.
+                    ContentValues refresh = new ContentValues();
+                    refresh.put("seen_at", now);
+                    refresh.put("source_identity", emptyToNull(sourceIdentity));
+                    refresh.put("payer_hash", emptyToNull(payerHash));
+                    refresh.put("account_hash", emptyToNull(accountHash));
+                    refresh.put("text_hash", emptyToNull(textHash));
+                    db.update(TABLE, refresh, "id = ?",
+                        new String[]{String.valueOf(old.id)});
+                    db.setTransactionSuccessful();
+                    return true;
+                }
+
                 // Fuzzy cross-source matching is stricter: both sides must
                 // agree on a known direction, in addition to payer/account evidence.
                 if (!sameDirection || "unknown".equals(direction)) continue;
@@ -310,6 +349,35 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
             cursor.close();
         }
         return items;
+    }
+
+    private static long notificationPostTime(String identity) {
+        if (!notEmpty(identity)) return 0L;
+        String[] parts = identity.split("\\|");
+        if (parts.length < 3) return 0L;
+        try {
+            return Long.parseLong(parts[parts.length - 1]);
+        } catch (NumberFormatException error) {
+            return 0L;
+        }
+    }
+
+    private static boolean isNotificationUpdate(String a, String b) {
+        String streamA = notificationStream(a);
+        String streamB = notificationStream(b);
+        return notEmpty(streamA) && streamA.equals(streamB);
+    }
+
+    private static String notificationStream(String identity) {
+        if (!notEmpty(identity) || identity.startsWith("sms|")) return null;
+        String[] parts = identity.split("\\|");
+        if (parts.length < 3 || notificationPostTime(identity) <= 0L) return null;
+        StringBuilder stream = new StringBuilder();
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (i > 0) stream.append('|');
+            stream.append(parts[i]);
+        }
+        return stream.toString();
     }
 
     private static String resolveSourceIdentity(Map<?, ?> input, String origin, String rawText) {

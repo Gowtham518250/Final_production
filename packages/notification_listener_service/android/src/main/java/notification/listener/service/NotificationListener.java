@@ -196,7 +196,8 @@ public class NotificationListener extends NotificationListenerService {
         String subText = extras == null || extras.getCharSequence(Notification.EXTRA_SUB_TEXT) == null
                 ? "" : extras.getCharSequence(Notification.EXTRA_SUB_TEXT).toString();
         String version = title + "|" + text + "|" + bigText + "|" + subText;
-        return sbn.getPackageName() + "|" + sbn.getId() + "|" + sbn.getPostTime()
+        String tag = sbn.getTag() == null ? "" : sbn.getTag();
+        return sbn.getPackageName() + "|" + tag + "|" + sbn.getId() + "|" + sbn.getPostTime()
                 + "|" + Integer.toHexString(version.hashCode());
     }
 

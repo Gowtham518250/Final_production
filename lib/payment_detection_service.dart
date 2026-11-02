@@ -2048,6 +2048,35 @@ class PriorityVoiceQueue {
           (event.amount - old.amount).abs() < 0.01 &&
           currentDirection ==
               PaymentDetectionService._eventPaymentDirection(old);
+        final notificationAt = event.sourceTimestamp ?? event.timestamp;
+        final previousNotificationAt = old.sourceTimestamp ?? old.timestamp;
+        final currentNotificationPayer = event.notificationPayerIdentity;
+        final previousNotificationPayer = old.notificationPayerIdentity;
+        final sameNotificationPayer = currentNotificationPayer != null &&
+          previousNotificationPayer != null &&
+          currentNotificationPayer == previousNotificationPayer;
+        final sameNotificationAccount = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix == old.accountSuffix;
+        final notificationAccountConflict = event.accountSuffix != null &&
+          old.accountSuffix != null &&
+          event.accountSuffix != old.accountSuffix;
+        final notificationPayerConflict = currentNotificationPayer != null &&
+          previousNotificationPayer != null &&
+          currentNotificationPayer != previousNotificationPayer;
+        if (currentReference == null &&
+          priorReference == null &&
+          event.sourceNotificationStream != null &&
+          event.sourceNotificationStream == old.sourceNotificationStream &&
+          sameAmountAndDirection &&
+          notificationAt.difference(previousNotificationAt).abs() <=
+            PaymentIdentityMatcher.notificationUpdateWindow &&
+          !notificationAccountConflict &&
+          !notificationPayerConflict &&
+          (sameNotificationAccount || sameNotificationPayer)) {
+        PdsLogger.d('VOICE', 'Reposted notification update announcement suppressed');
+        return true;
+        }
       final currentPayer = _normalizedVoicePayer(event.payerName);
       final priorPayer = _normalizedVoicePayer(old.payerName);
       final sameKnownPayer = currentPayer != null &&
@@ -5696,6 +5725,7 @@ class PaymentDetectionService {
     bool isBillSettlement = false,
     bool forceMute = false,
   }) async {
+    var suppressRepeatedAnnouncement = false;
     event = requireMerchantConfirmation(event);
     // Preserve the native fallback marker as payment events cross isolates.
     // Classification/history still run, but later Flutter speech/alerts are muted.
@@ -5751,10 +5781,10 @@ class PaymentDetectionService {
       _stats.recordDupe();
       PdsLogger.i(
         'EMIT',
-        'Cross-isolate payment echo suppressed before announcement: '
+        'Cross-isolate duplicate announcement muted; candidate retained: '
             'amount=${event.amount} origin=${_eventOrigin(event.detectionSource)}',
       );
-      return;
+      suppressRepeatedAnnouncement = true;
     }
 
     // Cross-device UTR check happens before UI/voice emission. Serialize
@@ -5820,7 +5850,8 @@ class PaymentDetectionService {
       }
     }
 
-    if (billContext.isActive &&
+    if (!suppressRepeatedAnnouncement &&
+      billContext.isActive &&
         event.decision == PaymentDecision.likely &&
         !event.isMerchantConfirmed &&
         isSafeIncomingCredit(event)) {
@@ -5896,14 +5927,19 @@ class PaymentDetectionService {
     _uiCtrl.add(finalUi);
 
     // Voice Rule: Bill settlement message PREVENTS standard amount voice
-    if (isSettled && !forceMute && !finalEvent.nativeAnnouncementHandled) {
+    if (isSettled &&
+      !forceMute &&
+      !suppressRepeatedAnnouncement &&
+      !finalEvent.nativeAnnouncementHandled) {
       final t = VoiceBuilder.received(finalEvent.amount, null, _voiceLanguage);
       _voice.enqueueRaw(
         'Payment Confirmed. $t',
         _VP.high,
         fingerprint: finalEvent.fingerprint,
       );
-    } else if (!forceMute && !finalEvent.nativeAnnouncementHandled) {
+    } else if (!forceMute &&
+      !suppressRepeatedAnnouncement &&
+      !finalEvent.nativeAnnouncementHandled) {
       _voice.enqueue(finalEvent, finalUi);
     }
 

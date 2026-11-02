@@ -150,6 +150,11 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
           payer: nonEmpty(entry['payer']),
           account: nonEmpty(entry['account']),
           sourceIdentity: nonEmpty(entry['sourceEventFingerprint']),
+          notificationStream: nonEmpty(entry['notificationStream']),
+          notificationAt: DateTime.tryParse(
+            (entry['notificationAt'] ?? '').toString(),
+          ),
+          notificationPayer: nonEmpty(entry['notificationPayer']),
           text: (entry['text'] ?? '').toString(),
         ),
       );
@@ -169,6 +174,9 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       payer: nonEmpty(payer),
       account: nonEmpty(account),
       sourceIdentity: event.sourceEventFingerprint,
+      notificationStream: event.sourceNotificationStream,
+      notificationAt: event.sourceTimestamp,
+      notificationPayer: event.notificationPayerIdentity,
       text: text,
     );
 
@@ -188,8 +196,18 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
 
     if (resolution.isEcho) {
       final claimChannel = resolution.claimChannel;
+      final index = stored.indexWhere((e) => e['id'] == resolution.matchedId);
+      if (index >= 0 && resolution.reason == 'same_notification_update') {
+        stored[index]['seenAt'] = now.toIso8601String();
+        stored[index]['notificationAt'] =
+            event.sourceTimestamp?.toIso8601String();
+        stored[index]['sourceEventFingerprint'] =
+            event.sourceEventFingerprint;
+        stored[index]['notificationPayer'] =
+            event.notificationPayerIdentity;
+        stored[index]['account'] = account;
+      }
       if (claimChannel != null) {
-        final index = stored.indexWhere((e) => e['id'] == resolution.matchedId);
         if (index >= 0) {
           final claimed = (stored[index]['claimedChannels'] is List)
               ? (stored[index]['claimedChannels'] as List)
@@ -217,6 +235,9 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       'account': account,
       'text': text,
       'sourceEventFingerprint': event.sourceEventFingerprint,
+      'notificationStream': event.sourceNotificationStream,
+      'notificationAt': event.sourceTimestamp?.toIso8601String(),
+      'notificationPayer': event.notificationPayerIdentity,
       'seenAt': now.toIso8601String(),
       'claimedChannels': <String>[],
     });

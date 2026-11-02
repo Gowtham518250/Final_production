@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:csv/csv.dart';
+import 'package:flutter/foundation.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,16 +12,89 @@ import 'financial_math.dart';
 import 'notification_service.dart';
 
 class ExportService {
+  static DateTime? parseSalesDate(dynamic rawDate) {
+    if (rawDate == null || rawDate.toString().trim().isEmpty) return null;
+    if (rawDate is DateTime) return rawDate.toLocal();
+
+    final value = rawDate.toString().trim();
+    final trimmed = value.replaceFirst(RegExp(r'\s+Z$'), 'Z');
+
+    for (final pattern in [
+      'yyyy-MM-dd',
+      'yyyy/MM/dd',
+      'dd-MM-yyyy',
+      'dd/MM/yyyy',
+      'MM/dd/yyyy',
+      'yyyy-MM-dd HH:mm:ss',
+      'yyyy-MM-ddTHH:mm:ss',
+      'yyyy-MM-ddTHH:mm:ssZ',
+      'yyyy-MM-ddTHH:mm:ss.SSSZ',
+    ]) {
+      final parsed = _tryParseFormat(trimmed, pattern);
+      if (parsed != null) return parsed;
+    }
+
+    final iso = DateTime.tryParse(trimmed);
+    if (iso != null) return iso.toLocal();
+
+    final fallback = DateTime.tryParse(trimmed.replaceAll('/', '-'));
+    if (fallback != null) return fallback.toLocal();
+
+    return null;
+  }
+
+  static DateTime? _tryParseFormat(String value, String format) {
+    try {
+      final formatter = DateFormat(format);
+      final parsed = formatter.parseStrict(value);
+      return parsed.toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static DateTime? resolveSalesDate(Map<String, dynamic>? sale) {
+    if (sale == null) return null;
+
+    final keys = [
+      'date',
+      'sale_date',
+      'business_date',
+      'invoice_date',
+      'created_at',
+      'createdAt',
+      'updated_at',
+      'updatedAt',
+      'timestamp',
+      'event_timestamp',
+      'sale_timestamp',
+      'paid_date',
+      'payment_date',
+    ];
+
+    for (final key in keys) {
+      final parsed = parseSalesDate(sale[key]);
+      if (parsed != null) return parsed;
+    }
+
+    final raw = sale['raw'];
+    if (raw is Map) {
+      final nested = Map<String, dynamic>.from(raw);
+      final nestedParsed = resolveSalesDate(nested);
+      if (nestedParsed != null) return nestedParsed;
+    }
+
+    return null;
+  }
+
   /// Generate CSV from sales data
   static Future<String> generateCSV(List<Map<String, dynamic>> sales) async {
     try {
       // Sort sales by date ascending
       final sortedSales = List<Map<String, dynamic>>.from(sales);
       sortedSales.sort((a, b) {
-        final dateAStr = a['date'] ?? a['sale_date'] ?? '';
-        final dateBStr = b['date'] ?? b['sale_date'] ?? '';
-        final dateA = DateTime.tryParse(dateAStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = DateTime.tryParse(dateBStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
@@ -33,9 +106,10 @@ class ExportService {
         final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
         final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
         final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
-        
+        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
+
         csvData.add([
-          _formatDate(sale['date'] ?? sale['sale_date'] ?? DateTime.now()),
+          _formatDate(saleDate),
           sale['product'] ?? sale['item'] ?? 'N/A',
           qty,
           'Rs.${price.toStringAsFixed(2)}',
@@ -76,7 +150,8 @@ class ExportService {
         final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
         final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
         final double gstPercent = double.tryParse(sale['gstPercent']?.toString() ?? '18') ?? 18.0;
-        
+        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
+
         final double invoiceValue = CurrencyManager.multiply(price, qty);
         final double taxableValue = invoiceValue / (1 + (gstPercent / 100));
 
@@ -84,7 +159,7 @@ class ExportService {
           '', // GSTIN of Recipient
           sale['customerName'] ?? 'Walk-in', // Receiver Name
           sale['invoiceId'] ?? 'N/A', // Invoice Number
-          _formatDate(sale['date'] ?? sale['sale_date'] ?? DateTime.now()), // Invoice Date
+          _formatDate(saleDate), // Invoice Date
           invoiceValue.toStringAsFixed(2), // Invoice Value
           '', // Place Of Supply
           'N', // Reverse Charge
@@ -115,9 +190,10 @@ class ExportService {
         final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
         final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
         final double total = CurrencyManager.multiply(price, qty);
+        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
 
         csvData.add([
-          _formatDate(sale['date'] ?? sale['sale_date'] ?? DateTime.now()),
+          _formatDate(saleDate),
           'Sales',
           sale['invoiceId'] ?? 'N/A',
           sale['customerName'] ?? 'Walk-in',
@@ -142,10 +218,8 @@ class ExportService {
       // Sort sales by date ascending
       final sortedSales = List<Map<String, dynamic>>.from(sales);
       sortedSales.sort((a, b) {
-        final dateAStr = a['date'] ?? a['sale_date'] ?? '';
-        final dateBStr = b['date'] ?? b['sale_date'] ?? '';
-        final dateA = DateTime.tryParse(dateAStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = DateTime.tryParse(dateBStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
@@ -162,9 +236,10 @@ class ExportService {
         final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
         final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
         final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
-        
+        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
+
         sheetObject.appendRow([
-          TextCellValue(_formatDate(sale['date'] ?? sale['sale_date'] ?? DateTime.now())),
+          TextCellValue(_formatDate(saleDate)),
           TextCellValue(sale['product'] ?? sale['item'] ?? 'N/A'),
           DoubleCellValue(qty),
           TextCellValue('Rs.${price.toStringAsFixed(2)}'),
@@ -175,7 +250,7 @@ class ExportService {
 
       return excel.encode() ?? [];
     } catch (e) {
-      print('Excel export error: $e');
+      debugPrint('Excel export error: $e');
       throw Exception('Excel generation failed: $e');
     }
   }
@@ -256,14 +331,12 @@ class ExportService {
       // Sort sales by date ascending
       final sortedSales = List<Map<String, dynamic>>.from(sales);
       sortedSales.sort((a, b) {
-        final dateAStr = a['date'] ?? a['sale_date'] ?? '';
-        final dateBStr = b['date'] ?? b['sale_date'] ?? '';
-        final dateA = DateTime.tryParse(dateAStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = DateTime.tryParse(dateBStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
-      print('📄 Generating PDF for ${sortedSales.length} items...');
+      debugPrint('📄 Generating PDF for ${sortedSales.length} items...');
       final pdf = pw.Document();
 
       pdf.addPage(
@@ -348,8 +421,8 @@ class ExportService {
                 final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
                 final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
                 final String name = (sale['product'] ?? sale['item'] ?? 'N/A').toString();
-                final String dateStr = _formatDate(sale['date'] ?? sale['sale_date'] ?? DateTime.now());
-                
+                final String dateStr = _formatDate(resolveSalesDate(sale) ?? DateTime.now());
+
                 return [
                   dateStr,
                   name,
@@ -385,7 +458,7 @@ class ExportService {
       // Print or save
       await Printing.layoutPdf(onLayout: (format) async => pdf.save());
     } catch (e) {
-      print('PDF print error: $e');
+      debugPrint('PDF print error: $e');
       throw Exception('PDF generation failed: $e');
     }
   }
@@ -402,10 +475,8 @@ class ExportService {
       // Sort sales by date ascending
       final sortedSales = List<Map<String, dynamic>>.from(sales);
       sortedSales.sort((a, b) {
-        final dateAStr = a['date'] ?? a['sale_date'] ?? '';
-        final dateBStr = b['date'] ?? b['sale_date'] ?? '';
-        final dateA = DateTime.tryParse(dateAStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = DateTime.tryParse(dateBStr.toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
@@ -483,7 +554,7 @@ class ExportService {
                  final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
                  final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
                  final String name = (sale['product'] ?? sale['item'] ?? 'N/A').toString();
-                 final String dateStr = _formatDate(sale['date'] ?? sale['sale_date'] ?? DateTime.now());
+                 final String dateStr = _formatDate(resolveSalesDate(sale) ?? DateTime.now());
 
                  return [
                   dateStr,
@@ -518,7 +589,7 @@ class ExportService {
 
       return file.path;
     } catch (e) {
-      print('PDF save error: $e');
+      debugPrint('PDF save error: $e');
       throw Exception('Failed to save PDF: $e');
     }
   }
@@ -538,9 +609,12 @@ class ExportService {
   static Future<void> openWithShareSheet(String filePath) async {
     try {
       final xFile = XFile(filePath);
-      await Share.shareXFiles([xFile],
-        text: 'Retail Mind – Sales Export',
-        subject: 'Sales Data Export',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [xFile],
+          text: 'Retail Mind – Sales Export',
+          subject: 'Sales Data Export',
+        ),
       );
     } catch (e) {
       throw Exception('Failed to open file: $e');

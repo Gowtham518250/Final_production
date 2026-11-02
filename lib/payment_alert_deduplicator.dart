@@ -1,4 +1,5 @@
 import 'package:retail_mind/payment_event.dart';
+import 'package:retail_mind/payment_identity_matcher.dart';
 
 /// Coalesces repeat *alerts* without collapsing distinct payments merely
 /// because the payer and amount happen to be the same.
@@ -34,6 +35,7 @@ class PaymentAlertDeduplicator {
     final amount = event.amount;
     final reference = event.normalizedReferenceId;
     final sourceFingerprint = event.sourceEventFingerprint;
+    final notificationStream = event.sourceNotificationStream;
     final channel = _channelKey(event);
     final text = _normalizeText(event.rawText);
     final payer = _payerIdentity(event);
@@ -64,6 +66,37 @@ class PaymentAlertDeduplicator {
       if (reference != null || previous.reference != null) {
         if (reference != null && previous.reference == reference) return true;
         continue;
+      }
+
+      final notificationAt = event.sourceTimestamp ?? event.timestamp;
+        final previousNotificationAt = previous.notificationAt;
+      final notificationAccountConflict = account.isNotEmpty &&
+          previous.account.isNotEmpty &&
+          account != previous.account;
+      final updatePreviousPayer = previous.payer;
+      final notificationPayerConflict = payer != null &&
+          updatePreviousPayer != null &&
+          !_payersCompatible(payer, updatePreviousPayer);
+        final notificationPayer = event.notificationPayerIdentity;
+        final previousNotificationPayer = previous.notificationPayer;
+        final sameNotificationAccount = account.isNotEmpty &&
+          previous.account.isNotEmpty &&
+          account == previous.account;
+        final sameNotificationPayer = notificationPayer != null &&
+          previousNotificationPayer != null &&
+          notificationPayer == previousNotificationPayer;
+      if (notificationStream != null &&
+          notificationStream == previous.notificationStream &&
+          notificationAt.difference(previousNotificationAt).abs() <=
+              PaymentIdentityMatcher.notificationUpdateWindow &&
+          !notificationAccountConflict &&
+          !notificationPayerConflict &&
+          (sameNotificationAccount || sameNotificationPayer)) {
+        previous.notificationAt = notificationAt;
+        previous.notificationPayer = notificationPayer;
+        previous.seenAt = moment;
+        previous.expiresAt = moment.add(_fallbackTtl);
+        return true;
       }
 
       final age = moment.difference(previous.seenAt).abs();
@@ -125,6 +158,9 @@ class PaymentAlertDeduplicator {
         direction: direction,
         reference: event.normalizedReferenceId,
         sourceFingerprint: event.sourceEventFingerprint,
+        notificationStream: event.sourceNotificationStream,
+        notificationAt: event.sourceTimestamp ?? event.timestamp,
+        notificationPayer: event.notificationPayerIdentity,
         channel: _channelKey(event),
         payer: _payerIdentity(event),
         account: _normalizeAccount(event.accountSuffix),
@@ -260,6 +296,9 @@ class _AlertObservation {
     required this.direction,
     required this.reference,
     required this.sourceFingerprint,
+    required this.notificationStream,
+    required this.notificationAt,
+    required this.notificationPayer,
     required this.channel,
     required this.payer,
     required this.account,
@@ -272,11 +311,14 @@ class _AlertObservation {
   final String direction;
   String? reference;
   final String? sourceFingerprint;
+  final String? notificationStream;
+  DateTime notificationAt;
+  String? notificationPayer;
   final String channel;
   final String? payer;
   final String account;
   final String text;
-  final DateTime seenAt;
+  DateTime seenAt;
   DateTime expiresAt;
   final Set<String> claimedChannels = <String>{};
 }

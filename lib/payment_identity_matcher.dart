@@ -30,6 +30,9 @@ class SignalIdentity {
     this.payer,
     this.account,
     this.sourceIdentity,
+    this.notificationStream,
+    this.notificationAt,
+    this.notificationPayer,
     this.text = '',
   });
 
@@ -59,6 +62,15 @@ class SignalIdentity {
 
   /// Stable identity of the native Android notification post (hashed).
   final String? sourceIdentity;
+
+  /// Stable notification slot identity, excluding post time and payload.
+  final String? notificationStream;
+
+  /// Source post time, distinct from [at] which is the processing time.
+  final DateTime? notificationAt;
+
+  /// Unicode-preserving payer identity for notification repost comparison.
+  final String? notificationPayer;
 
   /// Whitespace-normalised, lower-cased text, used only for exact replays.
   final String text;
@@ -141,6 +153,7 @@ class PaymentIdentityMatcher {
   static const Duration smsWindow = Duration(hours: 3);
   static const Duration truecallerWindow = Duration(seconds: 8);
   static const Duration defaultReplayWindow = Duration(seconds: 3);
+  static const Duration notificationUpdateWindow = Duration(seconds: 30);
 
   static const Set<String> _trustedTruecallerCounterparts = {
     'googlepay',
@@ -243,6 +256,43 @@ class PaymentIdentityMatcher {
           ? const IdentityDecision(IdentityVerdict.sameTransfer, 'same_reference')
           : const IdentityDecision(
               IdentityVerdict.distinct, 'same_reference_direction_conflict');
+    }
+
+    final notificationAt = current.notificationAt ?? current.at;
+    final previousNotificationAt = previous.notificationAt ?? previous.at;
+    final notificationAccountConflict = current.account != null &&
+        previous.account != null &&
+        current.account != previous.account;
+    final currentNotificationPayer =
+      current.notificationPayer ?? current.payer;
+    final previousNotificationPayer =
+      previous.notificationPayer ?? previous.payer;
+    final notificationPayerConflict = currentNotificationPayer != null &&
+      previousNotificationPayer != null &&
+      currentNotificationPayer != previousNotificationPayer;
+    final sameNotificationAccount = current.account != null &&
+        previous.account != null &&
+        current.account == previous.account;
+    final sameNotificationPayer = currentNotificationPayer != null &&
+        previousNotificationPayer != null &&
+        _payersCompatible(
+          currentNotificationPayer,
+          previousNotificationPayer,
+        );
+    if (current.reference == null &&
+        previous.reference == null &&
+        current.notificationStream != null &&
+        current.notificationStream == previous.notificationStream &&
+        directionKnownEqual &&
+        notificationAt.difference(previousNotificationAt).abs() <=
+            notificationUpdateWindow &&
+        !notificationAccountConflict &&
+        !notificationPayerConflict &&
+        (sameNotificationAccount || sameNotificationPayer)) {
+      return const IdentityDecision(
+        IdentityVerdict.sameTransfer,
+        'same_notification_update',
+      );
     }
 
     // Everything below is fuzzy and needs a known, equal direction.

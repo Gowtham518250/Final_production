@@ -1,8 +1,9 @@
 import 'live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'whatsapp_message_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'data_export_widget.dart';
 
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
@@ -39,6 +40,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
   List<Map<String, dynamic>> _khataTransactions = [];
   List<Map<String, dynamic>> _invoiceTransactions = [];
   List<Map<String, dynamic>> _paidCustomers = [];
+  List<Map<String, dynamic>> _rawSales = [];
 
   @override
   void initState() {
@@ -66,7 +68,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
     if (parsed == null) return null;
     final explicitZone = value.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(value);
     if (explicitZone) return parsed.toLocal();
-    return DateTime.parse(value + 'Z').toLocal();
+    return DateTime.parse('${value}Z').toLocal();
   }
 
   DateTime? _businessDate(dynamic raw) {
@@ -120,6 +122,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       // Option B: dedupe before showing transactions
       await SalesDedupHelper.cleanupAndPersist();
       final sales = await LocalStorageService.loadSales();
+      _rawSales = sales.whereType<Map<String, dynamic>>().toList();
       // Load cash transactions (manual entry)
       _cashTransactions = [];
       // Load online transactions (manual entry or detected)
@@ -316,6 +319,30 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         elevation: 0,
         backgroundColor: const Color(0xFF1F2937),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Export sales data',
+            onPressed: () {
+              if (_rawSales.isEmpty) return;
+              showDialog(
+                context: context,
+                builder: (context) => Dialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  backgroundColor: Colors.transparent,
+                  child: SingleChildScrollView(
+                    child: DataExportWidget(
+                      allSales: _rawSales,
+                      shopName: 'Retail Store',
+                    ),
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.download_rounded),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,

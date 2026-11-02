@@ -14,6 +14,9 @@ SignalIdentity sig(
   String? payer,
   String? account,
   String? source,
+  String? notificationStream,
+  DateTime? notificationAt,
+  String? notificationPayer,
   String text = '',
 }) => SignalIdentity(
   id: id,
@@ -26,6 +29,9 @@ SignalIdentity sig(
   payer: payer,
   account: account,
   sourceIdentity: source,
+  notificationStream: notificationStream,
+  notificationAt: notificationAt,
+  notificationPayer: notificationPayer,
   text: text,
 );
 
@@ -161,6 +167,119 @@ void main() {
         sig('b', source: 'p|2|200', sec: 5, text: 'x'),
         sig('a', source: 'p|1|100', text: 'x'),
       );
+      expect(d.verdict, IdentityVerdict.distinct);
+    });
+
+    test('same notification slot update within source-time window is one alert', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+          notificationPayer: 'रवि कुमार',
+        ),
+        sig(
+          'update',
+          source: 'post-b',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 20)),
+          notificationPayer: 'रवि कुमार',
+          sec: 60,
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.sameTransfer);
+      expect(d.reason, 'same_notification_update');
+    });
+
+    test('notification repost conflicts stay distinct', () {
+      final first = sig(
+        'first',
+        source: 'post-a',
+        notificationStream: 'package|tag|id',
+        notificationAt: _t0,
+        payer: 'first payer',
+      );
+      expect(
+        PaymentIdentityMatcher.compare(
+          first,
+          sig(
+            'different-payer',
+            source: 'post-b',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0.add(const Duration(seconds: 2)),
+            payer: 'different payer',
+            notificationPayer: 'अन्ना देवी',
+          ),
+        ).verdict,
+        IdentityVerdict.distinct,
+      );
+      expect(
+        PaymentIdentityMatcher.compare(
+          first,
+          sig(
+            'different-direction',
+            source: 'post-b',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0.add(const Duration(seconds: 2)),
+            direction: 'debit',
+          ),
+        ).verdict,
+        IdentityVerdict.distinct,
+      );
+      expect(
+        PaymentIdentityMatcher.compare(
+          first,
+          sig(
+            'unknown-direction',
+            source: 'post-b',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0.add(const Duration(seconds: 2)),
+            direction: 'unknown',
+          ),
+        ).verdict,
+        IdentityVerdict.distinct,
+      );
+    });
+
+    test('notification repost outside source-time window stays distinct', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+        ),
+        sig(
+          'later',
+          source: 'post-b',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 31)),
+          sec: 31,
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.distinct);
+    });
+
+    test('same notification slot without payer/account evidence stays distinct', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+        ),
+        sig(
+          'second-payment',
+          source: 'post-b',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 2)),
+          sec: 2,
+        ),
+      );
+
       expect(d.verdict, IdentityVerdict.distinct);
     });
 

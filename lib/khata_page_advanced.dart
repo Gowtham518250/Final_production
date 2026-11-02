@@ -204,12 +204,13 @@ class _KhataPageAdvancedState extends State<KhataPageAdvanced> {
 
   Future<void> _sendWhatsApp(Map<String, dynamic> customer) async {
     final prefs = await SharedPreferences.getInstance();
+    final resolvedUpiId = await WhatsAppMessageService.resolveShopUpiId(prefs: prefs);
     final success = await WhatsAppMessageService.sendPaymentReminderWithUPI(
       phone: customer['customer_phone'] ?? '',
       customerName: customer['customer_name'] ?? 'Customer',
       pendingAmount: customer['total_balance'] ?? 0.0,
       shopName: prefs.getString('shop_name') ?? 'Shop',
-      upiId: prefs.getString('upi_id') ?? '',
+      upiId: resolvedUpiId,
       dueDate: customer['earliest_due_date']?.toString() ?? 'ASAP',
     );
     if (success && mounted) _showToast('WhatsApp reminder sent!');

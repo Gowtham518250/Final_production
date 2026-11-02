@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notification_listener_service/notification_event.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retail_mind/payment_detection_service.dart';
 import 'package:retail_mind/payment_event.dart';
 
@@ -13,11 +14,13 @@ PaymentEvent _credit({
   String? ref,
   String? accountSuffix,
   String? sourceEventKey,
+  DateTime? sourceTimestamp,
   String text = 'sent to you',
 }) => PaymentEvent(
   id: id,
   amount: amount,
   timestamp: at,
+  sourceTimestamp: sourceTimestamp,
   app: app,
   payerName: payer,
   accountSuffix: accountSuffix,
@@ -372,6 +375,81 @@ void main() {
 
         expect(spoken, hasLength(2));
         queue.dispose();
+        PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+      },
+    );
+
+    test(
+      'same notification repost stays in review but is announced once',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final originalVoiceEnabled = PdsConfig.isVoiceEnabled;
+        PdsConfig.isVoiceEnabled = true;
+        final now = DateTime.now();
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        final emitted = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(emitted.add);
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+
+        final first = _credit(
+          id: 'repost-first',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now,
+          sourceTimestamp: now,
+          payer: 'Ravi Kumar',
+          accountSuffix: '4222',
+          sourceEventKey:
+              'com.phonepe.app|payments|42|${now.millisecondsSinceEpoch}|hash-a',
+          text: 'Ravi Kumar sent ₹500 to account 4222',
+          amount: 500,
+        );
+        final updateAt = now.add(const Duration(seconds: 5));
+        final repost = _credit(
+          id: 'repost-update',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: updateAt,
+          sourceTimestamp: updateAt,
+          payer: 'Ravi Kumar',
+          accountSuffix: '4222',
+          sourceEventKey:
+              'com.phonepe.app|payments|42|${updateAt.millisecondsSinceEpoch}|hash-b',
+          text: 'Payment received ₹500 from Ravi Kumar, account 4222',
+          amount: 500,
+        );
+        PaymentUiState ui(PaymentEvent event) => PaymentUiState(
+          id: event.id,
+          decision: event.decision,
+          amount: event.amount,
+          payerName: event.payerName,
+          bankName: event.bankName,
+          isFailed: event.isFailed,
+          detectedAt: event.timestamp,
+          rawText: event.rawText,
+          direction: event.direction,
+        );
+
+        await service.debugEmitForTesting(first);
+        await service.debugEmitForTesting(repost);
+        queue.enqueue(first, ui(first));
+        queue.enqueue(repost, ui(repost));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        expect(emitted.map((event) => event.id), containsAll(<String>[
+          'repost-first',
+          'repost-update',
+        ]));
+        expect(spoken, hasLength(1));
+
+        queue.dispose();
+        await subscription.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
         PdsConfig.isVoiceEnabled = originalVoiceEnabled;
       },
     );

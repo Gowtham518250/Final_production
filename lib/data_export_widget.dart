@@ -1,8 +1,6 @@
 import 'live_translated_text.dart';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:share_plus/share_plus.dart';
 import 'export_service.dart';
 
 enum ExportTimeRange { today, last7Days, last30Days, thisYear, custom }
@@ -21,25 +19,25 @@ class DataExportWidget extends StatefulWidget {
     this.shopPhone,
   });
 
-  @override
-  State<DataExportWidget> createState() => _DataExportWidgetState();
-}
+  static DateTime? parseSalesDate(dynamic rawDate) {
+    return ExportService.parseSalesDate(rawDate);
+  }
 
-class _DataExportWidgetState extends State<DataExportWidget> {
-  ExportTimeRange _selectedTimeRange = ExportTimeRange.today;
-  ExportFormat _selectedFormat = ExportFormat.excel;
-  bool _isExporting = false;
-  String _statusMessage = '';
-  bool _showSuccess = false;
-  DateTime? _customStartDate;
-  DateTime? _customEndDate;
+  static DateTime? resolveSalesDate(Map<String, dynamic>? sale) {
+    return ExportService.resolveSalesDate(sale);
+  }
 
-  List<Map<String, dynamic>> _filterSalesByTimeRange(ExportTimeRange range) {
-    if (widget.allSales.isEmpty) return [];
+  static List<Map<String, dynamic>> filterSalesByTimeRange({
+    required List<Map<String, dynamic>> allSales,
+    required ExportTimeRange range,
+    DateTime? customStartDate,
+    DateTime? customEndDate,
+  }) {
+    if (allSales.isEmpty) return const [];
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    
+
     DateTime startDate;
     DateTime endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
@@ -57,32 +55,42 @@ class _DataExportWidgetState extends State<DataExportWidget> {
         startDate = DateTime(now.year, 1, 1);
         break;
       case ExportTimeRange.custom:
-        if (_customStartDate != null && _customEndDate != null) {
-          startDate = DateTime(_customStartDate!.year, _customStartDate!.month, _customStartDate!.day);
-          endDate = DateTime(_customEndDate!.year, _customEndDate!.month, _customEndDate!.day, 23, 59, 59);
+        if (customStartDate != null && customEndDate != null) {
+          startDate = DateTime(customStartDate.year, customStartDate.month, customStartDate.day);
+          endDate = DateTime(customEndDate.year, customEndDate.month, customEndDate.day, 23, 59, 59);
         } else {
-          return widget.allSales;
+          return allSales;
         }
         break;
     }
 
-    return widget.allSales.where((sale) {
-      final saleDateStr = sale['date'] ?? sale['sale_date'] ?? DateTime.now().toIso8601String();
-      final saleDate = _parseDate(saleDateStr);
+    return allSales.where((sale) {
+      final saleDate = resolveSalesDate(sale);
+      if (saleDate == null) return false;
       return !saleDate.isBefore(startDate) && !saleDate.isAfter(endDate);
     }).toList();
   }
 
-  DateTime _parseDate(dynamic date) {
-    if (date is DateTime) return date;
-    if (date is String) {
-      try {
-        return DateTime.parse(date);
-      } catch (_) {
-        return DateTime.now();
-      }
-    }
-    return DateTime.now();
+  @override
+  State<DataExportWidget> createState() => _DataExportWidgetState();
+}
+
+class _DataExportWidgetState extends State<DataExportWidget> {
+  ExportTimeRange _selectedTimeRange = ExportTimeRange.today;
+  ExportFormat _selectedFormat = ExportFormat.excel;
+  bool _isExporting = false;
+  String _statusMessage = '';
+  bool _showSuccess = false;
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
+
+  List<Map<String, dynamic>> _filterSalesByTimeRange(ExportTimeRange range) {
+    return DataExportWidget.filterSalesByTimeRange(
+      allSales: widget.allSales,
+      range: range,
+      customStartDate: _customStartDate,
+      customEndDate: _customEndDate,
+    );
   }
 
   Future<void> _performExport() async {
@@ -114,8 +122,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
           ? '${_customStartDate.toString().split(' ')[0]}_to_${_customEndDate.toString().split(' ')[0]}'
           : _selectedTimeRange.name;
 
-      String? filePath;
-      String? fileType;
+      String filePath = '';
+      String fileType = '';
 
       if (_selectedFormat == ExportFormat.excel) {
         setState(() => _statusMessage = 'Generating Excel (XLSX)...');
@@ -152,13 +160,12 @@ class _DataExportWidgetState extends State<DataExportWidget> {
         fileType = 'PDF';
       }
 
-      if (filePath != null) {
+      if (filePath.isNotEmpty) {
         setState(() {
           _statusMessage = '✅ $fileType saved to Downloads!';
           _showSuccess = true;
         });
 
-        // Immediately open share+open sheet so user can view the file
         await Future.delayed(const Duration(milliseconds: 300));
         if (mounted) {
           await ExportService.openWithShareSheet(filePath);
@@ -171,46 +178,6 @@ class _DataExportWidgetState extends State<DataExportWidget> {
     } finally {
       setState(() => _isExporting = false);
     }
-  }
-
-  void _showShareDialog(String filePath, String fileType) {
-    final filteredSales = _filterSalesByTimeRange(_selectedTimeRange);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: LiveTranslatedText('Export Complete'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            LiveTranslatedText('✅ $fileType file has been saved'),
-            const SizedBox(height: 8),
-            LiveTranslatedText('${filteredSales.length} transactions exported'),
-            const SizedBox(height: 8),
-            LiveTranslatedText('File: ${filePath.split('/').last}',
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const LiveTranslatedText('Done'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              try {
-                await Share.share('Export saved: ${File(filePath).path}');
-              } catch (e) {
-                print('Share error: $e');
-              }
-              Navigator.pop(context);
-            },
-            icon: const Icon(Icons.share),
-            label: const LiveTranslatedText('Share'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

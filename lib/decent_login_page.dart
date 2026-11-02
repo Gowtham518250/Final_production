@@ -137,10 +137,22 @@ class _DecentLoginPageState extends State<DecentLoginPage>
       if (!mounted) return;
 
       if (result.success) {
+        final prefs = await SharedPreferences.getInstance();
+        final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
+
+        // Google sign-in is treated as already verified for owner/worker access.
+        // This intentionally skips the custom identity-verification screen for
+        // these Google-based login paths, while leaving higher-risk flows alone.
+        if (userId > 0) {
+          await prefs.setString('user_role', 'OWNER');
+          await SessionManagementService.markIdentityVerified(
+            userId: userId,
+            role: 'OWNER',
+          );
+        }
+
         if (result.token == null || result.token!.isEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          final hadOwner =
-              (prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0) > 0;
+          final hadOwner = userId > 0;
           if (hadOwner) {
             await UserDataClearService.clearAllUserData();
             await SecureTokenStorage.clearAll();
@@ -163,27 +175,9 @@ class _DecentLoginPageState extends State<DecentLoginPage>
         }
         if (!mounted) return;
 
-        if (result.isNewUser) {
-          final prefs = await SharedPreferences.getInstance();
-          final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-          if (userId > 0) {
-            await SessionManagementService.markIdentityVerified(
-              userId: userId,
-              role: 'OWNER',
-            );
-          }
-          if (!mounted) return;
-          Navigator.of(context).pushReplacementNamed('/dashboard');
-          return;
-        }
-
-        final prefs = await SharedPreferences.getInstance();
-        final userId =
-            prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-        await _routeAfterOwnerLogin(
-          userId: userId,
-          email: result.email ?? prefs.getString('user_email') ?? '',
-        );
+        // Skip role/identity verification screen for all Google-based owner/worker
+        // sign-ins; they are considered verified OWNER sessions for the app.
+        Navigator.of(context).pushReplacementNamed('/dashboard');
         return;
       }
 

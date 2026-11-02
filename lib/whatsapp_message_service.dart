@@ -1,6 +1,8 @@
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'payment_detection_service.dart';
+import 'secure_preferences_service.dart';
 
 /// WhatsApp Message Service - Build and send localized messages via WhatsApp
 class WhatsAppMessageService {
@@ -261,15 +263,32 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     await _launchWhatsApp(phone: shopOwnerPhone, message: sb.toString());
   }
 
-  /// Build and send a complete Payment Reminder with fixed amount & UPI payment link/QR intent
-  static Future<bool> sendPaymentReminderWithUPI({
-    required String phone,
+  static Future<String> resolveShopUpiId({SharedPreferences? prefs}) async {
+    final store = prefs ?? await SharedPreferences.getInstance();
+    final candidates = <String?>[
+      store.getString('primary_upi_id'),
+      store.getString('upi_id'),
+      store.getString('shop_upi_id'),
+      store.getString('upi_vpa'),
+    ];
+
+    for (final candidate in candidates) {
+      final value = (candidate ?? '').trim();
+      if (value.isNotEmpty) return value;
+    }
+
+    final secureUpi = await SecurePreferencesService.getUpiId();
+    final trimmedSecureUpi = (secureUpi ?? '').trim();
+    return trimmedSecureUpi;
+  }
+
+  static String buildPaymentReminderMessage({
     required String customerName,
     required double pendingAmount,
     required String shopName,
     String? upiId,
     String? dueDate,
-  }) async {
+  }) {
     final formattedAmount = pendingAmount.toStringAsFixed(2);
     final cleanUpi = (upiId ?? '').trim();
 
@@ -285,7 +304,7 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     }
     sb.writeln('');
     sb.writeln('💳 *Pay Online via UPI:*');
-    
+
     if (cleanUpi.isNotEmpty) {
       final upiUri = 'upi://pay?pa=$cleanUpi&pn=${Uri.encodeComponent(shopName)}&am=$formattedAmount&cu=INR&tn=PaymentToShop';
       sb.writeln('Tap to Pay: $upiUri');
@@ -296,8 +315,30 @@ Total: ₹${totalSales.toStringAsFixed(2)}
 
     sb.writeln('');
     sb.writeln('Kindly clear your balance at your earliest convenience. Thank you! 🙏');
+    return sb.toString();
+  }
 
-    return await sendCustomMessage(phone: phone, message: sb.toString());
+  /// Build and send a complete Payment Reminder with fixed amount & UPI payment link/QR intent
+  static Future<bool> sendPaymentReminderWithUPI({
+    required String phone,
+    required String customerName,
+    required double pendingAmount,
+    required String shopName,
+    String? upiId,
+    String? dueDate,
+  }) async {
+    final resolvedUpiId = (upiId ?? '').trim().isNotEmpty
+        ? upiId!.trim()
+        : await resolveShopUpiId();
+    final message = buildPaymentReminderMessage(
+      customerName: customerName,
+      pendingAmount: pendingAmount,
+      shopName: shopName,
+      upiId: resolvedUpiId,
+      dueDate: dueDate,
+    );
+
+    return await sendCustomMessage(phone: phone, message: message);
   }
 
   /// Send custom message using native frontend launcher
