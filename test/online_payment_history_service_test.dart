@@ -49,8 +49,10 @@ void main() {
     () async {
       expect(
         await OnlinePaymentHistoryService.recordIncomingPayment(
-          event(decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified),
+          event(
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+          ),
         ),
         isTrue,
       );
@@ -84,10 +86,78 @@ void main() {
     },
   );
 
+  test('suppresses Truecaller reposts of the same notification slot', () async {
+    final firstAt = DateTime.now();
+    final first = event(
+      id: 'truecaller-first',
+      referenceId: null,
+      decision: PaymentDecision.likely,
+      verification: PaymentVerificationStatus.unverified,
+      timestamp: firstAt,
+      sourceTimestamp: firstAt,
+      sourceEventKey:
+          'com.truecaller|42|${firstAt.millisecondsSinceEpoch}|payload-a',
+      app: PaymentApp.bankApp,
+      detectionSource: 'truecaller_notification',
+      payerName: 'Ravi Kumar',
+    );
+    await OnlinePaymentHistoryService.recordIncomingPayment(first);
+
+    final updateAt = firstAt.add(const Duration(seconds: 3));
+    final repost = event(
+      id: 'truecaller-repost',
+      referenceId: null,
+      decision: PaymentDecision.likely,
+      verification: PaymentVerificationStatus.unverified,
+      timestamp: updateAt,
+      sourceTimestamp: updateAt,
+      sourceEventKey:
+          'com.truecaller|42|${updateAt.millisecondsSinceEpoch}|payload-b',
+      app: PaymentApp.bankApp,
+      detectionSource: 'truecaller_notification',
+      payerName: 'Ravi Kumar',
+    );
+
+    final annotated =
+        await OnlinePaymentHistoryService.annotateKnownReferenceState(repost);
+    expect(annotated.isDuplicate, isTrue);
+    expect(await OnlinePaymentHistoryService.load(), hasLength(1));
+  });
+
+  test(
+    'dismissed pending detection is hidden and remains suppressed',
+    () async {
+      final pending = event(
+        id: 'dismissed-pending',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+      );
+      await OnlinePaymentHistoryService.recordIncomingPayment(pending);
+      final visible = await OnlinePaymentHistoryService.load();
+      expect(visible, hasLength(1));
+
+      expect(
+        await OnlinePaymentHistoryService.dismissEntry(
+          visible.single['_history_key'] as String,
+        ),
+        isTrue,
+      );
+      expect(await OnlinePaymentHistoryService.load(), isEmpty);
+      expect(
+        (await OnlinePaymentHistoryService.annotateKnownReferenceState(
+          pending,
+        )).isDuplicate,
+        isTrue,
+      );
+    },
+  );
+
   test('promotes a pending detection when it is confirmed', () async {
     await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified),
+      event(
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+      ),
     );
     var records = await OnlinePaymentHistoryService.load();
     expect(records, hasLength(1));
@@ -102,196 +172,233 @@ void main() {
     expect(records.single['verified'], isFalse);
   });
 
-  test('marks same-reference amount conflicts for review instead of replacing history', () async {
-    await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(amount: 125.50, id: 'initial-confirmed'),
-    );
+  test(
+    'marks same-reference amount conflicts for review instead of replacing history',
+    () async {
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(amount: 125.50, id: 'initial-confirmed'),
+      );
 
-    final accepted = await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(
-        amount: 200,
-        id: 'conflicting-alert',
-        timestamp: DateTime(2026, 10, 22, 9, 1),
-      ),
-    );
+      final accepted = await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          amount: 200,
+          id: 'conflicting-alert',
+          timestamp: DateTime(2026, 10, 22, 9, 1),
+        ),
+      );
 
-    expect(accepted, isFalse);
-    final records = await OnlinePaymentHistoryService.load();
-    expect(records, hasLength(1));
-    expect(records.single['status'], 'CONFLICT_REVIEW');
-    expect(records.single['merchant_confirmed'], isFalse);
-    expect(records.single['verified'], isFalse);
-    expect(records.single['conflicting_amounts'], [125.5, 200.0]);
-    expect(await OnlinePaymentHistoryService.hasReferenceConflict(
-      event(amount: 125.50, id: 'third-notification'),
-    ), isTrue);
-  });
+      expect(accepted, isFalse);
+      final records = await OnlinePaymentHistoryService.load();
+      expect(records, hasLength(1));
+      expect(records.single['status'], 'CONFLICT_REVIEW');
+      expect(records.single['merchant_confirmed'], isFalse);
+      expect(records.single['verified'], isFalse);
+      expect(records.single['conflicting_amounts'], [125.5, 200.0]);
+      expect(
+        await OnlinePaymentHistoryService.hasReferenceConflict(
+          event(amount: 125.50, id: 'third-notification'),
+        ),
+        isTrue,
+      );
+    },
+  );
 
+  test(
+    'replayed same reference after a delay is marked duplicate across restarts',
+    () async {
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(id: 'phonepe-first'),
+      );
 
-  test('replayed same reference after a delay is marked duplicate across restarts', () async {
-    await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(id: 'phonepe-first'),
-    );
+      final replay =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'truecaller-late-replay',
+              timestamp: DateTime(2026, 10, 22, 9, 10),
+            ),
+          );
 
-    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-      event(
-        id: 'truecaller-late-replay',
-        timestamp: DateTime(2026, 10, 22, 9, 10),
-      ),
-    );
+      expect(replay.isDuplicate, isTrue);
+      expect(replay.hasReferenceConflict, isFalse);
+      final records = await OnlinePaymentHistoryService.load();
+      expect(records, hasLength(1));
+      expect(records.single['status'], 'CONFIRMED');
+    },
+  );
 
-    expect(replay.isDuplicate, isTrue);
-    expect(replay.hasReferenceConflict, isFalse);
-    final records = await OnlinePaymentHistoryService.load();
-    expect(records, hasLength(1));
-    expect(records.single['status'], 'CONFIRMED');
-  });
-
-  test('merchant rejection persists and prevents the same reference reopening review', () async {
-    final candidate = event(
-      id: 'rejected-candidate',
-      decision: PaymentDecision.likely,
-      verification: PaymentVerificationStatus.unverified,
-      timestamp: DateTime.now(),
-    );
-    await OnlinePaymentHistoryService.recordIncomingPayment(candidate);
-
-    expect(
-      await OnlinePaymentHistoryService.rejectPendingPayment(candidate),
-      isTrue,
-    );
-
-    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-      event(
-        id: 'same-reference-replay',
-        decision: PaymentDecision.likely,
-        verification: PaymentVerificationStatus.unverified,
-        timestamp: DateTime.now().add(const Duration(hours: 8)),
-      ),
-    );
-    expect(replay.isDuplicate, isTrue);
-    expect(
-      await OnlinePaymentHistoryService.recordIncomingPayment(replay),
-      isFalse,
-    );
-
-    final records = await OnlinePaymentHistoryService.load();
-    expect(records, hasLength(1));
-    expect(records.single['status'], 'REJECTED');
-    expect(records.single['merchant_confirmed'], isFalse);
-  });
-
-  test('unresolved pending reference resurfaces as a review reminder after six hours', () async {
-    final detectedAt = DateTime.now().subtract(const Duration(hours: 7));
-    await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(
-        id: 'night-payment',
-        decision: PaymentDecision.likely,
-        verification: PaymentVerificationStatus.unverified,
-        timestamp: detectedAt,
-      ),
-    );
-
-    final morning = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-      event(
-        id: 'morning-payment',
+  test(
+    'merchant rejection persists and prevents the same reference reopening review',
+    () async {
+      final candidate = event(
+        id: 'rejected-candidate',
         decision: PaymentDecision.likely,
         verification: PaymentVerificationStatus.unverified,
         timestamp: DateTime.now(),
-      ),
-    );
+      );
+      await OnlinePaymentHistoryService.recordIncomingPayment(candidate);
 
-    expect(morning.isDuplicate, isFalse);
-    expect(morning.decision, PaymentDecision.likely);
-    expect(morning.verificationStatus, PaymentVerificationStatus.unverified);
-    expect(
-      morning.detectionSource,
-      contains(':pending_review_reminder'),
-    );
-  });
+      expect(
+        await OnlinePaymentHistoryService.rejectPendingPayment(candidate),
+        isTrue,
+      );
 
-  test('unresolved pending reference is coalesced during six-hour cooldown', () async {
-    await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(
-        id: 'night-payment',
-        decision: PaymentDecision.likely,
+      final replay =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'same-reference-replay',
+              decision: PaymentDecision.likely,
+              verification: PaymentVerificationStatus.unverified,
+              timestamp: DateTime.now().add(const Duration(hours: 8)),
+            ),
+          );
+      expect(replay.isDuplicate, isTrue);
+      expect(
+        await OnlinePaymentHistoryService.recordIncomingPayment(replay),
+        isFalse,
+      );
+
+      final records = await OnlinePaymentHistoryService.load();
+      expect(records, hasLength(1));
+      expect(records.single['status'], 'REJECTED');
+      expect(records.single['merchant_confirmed'], isFalse);
+    },
+  );
+
+  test(
+    'unresolved pending reference is not re-prompted after six hours',
+    () async {
+      final detectedAt = DateTime.now().subtract(const Duration(hours: 7));
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          id: 'night-payment',
+          decision: PaymentDecision.likely,
+          verification: PaymentVerificationStatus.unverified,
+          timestamp: detectedAt,
+        ),
+      );
+
+      final morning =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'morning-payment',
+              decision: PaymentDecision.likely,
+              verification: PaymentVerificationStatus.unverified,
+              timestamp: DateTime.now(),
+            ),
+          );
+
+      expect(morning.isDuplicate, isTrue);
+      expect(morning.decision, PaymentDecision.likely);
+      expect(morning.verificationStatus, PaymentVerificationStatus.unverified);
+      expect(
+        morning.detectionSource,
+        isNot(contains(':pending_review_reminder')),
+      );
+    },
+  );
+
+  test(
+    'unresolved pending reference is coalesced during six-hour cooldown',
+    () async {
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          id: 'night-payment',
+          decision: PaymentDecision.likely,
+          verification: PaymentVerificationStatus.unverified,
+          timestamp: DateTime.now().subtract(const Duration(hours: 2)),
+        ),
+      );
+
+      final replay =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'same-morning-replay',
+              decision: PaymentDecision.likely,
+              verification: PaymentVerificationStatus.unverified,
+              timestamp: DateTime.now(),
+            ),
+          );
+
+      expect(replay.isDuplicate, isTrue);
+      expect(
+        replay.detectionSource,
+        isNot(contains(':pending_review_reminder')),
+      );
+    },
+  );
+
+  test(
+    'delayed same-reference different amount is flagged for review',
+    () async {
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(id: 'phonepe-first', amount: 125.50),
+      );
+
+      final replay =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'truecaller-conflict',
+              amount: 200,
+              timestamp: DateTime(2026, 10, 22, 9, 10),
+            ),
+          );
+
+      expect(replay.isDuplicate, isFalse);
+      expect(replay.hasReferenceConflict, isTrue);
+      expect(replay.isMerchantConfirmed, isFalse);
+      final records = await OnlinePaymentHistoryService.load();
+      expect(records, hasLength(1));
+      expect(records.single['status'], 'CONFLICT_REVIEW');
+    },
+  );
+
+  test(
+    'auto-records high-confidence events without claiming bank verification',
+    () async {
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(verification: PaymentVerificationStatus.unverified),
+      );
+
+      final records = await OnlinePaymentHistoryService.load();
+      expect(records.single['status'], 'AUTO_ACCEPTED');
+      expect(records.single['merchant_confirmed'], isFalse);
+      expect(records.single['confirmation_mode'], 'automatic');
+      expect(records.single['verified'], isFalse);
+    },
+  );
+
+  test(
+    'does not reopen a high-confidence auto-recorded reference for confirmation',
+    () async {
+      final first = event(
+        decision: PaymentDecision.confirmed,
         verification: PaymentVerificationStatus.unverified,
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-    );
+        timestamp: DateTime.now().subtract(const Duration(hours: 8)),
+      );
+      await OnlinePaymentHistoryService.recordIncomingPayment(first);
 
-    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-      event(
-        id: 'same-morning-replay',
-        decision: PaymentDecision.likely,
-        verification: PaymentVerificationStatus.unverified,
-        timestamp: DateTime.now(),
-      ),
-    );
+      final replay =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'late-auto-recorded-replay',
+              decision: PaymentDecision.likely,
+              verification: PaymentVerificationStatus.unverified,
+              timestamp: DateTime.now(),
+            ),
+          );
 
-    expect(replay.isDuplicate, isTrue);
-    expect(replay.detectionSource, isNot(contains(':pending_review_reminder')));
-  });
-
-  test('delayed same-reference different amount is flagged for review', () async {
-    await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(id: 'phonepe-first', amount: 125.50),
-    );
-
-    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-      event(
-        id: 'truecaller-conflict',
-        amount: 200,
-        timestamp: DateTime(2026, 10, 22, 9, 10),
-      ),
-    );
-
-    expect(replay.isDuplicate, isFalse);
-    expect(replay.hasReferenceConflict, isTrue);
-    expect(replay.isMerchantConfirmed, isFalse);
-    final records = await OnlinePaymentHistoryService.load();
-    expect(records, hasLength(1));
-    expect(records.single['status'], 'CONFLICT_REVIEW');
-  });
-
-  test('auto-records high-confidence events without claiming bank verification', () async {
-    await OnlinePaymentHistoryService.recordIncomingPayment(
-      event(verification: PaymentVerificationStatus.unverified),
-    );
-
-    final records = await OnlinePaymentHistoryService.load();
-    expect(records.single['status'], 'AUTO_ACCEPTED');
-    expect(records.single['merchant_confirmed'], isFalse);
-    expect(records.single['confirmation_mode'], 'automatic');
-    expect(records.single['verified'], isFalse);
-  });
-
-  test('does not reopen a high-confidence auto-recorded reference for confirmation', () async {
-    final first = event(
-      decision: PaymentDecision.confirmed,
-      verification: PaymentVerificationStatus.unverified,
-      timestamp: DateTime.now().subtract(const Duration(hours: 8)),
-    );
-    await OnlinePaymentHistoryService.recordIncomingPayment(first);
-
-    final replay = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-      event(
-        id: 'late-auto-recorded-replay',
-        decision: PaymentDecision.likely,
-        verification: PaymentVerificationStatus.unverified,
-        timestamp: DateTime.now(),
-      ),
-    );
-
-    expect(replay.isDuplicate, isTrue);
-    expect(replay.detectionSource, isNot(contains(':pending_review_reminder')));
-    final records = await OnlinePaymentHistoryService.load();
-    expect(records, hasLength(1));
-    expect(records.single['status'], 'AUTO_ACCEPTED');
-    expect(records.single['merchant_confirmed'], isFalse);
-    expect(records.single['verified'], isFalse);
-  });
-
+      expect(replay.isDuplicate, isTrue);
+      expect(
+        replay.detectionSource,
+        isNot(contains(':pending_review_reminder')),
+      );
+      final records = await OnlinePaymentHistoryService.load();
+      expect(records, hasLength(1));
+      expect(records.single['status'], 'AUTO_ACCEPTED');
+      expect(records.single['merchant_confirmed'], isFalse);
+      expect(records.single['verified'], isFalse);
+    },
+  );
 
   test(
     'merges PhonePe, UPI-app, bank-SMS and Messages copies into one row per UTR',
@@ -305,85 +412,106 @@ void main() {
         required String prefix,
       }) async {
         // PhonePe posts a notification and accessibility exposes it again.
-        await OnlinePaymentHistoryService.recordIncomingPayment(event(
-          id: prefix + '-phonepe',
-          amount: amount,
-          referenceId: null,
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.phonePe,
-          detectionSource: 'notification',
-          rawText: 'Received Rs ' + amount.toStringAsFixed(0) + ' from Ravi via PhonePe',
-          timestamp: time,
-          sourceTimestamp: time,
-        ));
-        await OnlinePaymentHistoryService.recordIncomingPayment(event(
-          id: prefix + '-phonepe-accessibility',
-          amount: amount,
-          referenceId: null,
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.phonePe,
-          detectionSource: 'accessibility',
-          rawText: 'PhonePe payment received Rs ' + amount.toStringAsFixed(0),
-          timestamp: time.add(const Duration(seconds: 1)),
-          sourceTimestamp: time.add(const Duration(seconds: 1)),
-        ));
+        await OnlinePaymentHistoryService.recordIncomingPayment(
+          event(
+            id: prefix + '-phonepe',
+            amount: amount,
+            referenceId: null,
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+            app: PaymentApp.phonePe,
+            detectionSource: 'notification',
+            rawText:
+                'Received Rs ' +
+                amount.toStringAsFixed(0) +
+                ' from Ravi via PhonePe',
+            timestamp: time,
+            sourceTimestamp: time,
+          ),
+        );
+        await OnlinePaymentHistoryService.recordIncomingPayment(
+          event(
+            id: prefix + '-phonepe-accessibility',
+            amount: amount,
+            referenceId: null,
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+            app: PaymentApp.phonePe,
+            detectionSource: 'accessibility',
+            rawText: 'PhonePe payment received Rs ' + amount.toStringAsFixed(0),
+            timestamp: time.add(const Duration(seconds: 1)),
+            sourceTimestamp: time.add(const Duration(seconds: 1)),
+          ),
+        );
 
         // The Messages notification is parsed under the generic UPI app label.
-        await OnlinePaymentHistoryService.recordIncomingPayment(event(
-          id: prefix + '-messages-app',
-          amount: amount,
-          referenceId: null,
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.unknown,
-          detectionSource: 'notification',
-          rawText: 'Payment received Rs ' + amount.toStringAsFixed(0),
-          timestamp: time.add(const Duration(seconds: 2)),
-          sourceTimestamp: time.add(const Duration(seconds: 2)),
-        ));
-        await OnlinePaymentHistoryService.recordIncomingPayment(event(
-          id: prefix + '-messages-accessibility',
-          amount: amount,
-          referenceId: null,
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.unknown,
-          detectionSource: 'accessibility',
-          rawText: 'UPI payment received Rs ' + amount.toStringAsFixed(0),
-          timestamp: time.add(const Duration(seconds: 3)),
-          sourceTimestamp: time.add(const Duration(seconds: 3)),
-        ));
+        await OnlinePaymentHistoryService.recordIncomingPayment(
+          event(
+            id: prefix + '-messages-app',
+            amount: amount,
+            referenceId: null,
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+            app: PaymentApp.unknown,
+            detectionSource: 'notification',
+            rawText: 'Payment received Rs ' + amount.toStringAsFixed(0),
+            timestamp: time.add(const Duration(seconds: 2)),
+            sourceTimestamp: time.add(const Duration(seconds: 2)),
+          ),
+        );
+        await OnlinePaymentHistoryService.recordIncomingPayment(
+          event(
+            id: prefix + '-messages-accessibility',
+            amount: amount,
+            referenceId: null,
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+            app: PaymentApp.unknown,
+            detectionSource: 'accessibility',
+            rawText: 'UPI payment received Rs ' + amount.toStringAsFixed(0),
+            timestamp: time.add(const Duration(seconds: 3)),
+            sourceTimestamp: time.add(const Duration(seconds: 3)),
+          ),
+        );
 
         // The bank SMS supplies the durable transaction identity after app signals.
-        await OnlinePaymentHistoryService.recordIncomingPayment(event(
-          id: prefix + '-bank-sms',
-          amount: amount,
-          referenceId: utr,
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.bankSms,
-          detectionSource: 'sms',
-          rawText: 'An amount of Rs ' + amount.toStringAsFixed(0) +
-              ' is credited. UPI Ref No:' + utr,
-          timestamp: time.add(const Duration(seconds: 4)),
-          sourceTimestamp: time.add(const Duration(seconds: 4)),
-        ));
+        await OnlinePaymentHistoryService.recordIncomingPayment(
+          event(
+            id: prefix + '-bank-sms',
+            amount: amount,
+            referenceId: utr,
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+            app: PaymentApp.bankSms,
+            detectionSource: 'sms',
+            rawText:
+                'An amount of Rs ' +
+                amount.toStringAsFixed(0) +
+                ' is credited. UPI Ref No:' +
+                utr,
+            timestamp: time.add(const Duration(seconds: 4)),
+            sourceTimestamp: time.add(const Duration(seconds: 4)),
+          ),
+        );
         // Android Messages can surface the same SMS as another notification.
-        await OnlinePaymentHistoryService.recordIncomingPayment(event(
-          id: prefix + '-messages-notification',
-          amount: amount,
-          referenceId: utr,
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.bankSms,
-          detectionSource: 'notification',
-          rawText: 'Messages: credited Rs ' + amount.toStringAsFixed(0) +
-              ' UPI Ref No:' + utr,
-          timestamp: time.add(const Duration(seconds: 5)),
-          sourceTimestamp: time.add(const Duration(seconds: 5)),
-        ));
+        await OnlinePaymentHistoryService.recordIncomingPayment(
+          event(
+            id: prefix + '-messages-notification',
+            amount: amount,
+            referenceId: utr,
+            decision: PaymentDecision.likely,
+            verification: PaymentVerificationStatus.unverified,
+            app: PaymentApp.bankSms,
+            detectionSource: 'notification',
+            rawText:
+                'Messages: credited Rs ' +
+                amount.toStringAsFixed(0) +
+                ' UPI Ref No:' +
+                utr,
+            timestamp: time.add(const Duration(seconds: 5)),
+            sourceTimestamp: time.add(const Duration(seconds: 5)),
+          ),
+        );
       }
 
       await addPaymentCopies(
@@ -406,30 +534,36 @@ void main() {
       );
 
       final rows = await OnlinePaymentHistoryService.load();
-      final amounts = rows.map((row) => (row['amount'] as num).toDouble()).toList()
-        ..sort();
+      final amounts =
+          rows.map((row) => (row['amount'] as num).toDouble()).toList()..sort();
       expect(rows, hasLength(3));
       expect(amounts, [5.0, 5.0, 10.0]);
-      expect(rows.map((row) => row['reference_id']).toSet(),
-          {'663292616261', '663292616262', '663292616263'});
+      expect(rows.map((row) => row['reference_id']).toSet(), {
+        '663292616261',
+        '663292616262',
+        '663292616263',
+      });
       expect(rows.every((row) => row['verified'] == false), isTrue);
       expect(rows.every((row) => row['_record_type'] == null), isTrue);
-      expect(rows.every((row) => (row['source_signals'] as List).length >= 3),
-          isTrue);
-
-      final duplicate = await OnlinePaymentHistoryService.annotateKnownReferenceState(
-        event(
-          id: 'five-a-late-replay',
-          amount: 5,
-          referenceId: '663292616261',
-          decision: PaymentDecision.likely,
-          verification: PaymentVerificationStatus.unverified,
-          app: PaymentApp.bankSms,
-          detectionSource: 'sms',
-          rawText: 'UPI Ref No:663292616261',
-          timestamp: DateTime.now(),
-        ),
+      expect(
+        rows.every((row) => (row['source_signals'] as List).length >= 3),
+        isTrue,
       );
+
+      final duplicate =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(
+            event(
+              id: 'five-a-late-replay',
+              amount: 5,
+              referenceId: '663292616261',
+              decision: PaymentDecision.likely,
+              verification: PaymentVerificationStatus.unverified,
+              app: PaymentApp.bankSms,
+              detectionSource: 'sms',
+              rawText: 'UPI Ref No:663292616261',
+              timestamp: DateTime.now(),
+            ),
+          );
       expect(duplicate.isDuplicate, isTrue);
       expect(await OnlinePaymentHistoryService.load(), hasLength(3));
     },
@@ -439,63 +573,74 @@ void main() {
     'does not merge distinct same-amount payments with different references',
     () async {
       final now = DateTime.now();
-      await OnlinePaymentHistoryService.recordIncomingPayment(event(
-        id: 'payment-five-1',
-        amount: 5,
-        referenceId: 'UTR-FIVE-0001',
-        timestamp: now,
-        sourceTimestamp: now,
-        app: PaymentApp.phonePe,
-      ));
-      await OnlinePaymentHistoryService.recordIncomingPayment(event(
-        id: 'payment-five-2',
-        amount: 5,
-        referenceId: 'UTR-FIVE-0002',
-        timestamp: now.add(const Duration(seconds: 2)),
-        sourceTimestamp: now.add(const Duration(seconds: 2)),
-        app: PaymentApp.phonePe,
-      ));
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          id: 'payment-five-1',
+          amount: 5,
+          referenceId: 'UTR-FIVE-0001',
+          timestamp: now,
+          sourceTimestamp: now,
+          app: PaymentApp.phonePe,
+        ),
+      );
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          id: 'payment-five-2',
+          amount: 5,
+          referenceId: 'UTR-FIVE-0002',
+          timestamp: now.add(const Duration(seconds: 2)),
+          sourceTimestamp: now.add(const Duration(seconds: 2)),
+          app: PaymentApp.phonePe,
+        ),
+      );
       final rows = await OnlinePaymentHistoryService.load();
       expect(rows, hasLength(2));
-      expect(rows.map((row) => row['reference_id']).toSet(),
-          {'UTRFIVE0001', 'UTRFIVE0002'});
+      expect(rows.map((row) => row['reference_id']).toSet(), {
+        'UTRFIVE0001',
+        'UTRFIVE0002',
+      });
     },
   );
-
 
   test(
     'does not merge a new same-amount same-app notification into an existing UTR',
     () async {
       final now = DateTime.now();
-      await OnlinePaymentHistoryService.recordIncomingPayment(event(
-        id: 'previous-five',
-        amount: 5,
-        referenceId: 'UTR-PREVIOUS-5551',
-        app: PaymentApp.phonePe,
-        detectionSource: 'notification',
-        rawText: 'You received Rs 5 from Ravi',
-        timestamp: now,
-        sourceTimestamp: now,
-      ));
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          id: 'previous-five',
+          amount: 5,
+          referenceId: 'UTR-PREVIOUS-5551',
+          app: PaymentApp.phonePe,
+          detectionSource: 'notification',
+          rawText: 'You received Rs 5 from Ravi',
+          timestamp: now,
+          sourceTimestamp: now,
+        ),
+      );
 
-      await OnlinePaymentHistoryService.recordIncomingPayment(event(
-        id: 'new-five',
-        amount: 5,
-        referenceId: null,
-        decision: PaymentDecision.likely,
-        verification: PaymentVerificationStatus.unverified,
-        app: PaymentApp.phonePe,
-        detectionSource: 'notification',
-        rawText: 'You received Rs 5 from Ravi',
-        timestamp: now.add(const Duration(seconds: 2)),
-        sourceTimestamp: now.add(const Duration(seconds: 2)),
-      ));
+      await OnlinePaymentHistoryService.recordIncomingPayment(
+        event(
+          id: 'new-five',
+          amount: 5,
+          referenceId: null,
+          decision: PaymentDecision.likely,
+          verification: PaymentVerificationStatus.unverified,
+          app: PaymentApp.phonePe,
+          detectionSource: 'notification',
+          rawText: 'You received Rs 5 from Ravi',
+          timestamp: now.add(const Duration(seconds: 2)),
+          sourceTimestamp: now.add(const Duration(seconds: 2)),
+        ),
+      );
 
       final rows = await OnlinePaymentHistoryService.load();
       expect(rows, hasLength(2));
       expect(rows.where((row) => row['reference_id'] != null), hasLength(1));
-      expect(rows.map((row) => (row['amount'] as num).toDouble()).toList(),
-          everyElement(5.0));
+      expect(
+        rows.map((row) => (row['amount'] as num).toDouble()).toList(),
+        everyElement(5.0),
+      );
     },
   );
 
@@ -512,8 +657,7 @@ void main() {
         verification: PaymentVerificationStatus.unverified,
         timestamp: now,
         sourceTimestamp: now,
-        sourceEventKey:
-            'com.phonepe.app|42|$postedAtMs|payload-hash-first',
+        sourceEventKey: 'com.phonepe.app|42|$postedAtMs|payload-hash-first',
         rawText: 'You received ₹2 from a customer',
       );
       final replay = event(
@@ -526,8 +670,7 @@ void main() {
         sourceTimestamp: now.add(const Duration(seconds: 18)),
         // A payload hash can change when Android updates the same notification.
         // Package, notification ID, and post time still identify that same post.
-        sourceEventKey:
-            'com.phonepe.app|42|$postedAtMs|payload-hash-updated',
+        sourceEventKey: 'com.phonepe.app|42|$postedAtMs|payload-hash-updated',
         rawText: 'Payment received ₹2',
       );
 
@@ -546,16 +689,18 @@ void main() {
       final rows = await OnlinePaymentHistoryService.load();
       expect(rows, hasLength(1));
       expect(rows.single['amount'], 2.0);
-      expect(rows.single['source_event_fingerprint'], first.sourceEventFingerprint);
+      expect(
+        rows.single['source_event_fingerprint'],
+        first.sourceEventFingerprint,
+      );
     },
   );
 
-  test(
-    'does not merge distinct same-value native notifications',
-    () async {
-      final now = DateTime.now();
-      final postedAt = now.millisecondsSinceEpoch;
-      await OnlinePaymentHistoryService.recordIncomingPayment(event(
+  test('does not merge distinct same-value native notifications', () async {
+    final now = DateTime.now();
+    final postedAt = now.millisecondsSinceEpoch;
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(
         id: 'phonepe-two-rupee-a',
         amount: 2,
         referenceId: null,
@@ -563,23 +708,24 @@ void main() {
         verification: PaymentVerificationStatus.unverified,
         timestamp: now,
         sourceEventKey: 'com.phonepe.app|51|$postedAt|hash-a',
-      ));
-      await OnlinePaymentHistoryService.recordIncomingPayment(event(
+      ),
+    );
+    await OnlinePaymentHistoryService.recordIncomingPayment(
+      event(
         id: 'phonepe-two-rupee-b',
         amount: 2,
         referenceId: null,
         decision: PaymentDecision.likely,
         verification: PaymentVerificationStatus.unverified,
         timestamp: now.add(const Duration(seconds: 2)),
-        sourceEventKey:
-            'com.phonepe.app|52|${postedAt + 2000}|hash-b',
-      ));
+        sourceEventKey: 'com.phonepe.app|52|${postedAt + 2000}|hash-b',
+      ),
+    );
 
-      final rows = await OnlinePaymentHistoryService.load();
-      expect(rows, hasLength(2));
-      expect(rows.map((row) => row['amount']).toList(), [2.0, 2.0]);
-    },
-  );
+    final rows = await OnlinePaymentHistoryService.load();
+    expect(rows, hasLength(2));
+    expect(rows.map((row) => row['amount']).toList(), [2.0, 2.0]);
+  });
 
   test('does not store rejected or outgoing payments', () async {
     expect(

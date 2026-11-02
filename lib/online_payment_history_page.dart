@@ -27,6 +27,19 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
     await _history;
   }
 
+  Future<void> _dismissEntry(Map<String, dynamic> entry) async {
+    final key = entry['_history_key']?.toString() ?? '';
+    if (key.isEmpty) return;
+    final dismissed = await OnlinePaymentHistoryService.dismissEntry(key);
+    if (!mounted) return;
+    if (dismissed) {
+      setState(() => _history = OnlinePaymentHistoryService.load());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Detection dismissed')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
@@ -88,7 +101,9 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                       Icons.account_balance_wallet_outlined,
                       color: Colors.green,
                     ),
-                    title: const LiveTranslatedText('Merchant-confirmed receipts'),
+                    title: const LiveTranslatedText(
+                      'Merchant-confirmed receipts',
+                    ),
                     subtitle: LiveTranslatedText(
                       '${confirmedEntries.length} merchant-confirmed · '
                       '$automaticEntries auto-accepted · '
@@ -133,11 +148,11 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                             child: Icon(
                               conflict
                                   ? Icons.warning_amber_rounded
-                              : confirmed
-                              ? Icons.check_circle_outline
-                              : automatic
-                              ? Icons.auto_awesome_outlined
-                              : Icons.pending_outlined,
+                                  : confirmed
+                                  ? Icons.check_circle_outline
+                                  : automatic
+                                  ? Icons.auto_awesome_outlined
+                                  : Icons.pending_outlined,
                               color: statusColor,
                             ),
                           ),
@@ -155,18 +170,42 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                             '${entry['app'] ?? 'Online payment'} · '
                             '${_formatTime(entry['timestamp'])}',
                           ),
-                          trailing: LiveTranslatedText(
-                            conflict
-                                ? 'Review conflict'
-                              : confirmed
-                              ? 'Merchant-confirmed'
-                              : automatic
-                              ? 'Auto-accepted · verify if needed'
-                              : 'Pending review',
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 12,
-                            ),
+                          trailing: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Flexible(
+                                child: LiveTranslatedText(
+                                  conflict
+                                      ? 'Review conflict'
+                                      : confirmed
+                                      ? 'Merchant-confirmed'
+                                      : automatic
+                                      ? 'Auto-accepted · verify if needed'
+                                      : 'Pending review',
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 12,
+                                  ),
+                                  textAlign: TextAlign.end,
+                                ),
+                              ),
+                              if (!confirmed)
+                                SizedBox(
+                                  height: 36,
+                                  width: 40,
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    tooltip: 'Dismiss detection',
+                                    onPressed: () => _dismissEntry(entry),
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: Colors.redAccent,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       );

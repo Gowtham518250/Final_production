@@ -70,80 +70,118 @@ void main() {
       );
     });
 
-    test('coalesces cross-source alerts when payer, amount and direction match', () {
-      final deduper = PaymentAlertDeduplicator();
-      final first = event(
-        id: 'phonepe-event',
-        payerName: 'Anna',
-        rawText: 'Anna sent ₹500 to you',
-      );
-      final second = event(
-        id: 'generic-upi-event',
-        payerName: 'anna',
-        app: PaymentApp.unknown,
-        rawText: 'You received ₹500 from Anna through UPI',
-      );
+    test(
+      'coalesces cross-source alerts when payer, amount and direction match',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        final first = event(
+          id: 'phonepe-event',
+          payerName: 'Anna',
+          rawText: 'Anna sent ₹500 to you',
+        );
+        final second = event(
+          id: 'generic-upi-event',
+          payerName: 'anna',
+          app: PaymentApp.unknown,
+          rawText: 'You received ₹500 from Anna through UPI',
+        );
 
-      expect(deduper.shouldSuppress(first, now: now), isFalse);
-      expect(
-        deduper.shouldSuppress(
-          second,
-          now: now.add(const Duration(seconds: 2)),
-        ),
-        isTrue,
-      );
-    });
+        expect(deduper.shouldSuppress(first, now: now), isFalse);
+        expect(
+          deduper.shouldSuppress(
+            second,
+            now: now.add(const Duration(seconds: 2)),
+          ),
+          isTrue,
+        );
+      },
+    );
 
+    test(
+      'same native notification update with a changed payload is suppressed',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        final postedAt = now.millisecondsSinceEpoch;
+        final first = event(
+          id: 'first',
+          rawText: 'Payment received ₹500',
+          sourceEventKey: 'com.phonepe.app|42|${postedAt}|first-hash',
+        );
+        final updated = event(
+          id: 'updated',
+          rawText: '₹500 credited successfully',
+          sourceEventKey: 'com.phonepe.app|42|${postedAt}|updated-hash',
+        );
 
-    test('same native notification update with a changed payload is suppressed', () {
-      final deduper = PaymentAlertDeduplicator();
-      final postedAt = now.millisecondsSinceEpoch;
-      final first = event(
-        id: 'first',
-        rawText: 'Payment received ₹500',
-        sourceEventKey: 'com.phonepe.app|42|${postedAt}|first-hash',
-      );
-      final updated = event(
-        id: 'updated',
-        rawText: '₹500 credited successfully',
-        sourceEventKey: 'com.phonepe.app|42|${postedAt}|updated-hash',
-      );
+        expect(deduper.shouldSuppress(first, now: now), isFalse);
+        expect(
+          deduper.shouldSuppress(
+            updated,
+            now: now.add(const Duration(seconds: 2)),
+          ),
+          isTrue,
+        );
+      },
+    );
 
-      expect(deduper.shouldSuppress(first, now: now), isFalse);
-      expect(
-        deduper.shouldSuppress(
-          updated,
-          now: now.add(const Duration(seconds: 2)),
-        ),
-        isTrue,
-      );
-    });
+    test(
+      'same Truecaller replay without native identity is suppressed briefly',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        final first = event(
+          id: 'truecaller-first',
+          payerName: 'Anna Devi',
+          accountSuffix: '4222',
+          rawText: 'Anna sent ₹500 to account 4222',
+          detectionSource: 'truecaller_notification',
+        );
+        final replay = event(
+          id: 'truecaller-updated',
+          payerName: 'Anna Devi',
+          accountSuffix: '4222',
+          rawText: '₹500 credited to your account 4222',
+          detectionSource: 'truecaller_notification',
+        );
 
-    test('distinct same-value native notifications from the same payer remain eligible', () {
-      final deduper = PaymentAlertDeduplicator();
-      final postedAt = now.millisecondsSinceEpoch;
-      final first = event(
-        id: 'first',
-        payerName: 'Anna',
-        rawText: 'Anna sent ₹500 to you',
-        sourceEventKey: 'com.phonepe.app|42|${postedAt}|first-hash',
-      );
-      final second = event(
-        id: 'second',
-        payerName: 'Anna',
-        rawText: 'Anna sent ₹500 to you',
-        sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|second-hash',
-      );
+        expect(deduper.shouldSuppress(first, now: now), isFalse);
+        expect(
+          deduper.shouldSuppress(
+            replay,
+            now: now.add(const Duration(seconds: 2)),
+          ),
+          isTrue,
+        );
+      },
+    );
 
-      expect(deduper.shouldSuppress(first, now: now), isFalse);
-      expect(
-        deduper.shouldSuppress(
-          second,
-          now: now.add(const Duration(seconds: 1)),
-        ),
-        isFalse,
-      );
-    });
+    test(
+      'distinct same-value native notifications from the same payer remain eligible',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        final postedAt = now.millisecondsSinceEpoch;
+        final first = event(
+          id: 'first',
+          payerName: 'Anna',
+          rawText: 'Anna sent ₹500 to you',
+          sourceEventKey: 'com.phonepe.app|42|${postedAt}|first-hash',
+        );
+        final second = event(
+          id: 'second',
+          payerName: 'Anna',
+          rawText: 'Anna sent ₹500 to you',
+          sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|second-hash',
+        );
+
+        expect(deduper.shouldSuppress(first, now: now), isFalse);
+        expect(
+          deduper.shouldSuppress(
+            second,
+            now: now.add(const Duration(seconds: 1)),
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('different UTRs stay separate even for same payer and amount', () {
       final deduper = PaymentAlertDeduplicator();
@@ -167,53 +205,58 @@ void main() {
       );
     });
 
-    test('two same-value payments pair with two cross-source echoes one-to-one', () {
-      final deduper = PaymentAlertDeduplicator();
-      final postedAt = now.millisecondsSinceEpoch;
-      final first = event(
-        id: 'phonepe-1',
-        payerName: 'Anna',
-        sourceEventKey: 'com.phonepe.app|42|${postedAt}|hash-1',
-      );
-      final second = event(
-        id: 'phonepe-2',
-        payerName: 'Meena',
-        sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|hash-2',
-      );
+    test(
+      'two same-value payments pair with two cross-source echoes one-to-one',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        final postedAt = now.millisecondsSinceEpoch;
+        final first = event(
+          id: 'phonepe-1',
+          payerName: 'Anna',
+          sourceEventKey: 'com.phonepe.app|42|${postedAt}|hash-1',
+        );
+        final second = event(
+          id: 'phonepe-2',
+          payerName: 'Meena',
+          sourceEventKey: 'com.phonepe.app|43|${postedAt + 1000}|hash-2',
+        );
 
-      expect(deduper.shouldSuppress(first, now: now), isFalse);
-      expect(
-        deduper.shouldSuppress(
-          second,
-          now: now.add(const Duration(seconds: 1)),
-        ),
-        isFalse,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(
-            id: 'mirror-1',
-            payerName: 'Anna',
-            app: PaymentApp.unknown,
-            sourceEventKey: 'com.truecaller.app|7|${postedAt + 2000}|mirror-1',
+        expect(deduper.shouldSuppress(first, now: now), isFalse);
+        expect(
+          deduper.shouldSuppress(
+            second,
+            now: now.add(const Duration(seconds: 1)),
           ),
-          now: now.add(const Duration(seconds: 2)),
-        ),
-        isTrue,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(
-            id: 'mirror-2',
-            payerName: 'Meena',
-            app: PaymentApp.unknown,
-            sourceEventKey: 'com.truecaller.app|8|${postedAt + 3000}|mirror-2',
+          isFalse,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(
+              id: 'mirror-1',
+              payerName: 'Anna',
+              app: PaymentApp.unknown,
+              sourceEventKey:
+                  'com.truecaller.app|7|${postedAt + 2000}|mirror-1',
+            ),
+            now: now.add(const Duration(seconds: 2)),
           ),
-          now: now.add(const Duration(seconds: 3)),
-        ),
-        isTrue,
-      );
-    });
+          isTrue,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(
+              id: 'mirror-2',
+              payerName: 'Meena',
+              app: PaymentApp.unknown,
+              sourceEventKey:
+                  'com.truecaller.app|8|${postedAt + 3000}|mirror-2',
+            ),
+            now: now.add(const Duration(seconds: 3)),
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('does not coalesce equal amounts from different named payers', () {
       final deduper = PaymentAlertDeduplicator();
@@ -230,49 +273,55 @@ void main() {
       );
     });
 
-    test('does not use amount and time alone to merge unreferenced payments', () {
-      final deduper = PaymentAlertDeduplicator();
-      expect(
-        deduper.shouldSuppress(
-          event(rawText: '₹500 received in your account'),
-          now: now,
-        ),
-        isFalse,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(
-            app: PaymentApp.unknown,
-            rawText: '₹500 credited to your account',
+    test(
+      'does not use amount and time alone to merge unreferenced payments',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        expect(
+          deduper.shouldSuppress(
+            event(rawText: '₹500 received in your account'),
+            now: now,
           ),
-          now: now.add(const Duration(seconds: 1)),
-        ),
-        isFalse,
-      );
-    });
+          isFalse,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(
+              app: PaymentApp.unknown,
+              rawText: '₹500 credited to your account',
+            ),
+            now: now.add(const Duration(seconds: 1)),
+          ),
+          isFalse,
+        );
+      },
+    );
 
-    test('direction and amount differences remain independently reviewable', () {
-      final deduper = PaymentAlertDeduplicator();
-      expect(
-        deduper.shouldSuppress(
-          event(referenceId: '123456789012', amount: 500),
-          now: now,
-        ),
-        isFalse,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(
-            referenceId: '123456789012',
-            amount: 700,
-            rawText: '₹700 debited from your account',
-            direction: PaymentTransactionDirection.outgoingDebit,
+    test(
+      'direction and amount differences remain independently reviewable',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        expect(
+          deduper.shouldSuppress(
+            event(referenceId: '123456789012', amount: 500),
+            now: now,
           ),
-          now: now.add(const Duration(seconds: 1)),
-        ),
-        isFalse,
-      );
-    });
+          isFalse,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(
+              referenceId: '123456789012',
+              amount: 700,
+              rawText: '₹700 debited from your account',
+              direction: PaymentTransactionDirection.outgoingDebit,
+            ),
+            now: now.add(const Duration(seconds: 1)),
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('expired fallback window permits a later new alert', () {
       final deduper = PaymentAlertDeduplicator();
@@ -289,27 +338,30 @@ void main() {
       );
     });
 
-    test('coalesces no-reference alert bursts for fifteen minutes then allows a reminder', () {
-      final deduper = PaymentAlertDeduplicator();
-      expect(
-        deduper.shouldSuppress(event(payerName: 'Anna'), now: now),
-        isFalse,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(payerName: 'Anna', app: PaymentApp.unknown),
-          now: now.add(const Duration(minutes: 10)),
-        ),
-        isTrue,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(payerName: 'Anna', app: PaymentApp.unknown),
-          now: now.add(const Duration(minutes: 16)),
-        ),
-        isFalse,
-      );
-    });
+    test(
+      'coalesces no-reference alert bursts for fifteen minutes then allows a reminder',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        expect(
+          deduper.shouldSuppress(event(payerName: 'Anna'), now: now),
+          isFalse,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(payerName: 'Anna', app: PaymentApp.unknown),
+            now: now.add(const Duration(minutes: 10)),
+          ),
+          isTrue,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(payerName: 'Anna', app: PaymentApp.unknown),
+            now: now.add(const Duration(minutes: 16)),
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('reference alert becomes eligible again after six hours', () {
       final deduper = PaymentAlertDeduplicator();
@@ -331,169 +383,175 @@ void main() {
       );
     });
 
-    test('uses audible notification fallback when voice would not announce a reminder', () {
-      final duplicate = event(id: 'old-duplicate')
-          .copyWith(isDuplicate: true);
-      final conflict = event(id: 'conflicting-payment')
-          .copyWith(hasReferenceConflict: true);
-      final reminder = event(
-        id: 'morning-reminder',
-      ).copyWith(
-        detectionSource: 'notification:pending_review_reminder',
-      );
-      final ordinary = event(id: 'ordinary-payment');
+    test(
+      'uses audible notification fallback when voice would not announce a reminder',
+      () {
+        final duplicate = event(
+          id: 'old-duplicate',
+        ).copyWith(isDuplicate: true);
+        final conflict = event(
+          id: 'conflicting-payment',
+        ).copyWith(hasReferenceConflict: true);
+        final reminder = event(
+          id: 'morning-reminder',
+        ).copyWith(detectionSource: 'notification:pending_review_reminder');
+        final ordinary = event(id: 'ordinary-payment');
 
-      expect(
-        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
-          duplicate,
-          voiceEnabled: true,
-        ),
-        isTrue,
-      );
-      expect(
-        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
-          conflict,
-          voiceEnabled: true,
-        ),
-        isTrue,
-      );
-      expect(
-        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
-          reminder,
-          voiceEnabled: true,
-        ),
-        isTrue,
-      );
-      expect(
-        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
-          ordinary,
-          voiceEnabled: true,
-        ),
-        isFalse,
-      );
-      expect(
-        PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
-          ordinary,
-          voiceEnabled: false,
-        ),
-        isTrue,
-      );
-    });
-
-    test('merchant-confirmed transition is not swallowed by an earlier alert', () {
-      final deduper = PaymentAlertDeduplicator();
-      expect(
-        deduper.shouldSuppress(event(payerName: 'Anna'), now: now),
-        isFalse,
-      );
-      expect(
-        deduper.shouldSuppress(
-          event(
-            payerName: 'Anna',
-            merchantConfirmed: true,
+        expect(
+          PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+            duplicate,
+            voiceEnabled: true,
           ),
-          now: now.add(const Duration(seconds: 10)),
-        ),
-        isFalse,
-      );
-    });
+          isTrue,
+        );
+        expect(
+          PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+            conflict,
+            voiceEnabled: true,
+          ),
+          isTrue,
+        );
+        expect(
+          PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+            reminder,
+            voiceEnabled: true,
+          ),
+          isTrue,
+        );
+        expect(
+          PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+            ordinary,
+            voiceEnabled: true,
+          ),
+          isFalse,
+        );
+        expect(
+          PaymentAlertDeduplicator.shouldUseAudibleNotificationFallback(
+            ordinary,
+            voiceEnabled: false,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'merchant-confirmed transition is not swallowed by an earlier alert',
+      () {
+        final deduper = PaymentAlertDeduplicator();
+        expect(
+          deduper.shouldSuppress(event(payerName: 'Anna'), now: now),
+          isFalse,
+        );
+        expect(
+          deduper.shouldSuppress(
+            event(payerName: 'Anna', merchantConfirmed: true),
+            now: now.add(const Duration(seconds: 10)),
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('reference conflicts are left visible for review', () {
       final deduper = PaymentAlertDeduplicator();
       expect(
-        deduper.shouldSuppress(
-          event(referenceId: '123456789012'),
-          now: now,
-        ),
+        deduper.shouldSuppress(event(referenceId: '123456789012'), now: now),
         isFalse,
       );
       expect(
         deduper.shouldSuppress(
-          event(
-            referenceId: '123456789012',
-            conflict: true,
-          ),
+          event(referenceId: '123456789012', conflict: true),
           now: now.add(const Duration(seconds: 1)),
         ),
         isFalse,
       );
     });
 
-    test('native notification and SHA-based UTR keys survive process restart storage', () async {
-      SharedPreferences.setMockInitialValues({});
-      final expiry = DateTime.now().add(const Duration(hours: 24));
-      await PdsStateStore.saveDedup({
-        'notification-event:native-hash': expiry,
-        'utr_utr-hash': expiry,
-        'utr:legacy-utr-hash': expiry,
-        'event_transient': expiry,
-      });
+    test(
+      'native notification and SHA-based UTR keys survive process restart storage',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final expiry = DateTime.now().add(const Duration(hours: 24));
+        await PdsStateStore.saveDedup({
+          'notification-event:native-hash': expiry,
+          'utr_utr-hash': expiry,
+          'utr:legacy-utr-hash': expiry,
+          'event_transient': expiry,
+        });
 
-      final prefs = await SharedPreferences.getInstance();
-      final serialized = prefs.getString('pds_dedup_v2');
-      expect(serialized, isNotNull);
-      final saved = jsonDecode(serialized!) as Map<String, dynamic>;
+        final prefs = await SharedPreferences.getInstance();
+        final serialized = prefs.getString('pds_dedup_v2');
+        expect(serialized, isNotNull);
+        final saved = jsonDecode(serialized!) as Map<String, dynamic>;
 
-      expect(saved.keys, contains('notification-event:native-hash'));
-      expect(saved.keys, contains('utr_utr-hash'));
-      expect(saved.keys, contains('utr:legacy-utr-hash'));
-      expect(saved.keys, isNot(contains('event_transient')));
-    });
+        expect(saved.keys, contains('notification-event:native-hash'));
+        expect(saved.keys, contains('utr_utr-hash'));
+        expect(saved.keys, contains('utr:legacy-utr-hash'));
+        expect(saved.keys, isNot(contains('event_transient')));
+      },
+    );
 
-    test('persistent cache gives pending references six hours and confirmed references 24 hours', () async {
-      SharedPreferences.setMockInitialValues({});
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final now = DateTime.now();
-      final pendingAt = now.subtract(const Duration(hours: 2));
-      const pendingReference = 'UTR-PENDING-5555';
-      const confirmedReference = 'UTR-CONFIRMED-6666';
+    test(
+      'persistent cache gives pending references six hours and confirmed references 24 hours',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final now = DateTime.now();
+        final pendingAt = now.subtract(const Duration(hours: 2));
+        const pendingReference = 'UTR-PENDING-5555';
+        const confirmedReference = 'UTR-CONFIRMED-6666';
 
-      final pendingKey = PaymentEvent(
-        amount: 1,
-        timestamp: pendingAt,
-        app: PaymentApp.unknown,
-        referenceId: pendingReference,
-      ).fingerprint;
-      final confirmedKey = PaymentEvent(
-        amount: 1,
-        timestamp: pendingAt,
-        app: PaymentApp.unknown,
-        referenceId: confirmedReference,
-      ).fingerprint;
+        final pendingKey = PaymentEvent(
+          amount: 1,
+          timestamp: pendingAt,
+          app: PaymentApp.unknown,
+          referenceId: pendingReference,
+        ).fingerprint;
+        final confirmedKey = PaymentEvent(
+          amount: 1,
+          timestamp: pendingAt,
+          app: PaymentApp.unknown,
+          referenceId: confirmedReference,
+        ).fingerprint;
 
-      await service.syncDedupWindowsFromPaymentHistory([
-        {
-          'reference_id': pendingReference,
-          'status': 'PENDING_CONFIRMATION',
-          'timestamp': pendingAt.toIso8601String(),
-        },
-        {
-          'reference_id': confirmedReference,
-          'status': 'CONFIRMED',
-          'timestamp': pendingAt.toIso8601String(),
-        },
-      ]);
+        await service.syncDedupWindowsFromPaymentHistory([
+          {
+            'reference_id': pendingReference,
+            'status': 'PENDING_CONFIRMATION',
+            'timestamp': pendingAt.toIso8601String(),
+          },
+          {
+            'reference_id': confirmedReference,
+            'status': 'CONFIRMED',
+            'timestamp': pendingAt.toIso8601String(),
+          },
+        ]);
 
-      final prefs = await SharedPreferences.getInstance();
-      final saved = jsonDecode(prefs.getString('pds_dedup_v2')!)
-          as Map<String, dynamic>;
-      final pendingExpiry = DateTime.parse(saved[pendingKey] as String);
-      final confirmedExpiry = DateTime.parse(saved[confirmedKey] as String);
+        final prefs = await SharedPreferences.getInstance();
+        final saved =
+            jsonDecode(prefs.getString('pds_dedup_v2')!)
+                as Map<String, dynamic>;
+        final pendingExpiry = DateTime.parse(saved[pendingKey] as String);
+        final confirmedExpiry = DateTime.parse(saved[confirmedKey] as String);
 
-      expect(
-        pendingExpiry.difference(
-          pendingAt.add(const Duration(hours: 6)),
-        ).inSeconds.abs(),
-        lessThan(2),
-      );
-      expect(
-        confirmedExpiry.difference(
-          DateTime.now().add(const Duration(hours: 24)),
-        ).inSeconds.abs(),
-        lessThan(2),
-      );
-    });
+        expect(
+          pendingExpiry
+              .difference(pendingAt.add(const Duration(hours: 6)))
+              .inSeconds
+              .abs(),
+          lessThan(2),
+        );
+        expect(
+          confirmedExpiry
+              .difference(DateTime.now().add(const Duration(hours: 24)))
+              .inSeconds
+              .abs(),
+          lessThan(2),
+        );
+      },
+    );
 
     test('migrates only native replay keys to the six-hour window', () async {
       final oldExpiry = DateTime.now().add(const Duration(hours: 22));

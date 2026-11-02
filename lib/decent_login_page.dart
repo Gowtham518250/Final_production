@@ -838,7 +838,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                       localizations.translate('voiceInstructionsLanguage'),
                       style: GoogleFonts.inter(
                         fontSize: 11,
-                        color: _C.textMuted,
+                        color: const Color(0xFF475569),
                       ),
                     ),
                   ],
@@ -929,7 +929,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                   LiveTranslatedText(
                     l.translate('manageSalesMessage'),
                     style: GoogleFonts.inter(
-                      color: _C.textMuted,
+                      color: const Color(0xFF334155),
                       fontSize: 13.5,
                       height: 1.3,
                     ),
@@ -1212,7 +1212,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                         text: TextSpan(
                           text: l.translate('noAccount'),
                           style: GoogleFonts.inter(
-                            color: _C.textMuted,
+                            color: const Color(0xFF334155),
                             fontSize: 13,
                           ),
                           children: [

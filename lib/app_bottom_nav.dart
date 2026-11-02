@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'visual_widgets.dart';
-import 'session_logout_service.dart';
-import 'sync_queue_manager.dart';
-import 'simple_loader.dart';
 
 /// Modern SaaS bottom navigation bar
 /// 5 tabs: Home, Analytics, Add Sale (center), Store, AI
@@ -14,10 +11,10 @@ class AppBottomNav extends StatefulWidget {
   final Function(int) onTap;
 
   const AppBottomNav({
-    Key? key,
+    super.key,
     required this.currentIndex,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   State<AppBottomNav> createState() => _AppBottomNavState();
@@ -77,9 +74,10 @@ class _AppBottomNavState extends State<AppBottomNav> {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // 1. HOME / DASHBOARD
               _ModernNavItem(
@@ -116,71 +114,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
     );
   }
 
-  void _showLogoutConfirm(BuildContext context) async {
-    final pendingCount = await SyncQueueManager.getQueueSize();
-    
-    if (!context.mounted) return;
-    
-    if (pendingCount > 0) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.red),
-              const SizedBox(width: 8),
-              const LiveTranslatedText('Action Blocked', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: LiveTranslatedText('You have $pendingCount offline sales pending. Please connect to the internet to sync them before logging out, otherwise they will be permanently lost.'),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B3A6B), foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx),
-              child: const LiveTranslatedText('OK, I WILL CONNECT'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const LiveTranslatedText('Confirm Logout'),
-        content: const LiveTranslatedText('Are you sure you want to log out?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const LiveTranslatedText('CANCEL')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              // 🔧 FIX: previously awaited performOwnerLogout() with no
-              // loader and no error handling — if any internal cleanup step
-              // threw, the exception stopped execution right there and the
-              // Navigator call below never ran, so the button appeared to
-              // do nothing. Now shows a simple loader and guarantees
-              // navigation to /login regardless of what fails inside.
-              try {
-                await SimpleLoader.run(context, 'Logging out...', () {
-                  return SessionLogoutService.performOwnerLogout();
-                });
-              } catch (e) {
-                // Best-effort: still navigate away even if logout errored.
-              }
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-              }
-            },
-            child: const LiveTranslatedText('LOGOUT'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Modern navigation item widget
@@ -206,22 +139,24 @@ class _ModernNavItem extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              width: 40,
+              height: 40,
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isActive ? const Color(0xFF1B3A6B).withValues(alpha: 0.1) : Colors.transparent,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
                 color: isActive ? const Color(0xFF1B3A6B) : AppColors.textSecondary,
-                size: 24,
+                size: 22,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             LiveTranslatedText(
               label,
               style: GoogleFonts.poppins(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                 color: isActive ? const Color(0xFF1B3A6B) : AppColors.textSecondary,
               ),
@@ -252,33 +187,35 @@ class _CenterActionButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              width: 46,
+              height: 46,
+              padding: const EdgeInsets.all(10),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [Color(0xFF1B3A6B), Color(0xFF2563EB)],
                 ),
-                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderRadius: BorderRadius.all(Radius.circular(14)),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0x661B3A6B),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
+                    blurRadius: 10,
+                    offset: Offset(0, 3),
                   ),
                 ],
               ),
               child: const Icon(
                 Icons.add_rounded,
                 color: Colors.white,
-                size: 28,
+                size: 22,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             LiveTranslatedText(
               'Add',
               style: GoogleFonts.inter(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w700,
                 color: const Color(0xFF1B3A6B),
               ),

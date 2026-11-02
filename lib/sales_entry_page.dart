@@ -92,6 +92,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   bool _withTax = false; // GST Toggle State (Disabled by Default)
   final TextEditingController customerPhoneController = TextEditingController();
   final TextEditingController customerNameController = TextEditingController();
+  String _currentCustomerAddress = '';
   int? _lastAddedRowIndex = -1;
   double _schemeDiscount = 0.0;
   double _flashSaleDiscount = 0.0;
@@ -1964,9 +1965,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
             final wasBorrowRequest = _borrowWaitingForCustomer;
             setState(() {
+              customerNameController.text = finalName;
               customerPhoneController.text = normalizedPhone;
+              _currentCustomerAddress = addressC.text.trim();
               _loadLocalCustomers();
-              _borrowWaitingForCustomer = false;
+              _borrowWaitingForCustomer = wasBorrowRequest;
             });
 
             Navigator.pop(ctx);
@@ -1974,13 +1977,20 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               SnackBar(
                 content: LiveTranslatedText(
                   wasBorrowRequest
-                      ? '✅ Customer added. Borrow NOT recorded yet — tap “Record Borrow” to continue.'
+                      ? '✅ Customer added. Preparing borrow…'
                       : '✅ Customer added!',
                 ),
                 backgroundColor: const Color(0xFF10B981),
                 duration: const Duration(seconds: 4),
               ),
             );
+
+            if (wasBorrowRequest && mounted) {
+              await Future<void>.delayed(const Duration(milliseconds: 180));
+              if (mounted) {
+                await borrowSale();
+              }
+            }
           } catch (e) {
             if (ctx.mounted) {
               setDialogState(() => isSaving = false);
@@ -4529,6 +4539,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
       customerPhoneController.clear();
       customerNameController.clear();
+      _currentCustomerAddress = '';
+      _borrowWaitingForCustomer = false;
       _paidAmount = 0;
       _pendingDetectedPaymentAmount = null;
       _paymentConfirmed = false;
@@ -4918,6 +4930,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         paidAmount: paidAmountForSubmission,
         customerName: customerNameController.text.trim(),
         customerPhone: customerPhoneController.text.trim(),
+        customerAddress: _currentCustomerAddress,
         withTax: _withTax,
         totals: totals,
         paymentMethod: _isOnlinePayment
@@ -4956,6 +4969,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           'product': productList,
           'customer_name': customerNameController.text.trim(),
           'customer_phone': customerPhoneController.text.trim(),
+          'customer_address': _currentCustomerAddress,
           'total_amount': grandTotal,
           'paid_amount': 0.0,
           'due_date': dueDate,
@@ -6744,6 +6758,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (c['phone'] == phone.trim()) {
         setState(() {
           customerNameController.text = c['name'] ?? '';
+          _currentCustomerAddress = c['address']?.toString() ?? '';
         });
         _checkPendingDuesAlert(phone.trim(), c['name'] ?? '');
         break;
@@ -7067,6 +7082,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                     onSelected: (Map<String, dynamic> selection) {
                       customerNameController.text = selection['name']
                           .toString();
+                      _currentCustomerAddress =
+                          selection['address']?.toString() ?? '';
                       if (selection['phone'] != null &&
                           selection['phone'].toString().isNotEmpty) {
                         customerPhoneController.text = selection['phone']

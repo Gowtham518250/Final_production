@@ -2676,6 +2676,7 @@ class _KhataPageState extends State<KhataPage>
             .toUpperCase();
     final customerName = inv['customer_name']?.toString() ?? 'Guest Customer';
     final customerPhone = inv['customer_phone']?.toString() ?? '';
+    final customerAddress = inv['customer_address']?.toString() ?? '';
     final invoiceNumber =
         inv['invoice_number']?.toString() ?? inv['sale_id']?.toString() ?? '—';
     final dateStr = inv['business_date']?.toString() ?? '';
@@ -2777,6 +2778,16 @@ class _KhataPageState extends State<KhataPage>
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                              if (customerAddress.isNotEmpty)
+                                LiveTranslatedText(
+                                  customerAddress,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               if (customerPhone.isNotEmpty)
                                 LiveTranslatedText(
                                   customerPhone,

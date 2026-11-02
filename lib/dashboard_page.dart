@@ -1657,6 +1657,12 @@ class _DashboardPageState extends State<DashboardPage>
     await runSafely('realtime connection', _connectRealtime);
     if (!mounted) return;
 
+    await runSafely(
+      'inventory and low stock refresh',
+      _refreshDashboardInventoryAndLowStock,
+    );
+    if (!mounted) return;
+
     await runSafely('online store status', _loadOnlineStoreStatus);
     if (!mounted) return;
 
@@ -1685,6 +1691,40 @@ class _DashboardPageState extends State<DashboardPage>
     // Replay retained SMS/payment events after the first screen and profile
     // work has settled; this may parse a queue on older devices.
     await runSafely('background event replay', _replayBackgroundSms);
+  }
+
+  Future<void> _refreshDashboardInventoryAndLowStock() async {
+    final hasPendingMutation = await SyncQueueManager.hasAnyPendingAction(
+      const [
+        'save_sale',
+        'sync_sale',
+        'create_local_product',
+        'update_local_product',
+        'decrease_stock',
+      ],
+    );
+    if (hasPendingMutation) {
+      if (kDebugMode) {
+        debugPrint(
+          '⏭️ Dashboard inventory refresh skipped: pending stock mutation',
+        );
+      }
+      return;
+    }
+
+    final result = await InventorySyncService.refreshAllInventory();
+    if (!mounted) return;
+    if (result['success'] != true) {
+      if (kDebugMode) {
+        debugPrint(
+          '⚠️ Dashboard inventory refresh failed: '
+          '${result['error'] ?? 'unknown error'}',
+        );
+      }
+      return;
+    }
+
+    await _checkLowStock();
   }
 
   @override

@@ -11,10 +11,7 @@ class PaymentAlertDeduplicator {
 
   final List<_AlertObservation> _seen = <_AlertObservation>[];
 
-  bool shouldSuppress(
-    PaymentEvent event, {
-    DateTime? now,
-  }) {
+  bool shouldSuppress(PaymentEvent event, {DateTime? now}) {
     if (event.isDuplicate && !event.hasReferenceConflict) return true;
     if (event.isMerchantConfirmed ||
         event.hasReferenceConflict ||
@@ -69,20 +66,24 @@ class PaymentAlertDeduplicator {
       }
 
       final notificationAt = event.sourceTimestamp ?? event.timestamp;
-        final previousNotificationAt = previous.notificationAt;
-      final notificationAccountConflict = account.isNotEmpty &&
+      final previousNotificationAt = previous.notificationAt;
+      final notificationAccountConflict =
+          account.isNotEmpty &&
           previous.account.isNotEmpty &&
           account != previous.account;
       final updatePreviousPayer = previous.payer;
-      final notificationPayerConflict = payer != null &&
+      final notificationPayerConflict =
+          payer != null &&
           updatePreviousPayer != null &&
           !_payersCompatible(payer, updatePreviousPayer);
-        final notificationPayer = event.notificationPayerIdentity;
-        final previousNotificationPayer = previous.notificationPayer;
-        final sameNotificationAccount = account.isNotEmpty &&
+      final notificationPayer = event.notificationPayerIdentity;
+      final previousNotificationPayer = previous.notificationPayer;
+      final sameNotificationAccount =
+          account.isNotEmpty &&
           previous.account.isNotEmpty &&
           account == previous.account;
-        final sameNotificationPayer = notificationPayer != null &&
+      final sameNotificationPayer =
+          notificationPayer != null &&
           previousNotificationPayer != null &&
           notificationPayer == previousNotificationPayer;
       if (notificationStream != null &&
@@ -103,6 +104,17 @@ class PaymentAlertDeduplicator {
       if (age > _fallbackTtl) continue;
 
       if (previous.channel == channel) {
+        final sameTruecallerReplay =
+            channel.startsWith('truecaller_notification|') &&
+            sourceFingerprint == null &&
+            previous.sourceFingerprint == null &&
+            age <= _sameChannelReplayWindow &&
+            ((account.isNotEmpty && account == previous.account) ||
+                (payer != null &&
+                    previous.payer != null &&
+                    _payersCompatible(payer, previous.payer!)));
+        if (sameTruecallerReplay) return true;
+
         if (sourceFingerprint != null || previous.sourceFingerprint != null) {
           // A missing or distinct native identity cannot be treated as a replay.
           continue;
@@ -117,18 +129,20 @@ class PaymentAlertDeduplicator {
 
       if (previous.claimedChannels.contains(channel)) continue;
 
-      final differentAccounts = account.isNotEmpty &&
+      final differentAccounts =
+          account.isNotEmpty &&
           previous.account.isNotEmpty &&
           account != previous.account;
       final previousPayer = previous.payer;
-      final differentPayers = payer != null &&
+      final differentPayers =
+          payer != null &&
           previousPayer != null &&
           !_payersCompatible(payer, previousPayer);
       if (differentAccounts || differentPayers) continue;
 
-      final sameAccount =
-          account.isNotEmpty && account == previous.account;
-      final samePayer = payer != null &&
+      final sameAccount = account.isNotEmpty && account == previous.account;
+      final samePayer =
+          payer != null &&
           previousPayer != null &&
           _payersCompatible(payer, previousPayer);
       if (!sameAccount && !samePayer) continue;

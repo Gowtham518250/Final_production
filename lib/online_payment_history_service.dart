@@ -9,7 +9,6 @@ import 'payment_event.dart';
 class OnlinePaymentHistoryService {
   static const _keyPrefix = 'confirmed_online_payment';
   static const _maxEntries = 500;
-  static const Duration pendingReviewReminderInterval = Duration(hours: 6);
 
   static String _userPrefix(int userId) => '${_keyPrefix}_${userId}_';
 
@@ -23,10 +22,10 @@ class OnlinePaymentHistoryService {
     return userId;
   }
 
-
   static const String _aliasRecordType = 'online_payment_history_alias_v1';
   static const Duration _signalCorrelationWindow = Duration(seconds: 12);
   static const Duration _referenceCorrelationWindow = Duration(seconds: 45);
+  static const Duration _notificationUpdateWindow = Duration(seconds: 30);
 
   static Map<String, dynamic>? _decodeEntry(String? raw) {
     if (raw == null) return null;
@@ -73,12 +72,15 @@ class OnlinePaymentHistoryService {
     if (aliasKey == target) return;
     final existing = _decodeEntry(prefs.getString(aliasKey));
     if (existing != null && !_isAlias(existing) && !replaceExisting) return;
-    await prefs.setString(aliasKey, jsonEncode(<String, dynamic>{
-      '_record_type': _aliasRecordType,
-      '_alias_for': target,
-      'timestamp': DateTime.now().toIso8601String(),
-      if (reference != null) 'reference_id': reference,
-    }));
+    await prefs.setString(
+      aliasKey,
+      jsonEncode(<String, dynamic>{
+        '_record_type': _aliasRecordType,
+        '_alias_for': target,
+        'timestamp': DateTime.now().toIso8601String(),
+        if (reference != null) 'reference_id': reference,
+      }),
+    );
   }
 
   static String _historyDirection(PaymentEvent event) {
@@ -129,7 +131,8 @@ class OnlinePaymentHistoryService {
         .replaceAll(RegExp(r'[^a-z0-9\u0080-\uFFFF]+'), ' ')
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ');
-    final payload = '${event.app.name}|${event.amount.toStringAsFixed(2)}|'
+    final payload =
+        '${event.app.name}|${event.amount.toStringAsFixed(2)}|'
         '${_historyDirection(event)}|$normalizedText';
     return sha256.convert(utf8.encode(payload)).toString();
   }
@@ -147,7 +150,10 @@ class OnlinePaymentHistoryService {
   static List<String> _storedStrings(Map<String, dynamic> entry, String field) {
     final value = entry[field];
     if (value is List) {
-      return value.map((item) => item.toString()).where((s) => s.isNotEmpty).toList();
+      return value
+          .map((item) => item.toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
     }
     final single = entry[field]?.toString() ?? '';
     return single.isEmpty ? <String>[] : <String>[single];
@@ -213,8 +219,9 @@ class OnlinePaymentHistoryService {
       'source_event_fingerprint': event.sourceEventFingerprint,
     };
     await prefs.setString(canonicalKey, jsonEncode(updated));
-    final transactionFingerprint =
-        sha256.convert(utf8.encode(event.fingerprint)).toString();
+    final transactionFingerprint = sha256
+        .convert(utf8.encode(event.fingerprint))
+        .toString();
     final incomingReferenceKey = '$prefix$transactionFingerprint';
     if (incomingReferenceKey != canonicalKey) {
       await _writeAlias(
@@ -225,6 +232,48 @@ class OnlinePaymentHistoryService {
         replaceExisting: true,
       );
     }
+  }
+
+  static Future<MapEntry<String, Map<String, dynamic>>?>
+  _findNotificationUpdate(
+    SharedPreferences prefs,
+    String prefix,
+    PaymentEvent event,
+  ) async {
+    final stream = event.sourceNotificationStream;
+    if (stream == null) return null;
+
+    final eventTime = _eventTime(event);
+    final direction = _historyDirection(event);
+    final reference = event.normalizedReferenceId;
+    final matches = <MapEntry<String, Map<String, dynamic>>>[];
+    for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
+      final entry = _decodeEntry(prefs.getString(key));
+      if (entry == null || _isAlias(entry)) continue;
+      if (entry['source_notification_stream'] != stream) continue;
+
+      final amount = (entry['amount'] as num?)?.toDouble();
+      if (amount == null || (amount - event.amount).abs() >= 0.01) continue;
+      if ((entry['direction'] ?? 'unknown') != direction) continue;
+
+      final previousReference = (entry['reference_id'] ?? '').toString().trim();
+      if (reference != null &&
+          previousReference.isNotEmpty &&
+          previousReference != reference) {
+        continue;
+      }
+
+      final notificationTime = DateTime.tryParse(
+        entry['source_notification_timestamp']?.toString() ?? '',
+      );
+      if (notificationTime == null ||
+          !_within(eventTime, notificationTime, _notificationUpdateWindow)) {
+        continue;
+      }
+      matches.add(MapEntry(key, entry));
+    }
+
+    return matches.length == 1 ? matches.single : null;
   }
 
   static String? _legacyAppKey(Map<String, dynamic> entry) {
@@ -334,9 +383,7 @@ class OnlinePaymentHistoryService {
     return rows;
   }
 
-  static bool _tightCrossAppCluster(
-    List<Map<String, dynamic>> candidates,
-  ) {
+  static bool _tightCrossAppCluster(List<Map<String, dynamic>> candidates) {
     if (candidates.length < 2) return false;
     final times = <DateTime>[];
     final apps = <String>{};
@@ -355,7 +402,10 @@ class OnlinePaymentHistoryService {
     return times.last.difference(times.first) <= const Duration(seconds: 6);
   }
 
-  static Duration _distanceToEvent(Map<String, dynamic> candidate, PaymentEvent event) {
+  static Duration _distanceToEvent(
+    Map<String, dynamic> candidate,
+    PaymentEvent event,
+  ) {
     final time = _storedTime(candidate['entry'] as Map<String, dynamic>);
     if (time == null) return const Duration(days: 36500);
     final sourceTime = _eventTime(event);
@@ -371,8 +421,10 @@ class OnlinePaymentHistoryService {
     if (candidates.isEmpty) return null;
     if (candidates.length == 1) return candidates.single;
     final sorted = List<Map<String, dynamic>>.from(candidates)
-      ..sort((a, b) => _distanceToEvent(a, event)
-          .compareTo(_distanceToEvent(b, event)));
+      ..sort(
+        (a, b) =>
+            _distanceToEvent(a, event).compareTo(_distanceToEvent(b, event)),
+      );
     final closest = _distanceToEvent(sorted[0], event);
     final next = _distanceToEvent(sorted[1], event);
     // If two equally plausible rows exist, leave them visible for review.
@@ -406,12 +458,14 @@ class OnlinePaymentHistoryService {
 
     final signals = updated['source_signals'] is List
         ? (updated['source_signals'] as List)
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList()
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList()
         : <Map<String, dynamic>>[];
-    if (!signals.any((item) =>
-        item['app'] == event.appDisplayName && item['channel'] == channel)) {
+    if (!signals.any(
+      (item) =>
+          item['app'] == event.appDisplayName && item['channel'] == channel,
+    )) {
       signals.add(<String, dynamic>{
         'app': event.appDisplayName,
         'channel': channel,
@@ -441,7 +495,9 @@ class OnlinePaymentHistoryService {
     final prefs = await SharedPreferences.getInstance();
     final userId = await _currentUserId(prefs);
     final prefix = _userPrefix(userId);
-    final fingerprint = sha256.convert(utf8.encode(event.fingerprint)).toString();
+    final fingerprint = sha256
+        .convert(utf8.encode(event.fingerprint))
+        .toString();
     final incomingKey = '$prefix$fingerprint';
 
     // A reference or event ID may already be a hidden alias created when this
@@ -450,6 +506,7 @@ class OnlinePaymentHistoryService {
         await _resolveCanonicalKey(prefs, incomingKey) ?? incomingKey;
     var existing = _decodeEntry(prefs.getString(canonicalKey));
     var linkedToExisting = false;
+
     final sourceIdentityKey = _sourceIdentityKey(prefix, event);
     final sourceCanonicalKey = sourceIdentityKey == null
         ? null
@@ -459,8 +516,7 @@ class OnlinePaymentHistoryService {
       final sourceEntry = _decodeEntry(prefs.getString(sourceCanonicalKey));
       if (sourceEntry != null && _matchesSourceEvent(sourceEntry, event)) {
         final status = (sourceEntry['status'] ?? '').toString().toUpperCase();
-        if (event.isMerchantConfirmed ||
-            event.detectionSource.contains(':pending_review_reminder')) {
+        if (event.isMerchantConfirmed) {
           canonicalKey = sourceCanonicalKey;
           existing = sourceEntry;
           linkedToExisting = true;
@@ -509,14 +565,11 @@ class OnlinePaymentHistoryService {
       Map<String, dynamic>? selected;
       List<Map<String, dynamic>> cluster = <Map<String, dynamic>>[];
       if (reference != null && _tightCrossAppCluster(candidates)) {
-        final preferred = candidates.firstWhere(
-          (candidate) {
-            final entry = candidate['entry'] as Map<String, dynamic>;
-            return (entry['app'] ?? '').toString().trim().toLowerCase() !=
-                'upi app';
-          },
-          orElse: () => candidates.first,
-        );
+        final preferred = candidates.firstWhere((candidate) {
+          final entry = candidate['entry'] as Map<String, dynamic>;
+          return (entry['app'] ?? '').toString().trim().toLowerCase() !=
+              'upi app';
+        }, orElse: () => candidates.first);
         cluster = <Map<String, dynamic>>[
           preferred,
           ...candidates.where((candidate) => !identical(candidate, preferred)),
@@ -554,27 +607,36 @@ class OnlinePaymentHistoryService {
             }.take(12).toList(),
             'source_signals': <Map<String, dynamic>>[
               if (existing!['source_signals'] is List)
-                ...(existing!['source_signals'] as List)
-                    .whereType<Map>()
-                    .map((item) => Map<String, dynamic>.from(item)),
+                ...(existing!['source_signals'] as List).whereType<Map>().map(
+                  (item) => Map<String, dynamic>.from(item),
+                ),
               if (other['source_signals'] is List)
-                ...(other['source_signals'] as List)
-                    .whereType<Map>()
-                    .map((item) => Map<String, dynamic>.from(item)),
+                ...(other['source_signals'] as List).whereType<Map>().map(
+                  (item) => Map<String, dynamic>.from(item),
+                ),
             ].toSet().toList(),
-            'status': existing!['status'] == 'CONFIRMED' ||
+            'status':
+                existing!['status'] == 'CONFIRMED' ||
                     other['status'] == 'CONFIRMED'
                 ? 'CONFIRMED'
-                : (existing!['status'] ?? other['status'] ?? 'PENDING_CONFIRMATION'),
-            'merchant_confirmed': existing!['merchant_confirmed'] == true ||
+                : (existing!['status'] ??
+                      other['status'] ??
+                      'PENDING_CONFIRMATION'),
+            'merchant_confirmed':
+                existing!['merchant_confirmed'] == true ||
                 other['merchant_confirmed'] == true,
             'verified': false,
-            'payer_match_hash': existing!['payer_match_hash'] ??
-                other['payer_match_hash'],
+            'payer_match_hash':
+                existing!['payer_match_hash'] ?? other['payer_match_hash'],
           };
           existing = mergedSignals;
           await prefs.setString(canonicalKey, jsonEncode(existing));
-          await _writeAlias(prefs, otherKey, canonicalKey, replaceExisting: true);
+          await _writeAlias(
+            prefs,
+            otherKey,
+            canonicalKey,
+            replaceExisting: true,
+          );
         }
       }
     }
@@ -609,7 +671,12 @@ class OnlinePaymentHistoryService {
         }),
       );
       if (incomingKey != canonicalKey) {
-        await _writeAlias(prefs, incomingKey, canonicalKey, reference: reference);
+        await _writeAlias(
+          prefs,
+          incomingKey,
+          canonicalKey,
+          reference: reference,
+        );
       }
       await _trimHistory(prefs, prefix);
       return false;
@@ -635,7 +702,12 @@ class OnlinePaymentHistoryService {
         }),
       );
       if (incomingKey != canonicalKey) {
-        await _writeAlias(prefs, incomingKey, canonicalKey, reference: reference);
+        await _writeAlias(
+          prefs,
+          incomingKey,
+          canonicalKey,
+          reference: reference,
+        );
       }
       await _trimHistory(prefs, prefix);
       return false;
@@ -644,13 +716,25 @@ class OnlinePaymentHistoryService {
     // Persist aliases for replays without downgrading a confirmed/rejected row.
     if (oldStatus == 'REJECTED' && !event.isMerchantConfirmed) {
       if (incomingKey != canonicalKey && existing != null) {
-        await _writeAlias(prefs, incomingKey, canonicalKey, reference: reference);
+        await _writeAlias(
+          prefs,
+          incomingKey,
+          canonicalKey,
+          reference: reference,
+        );
       }
       return false;
     }
-    if (oldStatus == 'CONFIRMED' && !event.isMerchantConfirmed && !linkedToExisting) {
+    if (oldStatus == 'CONFIRMED' &&
+        !event.isMerchantConfirmed &&
+        !linkedToExisting) {
       if (incomingKey != canonicalKey && existing != null) {
-        await _writeAlias(prefs, incomingKey, canonicalKey, reference: reference);
+        await _writeAlias(
+          prefs,
+          incomingKey,
+          canonicalKey,
+          reference: reference,
+        );
       }
       return false;
     }
@@ -660,28 +744,27 @@ class OnlinePaymentHistoryService {
       ...base,
       'amount': event.amount,
       'timestamp': base['timestamp'] ?? _eventTime(event).toIso8601String(),
-      'detected_at': event.detectionSource.contains(':pending_review_reminder')
-          ? event.timestamp.toIso8601String()
-          : (base['detected_at'] ?? event.timestamp.toIso8601String()),
-      'app': (base['app']?.toString().isNotEmpty ?? false) &&
+      'detected_at': base['detected_at'] ?? event.timestamp.toIso8601String(),
+      'app':
+          (base['app']?.toString().isNotEmpty ?? false) &&
               (base['app']?.toString().trim().toLowerCase() != 'upi app' ||
                   event.appDisplayName == 'UPI App')
           ? base['app']
           : event.appDisplayName,
-       // High-confidence detector decisions are accepted automatically, but
-       // remain distinct from explicit merchant confirmation.
-       'status': event.isMerchantConfirmed
-           ? 'CONFIRMED'
-           : event.decision == PaymentDecision.confirmed
-               ? 'AUTO_ACCEPTED'
-               : (oldStatus.isNotEmpty ? oldStatus : 'PENDING_CONFIRMATION'),
+      // High-confidence detector decisions are accepted automatically, but
+      // remain distinct from explicit merchant confirmation.
+      'status': event.isMerchantConfirmed
+          ? 'CONFIRMED'
+          : event.decision == PaymentDecision.confirmed
+          ? 'AUTO_ACCEPTED'
+          : (oldStatus.isNotEmpty ? oldStatus : 'PENDING_CONFIRMATION'),
       'merchant_confirmed':
           event.isMerchantConfirmed || base['merchant_confirmed'] == true,
       'confirmation_mode': event.isMerchantConfirmed
           ? 'merchant'
           : event.decision == PaymentDecision.confirmed
-              ? 'automatic'
-              : (base['confirmation_mode'] ?? 'pending_review'),
+          ? 'automatic'
+          : (base['confirmation_mode'] ?? 'pending_review'),
       'confidence_score': event.confidenceScore,
       // A locally observed notification is never bank-verified.
       'verified': false,
@@ -693,6 +776,10 @@ class OnlinePaymentHistoryService {
           : _historyDirection(event),
       if (event.sourceEventFingerprint != null)
         'source_event_fingerprint': event.sourceEventFingerprint,
+      if (event.sourceNotificationStream != null)
+        'source_notification_stream': event.sourceNotificationStream,
+      if (event.sourceNotificationStream != null)
+        'source_notification_timestamp': _eventTime(event).toIso8601String(),
     };
     final withSignal = _appendSignal(record, event);
     await prefs.setString(canonicalKey, jsonEncode(withSignal));
@@ -700,16 +787,13 @@ class OnlinePaymentHistoryService {
     // Each incoming signal keeps a durable lookup key, but aliases are hidden
     // from history UI so multiple sources still represent one payment.
     if (incomingKey != canonicalKey) {
-      await _writeAlias(
-        prefs,
-        incomingKey,
-        canonicalKey,
-        reference: reference,
-      );
+      await _writeAlias(prefs, incomingKey, canonicalKey, reference: reference);
     }
     if (sourceIdentityKey != null && !sourceIdentityConflict) {
-      final existingSourceTarget =
-          await _resolveCanonicalKey(prefs, sourceIdentityKey);
+      final existingSourceTarget = await _resolveCanonicalKey(
+        prefs,
+        sourceIdentityKey,
+      );
       if (existingSourceTarget == null ||
           existingSourceTarget == canonicalKey) {
         await _writeAlias(
@@ -764,8 +848,8 @@ class OnlinePaymentHistoryService {
       jsonEncode(<String, dynamic>{
         ...existing,
         'amount': event.amount,
-        'timestamp':
-            (event.sourceTimestamp ?? event.timestamp).toIso8601String(),
+        'timestamp': (event.sourceTimestamp ?? event.timestamp)
+            .toIso8601String(),
         'detected_at': event.timestamp.toIso8601String(),
         'app': event.appDisplayName,
         'status': 'REJECTED',
@@ -778,7 +862,12 @@ class OnlinePaymentHistoryService {
       }),
     );
     if (incomingKey != key) {
-      await _writeAlias(prefs, incomingKey, key, reference: event.normalizedReferenceId);
+      await _writeAlias(
+        prefs,
+        incomingKey,
+        key,
+        reference: event.normalizedReferenceId,
+      );
     }
     await _trimHistory(prefs, _userPrefix(userId));
     return true;
@@ -799,19 +888,73 @@ class OnlinePaymentHistoryService {
     final userId = await _currentUserId(prefs);
     final prefix = _userPrefix(userId);
 
+    final notificationUpdate = await _findNotificationUpdate(
+      prefs,
+      prefix,
+      event,
+    );
+    if (notificationUpdate != null) {
+      final canonicalKey = notificationUpdate.key;
+      final existing = notificationUpdate.value;
+      final status = (existing['status'] ?? '').toString().toUpperCase();
+      final incomingKey =
+          '$prefix${sha256.convert(utf8.encode(event.fingerprint))}';
+      final sourceIdentityKey = _sourceIdentityKey(prefix, event);
+      if (incomingKey != canonicalKey) {
+        await _writeAlias(
+          prefs,
+          incomingKey,
+          canonicalKey,
+          reference: reference,
+        );
+      }
+      if (sourceIdentityKey != null && sourceIdentityKey != canonicalKey) {
+        await _writeAlias(
+          prefs,
+          sourceIdentityKey,
+          canonicalKey,
+          reference: reference,
+          replaceExisting: true,
+        );
+      }
+
+      if (status == 'CONFLICT_REVIEW') {
+        return event.copyWith(
+          hasReferenceConflict: true,
+          isDuplicate: false,
+          decision: PaymentDecision.likely,
+          verificationStatus: PaymentVerificationStatus.unverified,
+        );
+      }
+      if (status == 'PENDING_CONFIRMATION') {
+        return event.copyWith(
+          isDuplicate: true,
+          decision: PaymentDecision.likely,
+          verificationStatus: PaymentVerificationStatus.unverified,
+        );
+      }
+      return event.copyWith(
+        isDuplicate: true,
+        decision: PaymentDecision.likely,
+        verificationStatus: PaymentVerificationStatus.unverified,
+      );
+    }
+
     // This path covers exact native notification replays even if the source
     // did not expose a transaction reference. It runs before forwarding so a
     // repeat cannot announce again or create another pending history row.
     final sourceIdentityKey = _sourceIdentityKey(prefix, event);
     if (sourceIdentityKey != null && !event.isMerchantConfirmed) {
-      final sourceCanonicalKey =
-          await _resolveCanonicalKey(prefs, sourceIdentityKey);
+      final sourceCanonicalKey = await _resolveCanonicalKey(
+        prefs,
+        sourceIdentityKey,
+      );
       if (sourceCanonicalKey != null) {
-        final sourceEntry =
-            _decodeEntry(prefs.getString(sourceCanonicalKey));
+        final sourceEntry = _decodeEntry(prefs.getString(sourceCanonicalKey));
         if (sourceEntry != null && _matchesSourceEvent(sourceEntry, event)) {
-          final sourceStatus =
-              (sourceEntry['status'] ?? '').toString().toUpperCase();
+          final sourceStatus = (sourceEntry['status'] ?? '')
+              .toString()
+              .toUpperCase();
           if (sourceStatus == 'CONFLICT_REVIEW') {
             return event.copyWith(
               hasReferenceConflict: true,
@@ -831,30 +974,11 @@ class OnlinePaymentHistoryService {
             );
           }
           if (sourceStatus == 'PENDING_CONFIRMATION') {
-            DateTime? lastPendingAt;
-            try {
-              final rawTimestamp =
-                  (sourceEntry['detected_at'] ?? sourceEntry['timestamp'])
-                      ?.toString();
-              if (rawTimestamp != null && rawTimestamp.isNotEmpty) {
-                lastPendingAt = DateTime.parse(rawTimestamp);
-              }
-            } on FormatException {
-              lastPendingAt = null;
-            }
-            final reminderDue = lastPendingAt == null ||
-                !DateTime.now().isBefore(
-                  lastPendingAt.add(pendingReviewReminderInterval),
-                );
-            if (reminderDue) {
-              return event.copyWith(
-                isDuplicate: false,
-                decision: PaymentDecision.likely,
-                verificationStatus: PaymentVerificationStatus.unverified,
-                detectionSource:
-                    '${event.detectionSource}:pending_review_reminder',
-              );
-            }
+            return event.copyWith(
+              isDuplicate: true,
+              decision: PaymentDecision.likely,
+              verificationStatus: PaymentVerificationStatus.unverified,
+            );
           }
           return event.copyWith(
             isDuplicate: true,
@@ -867,8 +991,9 @@ class OnlinePaymentHistoryService {
 
     if (reference == null) return event;
 
-    final fingerprint =
-        sha256.convert(utf8.encode(event.fingerprint)).toString();
+    final fingerprint = sha256
+        .convert(utf8.encode(event.fingerprint))
+        .toString();
     final key = '$prefix$fingerprint';
     final canonicalKey = await _resolveCanonicalKey(prefs, key);
     if (canonicalKey == null) return event;
@@ -900,28 +1025,11 @@ class OnlinePaymentHistoryService {
 
     final oldStatus = (existing['status'] ?? '').toString().toUpperCase();
     if (oldStatus == 'PENDING_CONFIRMATION') {
-      DateTime? lastPendingAt;
-      try {
-        final rawTimestamp =
-            (existing['detected_at'] ?? existing['timestamp'])?.toString();
-        if (rawTimestamp != null && rawTimestamp.isNotEmpty) {
-          lastPendingAt = DateTime.parse(rawTimestamp);
-        }
-      } on FormatException {
-        lastPendingAt = null;
-      }
-      final reminderDue = lastPendingAt == null ||
-          !DateTime.now().isBefore(
-            lastPendingAt.add(pendingReviewReminderInterval),
-          );
-      if (reminderDue) {
-        return event.copyWith(
-          isDuplicate: false,
-          decision: PaymentDecision.likely,
-          verificationStatus: PaymentVerificationStatus.unverified,
-          detectionSource: '${event.detectionSource}:pending_review_reminder',
-        );
-      }
+      return event.copyWith(
+        isDuplicate: true,
+        decision: PaymentDecision.likely,
+        verificationStatus: PaymentVerificationStatus.unverified,
+      );
     }
 
     return event.copyWith(
@@ -960,17 +1068,52 @@ class OnlinePaymentHistoryService {
     final entries = <Map<String, dynamic>>[];
     for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
       final decoded = _decodeEntry(prefs.getString(key));
-      if (decoded == null || _isAlias(decoded)) continue;
-      entries.add(decoded);
+      if (decoded == null ||
+          _isAlias(decoded) ||
+          decoded['dismissed'] == true) {
+        continue;
+      }
+      entries.add(<String, dynamic>{...decoded, '_history_key': key});
     }
     entries.sort((a, b) {
-      final aDate = DateTime.tryParse(a['timestamp']?.toString() ?? '') ??
+      final aDate =
+          DateTime.tryParse(a['timestamp']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
-      final bDate = DateTime.tryParse(b['timestamp']?.toString() ?? '') ??
+      final bDate =
+          DateTime.tryParse(b['timestamp']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
       return bDate.compareTo(aDate);
     });
     return entries;
+  }
+
+  /// Hides a non-confirmed detection while retaining a rejected record so the
+  /// same notification cannot immediately recreate the prompt.
+  static Future<bool> dismissEntry(String historyKey) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await _currentUserId(prefs);
+    final prefix = _userPrefix(userId);
+    if (!historyKey.startsWith(prefix)) return false;
+
+    final entry = _decodeEntry(prefs.getString(historyKey));
+    if (entry == null ||
+        _isAlias(entry) ||
+        entry['merchant_confirmed'] == true) {
+      return false;
+    }
+
+    await prefs.setString(
+      historyKey,
+      jsonEncode(<String, dynamic>{
+        ...entry,
+        'status': 'REJECTED',
+        'merchant_confirmed': false,
+        'verified': false,
+        'dismissed': true,
+        'dismissed_at': DateTime.now().toIso8601String(),
+      }),
+    );
+    return true;
   }
 
   static Future<void> _trimHistory(
@@ -981,7 +1124,8 @@ class OnlinePaymentHistoryService {
     for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
       final decoded = _decodeEntry(prefs.getString(key));
       if (decoded == null || _isAlias(decoded)) continue;
-      final timestamp = DateTime.tryParse(decoded['timestamp']?.toString() ?? '') ??
+      final timestamp =
+          DateTime.tryParse(decoded['timestamp']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0);
       entries.add((key: key, timestamp: timestamp));
     }
@@ -1008,5 +1152,4 @@ class OnlinePaymentHistoryService {
       }
     }
   }
-
 }
