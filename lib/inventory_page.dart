@@ -538,6 +538,124 @@ class _InventoryPageState extends State<InventoryPage>
     }
   }
 
+  Future<void> _showExistingProductMatches(
+    List<Map<String, dynamic>> matches,
+  ) async {
+    if (!mounted || matches.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Product already exists'),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: matches.map((match) {
+                final raw = match['product'];
+                final product = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+                final types = (match['match_types'] as List? ?? const [])
+                    .map((value) => value.toString().replaceAll('_', ' '))
+                    .join(' + ');
+                final name = (product['product_name'] ?? product['name'] ?? 'Unnamed product').toString();
+                final barcode = (product['barcode'] ?? product['sku'] ?? 'Not set').toString();
+                final stock = product['current_stock'] ?? product['stock'] ?? 0;
+                final unit = product['unit'] ?? 'pcs';
+                final price = product['unit_price'] ?? product['price'] ?? 0;
+                final minimum = product['min_stock'] ?? 10;
+                final category = product['category'] ?? 'General';
+                Widget detail(String label, Object? value) => Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 118, child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.blueGrey))),
+                      Expanded(child: Text(value?.toString() ?? '-', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                    ],
+                  ),
+                );
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(types, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.deepOrange)),
+                      const SizedBox(height: 5),
+                      Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      detail('Barcode / SKU', barcode),
+                      detail('Selling price', '₹$price'),
+                      detail('Available stock', '$stock $unit'),
+                      detail('Min stock alert', minimum),
+                      detail('Category', category),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  Future<bool> _checkDuplicateProductAndShow({
+    required String productName,
+    required String sku,
+    int? excludeProductId,
+  }) async {
+    final path = '${ApiClient.inventoryPrefix}/products/duplicate-check'
+        '?product_name=${Uri.encodeQueryComponent(productName)}'
+        '&sku=${Uri.encodeQueryComponent(sku)}'
+        '${excludeProductId == null ? '' : '&exclude_product_id=$excludeProductId'}';
+    try {
+      final response = await ApiClient.getJson(path).timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['exists'] == true) {
+          final raw = decoded['matches'];
+          final matches = raw is List
+              ? raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+              : <Map<String, dynamic>>[];
+          if (matches.isNotEmpty) {
+            await _showExistingProductMatches(matches);
+            return true;
+          }
+        }
+        return false;
+      }
+    } catch (error) {
+      if (kDebugMode) debugPrint('Product duplicate preflight unavailable: $error');
+    }
+
+    final localProducts = <dynamic>[..._products];
+    try {
+      final local = await LocalStorageService.loadLocalProducts();
+      localProducts.addAll(local.values.where((value) => value is Map));
+    } catch (_) {}
+    try {
+      localProducts.addAll(await LocalStorageService.loadBackendProducts());
+    } catch (_) {}
+    final matches = InventoryStockHelper.findDuplicateProducts(
+      localProducts,
+      productName: productName,
+      sku: sku,
+      excludeProductId: excludeProductId,
+    );
+    if (matches.isNotEmpty) {
+      await _showExistingProductMatches(matches);
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _addProduct() async {
     final purchasePrice = double.tryParse(_purchasePriceC.text);
     final imageUrlValue =
@@ -625,10 +743,15 @@ class _InventoryPageState extends State<InventoryPage>
     };
 
     try {
+      final sku = productData['sku'].toString();
+      if (await _checkDuplicateProductAndShow(
+        productName: productData['product_name'].toString(),
+        sku: sku,
+      )) return;
+
       // Keep the local catalogue and sync outbox consistent. If the outbox
       // rejects the operation, roll back the optimistic local product.
       final local = await LocalStorageService.loadLocalProducts();
-      final sku = productData['sku'].toString();
       final previousProduct = local[sku];
       productData['sync_status'] = 'pending';
       productData['local_updated_at'] = DateTime.now()
@@ -637,8 +760,9 @@ class _InventoryPageState extends State<InventoryPage>
       local[sku] = productData;
       await LocalStorageService.saveLocalProducts(local);
 
+      final operationId = 'PRODUCT_CREATE_${_userId}_${DateTime.now().microsecondsSinceEpoch}';
       final queued = await SyncQueueManager.enqueue('create_local_product', {
-        'operation_id': 'PRODUCT_CREATE_$sku',
+        'operation_id': operationId,
         'user_id': _userId,
         'payload': productData,
       });
@@ -656,7 +780,7 @@ class _InventoryPageState extends State<InventoryPage>
 
       await CacheConsistencyService.markLocalMutation(
         'inventory',
-        operationId: 'PRODUCT_CREATE_$sku',
+        operationId: operationId,
       );
 
       if (!mounted) return;
@@ -3431,11 +3555,19 @@ class _InventoryPageState extends State<InventoryPage>
 
                               final updated = Map<String, dynamic>.from(p);
                               final barcode = barcodeC.text.trim();
+                              final productSku = barcode.isNotEmpty
+                                  ? barcode
+                                  : (p['sku'] ?? p['barcode'] ?? productName.toLowerCase()).toString();
+                              if (await _checkDuplicateProductAndShow(
+                                productName: productName,
+                                sku: productSku,
+                                excludeProductId: productId,
+                              )) return;
                               updated['id'] = productId;
                               updated['product_id'] ??= productId;
                               updated['product_name'] = productName;
                               updated['barcode'] = barcode;
-                              updated['sku'] = barcode;
+                              updated['sku'] = productSku;
                               updated['unit_price'] = sellingPrice;
                               if (purchasePrice != null)
                                 updated['purchase_price'] = purchasePrice;
@@ -3462,7 +3594,7 @@ class _InventoryPageState extends State<InventoryPage>
 
                               final apiUpdate = <String, dynamic>{
                                 'product_name': productName,
-                                'sku': barcode,
+                                'sku': productSku,
                                 'barcode': barcode,
                                 'unit_price': sellingPrice,
                                 'purchase_price':

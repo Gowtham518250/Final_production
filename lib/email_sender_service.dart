@@ -158,8 +158,8 @@ class EmailSenderService {
   static Future<bool> sendStockAlertEmail({
     required String recipientEmail,
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required num currentStock,
+    required num minStock,
   }) async {
     final email =
         (await _secureStorage.read(key: _kSenderEmail)) ?? _fallbackSender();
