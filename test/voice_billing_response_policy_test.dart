@@ -96,3 +96,20 @@ void main() {
     });
   });
 }
+
+
+    test('blocked response explains the affected product and price warning', () {
+      final message = voiceBillingManualReviewMessage({
+        'needs_clarification': false,
+        'items': [
+          {
+            'product_name_en': 'Sugar',
+            'needs_confirmation': true,
+            'price_warning': 'Spoken amount was unclear; catalogue price was used.',
+          },
+        ],
+      });
+      expect(message, contains('Sugar'));
+      expect(message, contains('Spoken amount was unclear'));
+      expect(message, contains('No voice items were added'));
+    });
