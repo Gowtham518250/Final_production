@@ -102,6 +102,48 @@ class InventoryStockHelper {
     return parsed;
   }
 
+  static String _normalizeProductIdentity(Object? value) {
+    return (value?.toString() ?? '')
+        .trim()
+        .replaceAll(RegExp(r'[ \\t\\r\\n]+'), ' ')
+        .toLowerCase();
+  }
+
+  static List<Map<String, dynamic>> findDuplicateProducts(
+    Iterable<dynamic> products, {
+    required String productName,
+    String? sku,
+    int? excludeProductId,
+  }) {
+    final requestedName = _normalizeProductIdentity(productName);
+    final requestedSku = _normalizeProductIdentity(sku);
+    final matches = <Map<String, dynamic>>[];
+    final seen = <String>{};
+
+    for (final raw in products) {
+      if (raw is! Map) continue;
+      final product = Map<String, dynamic>.from(raw);
+      final id = (product['id'] ?? product['product_id'] ?? '').toString();
+      if (excludeProductId != null && id == excludeProductId.toString()) continue;
+
+      final active = product['is_active'] != false;
+      final existingName = _normalizeProductIdentity(product['product_name'] ?? product['name']);
+      final existingSku = _normalizeProductIdentity(product['sku'] ?? product['barcode']);
+      final types = <String>[];
+      if (active && requestedName.isNotEmpty && existingName == requestedName) {
+        types.add('PRODUCT_NAME');
+      }
+      if (requestedSku.isNotEmpty && existingSku == requestedSku) {
+        types.add('BARCODE');
+      }
+      if (types.isEmpty) continue;
+
+      final identity = id.isEmpty ? '$existingName|$existingSku' : id;
+      if (seen.add(identity)) matches.add({'match_types': types, 'product': product});
+    }
+    return matches;
+  }
+
   static void writeStock(Map<String, dynamic> product, double value) {
     product['current_stock'] = value;
     product['stock'] = value;
