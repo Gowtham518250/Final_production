@@ -46,5 +46,8 @@ jobs:
 
           exit 0
 
+      - name: Run voice billing response-policy tests
+        run: flutter test test/voice_billing_response_policy_test.dart --reporter expanded
+
       - name: Run Flutter tests
         run: flutter test
