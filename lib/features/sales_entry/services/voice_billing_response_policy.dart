@@ -3,9 +3,12 @@
 /// A draft line must not be auto-added or confirmed when the server says its
 /// catalogue match, unit, quantity, or price needs manual review.
 bool voiceBillingItemNeedsManualReview(Map<dynamic, dynamic> item) {
+  final priceWarning = (item['price_warning'] ?? '').toString().trim();
   return item['needs_confirmation'] == true ||
       item['unit_mismatch'] == true ||
-      item['quantity_grounded'] == false;
+      item['quantity_grounded'] == false ||
+      item['price_missing'] == true ||
+      priceWarning.isNotEmpty;
 }
 
 bool voiceBillingResponseNeedsManualReview(Map<String, dynamic> payload) {
@@ -66,6 +69,10 @@ String voiceBillingItemReviewWarning(Map<dynamic, dynamic> item) {
   }
   if (item['price_missing'] == true) {
     details.add('the selling price is missing');
+  }
+  final priceWarning = (item['price_warning'] ?? '').toString().trim();
+  if (priceWarning.isNotEmpty) {
+    details.add(priceWarning);
   }
   if (details.isEmpty) {
     details.add('manual confirmation is required');
