@@ -38,7 +38,7 @@ class InventoryManagementService {
     required int productId,
     required String productName,
     required int quantitySold,
-    required int minStockLevel,
+    required num minStockLevel,
   }) async {
     try {
     if (kDebugMode) debugPrint('📦 Decreasing stock for $productName by $quantitySold units');
@@ -112,8 +112,8 @@ class InventoryManagementService {
   /// Manually trigger low stock alert
   static Future<void> _triggerLowStockAlert({ // FIX A — was void, swallowed all errors
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required num currentStock,
+    required num minStock,
     required int productId,
   }) async {
     // Show local notification
@@ -144,8 +144,8 @@ class InventoryManagementService {
   static Future<void> _notifyBackendOfAlert({
     required int productId,
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required num currentStock,
+    required num minStock,
   }) async {
     // FIX BUG 8 — 30-minute cooldown per product to prevent email flooding
     final prefs = await SharedPreferences.getInstance();
@@ -204,8 +204,8 @@ class InventoryManagementService {
   static Future<void> _saveAlertToHistory({
     required int productId,
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required num currentStock,
+    required num minStock,
     required String alertType,
   }) async {
     try {
@@ -519,7 +519,7 @@ class InventoryManagementService {
               _triggerLowStockAlert(
                 productName: invNameOrig,
                 currentStock: nextVal.toInt(),
-                minStock: minS.toInt(),
+                minStock: minS,
                 productId: int.tryParse(invId) ?? 0,
               ).catchError((_) {});
             }
@@ -569,7 +569,7 @@ class InventoryManagementService {
               _triggerLowStockAlert(
                 productName: invNameOrig,
                 currentStock: nextVal.toInt(),
-                minStock: minS.toInt(),
+                minStock: minS,
                 productId: int.tryParse(p['id']?.toString() ?? p['product_id']?.toString() ?? '0') ?? 0,
               ).catchError((_) {});
             }
@@ -649,7 +649,7 @@ class InventoryManagementService {
 
         final productId = int.tryParse(id) ?? 0;
         final name = product['product_name']?.toString() ?? 'Product';
-        final minS = int.tryParse(product['min_stock']?.toString() ?? '10') ?? 10;
+        final minS = double.tryParse(product['min_stock']?.toString() ?? '10') ?? 10.0;
 
         try {
           if (productId > 0) {
