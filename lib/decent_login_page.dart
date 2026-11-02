@@ -923,7 +923,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   LiveTranslatedText(
-                    l.signIn,
+                    l.translate('welcomeBackHeading'),
                     style: GoogleFonts.inter(
                       color: _C.navy,
                       fontSize: 30,
@@ -933,7 +933,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
                   ),
                   const SizedBox(height: 4),
                   LiveTranslatedText(
-                    l.enterCredentials,
+                    l.translate('manageSalesMessage'),
                     style: GoogleFonts.inter(
                       color: _C.textMuted,
                       fontSize: 13.5,

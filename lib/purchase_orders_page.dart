@@ -985,14 +985,34 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white,
+                const Color(0xFFF8F8FF),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: _border),
-            boxShadow: [BoxShadow(color: const Color(0xFF263B78).withValues(alpha: 0.035), blurRadius: 12, offset: const Offset(0, 4))],
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF3C4A7A).withValues(alpha: 0.04),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withValues(alpha: 0.11), borderRadius: BorderRadius.circular(11)), child: Icon(icon, color: color, size: 18)),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -1010,8 +1030,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FF),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE5EBF7)),
+      ),
       child: Row(children: [
         metric('All orders', _orderCount('All'), Icons.receipt_long_rounded, _primary),
         const SizedBox(width: 8),

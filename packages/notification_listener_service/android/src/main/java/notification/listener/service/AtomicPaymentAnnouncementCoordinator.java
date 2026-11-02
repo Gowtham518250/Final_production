@@ -223,7 +223,8 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                         currentTruecaller != oldTruecaller
                                 && age <= TRUECALLER_CROSS_APP_MS
                                 && isTrustedTruecallerEchoCounterpart(counterpartChannel);
-                boolean weakModalityPair = age <= WEAK_MODALITY_MS
+                long weakWindowMs = (long) number(input.get("weakWindowMs"), WEAK_MODALITY_MS);
+                boolean weakModalityPair = weakWindowMs > 0 && age <= weakWindowMs
                         && (("sms".equals(origin) && "notification".equals(old.origin))
                                 || ("notification".equals(origin) && "sms".equals(old.origin)));
                 if (!sameAccount && !samePayer && !truecallerCrossAppEcho

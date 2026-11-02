@@ -10,6 +10,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'Review every product, quantity, and price before saving the sale.',
       'In your language:': 'In your language:',
+      'Product Name': 'Product Name',
+      'Qty': 'Qty',
+      'Price': 'Price',
+      'Disc (₹)': 'Disc (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'Phone Number',
+      'Customer Name': 'Customer Name',
     },
     'te': {
       'Voice recognition result': 'వాయిస్ గుర్తింపు ఫలితం',
@@ -19,6 +26,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'అమ్మకాన్ని సేవ్ చేసే ముందు ప్రతి వస్తువు, పరిమాణం, ధరను పరిశీలించండి.',
       'In your language:': 'మీ భాషలో:',
+      'Product Name': 'వస్తువు పేరు',
+      'Qty': 'పరిమాణం',
+      'Price': 'ధర',
+      'Disc (₹)': 'డిస్కౌంట్ (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'ఫోన్ నంబర్',
+      'Customer Name': 'కస్టమర్ పేరు',
     },
     'hi': {
       'Voice recognition result': 'आवाज़ पहचान का परिणाम',
@@ -28,6 +42,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'बिल सेव करने से पहले हर वस्तु, मात्रा और कीमत जाँचें।',
       'In your language:': 'आपकी भाषा में:',
+      'Product Name': 'उत्पाद का नाम',
+      'Qty': 'मात्रा',
+      'Price': 'कीमत',
+      'Disc (₹)': 'छूट (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'फ़ोन नंबर',
+      'Customer Name': 'ग्राहक का नाम',
     },
     'ta': {
       'Voice recognition result': 'குரல் அடையாள முடிவு',
@@ -37,6 +58,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'விற்பனையைச் சேமிக்கும் முன் ஒவ்வொரு பொருள், அளவு, விலையையும் சரிபார்க்கவும்.',
       'In your language:': 'உங்கள் மொழியில்:',
+      'Product Name': 'பொருளின் பெயர்',
+      'Qty': 'அளவு',
+      'Price': 'விலை',
+      'Disc (₹)': 'தள்ளுபடி (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'தொலைபேசி எண்',
+      'Customer Name': 'வாடிக்கையாளர் பெயர்',
     },
     'kn': {
       'Voice recognition result': 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಯ ಫಲಿತಾಂಶ',
@@ -46,6 +74,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'ಮಾರಾಟವನ್ನು ಉಳಿಸುವ ಮೊದಲು ಪ್ರತಿಯೊಂದು ವಸ್ತು, ಪ್ರಮಾಣ ಮತ್ತು ಬೆಲೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.',
       'In your language:': 'ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ:',
+      'Product Name': 'ವಸ್ತುವಿನ ಹೆಸರು',
+      'Qty': 'ಪ್ರಮಾಣ',
+      'Price': 'ಬೆಲೆ',
+      'Disc (₹)': 'ರಿಯಾಯಿತಿ (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'ಫೋನ್ ಸಂಖ್ಯೆ',
+      'Customer Name': 'ಗ್ರಾಹಕರ ಹೆಸರು',
     },
     'ml': {
       'Voice recognition result': 'ശബ്ദ തിരിച്ചറിയൽ ഫലം',
@@ -55,6 +90,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'വിൽപ്പന സംരക്ഷിക്കുന്നതിന് മുമ്പ് ഓരോ ഇനവും അളവും വിലയും പരിശോധിക്കുക.',
       'In your language:': 'നിങ്ങളുടെ ഭാഷയിൽ:',
+      'Product Name': 'ഉൽപ്പന്നത്തിന്റെ പേര്',
+      'Qty': 'അളവ്',
+      'Price': 'വില',
+      'Disc (₹)': 'കിഴിവ് (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'ഫോൺ നമ്പർ',
+      'Customer Name': 'ഉപഭോക്താവിന്റെ പേര്',
     },
     'mr': {
       'Voice recognition result': 'आवाज ओळखण्याचा परिणाम',
@@ -64,6 +106,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'विक्री जतन करण्यापूर्वी प्रत्येक वस्तू, प्रमाण आणि किंमत तपासा.',
       'In your language:': 'तुमच्या भाषेत:',
+      'Product Name': 'वस्तूचे नाव',
+      'Qty': 'प्रमाण',
+      'Price': 'किंमत',
+      'Disc (₹)': 'सूट (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'फोन नंबर',
+      'Customer Name': 'ग्राहकाचे नाव',
     },
     'bn': {
       'Voice recognition result': 'কণ্ঠ শনাক্তকরণের ফলাফল',
@@ -73,6 +122,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'বিক্রি সংরক্ষণের আগে প্রতিটি পণ্য, পরিমাণ ও দাম যাচাই করুন।',
       'In your language:': 'আপনার ভাষায়:',
+      'Product Name': 'পণ্যের নাম',
+      'Qty': 'পরিমাণ',
+      'Price': 'দাম',
+      'Disc (₹)': 'ছাড় (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'ফোন নম্বর',
+      'Customer Name': 'গ্রাহকের নাম',
     },
     'gu': {
       'Voice recognition result': 'અવાજ ઓળખવાનું પરિણામ',
@@ -82,6 +138,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'વેચાણ સાચવતાં પહેલાં દરેક વસ્તુ, જથ્થો અને કિંમત તપાસો.',
       'In your language:': 'તમારી ભાષામાં:',
+      'Product Name': 'વસ્તુનું નામ',
+      'Qty': 'જથ્થો',
+      'Price': 'કિંમત',
+      'Disc (₹)': 'છૂટ (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'ફોન નંબર',
+      'Customer Name': 'ગ્રાહકનું નામ',
     },
     'pa': {
       'Voice recognition result': 'ਆਵਾਜ਼ ਪਛਾਣ ਦਾ ਨਤੀਜਾ',
@@ -91,6 +154,13 @@ abstract final class VoiceBillingLocalization {
       'Review every product, quantity, and price before saving the sale.':
           'ਵਿਕਰੀ ਸੇਵ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਹਰ ਚੀਜ਼, ਮਾਤਰਾ ਅਤੇ ਕੀਮਤ ਜਾਂਚੋ।',
       'In your language:': 'ਤੁਹਾਡੀ ਭਾਸ਼ਾ ਵਿੱਚ:',
+      'Product Name': 'ਚੀਜ਼ ਦਾ ਨਾਮ',
+      'Qty': 'ਮਾਤਰਾ',
+      'Price': 'ਕੀਮਤ',
+      'Disc (₹)': 'ਛੋਟ (₹)',
+      'GST %': 'GST %',
+      'Phone Number': 'ਫ਼ੋਨ ਨੰਬਰ',
+      'Customer Name': 'ਗਾਹਕ ਦਾ ਨਾਮ',
     },
   };
 

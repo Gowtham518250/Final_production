@@ -39,6 +39,66 @@ class GoogleAuthService {
     defaultValue: '', // If empty, fallback sign-in will be used
   );
 
+  static String formatGoogleSignInError({
+    int? statusCode,
+    String? responseBody,
+    Object? exception,
+    String fallbackMessage = 'Google Sign-In failed. Please try again.',
+  }) {
+    final details = <String>[];
+
+    if (statusCode != null) {
+      details.add('Status $statusCode');
+    }
+
+    if (responseBody != null && responseBody.trim().isNotEmpty) {
+      try {
+        final decoded = json.decode(responseBody);
+        if (decoded is Map<String, dynamic>) {
+          final message = decoded['detail'] ?? decoded['message'] ?? decoded['error'];
+          if (message != null && message.toString().trim().isNotEmpty) {
+            details.add(message.toString().trim());
+          }
+        } else if (decoded is String && decoded.trim().isNotEmpty) {
+          details.add(decoded.trim());
+        }
+      } catch (_) {
+        final trimmed = responseBody.trim();
+        if (trimmed.isNotEmpty && trimmed.length < 500) {
+          details.add(trimmed);
+        }
+      }
+    }
+
+    if (exception != null) {
+      final text = exception.toString()
+          .replaceAll('Exception:', '')
+          .replaceAll('Exception ', '')
+          .trim();
+      if (text.isNotEmpty) {
+        details.add(text);
+      }
+    }
+
+    if (details.isEmpty) {
+      return fallbackMessage;
+    }
+
+    final unique = details.toSet().toList();
+    return unique.join(' — ');
+  }
+
+  static bool isGoogleSignInSupported({
+    bool? isWeb,
+    bool? isAndroid,
+    bool? isIOS,
+  }) {
+    final web = isWeb ?? kIsWeb;
+    final android = isAndroid ?? false;
+    final ios = isIOS ?? false;
+    return web || android || ios;
+  }
+
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     clientId: kIsWeb && _googleClientId.isNotEmpty ? _googleClientId : null,
@@ -93,18 +153,13 @@ class GoogleAuthService {
         }).timeout(const Duration(seconds: 15));
 
         if (response.statusCode != 200) {
-          String message =
-              'Google sign-in could not be completed. Please try again.';
-          try {
-            final errorData = json.decode(response.body);
-            if (errorData is Map && errorData['detail'] != null) {
-              message = errorData['detail'].toString();
-            }
-          } catch (_) {}
+          final message = formatGoogleSignInError(
+            statusCode: response.statusCode,
+            responseBody: response.body,
+          );
           if (kDebugMode) {
             debugPrint(
-              'Backend /auth/google rejected sign-in: ' +
-                  response.statusCode.toString(),
+              'Backend /auth/google rejected sign-in: ${response.statusCode} | body=${response.body}',
             );
           }
           return GoogleSignInResult(success: false, error: message);
@@ -222,19 +277,27 @@ class GoogleAuthService {
           photoUrl: photoUrl,
         );
       } catch (e) {
+        final message = formatGoogleSignInError(
+          exception: e,
+          fallbackMessage:
+              'Unable to connect Google sign-in to Retail Mind. Check your connection and try again.',
+        );
         if (kDebugMode) {
-          debugPrint('Backend Google authentication failed: ' + e.runtimeType.toString());
+          debugPrint('Backend Google authentication failed: $message');
         }
-        return const GoogleSignInResult(
+        return GoogleSignInResult(
           success: false,
-          error: 'Unable to connect Google sign-in to Retail Mind. Check your connection and try again.',
+          error: message,
         );
       }
     } on Exception catch (e) {
-      if (kDebugMode) debugPrint('❌ Google Sign-In error: $e');
+      final message = formatGoogleSignInError(
+        exception: e,
+      );
+      if (kDebugMode) debugPrint('❌ Google Sign-In error: $message');
       return GoogleSignInResult(
         success: false,
-        error: 'Google Sign-In failed. Please try again.',
+        error: message,
       );
     }
   }

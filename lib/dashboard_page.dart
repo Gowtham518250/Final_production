@@ -2396,7 +2396,7 @@ class _DashboardPageState extends State<DashboardPage>
                   ),
                   const SizedBox(width: 8),
                   LiveTranslatedText(
-                    'Online Store is Live',
+                    AppLocalizations.of(context).translate('Online Store is Live'),
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -2447,7 +2447,7 @@ class _DashboardPageState extends State<DashboardPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: LiveTranslatedText(
-                        'Your shop is live at',
+                        AppLocalizations.of(context).translate('Your shop is live at'),
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
@@ -11501,7 +11501,7 @@ class _DashboardPageState extends State<DashboardPage>
                             children: [
                               Expanded(
                                 child: LiveTranslatedText(
-                                  'Enable Payment Detection',
+                                  AppLocalizations.of(context).translate('Enable Payment Detection'),
                                   style: GoogleFonts.poppins(
                                     fontWeight: FontWeight.w800,
                                     color: const Color(0xFF991B1B),
@@ -11519,7 +11519,7 @@ class _DashboardPageState extends State<DashboardPage>
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: LiveTranslatedText(
-                                  'ACTION REQUIRED',
+                                  AppLocalizations.of(context).translate('ACTION REQUIRED'),
                                   style: GoogleFonts.poppins(
                                     color: Colors.white,
                                     fontSize: 8.5,
@@ -11532,7 +11532,7 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                           const SizedBox(height: 5),
                           LiveTranslatedText(
-                            'Automatic payment detection is optional. You can still record sales manually when it is off.',
+                            AppLocalizations.of(context).translate('Automatic payment detection is optional. You can still record sales manually when it is off.'),
                             style: GoogleFonts.poppins(
                               color: const Color(0xFFB91C1C),
                               fontSize: 12.5,
@@ -11549,7 +11549,7 @@ class _DashboardPageState extends State<DashboardPage>
                   children: [
                     Expanded(
                       child: _buildPaymentInlineStatus(
-                        'Notification Access',
+                        AppLocalizations.of(context).translate('Notification Access'),
                         Icons.notifications_none_rounded,
                         NotificationListenerService.isPermissionGranted(),
                       ),
@@ -11557,7 +11557,7 @@ class _DashboardPageState extends State<DashboardPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildPaymentInlineStatus(
-                        'SMS Access',
+                        AppLocalizations.of(context).translate('SMS Access'),
                         Icons.sms_outlined,
                         Permission.sms.status.then((s) => s.isGranted),
                       ),
@@ -11566,7 +11566,7 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
                 const SizedBox(height: 14),
                 LiveTranslatedText(
-                  'This reminder will remain visible and highlighted until both required permissions are enabled.',
+                  AppLocalizations.of(context).translate('This reminder will remain visible and highlighted until both required permissions are enabled.'),
                   style: GoogleFonts.poppins(
                     fontSize: 11.5,
                     color: const Color(0xFF7F1D1D),
@@ -11620,7 +11620,7 @@ class _DashboardPageState extends State<DashboardPage>
                     },
                     icon: const Icon(Icons.lock_open_rounded, size: 20),
                     label: LiveTranslatedText(
-                      'ENABLE PAYMENT DETECTION',
+                      AppLocalizations.of(context).translate('ENABLE PAYMENT DETECTION'),
                       style: GoogleFonts.poppins(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,

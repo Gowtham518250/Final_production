@@ -371,6 +371,10 @@ class SessionManagementService {
   static bool _lastRefreshWasRejected = false;
   static bool get lastRefreshWasRejected => _lastRefreshWasRejected;
 
+  static bool shouldTreatRefreshAsRejected(int statusCode) {
+    return statusCode == 401 || statusCode == 403;
+  }
+
   static Future<Map<String, dynamic>?> autoLogin() {
     final running = _autoLoginInFlight;
     if (running != null) {
@@ -497,8 +501,10 @@ class SessionManagementService {
             'message': data['message'],
           };
         }
-        if (response.statusCode == 401 || response.statusCode == 403) {
-          _lastRefreshWasRejected = true;
+        _lastRefreshWasRejected = shouldTreatRefreshAsRejected(
+          response.statusCode,
+        );
+        if (_lastRefreshWasRejected) {
           if (kDebugMode)
             debugPrint(
               '[AUTH] Refresh attempt failed with authentication status ${response.statusCode}',
@@ -507,7 +513,7 @@ class SessionManagementService {
         } else {
           if (kDebugMode)
             debugPrint(
-              '[AUTH] Refresh attempt failed with status ${response.statusCode}',
+              '[AUTH] Refresh attempt failed with status ${response.statusCode} - keeping session for retry',
             );
         }
         return null;

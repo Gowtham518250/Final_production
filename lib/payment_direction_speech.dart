@@ -66,3 +66,30 @@ String neutralPaymentAlert(String languageKey, String amountText) {
           'it was credited or debited. Please check.';
   }
 }
+
+/// A separate payment signal kept despite weak echo evidence; asks the
+/// merchant to verify it and does not claim that money was received.
+String anotherPaymentAlert(String languageKey, String amountText) {
+  switch (languageKey) {
+    case 'hindi':
+      return 'एक और $amountText का भुगतान दिखा है। कृपया पुष्टि करें।';
+    case 'tamil':
+      return 'மேலும் ஒரு $amountText கட்டணம் கண்டறியப்பட்டது. தயவுசெய்து சரிபார்க்கவும்.';
+    case 'telugu':
+      return 'మరో $amountText చెల్లింపు గుర్తించబడింది. దయచేసి ధృవీకరించండి.';
+    case 'kannada':
+      return 'ಇನ್ನೊಂದು $amountText ಪಾವತಿ ಪತ್ತೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಪರಿಶೀಲಿಸಿ.';
+    case 'marathi':
+      return 'आणखी एक $amountText भरणा आढळला. कृपया तपासा.';
+    case 'gujarati':
+      return 'વધુ એક $amountText ચુકવણી મળી આવી છે. કૃપા કરીને ચકાસો.';
+    case 'bengali':
+      return 'আরও একটি $amountText পেমেন্ট শনাক্ত হয়েছে। অনুগ্রহ করে যাচাই করুন।';
+    case 'punjabi':
+      return 'ਇੱਕ ਹੋਰ $amountText ਭੁਗਤਾਨ ਦਾ ਪਤਾ ਲੱਗਾ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਜਾਂਚੋ।';
+    case 'malayalam':
+      return 'മറ്റൊരു $amountText പേയ്മെന്റ് കണ്ടെത്തി. ദയവായി പരിശോധിക്കുക.';
+    default:
+      return 'Another payment of $amountText detected. Please verify.';
+  }
+}

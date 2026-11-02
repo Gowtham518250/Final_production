@@ -864,24 +864,24 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Show your shop on Google Maps'),
-        content: const Text(
+        title: const LiveTranslatedText('Show your shop on Google Maps'),
+        content: const LiveTranslatedText(
           'First search for an existing listing to avoid duplicates. If it is missing, use Google Business Profile to add or claim your shop. Google may ask you to verify ownership before the listing is published.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, 'cancel'),
-            child: const Text('Cancel'),
+            child: const LiveTranslatedText('Cancel'),
           ),
           OutlinedButton.icon(
             onPressed: () => Navigator.pop(dialogContext, 'search'),
             icon: const Icon(Icons.map_outlined),
-            label: const Text('Check existing listing'),
+            label: const LiveTranslatedText('Check existing listing'),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(dialogContext, 'register'),
             icon: const Icon(Icons.add_business_outlined),
-            label: const Text('Register / claim'),
+            label: const LiveTranslatedText('Register / claim'),
           ),
         ],
       ),
@@ -931,7 +931,7 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    LiveTranslatedText(
                       'Google Maps listing',
                       style: GoogleFonts.poppins(
                         fontSize: 14,
@@ -940,14 +940,14 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
+                    LiveTranslatedText(
                       hasCoordinates
                           ? 'Store coordinates saved: ${_shopLatitude!.toStringAsFixed(6)}, ${_shopLongitude!.toStringAsFixed(6)}'
                           : 'Set your storefront location so customers can navigate to you.',
                       style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
                     ),
                     if (accuracy != null)
-                      Text(
+                      LiveTranslatedText(
                         'GPS accuracy: ±${accuracy.toStringAsFixed(0)} m${accuracy > 50 ? ' — retry outdoors for better accuracy' : ''}',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
@@ -960,7 +960,7 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          LiveTranslatedText(
             'Stand at your shop entrance and tap the location pin above. Then check whether your shop already exists on Google Maps.',
             style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
           ),
@@ -972,17 +972,17 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
               OutlinedButton.icon(
                 onPressed: _fetchLocation,
                 icon: const Icon(Icons.my_location_rounded, size: 18),
-                label: const Text('Capture location'),
+                label: const LiveTranslatedText('Capture location'),
               ),
               OutlinedButton.icon(
                 onPressed: _openGoogleMapsSearch,
                 icon: const Icon(Icons.map_outlined, size: 18),
-                label: const Text('Find on Maps'),
+                label: const LiveTranslatedText('Find on Maps'),
               ),
               FilledButton.icon(
                 onPressed: _openGoogleBusinessProfile,
                 icon: const Icon(Icons.add_business_outlined, size: 18),
-                label: const Text('Register / claim'),
+                label: const LiveTranslatedText('Register / claim'),
               ),
             ],
           ),
@@ -1633,7 +1633,7 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                                       color: _secondaryTextColor,
                                       size: 19,
                                     ),
-                                    tooltip: 'Share Shop',
+                                    tooltip: AppLocalizations.of(context).translate('Share Shop'),
                                   ),
                                 ],
                               ),
@@ -1865,7 +1865,7 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
               hint: 'Street, area, city',
               suffixIcon: IconButton(
                 icon: const Icon(Icons.my_location, color: _secondaryTextColor),
-                tooltip: 'Capture storefront location',
+                tooltip: AppLocalizations.of(context).translate('Capture storefront location'),
                 onPressed: _fetchLocation,
               ),
               validator: (v) => v!.isEmpty ? 'Please enter location' : null,
@@ -2155,7 +2155,7 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                   child: IconButton(
                     icon: const Icon(Icons.sync),
                     onPressed: isLoading ? null : _forceRetrySync,
-                    tooltip: 'Retry Sync',
+                    tooltip: AppLocalizations.of(context).translate('Retry Sync'),
                   ),
                 ),
               ],

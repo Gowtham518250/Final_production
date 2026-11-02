@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../live_translated_text.dart';
 import 'retailmind_billing_service.dart';
 import 'retailmind_subscription_page.dart';
 
@@ -122,37 +123,137 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
 
         if (snapshot.data == true) return widget.child;
 
+        final colors = Theme.of(context).colorScheme;
+        final featureMessage = switch (widget.featureCode) {
+          'online_orders' => 'Online orders are part of a paid plan',
+          'ai_queries' => 'AI queries are part of a paid plan',
+          'voice_billing' => 'Voice billing is part of a paid plan',
+          _ => 'This feature is part of a paid plan',
+        };
+
         return Scaffold(
-          appBar: AppBar(title: const Text('Upgrade required')),
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.lock_outline_rounded, size: 56),
-                  const SizedBox(height: 16),
-                  Text(
-                    '${widget.featureCode.split('_').join(' ')} requires a paid plan',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Choose a plan that includes this feature to unlock it.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const RetailMindSubscriptionPage(),
+          backgroundColor: colors.surface,
+          appBar: AppBar(
+            title: const LiveTranslatedText('Upgrade required'),
+            backgroundColor: colors.surface,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+          ),
+          body: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 64,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 440),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: colors.outlineVariant),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.shadow.withValues(alpha: 0.07),
+                            blurRadius: 28,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: colors.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.lock_rounded,
+                              size: 34,
+                              color: colors.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.secondaryContainer,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: LiveTranslatedText(
+                              'PAID PLAN FEATURE',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: colors.onSecondaryContainer,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          LiveTranslatedText(
+                            featureMessage,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 10),
+                          LiveTranslatedText(
+                            'Choose a plan that includes this feature to unlock it.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  height: 1.45,
+                                ),
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: () async {
+                                await Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const RetailMindSubscriptionPage(),
+                                  ),
+                                );
+                                if (mounted) await _retry();
+                              },
+                              icon: const Icon(
+                                Icons.workspace_premium_outlined,
+                              ),
+                              label: const LiveTranslatedText(
+                                'View plans and upgrade',
+                              ),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    icon: const Icon(Icons.workspace_premium_outlined),
-                    label: const Text('View plans and upgrade'),
                   ),
-                ],
+                ),
               ),
             ),
           ),

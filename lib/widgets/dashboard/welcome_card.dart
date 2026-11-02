@@ -1,3 +1,4 @@
+import '../../app_localizations.dart';
 import '../../live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +19,7 @@ class WelcomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
@@ -56,7 +58,7 @@ class WelcomeCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       LiveTranslatedText(
-                        'AI Shop Pro కి స్వాగతం! 👋',
+                        localizations.translate('Welcome to AI Shop Pro! 👋'),
                         style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -64,7 +66,7 @@ class WelcomeCard extends StatelessWidget {
                         ),
                       ),
                       LiveTranslatedText(
-                        'Welcome! Start with these 3 quick actions:',
+                        localizations.translate('Welcome! Start with these 3 quick actions:'),
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           color: Colors.white.withValues(alpha: 0.8),
@@ -92,7 +94,7 @@ class WelcomeCard extends StatelessWidget {
                 Expanded(
                   child: _WelcomeAction(
                     icon: Icons.receipt_long_rounded,
-                    label: 'బిల్లు చేయి\nNew Bill',
+                    label: localizations.translate('New Bill'),
                     onTap: onNewBill,
                   ),
                 ),
@@ -100,7 +102,7 @@ class WelcomeCard extends StatelessWidget {
                 Expanded(
                   child: _WelcomeAction(
                     icon: Icons.currency_rupee_rounded,
-                    label: 'నేటి సంపాదన\nToday Money',
+                    label: localizations.translate('Today Money'),
                     onTap: onTodayMoney,
                   ),
                 ),
@@ -108,7 +110,7 @@ class WelcomeCard extends StatelessWidget {
                 Expanded(
                   child: _WelcomeAction(
                     icon: Icons.inventory_2_rounded,
-                    label: 'స్టాక్ చూడు\nCheck Stock',
+                    label: localizations.translate('Check Stock'),
                     onTap: onCheckStock,
                   ),
                 ),

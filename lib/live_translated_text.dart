@@ -156,6 +156,25 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     );
     if (sharedPageCopy != null) return sharedPageCopy;
 
+    final featureGateCopy =
+      AppLocalizations.featureGateTranslations[normalized]?[targetCode];
+    if (featureGateCopy != null) return featureGateCopy;
+
+    final shopProfileCopy =
+        AppLocalizations.shopProfileTranslations[normalized]?[targetCode];
+    if (shopProfileCopy != null) return shopProfileCopy;
+
+    final attendanceStatusCopy =
+      AppLocalizations.attendanceStatusTranslations[normalized]?[targetCode];
+    if (attendanceStatusCopy != null) return attendanceStatusCopy;
+
+    final adFormatCopy = AppLocalizations.adFormatTranslations[normalized]?[targetCode];
+    if (adFormatCopy != null) return adFormatCopy;
+
+    final attendanceAndGrowthCopy =
+        AppLocalizations.attendanceAndGrowthTranslations[targetCode]?[normalized];
+    if (attendanceAndGrowthCopy != null) return attendanceAndGrowthCopy;
+
     final screenText =
         AppLocalizations.screenTextTranslations[targetCode]?[normalized];
     if (screenText != null) return screenText;

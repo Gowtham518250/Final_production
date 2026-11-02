@@ -217,6 +217,7 @@ class RetailMindBillingService {
         await Future.wait([
           _checkSingleFeatureAccess('online_orders'),
           _checkSingleFeatureAccess('ai_queries'),
+          _checkSingleFeatureAccess('voice_billing'),
         ]);
       }
     } catch (error) {
@@ -362,7 +363,28 @@ class RetailMindBillingService {
     return _decode(response);
   }
 
+  static bool shouldOpenCashfreeCheckout(Map<String, dynamic> result) {
+    final planChanged = result['plan_changed'] == true || result['planChanged'] == true;
+    final requiresCheckout = result['requires_checkout'] != false && result['requiresCheckout'] != false;
+    final successValue = result['success'] == true || (result['status'] ?? '').toString().toUpperCase() == 'ACTIVE';
+    final statusCode = (result['status'] ?? result['subscription_status'] ?? '').toString().toUpperCase();
+    final subscriptionId = (result['subscription_id'] ?? '').toString();
+    final sessionId = (result['subscription_session_id'] ?? '').toString();
 
+    if (successValue && !requiresCheckout) {
+      return false;
+    }
+
+    if (planChanged && !requiresCheckout) {
+      return false;
+    }
+
+    if (statusCode == 'ACTIVE' && !requiresCheckout) {
+      return false;
+    }
+
+    return requiresCheckout && subscriptionId.isNotEmpty && sessionId.isNotEmpty;
+  }
 
 }
 

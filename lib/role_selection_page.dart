@@ -1,4 +1,5 @@
 import 'live_translated_text.dart';
+import 'app_localizations.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -736,12 +737,12 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
   }
 
   Widget _buildRoleSelection() {
+    final localizations = AppLocalizations.of(context);
     return Column(
       children: [
         _RoleCard(
-          title: 'I am the Owner',
-          subtitle:
-              'Full access to Analytics, Reports and Settings. (Requires Email Verification)',
+          title: localizations.translate('ownerRoleCardTitle'),
+          subtitle: localizations.translate('ownerRoleCardSubtitle'),
           icon: Icons.admin_panel_settings_rounded,
           color: Colors.indigoAccent,
           onTap: _sendingOTP || _ownerEmailLoading
@@ -751,8 +752,8 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
         ),
         const SizedBox(height: 20),
         _RoleCard(
-          title: 'I am Staff / Worker',
-          subtitle: 'Enter your staff PIN for restricted shop access.',
+          title: localizations.translate('staffRoleCardTitle'),
+          subtitle: localizations.translate('staffRoleCardSubtitle'),
           icon: Icons.badge_rounded,
           color: Colors.teal,
           onTap: _sendingOTP ? null : _selectStaff,

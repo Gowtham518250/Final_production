@@ -52,5 +52,27 @@ void main() {
         '/api/billing/feature-access/online_orders',
       );
     });
+
+    test('does not open a Cashfree checkout for an in-place plan change', () {
+      final response = {
+        'success': true,
+        'plan_changed': true,
+        'requires_checkout': false,
+        'status': 'ACTIVE',
+      };
+
+      expect(RetailMindBillingService.shouldOpenCashfreeCheckout(response), isFalse);
+    });
+
+    test('opens a Cashfree checkout only when a new mandate is required', () {
+      final response = {
+        'success': true,
+        'requires_checkout': true,
+        'subscription_id': 'sub_123',
+        'subscription_session_id': 'sess_456',
+      };
+
+      expect(RetailMindBillingService.shouldOpenCashfreeCheckout(response), isTrue);
+    });
   });
 }

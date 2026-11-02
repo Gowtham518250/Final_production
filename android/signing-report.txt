@@ -1,0 +1,506 @@
+> Task :gradle:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle:compileKotlin UP-TO-DATE
+> Task :gradle:compileJava NO-SOURCE
+> Task :gradle:compileGroovy NO-SOURCE
+> Task :gradle:pluginDescriptors UP-TO-DATE
+> Task :gradle:processResources UP-TO-DATE
+> Task :gradle:classes UP-TO-DATE
+> Task :gradle:jar UP-TO-DATE
+
+> Configure project :app
+WARNING: The option setting 'android.builtInKotlin=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.newDsl=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+
+> Task :app:signingReport
+Variant: debug
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+Variant: release
+Config: release
+Store: D:\retail_mind\FinalProduction_clean_20261023\android\app\upload-keystore.jks
+Alias: upload
+MD5: 4F:B1:09:83:B7:B9:80:62:8A:E7:AB:C0:F8:E8:67:32
+SHA1: 19:9C:0F:5E:04:83:2D:E0:B4:9B:59:D2:28:C8:6D:09:0C:D5:AC:3C
+SHA-256: FE:D8:F0:6B:B9:75:96:29:75:F6:BA:53:DB:08:2B:8B:EB:0C:33:A7:BF:BD:BF:BE:88:5C:DB:CF:29:C7:5E:24
+Valid until: Tuesday, March 10, 2054
+----------
+Variant: profile
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :audioplayers_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :blue_thermal_printer:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :cloud_firestore:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :connectivity_plus:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :device_info_plus:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :file_picker:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :firebase_auth:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :firebase_core:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :firebase_crashlytics:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :firebase_messaging:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_accessibility_service:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_background_service_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_cashfree_pg_sdk:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_local_notifications:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_plugin_android_lifecycle:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_secure_storage:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :flutter_tts:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :geocoding_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :geolocator_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :google_mlkit_commons:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :google_mlkit_translation:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :google_sign_in_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :home_widget:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :image_picker_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :jni:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :jni_flutter:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :local_auth_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :mobile_scanner:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :notification_listener_service:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :package_info_plus:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :permission_handler_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :printing:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :receive_sharing_intent:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :record:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :share_plus:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :shared_preferences_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :speech_to_text:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :telephony:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :url_launcher_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+> Task :vibration:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\vanam\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: B4:C7:3D:5C:9F:C0:22:29:C1:BC:0E:A8:92:62:DD:9F
+SHA1: 49:BD:84:3A:E3:2D:7C:A2:B7:0A:3B:60:4C:2F:48:28:6C:33:CE:7F
+SHA-256: 84:73:DB:E9:0F:64:ED:30:53:07:94:45:72:A7:58:4E:D2:9A:AD:11:78:D9:A3:2E:FC:CC:D2:6D:A6:72:7D:8F
+Valid until: Thursday, September 21, 2056
+----------
+
+[Incubating] Problems report is available at: file:///D:/retail_mind/FinalProduction_clean_20261023/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 4s
+45 actionable tasks: 41 executed, 4 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.3.1/userguide/configuration_cache_enabling.html

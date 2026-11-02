@@ -1,4 +1,7 @@
 import 'live_translated_text.dart';
+import 'indic_number_repair.dart';
+import 'voice_billing_display.dart';
+import 'widgets/offline_first_text.dart';
 import 'guided_dictation_overlay.dart';
 // =============================================================================
 // voice_billing_assistant.dart  —  V3 MULTI-LANGUAGE AI VOICE BILLING
@@ -2230,6 +2233,15 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           languageCode: _selectedLang.code,
         );
       }
+      // Repair numbers the recogniser spelled by sound (Telugu "రేణు ఉందలు"
+      // = 200) before the AI sees them. Every repair is reported below so the
+      // shopkeeper verifies it; ordinary words are never converted.
+      final numberRepair = IndicNumberRepair.repair(clean, _selectedLang.code);
+      clean = numberRepair.text;
+      final repairNotes = <String>[
+        for (final r in numberRepair.repairs)
+          'Spoken amount "${r.heard}" was read as ${r.value}. Please verify.',
+      ];
       final transcriptBeforeScaleNormalization = clean;
       clean = RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
         clean,
@@ -2319,6 +2331,12 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         }
       }
 
+      if (repairNotes.isNotEmpty) {
+        warnings = <String>[
+          ...warnings,
+          ...repairNotes.where((note) => !warnings.contains(note)),
+        ];
+      }
       _parseWarnings = warnings;
       _interpretedText = interpretedText;
       _lastPreviewItems = List<ParsedItem>.from(items);
@@ -3132,8 +3150,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                           style: TextStyle(color: Color(0xFF92400E)),
                         ),
                         Expanded(
-                          child: LiveTranslatedText(
+                          child: OfflineFirstText(
                             warning,
+                            kind: DisplayKind.warning,
                             locale: _selectedDisplayLocale,
                             style: GoogleFonts.poppins(
                               fontSize: 11.5,
@@ -3284,6 +3303,16 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       final controller = _editControllers[index]?['name'];
       if (controller != null) controller.text = updatedName.trim();
     });
+
+    // Stock is deducted by the English/catalogue product name. A name typed in
+    // another script will not match the catalogue, so warn (but allow it: it
+    // may be a deliberate custom item).
+    final typedInIndicScript = RegExp(r'[\u0900-\u0DFF]').hasMatch(updatedName);
+    if (typedInIndicScript && _findKnownProduct(updatedName.trim()) == null) {
+      _showSnack(
+        _voiceBillingLabel('Keep the catalogue name to deduct stock correctly.'),
+      );
+    }
   }
 
   Widget _buildItemCard(int idx, ParsedItem item) {
@@ -3349,10 +3378,13 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           title: Row(
             children: [
               Expanded(
-                child: LiveTranslatedText(
+                // DISPLAY ONLY: the stored/English name (item.name and the
+                // edit controller) is what the bill and stock deduction use.
+                child: OfflineFirstText(
                   _editControllers[idx]!['name']!.text.trim().isEmpty
                       ? item.name
                       : _editControllers[idx]!['name']!.text.trim(),
+                  kind: DisplayKind.productName,
                   locale: _selectedDisplayLocale,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -3413,9 +3445,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               Row(
                 children: [
                   _miniField(_voiceBillingLabel('Qty'), _editControllers[idx]!['qty']!),
-                  LiveTranslatedText(
-                    ' ${item.unit}  ·  ₹',
-                    locale: _selectedDisplayLocale,
+                  Text(
+                    ' ${VoiceBillingDisplay.unit(item.unit, _selectedDisplayLocale.languageCode)}  ·  ₹',
                     style: GoogleFonts.rajdhani(
                       color: const Color(0xFF546E7A),
                       fontSize: 12,
@@ -3491,8 +3522,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               if (item.priceWarning != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: LiveTranslatedText(
+                  child: OfflineFirstText(
                     item.priceWarning!,
+                    kind: DisplayKind.warning,
                     locale: _selectedDisplayLocale,
                     style: GoogleFonts.inter(
                       color: const Color(0xFFB45309),

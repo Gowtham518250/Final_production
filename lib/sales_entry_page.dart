@@ -35,7 +35,9 @@ import 'payment_announcement_service.dart';
 import 'payment_detection_service.dart';
 import 'payment_event.dart';
 import 'payment_background_service.dart';
+import 'sale_payment_echo_policy.dart';
 import 'voice_billing_assistant.dart';
+import 'features/billing/retailmind_feature_gate.dart';
 import 'roman_indian_voice_normalizer.dart';
 import 'bill_generator_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -90,7 +92,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   final TextEditingController customerPhoneController = TextEditingController();
   final TextEditingController customerNameController = TextEditingController();
   int? _lastAddedRowIndex = -1;
-  bool _isVoiceAssistantOpen = false;
   double _schemeDiscount = 0.0;
   double _flashSaleDiscount = 0.0;
   Map<String, dynamic>? _activeFlashSale;
@@ -131,7 +132,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     double? totalCgst,
     double? totalSgst,
     bool? withTax,
-    bool? isVoiceAssistantOpen,
     double? schemeDiscount,
     double? flashSaleDiscount,
     String? activeSchemeName,
@@ -145,8 +145,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (totalCgst != null) this.totalCgst = totalCgst;
       if (totalSgst != null) this.totalSgst = totalSgst;
       if (withTax != null) _withTax = withTax;
-      if (isVoiceAssistantOpen != null)
-        _isVoiceAssistantOpen = isVoiceAssistantOpen;
       if (schemeDiscount != null) _schemeDiscount = schemeDiscount;
       if (flashSaleDiscount != null) _flashSaleDiscount = flashSaleDiscount;
       if (activeSchemeName != null) _activeSchemeName = activeSchemeName;
@@ -278,7 +276,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
 
     if (mounted) {
-      setState(() => _isVoiceAssistantOpen = false);
       calculateTotal();
       if (customItems.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -453,6 +450,42 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
   }
 
+  void _openVoiceBillingAssistant() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => RetailMindFeatureGate(
+          featureCode: 'voice_billing',
+          child: Scaffold(
+            appBar: AppBar(
+              title: const LiveTranslatedText('Voice billing'),
+            ),
+            body: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: VoiceBillingAssistant(
+                      onOrderParsed: (items) {
+                        _onVoiceOrderParsed(items);
+                        if (mounted) Navigator.of(context).maybePop();
+                      },
+                      knownProducts: _knownProducts,
+                      initialLocale: _speechInputLang == 'en-US'
+                          ? 'en-IN'
+                          : _speechInputLang,
+                      autoStart: true,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openVoiceBillingMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -493,7 +526,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               ),
               onTap: () {
                 Navigator.pop(ctx);
-                setState(() => _isVoiceAssistantOpen = true);
+                _openVoiceBillingAssistant();
               },
             ),
             ListTile(
@@ -514,21 +547,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               ),
               onTap: () {
                 Navigator.pop(ctx);
-                _startListening();
+                _openVoiceBillingAssistant();
               },
             ),
-            if (_isVoiceAssistantOpen)
-              ListTile(
-                leading: Icon(Icons.close_rounded, color: Colors.grey[700]),
-                title: LiveTranslatedText(
-                  'Close guided panel',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => _isVoiceAssistantOpen = false);
-                },
-              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -555,6 +576,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   final LinkedHashMap<String, PaymentEvent> _processedReferenceEvents =
       LinkedHashMap<String, PaymentEvent>();
   final List<PaymentEvent> _pendingPaymentConfirmations = [];
+  final Set<String> _possibleRepeatConfirmationIds = <String>{};
+  PaymentEvent? _confirmationInDialog;
   final Set<String> _queuedPaymentConfirmationIds = {};
   bool _paymentConfirmationDialogShowing = false;
   // FIX-UPI-LOOP: Session ID tied to the current bill — changes on every new bill so
@@ -1090,14 +1113,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   void _stopListening() async {
     await _speechToText.stop();
     setState(() => _isListening = false);
-  }
-
-  /// Full-bill voice input uses the same production assistant as the guided mic flow.
-  /// Keeping one parser prevents quantity/price behavior from diverging between
-  /// the two voice-entry paths.
-  void _startListening() {
-    if (!mounted) return;
-    setState(() => _isVoiceAssistantOpen = true);
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
@@ -3610,14 +3625,36 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         }
 
         if (!event.isMerchantConfirmed) {
-          if (_isRecentPaymentCandidateEcho(event)) {
+          final echo = _classifyRecentPaymentCandidate(event);
+          if (echo.verdict == SaleEchoVerdict.hardEcho) {
             if (kDebugMode) {
               debugPrint(
-                '⚠️ Cross-source payment candidate ignored for duplicate prompt: '
+                '⚠️ Repeated payment alert ignored (${echo.reason}): '
                 '${event.amount} from ${event.app.name}',
               );
             }
             return;
+          }
+          if (echo.verdict == SaleEchoVerdict.possibleRepeat) {
+            final covered = SalePaymentEchoPolicy.billAlreadyCovered(
+              remainingDue: math.max(0.0, freshTotal - _paidAmount).toDouble(),
+              pendingAmounts: [
+                ..._pendingPaymentConfirmations.map((pending) => pending.amount),
+                if (_confirmationInDialog != null)
+                  _confirmationInDialog!.amount,
+              ],
+              amount: event.amount,
+            );
+            if (covered) {
+              if (kDebugMode) {
+                debugPrint(
+                  '⚠️ Repeat of alerts already covering this bill '
+                  '(${echo.reason}): ${event.amount} from ${event.app.name}',
+                );
+              }
+              return;
+            }
+            _possibleRepeatConfirmationIds.add(event.id);
           }
           if (event.decision == PaymentDecision.likely) {
             _queueSalePaymentConfirmation(event, capturedSessionId);
@@ -3692,7 +3729,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           acceptedAmount,
           idempotencyKey: event.fingerprint,
         );
-        unawaited(syncRecordedBillPayment(acceptedAmount));
+        unawaited(
+          syncRecordedBillPayment(
+            acceptedAmount,
+            idempotencyKey: event.fingerprint,
+          ),
+        );
 
         // UI Feedback only — Announcement is handled by the Detection Engine
         if (!mounted) return;
@@ -3744,10 +3786,24 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
     _paymentConfirmationDialogShowing = true;
     final event = _pendingPaymentConfirmations.removeAt(0);
+    _confirmationInDialog = event;
     try {
       final currentTotal = calculateTotal()['total'] ?? 0.0;
       final remainingDue = math.max(0.0, currentTotal - _paidAmount).toDouble();
       final estimatedReceipt = math.min(event.amount, remainingDue).toDouble();
+      final possibleRepeat = _possibleRepeatConfirmationIds.remove(event.id);
+      if (remainingDue <= 0.5) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: LiveTranslatedText(
+                'Payment ₹${event.amount.toStringAsFixed(2)} detected, but this bill is already fully paid. It was not added to this sale.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
       final shouldConfirm = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -3776,6 +3832,16 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               LiveTranslatedText(
                 'Current balance ₹${remainingDue.toStringAsFixed(2)}. If verified, this sale will show ₹${(remainingDue - estimatedReceipt).toStringAsFixed(2)} remaining.',
               ),
+              if (possibleRepeat) ...[
+                const SizedBox(height: 10),
+                LiveTranslatedText(
+                  'This may be the same payment as an earlier alert (same amount, different source). Confirm only if the customer really paid again.',
+                  style: TextStyle(
+                    color: Colors.orange.shade800,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               const LiveTranslatedText(
                 'Check your bank or UPI account before confirming. Until confirmed, this amount is not added to the sale.',
@@ -3810,6 +3876,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         }
       } else {
         PaymentDetectionService().rejectDetectedPayment(event);
+        unawaited(syncRejectedBillPayment(event.id));
       }
     } catch (error, stackTrace) {
       if (kDebugMode) {
@@ -3827,6 +3894,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         );
       }
     } finally {
+      _confirmationInDialog = null;
       _paymentConfirmationDialogShowing = false;
       if (mounted && _pendingPaymentConfirmations.isNotEmpty) {
         unawaited(_showNextSalePaymentConfirmation(billSessionId));
@@ -3878,73 +3946,47 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     );
   }
 
-  bool _isRecentPaymentCandidateEcho(PaymentEvent event) {
+  String _echoDirectionKey(PaymentEvent event) {
+    final direction = event.direction == PaymentTransactionDirection.unknown
+        ? VoiceBuilder.detectDirection(event.rawText)
+        : event.direction == PaymentTransactionDirection.incomingCredit
+        ? PaymentDirection.credited
+        : PaymentDirection.debited;
+    return switch (direction) {
+      PaymentDirection.credited => 'credit',
+      PaymentDirection.debited => 'debit',
+      PaymentDirection.unknown => 'unknown',
+    };
+  }
+
+  SaleEchoCandidate _echoCandidateOf(PaymentEvent event) => SaleEchoCandidate(
+    id: event.id,
+    amount: event.amount,
+    direction: _echoDirectionKey(event),
+    appKey: event.app.name,
+    appFamily: _isBankRelayPaymentApp(event.app)
+        ? 'bankRelay'
+        : _isUplikePaymentApp(event.app)
+        ? 'uplike'
+        : 'other',
+    at: event.timestamp,
+    reference: event.normalizedReferenceId,
+    sourceFingerprint: event.sourceEventFingerprint,
+    text: event.rawText.toLowerCase().trim(),
+  );
+
+  SaleEchoResult _classifyRecentPaymentCandidate(PaymentEvent event) {
     final now = event.timestamp;
     _recentPaymentCandidates.removeWhere(
       (candidate) =>
           now.difference(candidate.timestamp).abs() > const Duration(minutes: 12),
     );
-    final currentReference = event.normalizedReferenceId;
-    final currentDirection = event.direction == PaymentTransactionDirection.unknown
-        ? VoiceBuilder.detectDirection(event.rawText)
-        : event.direction == PaymentTransactionDirection.incomingCredit
-        ? PaymentDirection.credited
-        : PaymentDirection.debited;
-    var isEcho = false;
-
-    for (final previous in _recentPaymentCandidates) {
-      if (previous.id == event.id) {
-        isEcho = true;
-        break;
-      }
-      final previousReference = previous.normalizedReferenceId;
-      if (currentReference != null && previousReference != null) {
-        if (currentReference == previousReference &&
-            !event.hasReferenceConflictWith(previous)) {
-          isEcho = true;
-          break;
-        }
-        // Different authoritative references cannot safely be merged.
-        continue;
-      }
-
-      final previousDirection =
-          previous.direction == PaymentTransactionDirection.unknown
-          ? VoiceBuilder.detectDirection(previous.rawText)
-          : previous.direction == PaymentTransactionDirection.incomingCredit
-          ? PaymentDirection.credited
-          : PaymentDirection.debited;
-      if ((event.amount - previous.amount).abs() >= 0.01 ||
-          currentDirection == PaymentDirection.unknown ||
-          currentDirection != previousDirection) {
-        continue;
-      }
-
-      final age = now.difference(previous.timestamp).abs();
-      final crossChannel =
-          event.app != previous.app &&
-          ((_isBankRelayPaymentApp(event.app) &&
-                  (_isUplikePaymentApp(previous.app) ||
-                      _isBankRelayPaymentApp(previous.app))) ||
-              (_isBankRelayPaymentApp(previous.app) &&
-                  (_isUplikePaymentApp(event.app) ||
-                      _isBankRelayPaymentApp(event.app))));
-      final sameNotificationReplay =
-          event.app == previous.app &&
-          event.rawText.toLowerCase().trim() ==
-              previous.rawText.toLowerCase().trim() &&
-          age <= const Duration(seconds: 90);
-      if ((crossChannel && age <= const Duration(minutes: 12)) ||
-          sameNotificationReplay) {
-        isEcho = true;
-        break;
-      }
-    }
-
-    // Remember suppressed events too, so a third delayed source for the same
-    // receipt doesn't reopen another confirmation dialog.
+    final result = SalePaymentEchoPolicy.classify(
+      _echoCandidateOf(event),
+      _recentPaymentCandidates.map(_echoCandidateOf),
+    );
     _rememberRecentPaymentCandidate(event);
-    return isEcho;
+    return result;
   }
 
   void _showPaymentReferenceConflict(
@@ -6918,7 +6960,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
                           onTap: () async {
-                            setState(() => _isVoiceAssistantOpen = true);
+                            _openVoiceBillingAssistant();
                           },
                           child: const Padding(
                             padding: EdgeInsets.all(8),
@@ -6935,18 +6977,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 ),
               ],
             ),
-
-            if (_isVoiceAssistantOpen) ...[
-              const SizedBox(height: 12),
-              VoiceBillingAssistant(
-                onOrderParsed: _onVoiceOrderParsed,
-                knownProducts: _knownProducts,
-                initialLocale: _speechInputLang == 'en-US'
-                    ? 'en-IN'
-                    : _speechInputLang,
-                autoStart: true,
-              ),
-            ],
 
             const SizedBox(height: 12),
             const Divider(color: Color(0xFFF3F4F6)),

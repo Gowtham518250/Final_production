@@ -1,37 +1,42 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "firebase_url": "https://retail-mind-dev.firebaseio.com",
-    "project_id": "retail-mind-dev",
-    "storage_bucket": "retail-mind-dev.appspot.com"
+    "project_number": "295199056762",
+    "project_id": "hack-gowtham",
+    "storage_bucket": "hack-gowtham.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef123456789012abcd",
+        "mobilesdk_app_id": "1:295199056762:android:c48717b040b21771f7acc3",
         "android_client_info": {
           "package_name": "com.retailmind.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "123456789012-abcdefghijklmnopqrstuvwxyz1234567.apps.googleusercontent.com",
-          "client_type": 3,
-          "client_secret": "abcdef1234567890abcdef"
+          "client_id": "295199056762-qgttn8cog3aio71fbq6i45aj51svvq6h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.retailmind.app",
+            "certificate_hash": "199c0f5e04832de0b49b59d228c86d090cd5ac3c"
+          }
+        },
+        {
+          "client_id": "295199056762-u3tbp425crrqagpkjmhdibqch9dc4rne.apps.googleusercontent.com",
+          "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAbcdef1234567890abcdef1234567890ABC"
+          "current_key": "AIzaSyBx1sMr7aqJnknJWss4k7nDOrC-WVO4EJE"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "123456789012-abcdefghijklmnopqrstuvwxyz1234567.apps.googleusercontent.com",
-              "client_type": 3,
-              "client_secret": "abcdef1234567890abcdef"
+              "client_id": "295199056762-u3tbp425crrqagpkjmhdibqch9dc4rne.apps.googleusercontent.com",
+              "client_type": 3
             }
           ]
         }

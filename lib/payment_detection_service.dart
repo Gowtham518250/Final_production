@@ -101,6 +101,7 @@ import 'package:notification_listener_service/notification_event.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telephony/telephony.dart';
+import 'bill_context.dart';
 import 'payment_direction_speech.dart';
 import 'payment_event.dart';
 import 'payment_identity_matcher.dart';
@@ -109,6 +110,8 @@ import 'sms_background_receiver.dart';
 import 'local_storage_service.dart';
 import 'sync_service.dart';
 import 'session_management.dart';
+
+export 'bill_context.dart';
 
 // =============================================================================
 // ENUMS
@@ -150,6 +153,7 @@ class PaymentUiState {
   final String rawText;
   final String? saleId; // FIX 4: Mapping Payment -> Sale
   final PaymentTransactionDirection direction;
+  final bool isPossibleRepeat;
 
   const PaymentUiState({
     required this.id,
@@ -167,6 +171,7 @@ class PaymentUiState {
     this.saleId,
     this.direction = PaymentTransactionDirection.unknown,
     this.rawText = '',
+    this.isPossibleRepeat = false,
   });
 
   // FIX-J: human-readable time-ago helper
@@ -225,7 +230,12 @@ class PaymentUiState {
           : VoiceBuilder.detectedDirectional(amount, lang, spoken);
     }
 
-    if (isPartial) {
+    if (isPossibleRepeat &&
+        !(decision == PaymentDecision.confirmed && isUserConfirmed)) {
+      return VoiceBuilder.anotherPayment(amount, lang);
+    }
+
+    if (isPartial && (shortfall ?? 0) > 0.5) {
       return decision == PaymentDecision.confirmed && isUserConfirmed
           ? VoiceBuilder.partial(amount, shortfall ?? 0, lang)
           : VoiceBuilder.partialDetected(amount, shortfall ?? 0, lang);
@@ -256,6 +266,7 @@ class PaymentUiState {
     bool? isBillMatch,
     String? rawText,
     PaymentTransactionDirection? direction,
+    bool? isPossibleRepeat,
   }) => PaymentUiState(
     id: id,
     decision: decision ?? this.decision,
@@ -271,6 +282,7 @@ class PaymentUiState {
     isUserRejected: isUserRejected ?? this.isUserRejected,
     rawText: rawText ?? this.rawText,
     direction: direction ?? this.direction,
+    isPossibleRepeat: isPossibleRepeat ?? this.isPossibleRepeat,
   );
 
   static String _fmt(double v) =>
@@ -284,6 +296,9 @@ class PaymentUiState {
 enum PaymentDirection { credited, debited, unknown }
 
 abstract class VoiceBuilder {
+  static String anotherPayment(double amount, VoiceLanguage lang) =>
+      anotherPaymentAlert(lang.name, _amt(amount, lang));
+
   static PaymentDirection detectDirection(String text) {
     final t = text.toLowerCase();
 
@@ -734,74 +749,7 @@ abstract class VoiceBuilder {
   }
 }
 
-// =============================================================================
-// BILL CONTEXT  (FIX-L: tolerance max(5%, ₹2))
-// =============================================================================
-
-class BillContext {
-  double? expectedAmount;
-  bool isActive = false;
-  DateTime? setAt;
-  double _partialReceived = 0;
-
-  void setExpected(double amount) {
-    assert(amount > 0);
-    final isNewBill = !isActive || expectedAmount == null;
-    if (isNewBill) {
-      _partialReceived = 0;
-    }
-    expectedAmount = amount;
-    isActive = true;
-    setAt = DateTime.now();
-  }
-
-  void clear() {
-    expectedAmount = null;
-    isActive = false;
-    setAt = null;
-    _partialReceived = 0;
-  }
-
-  bool get isExpired {
-    return !isActive || expectedAmount == null;
-  }
-
-  void recordPartial(double v) => _partialReceived += v;
-
-  /// How much has been received so far against this bill.
-  double get partialReceived => _partialReceived;
-
-  /// How much is still owed on this bill.
-  double get remainingAmount => (expectedAmount ?? 0) - _partialReceived;
-
-  bool get isFullyPaid =>
-      expectedAmount != null && (partialReceived - expectedAmount!).abs() < 1.0;
-
-  DateTime? _lastSettlementAt;
-  bool get isSettlementLocked {
-    if (_lastSettlementAt == null) return false;
-    return DateTime.now().difference(_lastSettlementAt!) <
-        const Duration(seconds: 5);
-  }
-
-  void markSettled() {
-    _lastSettlementAt = DateTime.now();
-  }
-
-  BillMatchResult evaluate(double detected) {
-    if (!isActive || isExpired || expectedAmount == null) {
-      return BillMatchResult.noContext;
-    }
-    final remaining = expectedAmount! - _partialReceived;
-    if (remaining <= 0) return BillMatchResult.noContext;
-    if (detected > expectedAmount! * 2.0) return BillMatchResult.suspicious;
-    if (detected >= remaining) return BillMatchResult.exact;
-    if (detected > 0) return BillMatchResult.partial;
-    return BillMatchResult.mismatch;
-  }
-}
-
-enum BillMatchResult { noContext, exact, partial, suspicious, mismatch }
+// BillContext and BillMatchResult are implemented in bill_context.dart.
 
 // =============================================================================
 // FIX-I: PAYMENT HISTORY BUFFER
@@ -2165,7 +2113,13 @@ class PriorityVoiceQueue {
       if (claimedChannels != null && claimedChannels.contains(currentChannel)) {
         continue;
       }
-      final weakModalityPair = PaymentIdentityMatcher.isWeakModalityPair(
+      final weakWindow = PaymentDetectionService().billContext.weakPairWindow(
+        event.amount,
+        noBillWindow: _crossSourceEchoWindow,
+      );
+      final weakModalityPair = weakWindow > Duration.zero &&
+          age <= weakWindow &&
+          PaymentIdentityMatcher.isWeakModalityPair(
           PaymentDetectionService._eventOrigin(event.detectionSource),
           PaymentDetectionService._eventOrigin(old.detectionSource),
         );
@@ -3025,6 +2979,7 @@ class PaymentDetectionService {
 
   /// Event id -> channels that already echoed it (one echo per channel).
   final Map<String, Set<String>> _echoClaims = {};
+  final LinkedHashSet<String> _possibleRepeatEventIds = LinkedHashSet<String>();
 
   static String? _normalizedPayer(String? name) {
     final n = name?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
@@ -3575,6 +3530,7 @@ class PaymentDetectionService {
     if (_appliedBillPaymentIds.length > 1000) {
       _appliedBillPaymentIds.remove(_appliedBillPaymentIds.first);
     }
+    billContext.releasePendingByAmount(amount);
     if (!billContext.isActive || amount <= 0) return;
     final remaining = billContext.remainingAmount;
     if (!remaining.isFinite || remaining <= 0) return;
@@ -3624,6 +3580,7 @@ class PaymentDetectionService {
     }
     _likelyTimers.remove(event.id)?.cancel();
     _confirmMgr.remove(event.id);
+    billContext.releasePending(event.id);
     final remainingBeforePayment = billContext.remainingAmount;
     final billMatch = billContext.evaluate(event.amount);
     final isPartialReceipt =
@@ -3674,6 +3631,7 @@ class PaymentDetectionService {
 
   void rejectPayment(String id) {
     _resolvedPaymentConfirmationIds.add(id);
+    billContext.releasePending(id);
     _likelyTimers.remove(id)?.cancel();
     _confirmMgr.reject(id);
     final state = history.findById(id);
@@ -5416,7 +5374,13 @@ class PaymentDetectionService {
           isPartialPayment: isPartial,
           isBillMatch: isBillSettled || isPartial,
           remainingAmount: isPartial
-              ? math.max(0.0, billContext.remainingAmount - amount).toDouble()
+              ? math.max(
+              0.0,
+              billContext.tentativeRemaining(
+                excludingId: matched?.event.id ?? tempEvent.id,
+                  ) -
+                  amount,
+                ).toDouble()
               : 0.0,
           hasReferenceConflict: referenceAmountConflict,
         ),
@@ -5642,13 +5606,24 @@ class PaymentDetectionService {
       // Amount + direction alone are not transaction identity, except for a
       // different-modality pair (SMS vs app/notification) inside the short
       // weak-pair window with no conflicting evidence on either side.
+      final weakWindow = billContext.weakPairWindow(event.amount);
+      final modalityPair = PaymentIdentityMatcher.isWeakModalityPair(
+        _eventOrigin(event.detectionSource),
+        _eventOrigin(old.detectionSource),
+      );
       final weakModalityPair =
-          age <= PaymentIdentityMatcher.weakModalityWindow &&
-          PaymentIdentityMatcher.isWeakModalityPair(
-            _eventOrigin(event.detectionSource),
-            _eventOrigin(old.detectionSource),
-          );
-      if (!sameAccount && !sameKnownPayer && !weakModalityPair) continue;
+          weakWindow > Duration.zero && age <= weakWindow && modalityPair;
+      if (!sameAccount && !sameKnownPayer && !weakModalityPair) {
+        if (modalityPair &&
+            weakWindow == Duration.zero &&
+            age <= PaymentIdentityMatcher.weakModalityWindow) {
+          _possibleRepeatEventIds.add(event.id);
+          if (_possibleRepeatEventIds.length > 200) {
+            _possibleRepeatEventIds.remove(_possibleRepeatEventIds.first);
+          }
+        }
+        continue;
+      }
 
       // If several earlier payments could explain this signal, the match is
       // ambiguous. Keep the event instead of hiding a potentially real payment.
@@ -5769,6 +5744,7 @@ class PaymentDetectionService {
     // before any UI event or voice/OS announcement is emitted.
     if (await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
       event,
+      weakPairWindow: billContext.weakPairWindow(event.amount),
     )) {
       _recentEmittedPayments.removeWhere((old) => old.id == event.id);
       _echoClaims.remove(event.id);
@@ -5844,6 +5820,13 @@ class PaymentDetectionService {
       }
     }
 
+    if (billContext.isActive &&
+        event.decision == PaymentDecision.likely &&
+        !event.isMerchantConfirmed &&
+        isSafeIncomingCredit(event)) {
+      billContext.notePending(event.id, event.amount);
+    }
+
     // FIX-J: ui state carries id + detectedAt
     final ui = PaymentUiState(
       id: event.id,
@@ -5858,6 +5841,7 @@ class PaymentDetectionService {
       detectedAt: event.timestamp,
       rawText: event.rawText,
       direction: event.direction,
+      isPossibleRepeat: _possibleRepeatEventIds.remove(event.id),
     );
 
     final decisionLabel = event.isMerchantConfirmed

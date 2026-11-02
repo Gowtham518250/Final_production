@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'app_localizations.dart';
 import 'live_translated_text.dart';
 import 'online_payment_history_service.dart';
 
@@ -28,9 +29,12 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const LiveTranslatedText('Online Payment History'),
+        title: LiveTranslatedText(
+          localizations.translate('Online Payment History'),
+        ),
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
         ],

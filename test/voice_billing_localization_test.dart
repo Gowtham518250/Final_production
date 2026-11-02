@@ -36,4 +36,38 @@ void main() {
       );
     });
   });
+
+  group('placeholder labels for sales entry', () {
+    const placeholders = [
+      'Product Name', 'Qty', 'Price', 'Disc (₹)', 'GST %', 'Phone Number', 'Customer Name',
+    ];
+    const langs = ['te', 'hi', 'ta', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa'];
+
+    test('English placeholders are unchanged', () {
+      for (final key in placeholders) {
+        expect(VoiceBillingLocalization.label(key, 'en'), key);
+      }
+    });
+
+    test('every placeholder is localised in every supported language', () {
+      for (final lang in langs) {
+        for (final key in placeholders) {
+          final t = VoiceBillingLocalization.label(key, lang);
+          // GST % legitimately keeps its Latin letters.
+          if (key == 'GST %') continue;
+          expect(t != key, true);
+        }
+      }
+    });
+
+    test('regional locale codes resolve', () {
+      expect(VoiceBillingLocalization.label('Price', 'te-IN'), 'ధర');
+      expect(VoiceBillingLocalization.label('Qty', 'te_IN'), 'పరిమాణం');
+    });
+
+    test('an unknown key falls back to itself, an unknown language to English', () {
+      expect(VoiceBillingLocalization.label('Something else', 'te'), 'Something else');
+      expect(VoiceBillingLocalization.label('Price', 'xx'), 'Price');
+    });
+});
 }

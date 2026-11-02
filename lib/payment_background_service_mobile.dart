@@ -37,13 +37,25 @@ Future<void> syncExpectedPaymentBill(double? amount) async {
   service.invoke('sync_expected_payment_bill', {'amount': amount});
 }
 
-Future<void> syncRecordedBillPayment(double amount) async {
+Future<void> syncRecordedBillPayment(
+  double amount, {
+  String? idempotencyKey,
+}) async {
   if (!amount.isFinite || amount <= 0) {
     debugPrint('⚠️ Ignoring invalid recorded bill payment amount: $amount');
     return;
   }
   FlutterBackgroundService().invoke('sync_recorded_bill_payment', {
     'amount': amount,
+    if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+      'key': idempotencyKey.trim(),
+  });
+}
+
+Future<void> syncRejectedBillPayment(String eventId) async {
+  if (eventId.trim().isEmpty) return;
+  FlutterBackgroundService().invoke('sync_rejected_bill_payment', {
+    'id': eventId.trim(),
   });
 }
 
@@ -428,7 +440,16 @@ Future<bool> onStart(ServiceInstance service) async {
         debugPrint('⚠️ Ignoring invalid synced bill payment amount: $amount');
         return;
       }
-      pds.recordBillPayment(amount);
+      final key = (event?['key'] as String?)?.trim();
+      pds.recordBillPayment(
+        amount,
+        idempotencyKey: (key == null || key.isEmpty) ? null : key,
+      );
+    });
+    service.on('sync_rejected_bill_payment').listen((event) {
+      final id = (event?['id'] as String?)?.trim();
+      if (id == null || id.isEmpty) return;
+      pds.billContext.releasePending(id);
     });
     service.on('sync_payment_sound_enabled').listen((event) {
       final enabled = event?['enabled'] as bool?;

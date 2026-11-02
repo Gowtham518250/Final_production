@@ -1,4 +1,5 @@
 import '../../live_translated_text.dart';
+import '../../widgets/offline_first_text.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -262,8 +263,10 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                         color: Color(0xFF10B981), size: 16),
                     const SizedBox(width: 7),
                     Expanded(
-                      child: LiveTranslatedText(
+                      // DISPLAY ONLY: itemName stays the English/catalogue name.
+                      child: OfflineFirstText(
                         item.itemName,
+                        kind: DisplayKind.productName,
                         locale: selectedLocale,
                         style: GoogleFonts.poppins(
                           color: const Color(0xFF1E293B),
@@ -517,7 +520,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                       flex: 2,
                       child: _CustomerField(
                         controller: provider.customerPhoneController,
-                        hint: 'Phone Number',
+                        hint: VoiceBillingLocalization.label('Phone Number', selectedLocale.languageCode),
                         icon: Icons.phone,
                       ),
                     ),
@@ -526,7 +529,7 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                       flex: 3,
                       child: _CustomerField(
                         controller: provider.customerNameController,
-                        hint: 'Customer Name',
+                        hint: VoiceBillingLocalization.label('Customer Name', selectedLocale.languageCode),
                         icon: Icons.person,
                       ),
                     ),

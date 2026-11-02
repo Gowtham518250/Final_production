@@ -628,7 +628,7 @@ class _AttendancePageState extends State<AttendancePage>
           tabs: [
             Tab(text: AppLocalizations.of(context).today),
             Tab(text: AppLocalizations.of(context).history),
-            const Tab(text: 'Payroll'),
+            const Tab(child: LiveTranslatedText('Payroll')),
           ],
         ),
       ),

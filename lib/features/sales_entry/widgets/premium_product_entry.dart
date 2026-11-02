@@ -1,4 +1,5 @@
 import '../../../live_translated_text.dart';
+import '../../../widgets/offline_first_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -207,7 +208,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
                   PremiumProductEntry(
                     controller: _nameCtrl,
                     focusNode: _nameNode,
-                    label: 'Product Name',
+                    label: VoiceBillingLocalization.label('Product Name', selectedLocale.languageCode),
                     icon: Icons.inventory_2_rounded,
                     onChanged: (_) => _notifyChange(),
                   ),
@@ -231,8 +232,10 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
                           ),
                           const SizedBox(width: 4),
                           Expanded(
-                            child: LiveTranslatedText(
+                            // DISPLAY ONLY: the typed/English name is what is saved.
+                            child: OfflineFirstText(
                               _nameCtrl.text.trim(),
+                              kind: DisplayKind.productName,
                               locale: selectedLocale,
                               style: GoogleFonts.poppins(
                                 color: const Color(0xFF4F46E5),
@@ -253,7 +256,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
               child: PremiumProductEntry(
                 controller: _qtyCtrl,
                 focusNode: _qtyNode,
-                label: 'Qty',
+                label: VoiceBillingLocalization.label('Qty', selectedLocale.languageCode),
                 icon: Icons.numbers_rounded,
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _notifyChange(),
@@ -270,7 +273,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
               child: PremiumProductEntry(
                 controller: _priceCtrl,
                 focusNode: _priceNode,
-                label: 'Price',
+                label: VoiceBillingLocalization.label('Price', selectedLocale.languageCode),
                 icon: Icons.currency_rupee_rounded,
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _notifyChange(),
@@ -280,7 +283,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
             Expanded(
               child: PremiumProductEntry(
                 controller: _discCtrl,
-                label: 'Disc (₹)',
+                label: VoiceBillingLocalization.label('Disc (₹)', selectedLocale.languageCode),
                 icon: Icons.percent_rounded,
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _notifyChange(),
@@ -290,7 +293,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
             Expanded(
               child: PremiumProductEntry(
                 controller: _gstCtrl,
-                label: 'GST %',
+                label: VoiceBillingLocalization.label('GST %', selectedLocale.languageCode),
                 icon: Icons.receipt_long_rounded,
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _notifyChange(),

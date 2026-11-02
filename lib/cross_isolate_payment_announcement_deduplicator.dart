@@ -36,11 +36,18 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
   static Future<bool> shouldSuppress(
     PaymentEvent event, {
     DateTime? now,
+    Duration? weakPairWindow,
   }) {
     final completer = Completer<bool>();
     _tail = _tail.then((_) async {
       try {
-        completer.complete(await _shouldSuppress(event, now ?? DateTime.now()));
+        completer.complete(
+          await _shouldSuppress(
+            event,
+            now ?? DateTime.now(),
+            weakPairWindow ?? PaymentIdentityMatcher.weakModalityWindow,
+          ),
+        );
       } catch (_) {
         // A storage error must not disable payment detection or block a valid
         // payment announcement. The caller retains its in-memory safeguards.
@@ -50,7 +57,11 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     return completer.future;
   }
 
-  static Future<bool> _shouldSuppress(PaymentEvent event, DateTime now) async {
+  static Future<bool> _shouldSuppress(
+    PaymentEvent event,
+    DateTime now,
+    Duration weakWindow,
+  ) async {
     if (event.isDuplicate ||
         event.isMerchantConfirmed ||
         event.hasReferenceConflict ||
@@ -92,6 +103,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
         'accountSuffix': event.accountSuffix,
         'bankName': event.bankName,
         'rawText': event.rawText,
+        'weakWindowMs': weakWindow.inMilliseconds,
       });
       if (nativeDecision != null) return nativeDecision;
     }
@@ -167,6 +179,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       // Accessibility can repeat an identical static payment screen; this
       // layer has always tolerated exact-text repeats for a few minutes.
       sameChannelReplayWindow: _sameChannelReplayWindow,
+      weakWindow: weakWindow,
     );
     developer.log(
       resolution.describe(event.id),

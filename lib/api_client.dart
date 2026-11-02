@@ -55,7 +55,7 @@ class ApiClient {
     const prodUrl = String.fromEnvironment('API_BASE_URL');
     final selectedUrl = prodUrl.isNotEmpty
         ? prodUrl
-        : 'https://retail-mind-vkbp.onrender.com';
+        : 'https://retail-mind-hpx3.onrender.com';
     return [_normalizeBaseUrl(selectedUrl)];
   }
 
@@ -474,6 +474,17 @@ class ApiClient {
 
   static void resetSessionExpiryNotification() {
     _sessionExpiryNotified = false;
+  }
+
+  static Future<void> _resetRefreshState() async {
+    _isRefreshingToken = false;
+    _refreshStartTime = null;
+
+    final pendingCompleter = _refreshCompleter;
+    if (pendingCompleter != null && !pendingCompleter.isCompleted) {
+      pendingCompleter.complete(false);
+    }
+    _refreshCompleter = null;
   }
 
   static Duration _timeoutWithRefresh(String path) {
@@ -1243,10 +1254,10 @@ class ApiClient {
         // token at all) ends the session. An expired access token plus a 5xx or
         // network timeout must not trigger a logout while the server is unavailable.
         final hasLocalSession = await SecureTokenStorage.isSessionValid();
-        if (!hasLocalSession &&
-            ownsRefresh &&
-            SessionManagementService.lastRefreshWasRejected &&
-            !_sessionExpiryNotified) {
+        final authRejected = SessionManagementService.shouldTreatRefreshAsRejected(
+          response.statusCode,
+        );
+        if (!hasLocalSession && ownsRefresh && authRejected && !_sessionExpiryNotified) {
           _sessionExpiryNotified = true;
           if (kDebugMode)
             debugPrint(
@@ -1257,25 +1268,13 @@ class ApiClient {
           }
         }
 
-        // Return the original 401 response instead of forcing logout
-        // The calling code can handle the 401 appropriately
+        // Return the original 401 response instead of forcing logout.
+        // The caller may handle the auth error, but transient 5xx errors keep
+        // the local session intact until the server is available again.
       }
     }
 
     return response;
-  }
-
-  /// Reset refresh state to handle deadlocks
-  static Future<void> _resetRefreshState() async {
-    await _tokenRefreshLock.synchronized(() async {
-      _isRefreshingToken = false;
-      _refreshStartTime = null;
-      if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
-        _refreshCompleter!.complete(false);
-      }
-      _refreshCompleter = null;
-      if (kDebugMode) debugPrint('🔄 Token refresh state reset');
-    });
   }
 
   // Try POST with form-encoded body

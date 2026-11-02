@@ -6,7 +6,12 @@ Future<void> initializeBackgroundService() async {
 
 Future<void> syncExpectedPaymentBill(double? amount) async {}
 
-Future<void> syncRecordedBillPayment(double amount) async {}
+Future<void> syncRecordedBillPayment(
+  double amount, {
+  String? idempotencyKey,
+}) async {}
+
+Future<void> syncRejectedBillPayment(String eventId) async {}
 
 Future<void> restartBackgroundPaymentDetection() async {}
 

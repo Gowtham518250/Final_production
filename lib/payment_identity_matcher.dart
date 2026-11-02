@@ -205,6 +205,7 @@ class PaymentIdentityMatcher {
     SignalIdentity current,
     SignalIdentity previous, {
     Duration sameChannelReplayWindow = defaultReplayWindow,
+    Duration weakWindow = weakModalityWindow,
   }) {
     if ((current.amount - previous.amount).abs() >= 0.01) {
       return const IdentityDecision(IdentityVerdict.distinct, 'amount_differs');
@@ -323,7 +324,8 @@ class PaymentIdentityMatcher {
           IdentityVerdict.candidateEcho, 'truecaller_mirror');
     }
 
-    if (age <= weakModalityWindow &&
+    if (weakWindow > Duration.zero &&
+      age <= weakWindow &&
          isWeakModalityPair(current.origin, previous.origin)) {
       return const IdentityDecision(
           IdentityVerdict.candidateEcho, 'weak_modality_pair');
@@ -345,6 +347,7 @@ class PaymentIdentityMatcher {
     Iterable<SignalIdentity> recent, {
     Map<String, Set<String>> claims = const {},
     Duration sameChannelReplayWindow = defaultReplayWindow,
+    Duration weakWindow = weakModalityWindow,
   }) {
     SignalIdentity? candidate;
     String candidateReason = '';
@@ -355,6 +358,7 @@ class PaymentIdentityMatcher {
         current,
         previous,
         sameChannelReplayWindow: sameChannelReplayWindow,
+        weakWindow: weakWindow,
       );
       switch (decision.verdict) {
         case IdentityVerdict.sameTransfer:

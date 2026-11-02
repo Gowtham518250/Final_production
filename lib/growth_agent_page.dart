@@ -12,7 +12,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
+import 'app_localizations.dart';
 import 'growth_marketing_helpers.dart';
+import 'live_translated_text.dart';
 import 'local_storage_service.dart';
 
 /// Free-first marketing assistant.
@@ -517,7 +519,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
-        title: const Text(
+        title: const LiveTranslatedText(
           'Grow My Shop',
           style: TextStyle(fontWeight: FontWeight.w800, color: _ink),
         ),
@@ -526,7 +528,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         elevation: 0,
         actions: [
           IconButton(
-            tooltip: 'Refresh shop data',
+            tooltip: AppLocalizations.of(context).translate('Refresh shop data'),
             onPressed: _loading ? null : _loadWorkspace,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -639,7 +641,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           ),
         ],
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -647,7 +649,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 30),
               SizedBox(width: 10),
               Expanded(
-                child: Text(
+                child: const LiveTranslatedText(
                   'Your free marketing helper',
                   style: TextStyle(
                     color: Colors.white,
@@ -659,7 +661,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             ],
           ),
           SizedBox(height: 9),
-          Text(
+          const LiveTranslatedText(
             'Create a shop poster, add your real products, and share it with customers. No ad budget needed.',
             style: TextStyle(color: Colors.white70, height: 1.45),
           ),
@@ -672,14 +674,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
+        LiveTranslatedText(title,
             style: const TextStyle(
               color: _ink,
               fontSize: 17,
               fontWeight: FontWeight.w800,
             )),
         const SizedBox(height: 3),
-        Text(subtitle, style: const TextStyle(color: _muted, fontSize: 12)),
+        LiveTranslatedText(subtitle, style: const TextStyle(color: _muted, fontSize: 12)),
       ],
     );
   }
@@ -700,7 +702,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             textCapitalization: TextCapitalization.words,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
-              labelText: 'Shop name',
+              label: LiveTranslatedText('Shop name'),
               prefixIcon: Icon(Icons.storefront_rounded),
               border: OutlineInputBorder(),
             ),
@@ -710,26 +712,26 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             value: _goal,
             isExpanded: true,
             decoration: const InputDecoration(
-              labelText: 'What do you want to achieve?',
+              label: LiveTranslatedText('What do you want to achieve?'),
               prefixIcon: Icon(Icons.flag_outlined),
               border: OutlineInputBorder(),
             ),
             items: const [
               DropdownMenuItem(
                 value: 'nearby',
-                child: Text('Attract nearby customers'),
+                child: LiveTranslatedText('Attract nearby customers'),
               ),
               DropdownMenuItem(
                 value: 'new_product',
-                child: Text('Promote a product'),
+                child: LiveTranslatedText('Promote a product'),
               ),
               DropdownMenuItem(
                 value: 'clear_stock',
-                child: Text('Promote available stock'),
+                child: LiveTranslatedText('Promote available stock'),
               ),
               DropdownMenuItem(
                 value: 'regular_customers',
-                child: Text('Invite regular customers back'),
+                child: LiveTranslatedText('Invite regular customers back'),
               ),
             ],
             onChanged: _busy
@@ -742,7 +744,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           DropdownButtonFormField<String>(
             value: _language,
             decoration: const InputDecoration(
-              labelText: 'Advertisement language',
+              label: LiveTranslatedText('Advertisement language'),
               prefixIcon: Icon(Icons.translate_rounded),
               border: OutlineInputBorder(),
             ),
@@ -766,17 +768,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             value: _selectedProductKey,
             isExpanded: true,
             decoration: InputDecoration(
-              labelText: 'Feature an in-stock product (optional)',
+              label: const LiveTranslatedText('Feature an in-stock product (optional)'),
               prefixIcon: const Icon(Icons.inventory_2_outlined),
               border: const OutlineInputBorder(),
-              helperText: _products.isEmpty
+                helper: LiveTranslatedText(_products.isEmpty
                   ? 'No in-stock products loaded. You can still create a general shop ad.'
-                  : _products.length.toString() + ' in-stock products available',
+                  : _products.length.toString() + ' in-stock products available'),
             ),
             items: <DropdownMenuItem<String>>[
               const DropdownMenuItem<String>(
                 value: '',
-                child: Text('General shop ad — no specific product'),
+                child: LiveTranslatedText('General shop ad — no specific product'),
               ),
               ..._products.asMap().entries.map((entry) {
               final product = entry.value;
@@ -809,8 +811,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             onChanged: (_) => setState(() {}),
             maxLength: 90,
             decoration: const InputDecoration(
-              labelText: 'Offer details (optional)',
-              hintText: 'Only enter a discount if you really offer it',
+              label: LiveTranslatedText('Offer details (optional)'),
+              hint: LiveTranslatedText('Only enter a discount if you really offer it'),
               prefixIcon: Icon(Icons.local_offer_outlined),
               border: OutlineInputBorder(),
               counterText: '',
@@ -820,7 +822,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           FilledButton.icon(
             onPressed: _busy ? null : _generateCampaign,
             icon: const Icon(Icons.auto_awesome_rounded),
-            label: const Text('Create free ad'),
+            label: const LiveTranslatedText('Create free ad'),
             style: FilledButton.styleFrom(
               backgroundColor: _purple,
               padding: const EdgeInsets.symmetric(vertical: 15),
@@ -849,16 +851,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   Widget _buildTemplatePicker() {
     const templates = <Map<String, String>>[
-      {'id': 'bold', 'name': 'Bold gradient', 'subtitle': 'Big headline'},
+          {'id': 'bold', 'name': 'Bold gradient', 'subtitle': 'Big headline'},
       {'id': 'festive', 'name': 'Festive offer', 'subtitle': 'Bright & punchy'},
       {'id': 'fresh', 'name': 'Fresh & local', 'subtitle': 'Friendly colours'},
-      {'id': 'minimal', 'name': 'Clean minimal', 'subtitle': 'Product first'},
+          {'id': 'minimal', 'name': 'Clean minimal', 'subtitle': 'Product first'},
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        const LiveTranslatedText(
           'Choose an ad design',
           style: TextStyle(
             color: _ink,
@@ -867,7 +869,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        const LiveTranslatedText(
           'Switch designs any time before sharing.',
           style: TextStyle(color: _muted, fontSize: 12),
         ),
@@ -966,7 +968,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                         ),
                       ),
                       const SizedBox(height: 5),
-                      Text(
+                      LiveTranslatedText(
                         entry['name']!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -976,7 +978,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                         ),
                       ),
-                      Text(
+                      LiveTranslatedText(
                         entry['subtitle']!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -997,23 +999,25 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return DropdownButtonFormField<String>(
       value: _adFormat,
       decoration: const InputDecoration(
-        labelText: 'Ad placement / image size',
+        label: LiveTranslatedText('Ad placement / image size'),
         prefixIcon: Icon(Icons.aspect_ratio_rounded),
         border: OutlineInputBorder(),
-        helperText: 'Exports target 1080px wide: feed ads, square posts, or vertical Stories/Status.',
+        helper: LiveTranslatedText(
+          'Exports target 1080px wide: feed ads, square posts, or vertical Stories/Status.',
+        ),
       ),
       items: const [
         DropdownMenuItem(
           value: 'feed',
-          child: Text('Feed ad · 4:5 · 1080×1350'),
+          child: LiveTranslatedText('Feed ad · 4:5 · 1080×1350'),
         ),
         DropdownMenuItem(
           value: 'square',
-          child: Text('Square ad · 1:1 · 1080×1080'),
+          child: LiveTranslatedText('Square ad · 1:1 · 1080×1080'),
         ),
         DropdownMenuItem(
           value: 'story',
-          child: Text('Story / Status · 9:16 · 1080×1920'),
+          child: LiveTranslatedText('Story / Status · 9:16 · 1080×1920'),
         ),
       ],
       onChanged: _busy
@@ -1024,7 +1028,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                 _adFormat = value;
                 if (_currentDraft != null) {
                   _currentDraft = Map<String, dynamic>.from(_currentDraft!)
-                    ..['ad_format'] = value;
+                      ..['ad_format'] = value;
                 }
               });
             },
@@ -1035,22 +1039,22 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return Container(
       padding: const EdgeInsets.all(26),
       decoration: BoxDecoration(
-        color: Colors.white,
+            color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: const Column(
+      child: Column(
         children: [
           Icon(Icons.campaign_outlined, size: 44, color: _purple),
           SizedBox(height: 10),
-          Text(
-            'Your advertisement will appear here',
+          const LiveTranslatedText(
+                'Your advertisement will appear here',
             style: TextStyle(fontWeight: FontWeight.w700, color: _ink),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 5),
-          Text(
-            'Choose your goal and tap Create free ad.',
+          const LiveTranslatedText(
+                'Choose your goal and tap Create free ad.',
             style: TextStyle(color: _muted),
             textAlign: TextAlign.center,
           ),
@@ -1062,7 +1066,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   Widget _posterPreview() {
     final product = _currentDraft!['product_name']?.toString() ?? '';
     final price = _currentDraft!['product_price'] is num
-        ? (_currentDraft!['product_price'] as num).toDouble()
+            ? (_currentDraft!['product_price'] as num).toDouble()
         : null;
     final width = math.min(360.0, MediaQuery.of(context).size.width - 48.0).toDouble();
     final template = _currentDraft!['template']?.toString() ?? _template;
@@ -1082,7 +1086,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             template: template,
             format: format,
             shopName: _shopController.text.trim().isEmpty
-                ? 'My Shop'
+                    ? 'My Shop'
                 : _shopController.text.trim(),
             headline: _headlineController.text.trim(),
             productName: product,
@@ -1110,7 +1114,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             controller: _headlineController,
             maxLength: 80,
             decoration: const InputDecoration(
-              labelText: 'Poster headline',
+              label: LiveTranslatedText('Poster headline'),
               counterText: '',
               border: OutlineInputBorder(),
             ),
@@ -1122,7 +1126,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             minLines: 3,
             maxLines: 6,
             decoration: const InputDecoration(
-              labelText: 'Caption to share',
+              label: LiveTranslatedText('Caption to share'),
               border: OutlineInputBorder(),
               alignLabelWithHint: true,
             ),
@@ -1133,7 +1137,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             child: TextButton.icon(
               onPressed: _busy ? null : _saveCurrentEdits,
               icon: const Icon(Icons.save_outlined),
-              label: const Text('Save edits'),
+              label: const LiveTranslatedText('Save edits'),
             ),
           ),
         ],
@@ -1150,7 +1154,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: const Text(
+        child: const LiveTranslatedText(
           'Your saved advertisements will show here.',
           style: TextStyle(color: _muted),
         ),
@@ -1290,7 +1294,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               color: Color(0xFF1D4ED8), size: 19),
           const SizedBox(width: 9),
           Expanded(
-            child: Text(
+            child: LiveTranslatedText(
               message,
               style: const TextStyle(
                 color: Color(0xFF1E40AF),
