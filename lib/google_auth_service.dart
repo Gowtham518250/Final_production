@@ -101,10 +101,12 @@ class GoogleAuthService {
 
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    clientId: kIsWeb && _googleClientId.isNotEmpty ? _googleClientId : null,
-    serverClientId: !kIsWeb && _googleClientId.isNotEmpty
+    // Web uses its Web OAuth client ID.
+    clientId: kIsWeb && _googleClientId.isNotEmpty
         ? _googleClientId
         : null,
+    // Android reads the Web OAuth client from google-services.json.
+    // Do not override serverClientId on Android.
   );
 
   /// Sign in with Google and attempt backend authentication.

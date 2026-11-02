@@ -2,6 +2,7 @@ import '../../live_translated_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../app_localizations.dart';
 import '../../security_service.dart';
 
 import 'dart:convert';
@@ -158,7 +159,8 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                   color: const Color(0xFF4F46E5),
                   icon: Icons.local_shipping,
                   label: 'Purchases',
-                  subtitle: '$_pendingPurchases Pending',
+                    subtitle:
+                      '$_pendingPurchases ${AppLocalizations.of(context).translate('Pending')}',
                   onTap: () => Navigator.pushNamed(context, '/purchase-orders'),
                 ),
               ),
@@ -178,7 +180,8 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                   color: const Color(0xFF8B5CF6),
                   icon: Icons.account_balance_wallet,
                   label: 'History',
-                  subtitle: '$_allTransactions Records',
+                    subtitle:
+                      '$_allTransactions ${AppLocalizations.of(context).translate('Records')}',
                   onTap: () => Navigator.pushNamed(context, '/all-transactions'),
                 ),
               ),
@@ -237,7 +240,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
               ),
             ),
             const SizedBox(height: 2),
-            LiveTranslatedText(
+            Text(
               subtitle,
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -306,7 +309,8 @@ class _OperationsSheet extends StatelessWidget {
                   color: const Color(0xFF4F46E5),
                   icon: Icons.local_shipping_rounded,
                   label: 'Purchase\nOrders',
-                  subtitle: '${pendingPurchases} Pending',
+                    subtitle:
+                      '$pendingPurchases ${AppLocalizations.of(context).translate('Pending')}',
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.pushNamed(context, '/purchase-orders');
@@ -351,7 +355,8 @@ class _OperationsSheet extends StatelessWidget {
                   color: const Color(0xFF8B5CF6),
                   icon: Icons.receipt_long_rounded,
                   label: 'All\nTransactions',
-                  subtitle: '${allTransactions} Records',
+                    subtitle:
+                      '$allTransactions ${AppLocalizations.of(context).translate('Records')}',
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.pushNamed(context, '/all-transactions');

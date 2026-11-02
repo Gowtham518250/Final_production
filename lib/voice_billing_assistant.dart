@@ -1,4 +1,5 @@
 import 'live_translated_text.dart';
+import 'localization.dart';
 import 'indic_number_repair.dart';
 import 'voice_billing_display.dart';
 import 'widgets/offline_first_text.dart';
@@ -34,6 +35,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' as audio;
 import 'utils/free_translator_service.dart';
 import 'api_client.dart';
+import 'audio_level_gate.dart';
 
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:google_fonts/google_fonts.dart';
@@ -854,6 +856,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   bool _startingCloudAudioFallback = false;
   String? _cloudRecordingPath;
   Timer? _cloudRecordingLimitTimer;
+  final AudioLevelGate _audioLevelGate = AudioLevelGate();
+  Timer? _levelSampleTimer;
+  Future<void>? _levelSampleInFlight;
+  Stopwatch? _cloudRecordingClock;
   bool _isListening = false;
   bool _isProcessing = false;
   String _transcript = '';
@@ -1772,6 +1778,25 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           if (!mounted) return;
 
           final raw = result.recognizedWords.trim();
+          final confidence = result.confidence;
+          if (result.finalResult &&
+              raw.isNotEmpty &&
+              confidence > 0 &&
+              confidence < 0.8) {
+            _finalResultHandled = true;
+            setState(() {
+              _transcript = '';
+              _transcriptCtrl.clear();
+              _lastFinalTranscript = '';
+            });
+            _showSnack(
+              _voiceBillingLabel(
+                'No items were identified. Try again or enter the items manually.',
+              ),
+              isError: true,
+            );
+            return;
+          }
           final normalizedForParser = raw.isEmpty
               ? ''
               : PhoneticNormalizer.normalize(raw, _selectedLang.code);
@@ -1854,7 +1879,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         bitRate: 96000,
       );
       _cloudRecordingPath = pendingPath;
+      _startLevelSampling();
       if (!mounted) {
+        await _stopLevelSampling();
         try {
           await _audioRecorder.stop();
           await File(pendingPath).delete();
@@ -1886,6 +1913,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       );
     } catch (error) {
       _cloudRecordingLimitTimer?.cancel();
+      await _stopLevelSampling();
       _cloudRecordingPath = null;
       if (pendingPath != null) {
         try {
@@ -1913,6 +1941,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   Future<void> _stopAndTranscribeCloudRecording() async {
     if (!_usingCloudAudioFallback || _isProcessing) return;
     _cloudRecordingLimitTimer?.cancel();
+    final elapsedMs = await _stopLevelSampling();
     _shouldRestartListening = false;
     final pendingPath = _cloudRecordingPath;
     if (mounted) {
@@ -1933,6 +1962,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       final recordingFile = File(recordingPath);
       if (await recordingFile.length() == 0) {
         throw StateError('No audio was captured. Please speak and try again.');
+      }
+      final activity = _audioLevelGate.evaluate(elapsedMs: elapsedMs);
+      if (!activity.hasSignal) {
+        if (kDebugMode) {
+          debugPrint(
+            '🎙️ [VoiceBilling] audio level gate rejected clip: '
+            'reason=${activity.reason.name} activeMs=${activity.activeMs} '
+            'peakDb=${activity.peakDb}',
+          );
+        }
+        throw StateError(
+          _voiceBillingLabel(
+            'No items were identified. Try again or enter the items manually.',
+          ),
+        );
       }
 
       final audioFile = await http.MultipartFile.fromPath(
@@ -2061,8 +2105,55 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     }
   }
 
+  void _startLevelSampling() {
+    _audioLevelGate.reset();
+    _levelSampleInFlight = null;
+    _cloudRecordingClock = Stopwatch()..start();
+    _levelSampleTimer?.cancel();
+    _levelSampleTimer = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) {
+        if (_levelSampleInFlight != null) return;
+        final sample = _readAudioLevel();
+        _levelSampleInFlight = sample;
+        unawaited(sample.whenComplete(() {
+          if (identical(_levelSampleInFlight, sample)) {
+            _levelSampleInFlight = null;
+          }
+        }));
+      },
+    );
+  }
+
+  Future<void> _readAudioLevel() async {
+    try {
+      final amplitude = await _audioRecorder.getAmplitude();
+      _audioLevelGate.addSample(
+        amplitude.current,
+        elapsedMs: _cloudRecordingClock?.elapsedMilliseconds ?? 0,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('🎙️ [VoiceBilling] microphone level sample failed: $error');
+      }
+    }
+  }
+
+  Future<int> _stopLevelSampling() async {
+    _levelSampleTimer?.cancel();
+    _levelSampleTimer = null;
+    final clock = _cloudRecordingClock;
+    clock?.stop();
+    final inFlight = _levelSampleInFlight;
+    if (inFlight != null) await inFlight;
+    _levelSampleInFlight = null;
+    _cloudRecordingClock = null;
+    return clock?.elapsedMilliseconds ?? 0;
+  }
+
   Future<void> _cleanupCloudRecorder() async {
     _cloudRecordingLimitTimer?.cancel();
+    await _stopLevelSampling();
     final path = _cloudRecordingPath;
     _cloudRecordingPath = null;
     try {
@@ -3202,8 +3293,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                         ),
                       ),
                       const SizedBox(height: 2),
-                      LiveTranslatedText(
-                        _interpretedText,
+                      Text(
+                        AppLocalization.translateText(
+                          _interpretedText,
+                          languageCode: _selectedDisplayLocale.languageCode,
+                        ),
                         locale: _selectedDisplayLocale,
                         style: GoogleFonts.inter(
                           color: const Color(0xFF3730A3),

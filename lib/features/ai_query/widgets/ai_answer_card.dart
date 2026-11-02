@@ -1,4 +1,5 @@
 import '../../../live_translated_text.dart';
+import '../../../localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,6 +47,7 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
 
   @override
   Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context);
     final queryText = widget.response.query ?? 'Your Question';
     final answerText = widget.response.displayAnswer;
     final timeStr = DateFormat('dd MMM, hh:mm a').format(widget.response.timestamp);
@@ -96,8 +98,11 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LiveTranslatedText(
-                      'You asked:',
+                    Text(
+                      AppLocalization.translateText(
+                        'You asked:',
+                        languageCode: locale.languageCode,
+                      ),
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -105,8 +110,8 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    LiveTranslatedText(
-                      '"$queryText"',
+                    Text(
+                      '"${AppLocalization.translateText(queryText, languageCode: locale.languageCode)}"',
                       style: GoogleFonts.inter(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
@@ -157,8 +162,11 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        LiveTranslatedText(
-                          'Retail Mind',
+                        Text(
+                          AppLocalization.translateText(
+                            'Retail Mind',
+                            languageCode: locale.languageCode,
+                          ),
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -182,7 +190,10 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                     ),
                     const SizedBox(height: 4),
                     SelectableText(
-                      answerText,
+                      AppLocalization.translateText(
+                        answerText,
+                        languageCode: locale.languageCode,
+                      ),
                       style: GoogleFonts.inter(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w500,
@@ -219,10 +230,13 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                       color: const Color(0xFF818CF8),
                     ),
                     const SizedBox(width: 6),
-                    LiveTranslatedText(
-                      _isTechnicalDetailsExpanded
-                          ? 'Hide Technical Details'
-                          : 'Show Technical Details',
+                    Text(
+                      AppLocalization.translateText(
+                        _isTechnicalDetailsExpanded
+                            ? 'Hide Technical Details'
+                            : 'Show Technical Details',
+                        languageCode: locale.languageCode,
+                      ),
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

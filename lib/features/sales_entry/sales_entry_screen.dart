@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import '../../language_provider.dart';
+import '../../localization.dart';
 import '../../speech_locale_policy.dart';
 import '../../voice_billing_localization.dart';
 import 'controllers/sales_entry_provider.dart';
@@ -210,7 +211,10 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
             ),
             const SizedBox(height: 4),
             SelectableText(
-              transcript,
+              AppLocalization.translateText(
+                transcript,
+                languageCode: selectedLocale.languageCode,
+              ),
               style: GoogleFonts.poppins(
                 color: const Color(0xFF111827),
                 fontSize: 13,
@@ -230,8 +234,11 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
               ),
             ),
             const SizedBox(height: 4),
-            LiveTranslatedText(
-              interpretation,
+            Text(
+              AppLocalization.translateText(
+                interpretation,
+                languageCode: selectedLocale.languageCode,
+              ),
               locale: selectedLocale,
               style: GoogleFonts.poppins(
                 color: const Color(0xFF3730A3),

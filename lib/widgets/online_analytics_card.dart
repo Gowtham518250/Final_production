@@ -1,4 +1,5 @@
 import '../live_translated_text.dart';
+import '../app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -29,6 +30,7 @@ class OnlineAnalyticsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPending = pendingOrders > 0;
+    final localizations = AppLocalizations.of(context);
     final statusColor =
         hasPending ? const Color(0xFFF59E0B) : const Color(0xFF16A34A);
 
@@ -106,8 +108,17 @@ class OnlineAnalyticsCard extends StatelessWidget {
                                 decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
                               ),
                               const SizedBox(width: 5),
-                              LiveTranslatedText(
-                                hasPending ? '$pendingOrders pending' : 'All caught up',
+                              hasPending
+                                  ? Text(
+                                      '$pendingOrders ${localizations.translate('Pending')}',
+                                      style: GoogleFonts.poppins(
+                                        color: statusColor,
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    )
+                                  : LiveTranslatedText(
+                                      'All caught up',
                                 style: GoogleFonts.poppins(
                                   color: statusColor,
                                   fontSize: 8.5,
@@ -120,10 +131,8 @@ class OnlineAnalyticsCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    LiveTranslatedText(
-                      totalOrders.toString() + ' orders  •  ₹' +
-                          totalRevenue.toStringAsFixed(0) +
-                          ' revenue  •  ' + totalPaidCount.toString() + ' paid',
+                    Text(
+                      '${totalOrders.toString()} ${localizations.translate('Orders')}  •  ₹${totalRevenue.toStringAsFixed(0)} ${localizations.translate('Revenue')}  •  ${totalPaidCount.toString()} ${localizations.translate('Paid')}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'ai_features_service.dart';
 import 'language_provider.dart';
 import 'live_translated_text.dart';
+import 'retail_mind_promo_player_page.dart';
 
 class ChatbotPage extends StatefulWidget {
   const ChatbotPage({super.key});
@@ -199,6 +200,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
               controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
               children: [
+                _buildPromoCard(context),
                 for (final message in _messages) _buildMessageBubble(message),
                 if (_showSuggestions) _buildSuggestions(),
                 if (_isSending) _buildTypingIndicator(),
@@ -207,6 +209,139 @@ class _ChatbotPageState extends State<ChatbotPage> {
           ),
           _buildComposer(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPromoCard(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const RetailMindPromoPlayerPage(),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 176,
+                    child: Image.asset(
+                      'assets/videos/retail_mind_promo_poster.jpg',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0x22000000),
+                            Color(0x00000000),
+                            Color(0x66000000),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.94),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.20),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow_rounded,
+                      color: _primary,
+                      size: 36,
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    top: 13,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _primary,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: LiveTranslatedText(
+                        'RETAIL MIND',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(15, 13, 15, 15),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          LiveTranslatedText(
+                            'See Retail Mind in action',
+                            style: GoogleFonts.poppins(
+                              color: _ink,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          LiveTranslatedText(
+                            'A quick look at smarter shop management',
+                            style: GoogleFonts.poppins(
+                              color: _muted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    LiveTranslatedText(
+                      '0:27',
+                      style: GoogleFonts.poppins(
+                        color: _primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

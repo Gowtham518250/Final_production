@@ -150,6 +150,10 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
 
   String? _curatedTranslation(String input, String targetCode) {
     final normalized = input.trim();
+    final dashboardCopy =
+        AppLocalizations.dashboardTranslations[normalized]?[targetCode];
+    if (dashboardCopy != null) return dashboardCopy;
+
     final sharedPageCopy = SharedPageTranslations.lookup(
       normalized,
       targetCode,

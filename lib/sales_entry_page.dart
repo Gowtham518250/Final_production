@@ -14,6 +14,7 @@ import 'secure_token_storage.dart';
 import 'secure_preferences_service.dart';
 import 'scoped_shared_preferences.dart';
 import 'app_localizations.dart';
+import 'localization.dart';
 import 'sync_queue_manager.dart';
 import 'stock_alert_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, debugPrint;
@@ -3804,17 +3805,26 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         }
         return;
       }
+      final locale = Localizations.localeOf(context);
       final shouldConfirm = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
-          title: const LiveTranslatedText('Payment detected'),
+          title: Text(
+            AppLocalization.translateText(
+              'Payment detected',
+              languageCode: locale.languageCode,
+            ),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LiveTranslatedText(
-                '₹${event.amount.toStringAsFixed(2)} via ${event.appDisplayName}',
+              Text(
+                AppLocalization.translateText(
+                  '₹${event.amount.toStringAsFixed(2)} via ${event.appDisplayName}',
+                  languageCode: locale.languageCode,
+                ),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -3822,20 +3832,36 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               ),
               if (event.payerName?.isNotEmpty == true) ...[
                 const SizedBox(height: 6),
-                LiveTranslatedText('Payer: ${event.payerName}'),
+                Text(
+                  AppLocalization.translateText(
+                    'Payer: ${event.payerName}',
+                    languageCode: locale.languageCode,
+                  ),
+                ),
               ],
               if (event.referenceId?.isNotEmpty == true) ...[
                 const SizedBox(height: 4),
-                LiveTranslatedText('Reference: ${event.referenceId}'),
+                Text(
+                  AppLocalization.translateText(
+                    'Reference: ${event.referenceId}',
+                    languageCode: locale.languageCode,
+                  ),
+                ),
               ],
               const SizedBox(height: 8),
-              LiveTranslatedText(
-                'Current balance ₹${remainingDue.toStringAsFixed(2)}. If verified, this sale will show ₹${(remainingDue - estimatedReceipt).toStringAsFixed(2)} remaining.',
+              Text(
+                AppLocalization.translateText(
+                  'Current balance ₹${remainingDue.toStringAsFixed(2)}. If verified, this sale will show ₹${(remainingDue - estimatedReceipt).toStringAsFixed(2)} remaining.',
+                  languageCode: locale.languageCode,
+                ),
               ),
               if (possibleRepeat) ...[
                 const SizedBox(height: 10),
-                LiveTranslatedText(
-                  'This may be the same payment as an earlier alert (same amount, different source). Confirm only if the customer really paid again.',
+                Text(
+                  AppLocalization.translateText(
+                    'This may be the same payment as an earlier alert (same amount, different source). Confirm only if the customer really paid again.',
+                    languageCode: locale.languageCode,
+                  ),
                   style: TextStyle(
                     color: Colors.orange.shade800,
                     fontWeight: FontWeight.w600,
@@ -3843,19 +3869,32 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 ),
               ],
               const SizedBox(height: 12),
-              const LiveTranslatedText(
-                'Check your bank or UPI account before confirming. Until confirmed, this amount is not added to the sale.',
+              Text(
+                AppLocalization.translateText(
+                  'Check your bank or UPI account before confirming. Until confirmed, this amount is not added to the sale.',
+                  languageCode: locale.languageCode,
+                ),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const LiveTranslatedText('Not received'),
+              child: Text(
+                AppLocalization.translateText(
+                  'Not received',
+                  languageCode: locale.languageCode,
+                ),
+              ),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const LiveTranslatedText('I verified it'),
+              child: Text(
+                AppLocalization.translateText(
+                  'I verified it',
+                  languageCode: locale.languageCode,
+                ),
+              ),
             ),
           ],
         ),

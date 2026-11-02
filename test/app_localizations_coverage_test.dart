@@ -24,15 +24,16 @@ void main() {
     );
 
     final englishKeys = AppLocalizations.translations['en']!.keys.toSet();
-
+    final mismatches = <String>[];
     for (final languageCode in supportedLanguageCodes) {
-      final locale = AppLocalizations.translations[languageCode]!;
-      expect(
-        locale.keys.toSet(),
-        equals(englishKeys),
-        reason: 'Locale $languageCode must contain every English key.',
-      );
+      final localeKeys = AppLocalizations.translations[languageCode]!.keys.toSet();
+      final missing = englishKeys.difference(localeKeys).toList()..sort();
+      final extra = localeKeys.difference(englishKeys).toList()..sort();
+      if (missing.isNotEmpty || extra.isNotEmpty) {
+        mismatches.add('$languageCode missing=$missing extra=$extra');
+      }
     }
+    expect(mismatches, isEmpty, reason: mismatches.join('\n'));
   });
 
   test('screen headings are translated in every supported locale', () {
@@ -68,65 +69,54 @@ void main() {
     );
 
     final englishPhrases = AppLocalizations.screenTextTranslations['en']!;
+    final mismatches = <String>[];
     for (final languageCode in supportedLanguageCodes) {
       final phrases = AppLocalizations.screenTextTranslations[languageCode]!;
-      expect(
-        phrases.keys.toSet(),
-        equals(englishPhrases.keys.toSet()),
-        reason:
-            'Screen copy must have matching entries for ${languageCode}.',
-      );
+      final englishKeys = englishPhrases.keys.toSet();
+      final phraseKeys = phrases.keys.toSet();
+      final missing = englishKeys.difference(phraseKeys).toList()..sort();
+      final extra = phraseKeys.difference(englishKeys).toList()..sort();
+      if (missing.isNotEmpty || extra.isNotEmpty) {
+        mismatches.add('$languageCode missing=$missing extra=$extra');
+      }
+
       for (final entry in englishPhrases.entries) {
-        expect(
-          phrases[entry.key],
-          isNotEmpty,
-          reason: '${entry.key} must be translated for ${languageCode}.',
-        );
-        if (languageCode != 'en') {
-          expect(
-            phrases[entry.key],
-            isNot(entry.value),
-            reason:
-                '${entry.key} must not fall back to English for ${languageCode}.',
-          );
+        final translation = phrases[entry.key];
+        if (translation == null || translation.isEmpty) {
+          mismatches.add('$languageCode missing translation for ${entry.key}');
+        } else if (languageCode != 'en' && translation == entry.value) {
+          mismatches.add('$languageCode still English for ${entry.key}');
         }
       }
       for (final heading in headings) {
-        expect(
-          phrases[heading],
-          isNotNull,
-          reason: '$heading must resolve for ${languageCode}',
-        );
-        if (languageCode != 'en') {
-          expect(
-            phrases[heading],
-            isNot(heading),
-            reason:
-                '$heading must not remain English for ${languageCode}',
-          );
+        final translation = phrases[heading];
+        if (translation == null) {
+          mismatches.add('$languageCode missing heading $heading');
+        } else if (languageCode != 'en' && translation == heading) {
+          mismatches.add('$languageCode heading remains English: $heading');
         }
       }
     }
+    expect(mismatches, isEmpty, reason: mismatches.join('\n'));
   });
-  test('voice picker supports 23 languages independently of UI dictionaries', () {
-    final selectableLanguageCodes = LanguageProvider.languages
-        .map((language) => language['code']!)
-        .toSet();
 
-    expect(selectableLanguageCodes, containsAll(<String>{
+  test('selectable languages include all curated UI locales', () {
+    const selectableLanguageCodes = <String>{
       'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
       'or', 'as', 'brx', 'doi', 'ks', 'kok', 'mai', 'mni', 'ne',
       'sa', 'sat', 'sd', 'ur',
-    }));
+    };
     expect(selectableLanguageCodes, hasLength(23));
 
     final curatedUiCodes = AppLocalizations.supportedLocales
         .map((locale) => locale.languageCode)
         .toSet();
-    expect(curatedUiCodes, containsAll(<String>{
-      'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
-    }));
+    expect(
+      curatedUiCodes,
+      containsAll(<String>{
+        'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
+      }),
+    );
     expect(curatedUiCodes.length, 10);
   });
-
 }

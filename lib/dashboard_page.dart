@@ -27,6 +27,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api_client.dart';
 import 'app_localizations.dart';
+import 'localization.dart';
 import 'local_storage_service.dart';
 import 'google_drive_service.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -2396,7 +2397,7 @@ class _DashboardPageState extends State<DashboardPage>
                   ),
                   const SizedBox(width: 8),
                   LiveTranslatedText(
-                    AppLocalizations.of(context).translate('Online Store is Live'),
+                    'Online Store is Live',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -2447,7 +2448,7 @@ class _DashboardPageState extends State<DashboardPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: LiveTranslatedText(
-                        AppLocalizations.of(context).translate('Your shop is live at'),
+                        'Your shop is live at',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
@@ -2536,7 +2537,9 @@ class _DashboardPageState extends State<DashboardPage>
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Copy shop URL',
+                        tooltip: AppLocalizations.of(context).translate(
+                          'Copy shop URL',
+                        ),
                         onPressed: _copyOnlineStoreUrl,
                         icon: const Icon(Icons.copy_rounded, size: 19),
                         color: const Color(0xFF16A34A),
@@ -5857,26 +5860,43 @@ class _DashboardPageState extends State<DashboardPage>
   // -------- UI helpers derived from HTML layout ----------
   /// 📧 Generate and send daily summary email to shopkeeper
   Future<void> _closeDayAndSendEmail() async {
+    final locale = Localizations.localeOf(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const LiveTranslatedText('📧 Close Day & Send Summary?'),
-        content: const LiveTranslatedText(
-          'Generate daily summary and send to your email?',
+        title: Text(
+          AppLocalization.translateText(
+            '📧 Close Day & Send Summary?',
+            languageCode: locale.languageCode,
+          ),
+        ),
+        content: Text(
+          AppLocalization.translateText(
+            'Generate daily summary and send to your email?',
+            languageCode: locale.languageCode,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const LiveTranslatedText('Cancel'),
+            child: Text(
+              AppLocalization.translateText(
+                'Cancel',
+                languageCode: locale.languageCode,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6366F1),
             ),
-            child: const LiveTranslatedText(
-              'Send Summary',
-              style: TextStyle(color: Colors.white),
+            child: Text(
+              AppLocalization.translateText(
+                'Send Summary',
+                languageCode: locale.languageCode,
+              ),
+              style: const TextStyle(color: Colors.white),
             ),
           ),
         ],
@@ -5890,12 +5910,25 @@ class _DashboardPageState extends State<DashboardPage>
 
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-      final userEmail = prefs.getString('email') ?? '';
+      final userEmailValue = [
+        prefs.getString('shop_email'),
+        prefs.getString('user_email'),
+        prefs.getString('email'),
+      ].firstWhere(
+        (value) => value != null && value.trim().isNotEmpty,
+        orElse: () => '',
+      );
+      final userEmail = (userEmailValue ?? '').trim();
 
       if (userId <= 0 || userEmail.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: LiveTranslatedText('❌ User email not found'),
+          SnackBar(
+            content: Text(
+              AppLocalization.translateText(
+                '❌ User email not found',
+                languageCode: locale.languageCode,
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -15790,6 +15823,33 @@ class _DashboardPageState extends State<DashboardPage>
         'en-IN';
   }
 
+  Widget _buildDashboardDockIcon(
+    IconData icon,
+    String label,
+    Color color, {
+    double size = 22,
+    bool labelOnPrimary = false,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: size),
+        const SizedBox(height: 3),
+        LiveTranslatedText(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            color: labelOnPrimary ? Colors.white : const Color(0xFF334155),
+            fontSize: 8,
+            fontWeight: FontWeight.w600,
+            height: 1,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // convert HTML dashboard layout into Flutter widgets
@@ -15850,11 +15910,12 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                         ],
                       ),
-                      child: const Icon(
+                      child: _buildDashboardDockIcon(
                         Icons.add_shopping_cart,
-                        semanticLabel: 'Add Shopping Cart',
-                        color: Colors.white,
-                        size: 24,
+                        'New Bill',
+                        Colors.white,
+                        size: 23,
+                        labelOnPrimary: true,
                       ),
                     ),
                   ),
@@ -15880,11 +15941,11 @@ class _DashboardPageState extends State<DashboardPage>
                               ).withValues(alpha: 0.3),
                             ),
                           ),
-                          child: const Icon(
+                          child: _buildDashboardDockIcon(
                             Icons.local_shipping,
-                            semanticLabel: 'Local Shipping',
-                            color: Color(0xFFFFB300),
-                            size: 24,
+                            'Online Orders',
+                            const Color(0xFFFFB300),
+                            size: 23,
                           ),
                         ),
                         Positioned(
@@ -15926,11 +15987,10 @@ class _DashboardPageState extends State<DashboardPage>
                           color: const Color(0xFFEC4899).withValues(alpha: 0.3),
                         ),
                       ),
-                      child: const Icon(
+                      child: _buildDashboardDockIcon(
                         Icons.card_giftcard_rounded,
-                        semanticLabel: 'Card Giftcard Rounded',
-                        color: Color(0xFFEC4899),
-                        size: 22,
+                        'Gift Card',
+                        const Color(0xFFEC4899),
                       ),
                     ),
                   ),
@@ -15955,11 +16015,10 @@ class _DashboardPageState extends State<DashboardPage>
                             ).withValues(alpha: 0.3),
                           ),
                         ),
-                        child: const Icon(
+                        child: _buildDashboardDockIcon(
                           Icons.analytics_rounded,
-                          semanticLabel: 'Analytics Rounded',
-                          color: Color(0xFF7C3AED),
-                          size: 22,
+                          'Ask AI',
+                          const Color(0xFF7C3AED),
                         ),
                       ),
                     ),
@@ -15980,11 +16039,10 @@ class _DashboardPageState extends State<DashboardPage>
                           color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                         ),
                       ),
-                      child: const Icon(
+                      child: _buildDashboardDockIcon(
                         Icons.translate,
-                        semanticLabel: 'Translate',
-                        color: Color(0xFF6366F1),
-                        size: 22,
+                        'Language',
+                        const Color(0xFF6366F1),
                       ),
                     ),
                   ),
@@ -16009,11 +16067,10 @@ class _DashboardPageState extends State<DashboardPage>
                             ).withValues(alpha: 0.3),
                           ),
                         ),
-                        child: const Icon(
+                        child: _buildDashboardDockIcon(
                           Icons.lock_clock_rounded,
-                          semanticLabel: 'Lock Clock Rounded',
-                          color: Color(0xFF0D9488),
-                          size: 22,
+                          'Daily Closing',
+                          const Color(0xFF0D9488),
                         ),
                       ),
                     ),
@@ -16033,11 +16090,10 @@ class _DashboardPageState extends State<DashboardPage>
                           color: const Color(0xFF10B981).withValues(alpha: 0.3),
                         ),
                       ),
-                      child: const Icon(
+                      child: _buildDashboardDockIcon(
                         Icons.help_outline,
-                        semanticLabel: 'Help Outline',
-                        color: Color(0xFF10B981),
-                        size: 22,
+                        'Help',
+                        const Color(0xFF10B981),
                       ),
                     ),
                   ),
@@ -16059,11 +16115,10 @@ class _DashboardPageState extends State<DashboardPage>
                           ).withValues(alpha: 0.20),
                         ),
                       ),
-                      child: const Icon(
+                      child: _buildDashboardDockIcon(
                         Icons.grid_view_rounded,
-                        semanticLabel: 'More and Settings',
-                        color: Color(0xFF334155),
-                        size: 22,
+                        'More',
+                        const Color(0xFF334155),
                       ),
                     ),
                   ),
@@ -16083,11 +16138,10 @@ class _DashboardPageState extends State<DashboardPage>
                           color: const Color(0xFFEF4444).withValues(alpha: 0.3),
                         ),
                       ),
-                      child: const Icon(
+                      child: _buildDashboardDockIcon(
                         Icons.logout_rounded,
-                        semanticLabel: 'Logout Rounded',
-                        color: Color(0xFFEF4444),
-                        size: 22,
+                        'Logout',
+                        const Color(0xFFEF4444),
                       ),
                     ),
                   ),
