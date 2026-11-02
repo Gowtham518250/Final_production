@@ -90,6 +90,41 @@ void main() {
     });
   });
 
+  group('InventoryStockHelper.findDuplicateProducts', () {
+    final book = <String, dynamic>{
+      'id': 42, 'product_name': 'Classmate Notebook',
+      'sku': '8901234567890', 'unit_price': 45,
+      'current_stock': 12, 'min_stock': 2.5,
+      'unit': 'pcs', 'category': 'Stationery', 'is_active': true,
+    };
+
+    test('returns existing details for exact name and barcode matches', () {
+      final matches = InventoryStockHelper.findDuplicateProducts(
+        [book], productName: ' CLASSMATE   NOTEBOOK ', sku: '8901234567890',
+      );
+      expect(matches, hasLength(1));
+      expect(matches.single['match_types'], containsAll(['PRODUCT_NAME', 'BARCODE']));
+      expect(matches.single['product']['product_name'], 'Classmate Notebook');
+      expect(matches.single['product']['current_stock'], 12);
+      expect(matches.single['product']['min_stock'], 2.5);
+    });
+
+    test('allows editing the same product', () {
+      final matches = InventoryStockHelper.findDuplicateProducts(
+        [book], productName: 'Classmate Notebook',
+        sku: '8901234567890', excludeProductId: 42,
+      );
+      expect(matches, isEmpty);
+    });
+
+    test('barcode match works when product names differ', () {
+      final matches = InventoryStockHelper.findDuplicateProducts(
+        [book], productName: 'Another book', sku: '8901234567890',
+      );
+      expect(matches.single['match_types'], ['BARCODE']);
+    });
+  });
+
   test(
     'deduplicates API products and does not resurrect acknowledged stale cache rows',
     () {
