@@ -25,8 +25,6 @@ void main() {
       );
     });
 
-
-
     test('requires manual review when a price warning exists without new flags', () {
       expect(
         voiceBillingItemNeedsManualReview({
@@ -94,9 +92,6 @@ void main() {
       expect(warning, contains('Lux Soap 150g'));
       expect(warning, isNot(contains('product_id')));
     });
-  });
-}
-
 
     test('blocked response explains the affected product and price warning', () {
       final message = voiceBillingManualReviewMessage({
@@ -113,3 +108,5 @@ void main() {
       expect(message, contains('Spoken amount was unclear'));
       expect(message, contains('No voice items were added'));
     });
+  });
+}
