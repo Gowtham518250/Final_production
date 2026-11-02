@@ -25,6 +25,19 @@ void main() {
       );
     });
 
+
+
+    test('requires manual review when a price warning exists without new flags', () {
+      expect(
+        voiceBillingItemNeedsManualReview({
+          'needs_confirmation': false,
+          'price_missing': false,
+          'price_warning': 'Spoken price differs from catalogue price.',
+        }),
+        isTrue,
+      );
+    });
+
     test('requires manual review for incompatible unit', () {
       expect(
         voiceBillingItemNeedsManualReview({
