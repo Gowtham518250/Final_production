@@ -36,6 +36,7 @@ import 'utils/free_translator_service.dart';
 import 'api_client.dart';
 
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'voice_activity_gate.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'phonetic_normalizer.dart';
@@ -854,6 +855,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   bool _startingCloudAudioFallback = false;
   String? _cloudRecordingPath;
   Timer? _cloudRecordingLimitTimer;
+  // Level sampling so a silent/noise-only clip is never uploaded for transcription.
+  final VoiceActivityGate _voiceGate = VoiceActivityGate();
+  Timer? _levelSampleTimer;
+  bool _sampleInFlight = false;
+  DateTime? _recordingStartedAt;
   bool _isListening = false;
   bool _isProcessing = false;
   String _transcript = '';
@@ -1854,7 +1860,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         bitRate: 96000,
       );
       _cloudRecordingPath = pendingPath;
+      _startLevelSampling();
       if (!mounted) {
+        _stopLevelSampling();
         try {
           await _audioRecorder.stop();
           await File(pendingPath).delete();
@@ -1886,6 +1894,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       );
     } catch (error) {
       _cloudRecordingLimitTimer?.cancel();
+      _stopLevelSampling();
       _cloudRecordingPath = null;
       if (pendingPath != null) {
         try {
@@ -1913,6 +1922,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   Future<void> _stopAndTranscribeCloudRecording() async {
     if (!_usingCloudAudioFallback || _isProcessing) return;
     _cloudRecordingLimitTimer?.cancel();
+    _stopLevelSampling();
     _shouldRestartListening = false;
     final pendingPath = _cloudRecordingPath;
     if (mounted) {
@@ -1933,6 +1943,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       final recordingFile = File(recordingPath);
       if (await recordingFile.length() == 0) {
         throw StateError('No audio was captured. Please speak and try again.');
+      }
+      // Do not send silence/noise to the speech model: it invents text for it.
+      final startedAt = _recordingStartedAt;
+      final elapsedMs = startedAt == null
+          ? 1 << 30
+          : DateTime.now().difference(startedAt).inMilliseconds;
+      final activity = _voiceGate.evaluate(elapsedMs: elapsedMs);
+      if (kDebugMode) {
+        debugPrint(
+          '🎙️ [VoiceBilling] activity: speech=${activity.hasSpeech} reason=${activity.reason.name} '
+          'voicedMs=${activity.voicedMs} peakDb=${activity.peakDb} floorDb=${activity.noiseFloorDb}',
+        );
+      }
+      if (!activity.hasSpeech) {
+        throw StateError(activity.userMessage ?? 'No speech was detected. Please try again.');
       }
 
       final audioFile = await http.MultipartFile.fromPath(
@@ -2061,8 +2086,36 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     }
   }
 
+  void _startLevelSampling() {
+    _voiceGate.reset();
+    _recordingStartedAt = DateTime.now();
+    _sampleInFlight = false;
+    _levelSampleTimer?.cancel();
+    _levelSampleTimer = Timer.periodic(
+      Duration(milliseconds: _voiceGate.sampleIntervalMs),
+      (_) async {
+        if (_sampleInFlight) return;
+        _sampleInFlight = true;
+        try {
+          final amplitude = await _audioRecorder.getAmplitude();
+          _voiceGate.addSample(amplitude.current);
+        } catch (_) {
+          // Unreadable levels make the gate fail open; the server guard still applies.
+        } finally {
+          _sampleInFlight = false;
+        }
+      },
+    );
+  }
+
+  void _stopLevelSampling() {
+    _levelSampleTimer?.cancel();
+    _levelSampleTimer = null;
+  }
+
   Future<void> _cleanupCloudRecorder() async {
     _cloudRecordingLimitTimer?.cancel();
+    _stopLevelSampling();
     final path = _cloudRecordingPath;
     _cloudRecordingPath = null;
     try {
