@@ -2191,6 +2191,7 @@ class SyncService {
       final apiPayload = <String, dynamic>{
         'product_name': raw['product_name'] ?? raw['name'] ?? '',
         'sku': raw['sku'] ?? raw['barcode'] ?? '',
+        'client_operation_id': data['operation_id']?.toString(),
         'unit_price': raw['unit_price'] ?? raw['price'] ?? 0,
         'purchase_price': raw['purchase_price'] ?? raw['cost_price'] ?? 0,
         'mrp': raw['mrp'] ?? 0,
