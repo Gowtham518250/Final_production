@@ -593,7 +593,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
   Widget _buildHeader() {
     final l = AppLocalizations.of(context);
     return SizedBox(
-      height: 235,
+      height: 280,
       child: Stack(
         children: [
           // Branding (left)
@@ -1244,7 +1244,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final topInset = MediaQuery.of(context).padding.top;
-    const headerHeight = 235.0;
+    const headerHeight = 280.0;
     const overlap = 36.0; // how far the white card rides up into the navy area
 
     return BackendLoadingOverlay(

@@ -15,23 +15,41 @@ class LowStockAlertsService {
     int limit = 50,
   }) async {
     try {
-      final response = await ApiClient.getJson('/api/inventory/low-stock?limit=$limit');
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List items = data['low_stock_products'] ?? data['items'] ?? [];
-        
-        return items
-            .map((item) => LowStockProduct.fromJson(item))
-            .toList();
-      }
-      
-      if (kDebugMode) debugPrint('⚠️ Failed to fetch low stock: ${response.statusCode}');
-      return [];
+      final items = await fetchLowStockProductRows(limit: limit);
+      return items.map(LowStockProduct.fromJson).toList();
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Low stock fetch error: $e');
       return [];
     }
+  }
+
+  /// Fetch only low-stock rows, allowing callers to retain their cached view
+  /// when the request fails instead of treating a failure as an empty result.
+  static Future<List<Map<String, dynamic>>> fetchLowStockProductRows({
+    int limit = 50,
+  }) async {
+    final response =
+        await ApiClient.getJson('/api/inventory/low-stock?limit=$limit');
+    if (response.statusCode != 200) {
+      throw StateError(
+        'Low-stock request failed with status ${response.statusCode}.',
+      );
+    }
+
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Low-stock response must be an object.');
+    }
+
+    final items = decoded['low_stock_products'] ?? decoded['items'];
+    if (items is! List) {
+      throw const FormatException('Low-stock response is missing its item list.');
+    }
+
+    return items
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   /// Check if we should refresh low stock list

@@ -72,6 +72,8 @@ import 'payment_announcement_service.dart';
 import 'online_store_service.dart';
 import 'online_order_service.dart';
 import 'low_stock_alerts_service.dart';
+import 'cache_consistency_service.dart';
+import 'inventory_stock_helper.dart';
 import 'payment_detection_service.dart';
 import 'payment_background_service.dart';
 import 'online_payment_history_service.dart';
@@ -1657,12 +1659,6 @@ class _DashboardPageState extends State<DashboardPage>
     await runSafely('realtime connection', _connectRealtime);
     if (!mounted) return;
 
-    await runSafely(
-      'inventory and low stock refresh',
-      _refreshDashboardInventoryAndLowStock,
-    );
-    if (!mounted) return;
-
     await runSafely('online store status', _loadOnlineStoreStatus);
     if (!mounted) return;
 
@@ -1691,9 +1687,10 @@ class _DashboardPageState extends State<DashboardPage>
     // Replay retained SMS/payment events after the first screen and profile
     // work has settled; this may parse a queue on older devices.
     await runSafely('background event replay', _replayBackgroundSms);
+    if (mounted) unawaited(_refreshDashboardLowStock());
   }
 
-  Future<void> _refreshDashboardInventoryAndLowStock() async {
+  Future<void> _refreshDashboardLowStock() async {
     final hasPendingMutation = await SyncQueueManager.hasAnyPendingAction(
       const [
         'save_sale',
@@ -1706,25 +1703,70 @@ class _DashboardPageState extends State<DashboardPage>
     if (hasPendingMutation) {
       if (kDebugMode) {
         debugPrint(
-          '⏭️ Dashboard inventory refresh skipped: pending stock mutation',
+          '⏭️ Dashboard low-stock refresh skipped: pending stock mutation',
         );
       }
       return;
     }
 
-    final result = await InventorySyncService.refreshAllInventory();
-    if (!mounted) return;
-    if (result['success'] != true) {
+    try {
+      final remoteRows =
+          await LowStockAlertsService.fetchLowStockProductRows(limit: 100);
+      if (!mounted) return;
+
+      final lowStockById = <String, Map<String, dynamic>>{};
+      final lowStockWithoutId = <Map<String, dynamic>>[];
+      for (final row in remoteRows) {
+        final product = InventoryStockHelper.normalizeProduct(row);
+        final id = (product['id'] ?? product['product_id'] ?? '')
+            .toString()
+            .trim();
+        final lowStockProduct = <String, dynamic>{
+          'productName': product['product_name'] ?? 'Unknown',
+          'currentStock': InventoryStockHelper.readStock(product),
+          'productId': product['id'] ?? product['product_id'],
+          'type': 'BACKEND',
+        };
+        if (id.isEmpty) {
+          lowStockWithoutId.add(lowStockProduct);
+        } else {
+          lowStockById[id] = lowStockProduct;
+        }
+      }
+
+      final localProducts = await LocalStorageService.loadLocalProducts();
+      for (final entry in localProducts.entries) {
+        if (entry.value is! Map) continue;
+        final product = Map<String, dynamic>.from(entry.value as Map);
+        if (!CacheConsistencyService.isPending(product)) continue;
+
+        final stock = InventoryStockHelper.readStock(product);
+        final minimum =
+            double.tryParse(product['min_stock']?.toString() ?? '10') ?? 10;
+        if (stock >= minimum) continue;
+
+        final id =
+            (product['id'] ?? product['product_id'] ?? entry.key).toString();
+        lowStockById[id] = {
+          'productName': product['product_name'] ?? 'Unknown',
+          'currentStock': stock,
+          'productId': product['id'] ?? product['product_id'] ?? 0,
+          'type': 'LOCAL',
+        };
+      }
+
+      setState(() {
+        _lowStockProducts = [
+          ...lowStockById.values,
+          ...lowStockWithoutId,
+        ];
+      });
+      _recomputeDailyHealthScore();
+    } catch (e) {
       if (kDebugMode) {
-        debugPrint(
-          '⚠️ Dashboard inventory refresh failed: '
-          '${result['error'] ?? 'unknown error'}',
-        );
+        debugPrint('⚠️ Dashboard low-stock refresh failed: $e');
       }
-      return;
     }
-
-    await _checkLowStock();
   }
 
   @override

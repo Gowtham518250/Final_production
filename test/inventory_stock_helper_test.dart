@@ -63,28 +63,50 @@ void main() {
       expect(InventoryStockHelper.parseProductsResponse({'data': []}), isEmpty);
     });
 
-    test('rejects an unknown response envelope instead of showing false empty inventory', () {
-      expect(
-        () => InventoryStockHelper.parseProductsResponse({'message': 'temporarily unavailable'}),
-        throwsA(isA<FormatException>()),
-      );
+    test(
+      'rejects an unknown response envelope instead of showing false empty inventory',
+      () {
+        expect(
+          () => InventoryStockHelper.parseProductsResponse({
+            'message': 'temporarily unavailable',
+          }),
+          throwsA(isA<FormatException>()),
+        );
+      },
+    );
+  });
+
+  group('InventoryStockHelper.parseStockThresholdInput', () {
+    test('accepts integer-shaped decimals and fractional stock thresholds', () {
+      expect(InventoryStockHelper.parseStockThresholdInput('10.0'), 10.0);
+      expect(InventoryStockHelper.parseStockThresholdInput('2.5'), 2.5);
+    });
+
+    test('rejects empty, negative, non-finite, and malformed values', () {
+      expect(InventoryStockHelper.parseStockThresholdInput(''), isNull);
+      expect(InventoryStockHelper.parseStockThresholdInput('-1'), isNull);
+      expect(InventoryStockHelper.parseStockThresholdInput('NaN'), isNull);
+      expect(InventoryStockHelper.parseStockThresholdInput('abc'), isNull);
     });
   });
 
-  test('deduplicates API products and does not resurrect acknowledged stale cache rows', () {
-    final result = InventoryStockHelper.mergeApiWithLocalCache(
-      [
-        {'id': 1, 'product_name': 'Rice', 'current_stock': 10},
-        {'id': 1, 'product_name': 'Rice', 'current_stock': 12},
-      ],
-      [
-        {'id': 1, 'product_name': 'Rice', 'current_stock': 9},
-        {'id': 2, 'product_name': 'Deleted item', 'current_stock': 5},
-      ],
-    );
+  test(
+    'deduplicates API products and does not resurrect acknowledged stale cache rows',
+    () {
+      final result = InventoryStockHelper.mergeApiWithLocalCache(
+        [
+          {'id': 1, 'product_name': 'Rice', 'current_stock': 10},
+          {'id': 1, 'product_name': 'Rice', 'current_stock': 12},
+        ],
+        [
+          {'id': 1, 'product_name': 'Rice', 'current_stock': 9},
+          {'id': 2, 'product_name': 'Deleted item', 'current_stock': 5},
+        ],
+      );
 
-    expect(result, hasLength(1));
-    expect(result.single['id'], 1);
-    expect(result.single['current_stock'], 12);
-  });
+      expect(result, hasLength(1));
+      expect(result.single['id'], 1);
+      expect(result.single['current_stock'], 12);
+    },
+  );
 }

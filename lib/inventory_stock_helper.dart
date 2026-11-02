@@ -94,6 +94,14 @@ class InventoryStockHelper {
     return 0;
   }
 
+  static double? parseStockThresholdInput(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null || !parsed.isFinite || parsed < 0) return null;
+    return parsed;
+  }
+
   static void writeStock(Map<String, dynamic> product, double value) {
     product['current_stock'] = value;
     product['stock'] = value;
@@ -104,7 +112,8 @@ class InventoryStockHelper {
     final product = Map<String, dynamic>.from(raw);
 
     // Preserve the canonical backend identity for update/delete operations.
-    final canonicalId = product['id'] ??
+    final canonicalId =
+        product['id'] ??
         product['product_id'] ??
         product['backend_id'] ??
         product['server_id'];
@@ -113,11 +122,9 @@ class InventoryStockHelper {
       product['product_id'] ??= canonicalId;
     }
 
-    final name = (product['product_name'] ??
-            product['name'] ??
-            product['product'] ??
-            '')
-        .toString();
+    final name =
+        (product['product_name'] ?? product['name'] ?? product['product'] ?? '')
+            .toString();
     if (name.isNotEmpty) product['product_name'] = name;
 
     writeStock(product, readStock(product));
@@ -153,17 +160,17 @@ class InventoryStockHelper {
 
     for (final raw in localList) {
       final product = normalizeProduct(Map<String, dynamic>.from(raw));
-      final id = (product['id'] ??
-              product['product_id'] ??
-              product['sku'] ??
-              product['barcode'] ??
-              '')
-          .toString()
-          .trim();
+      final id =
+          (product['id'] ??
+                  product['product_id'] ??
+                  product['sku'] ??
+                  product['barcode'] ??
+                  '')
+              .toString()
+              .trim();
       if (id.isEmpty) continue;
 
-      if (product['is_deleted'] == true &&
-          _isPendingLocalMutation(product)) {
+      if (product['is_deleted'] == true && _isPendingLocalMutation(product)) {
         deletedIds.add(id);
         localById.remove(id);
         continue;
@@ -177,13 +184,14 @@ class InventoryStockHelper {
     final apiWithoutId = <Map<String, dynamic>>[];
     for (final raw in apiList) {
       final product = normalizeProduct(Map<String, dynamic>.from(raw));
-      final id = (product['id'] ??
-              product['product_id'] ??
-              product['sku'] ??
-              product['barcode'] ??
-              '')
-          .toString()
-          .trim();
+      final id =
+          (product['id'] ??
+                  product['product_id'] ??
+                  product['sku'] ??
+                  product['barcode'] ??
+                  '')
+              .toString()
+              .trim();
       if (id.isEmpty) {
         apiWithoutId.add(product);
         continue;
@@ -199,13 +207,14 @@ class InventoryStockHelper {
     final seen = <String>{};
 
     for (final apiProduct in [...apiById.values, ...apiWithoutId]) {
-      final id = (apiProduct['id'] ??
-              apiProduct['product_id'] ??
-              apiProduct['sku'] ??
-              apiProduct['barcode'] ??
-              '')
-          .toString()
-          .trim();
+      final id =
+          (apiProduct['id'] ??
+                  apiProduct['product_id'] ??
+                  apiProduct['sku'] ??
+                  apiProduct['barcode'] ??
+                  '')
+              .toString()
+              .trim();
 
       if (id.isNotEmpty && deletedIds.contains(id)) {
         seen.add(id);

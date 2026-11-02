@@ -38,11 +38,12 @@ class InventoryPage extends StatefulWidget {
   State<InventoryPage> createState() => _InventoryPageState();
 }
 
-class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserver {
+class _InventoryPageState extends State<InventoryPage>
+    with WidgetsBindingObserver {
   // Modern SaaS Colors - synced with visual_widgets.dart
-  static const Color _primary = AppColors.primary;        // #635BFF
-  static const Color _warning = AppColors.warning;        // #F59E0B
-  static const Color _success = AppColors.success;        // #22C55E
+  static const Color _primary = AppColors.primary; // #635BFF
+  static const Color _warning = AppColors.warning; // #F59E0B
+  static const Color _success = AppColors.success; // #22C55E
 
   bool _loading = true;
   List<dynamic> _products = [];
@@ -89,7 +90,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       if (mounted) _fetch(preferLocalCache: true);
     };
     _connectRealtime();
-    _durableEventsSubscription = SyncService.durableEventsStream.listen((events) {
+    _durableEventsSubscription = SyncService.durableEventsStream.listen((
+      events,
+    ) {
       if (!mounted) return;
       final hasInventoryChange = events.any(
         (event) => event['type']?.toString() == 'inventory.changed',
@@ -99,8 +102,7 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
   }
 
   Future<void> _connectRealtime() async {
-    final userId = _userId ??
-        await SecureTokenStorage.getUserId();
+    final userId = _userId ?? await SecureTokenStorage.getUserId();
     if (!mounted || userId == null || userId <= 0) return;
 
     await RealtimeClient.connect(
@@ -125,8 +127,7 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
           changes.add(Map<String, dynamic>.from(raw));
         }
       }
-    } else if (message['product_id'] != null &&
-        message['new_stock'] != null) {
+    } else if (message['product_id'] != null && message['new_stock'] != null) {
       changes.add({
         'product_id': message['product_id'],
         'new_stock': message['new_stock'],
@@ -177,7 +178,8 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         'current_stock': newStock,
         'quantity': newStock,
         if (change['updated_at'] != null) 'updated_at': change['updated_at'],
-        if (change['server_updated_at'] != null) 'server_updated_at': change['server_updated_at'],
+        if (change['server_updated_at'] != null)
+          'server_updated_at': change['server_updated_at'],
       };
       final reconciled = CacheConsistencyService.mergeRecord(
         copy,
@@ -185,9 +187,7 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         dataset: 'inventory',
       );
       changedIds.add(productId);
-      updatedProducts.add(
-        InventoryStockHelper.normalizeProduct(reconciled),
-      );
+      updatedProducts.add(InventoryStockHelper.normalizeProduct(reconciled));
     }
 
     final missingProduct = changes.any((change) {
@@ -202,8 +202,7 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     // Keep the local backend-product cache aligned with server-authoritative
     // stock so the next offline screen render starts from the latest value.
     try {
-      final backendProducts =
-          await LocalStorageService.loadBackendProducts();
+      final backendProducts = await LocalStorageService.loadBackendProducts();
       var cacheChanged = false;
 
       for (final change in changes) {
@@ -220,8 +219,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
             'stock': newStock,
             'current_stock': newStock,
             'quantity': newStock,
-            if (change['updated_at'] != null) 'updated_at': change['updated_at'],
-            if (change['server_updated_at'] != null) 'server_updated_at': change['server_updated_at'],
+            if (change['updated_at'] != null)
+              'updated_at': change['updated_at'],
+            if (change['server_updated_at'] != null)
+              'server_updated_at': change['server_updated_at'],
           };
           backendProducts[i] = InventoryStockHelper.normalizeProduct(
             CacheConsistencyService.mergeRecord(
@@ -237,13 +238,14 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
       if (cacheChanged) {
         await LocalStorageService.saveBackendProducts(backendProducts);
-        await CacheConsistencyService.markRemoteRefresh('inventory', recordCount: backendProducts.length);
+        await CacheConsistencyService.markRemoteRefresh(
+          'inventory',
+          recordCount: backendProducts.length,
+        );
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint(
-          '⚠️ Failed to persist realtime inventory cache: $e',
-        );
+        debugPrint('⚠️ Failed to persist realtime inventory cache: $e');
       }
     }
 
@@ -288,8 +290,15 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     _durableEventsSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     RealtimeClient.disconnect();
-    _nameC.dispose(); _barcodeC.dispose(); _priceC.dispose(); _purchasePriceC.dispose(); _mrpC.dispose();
-    _stockC.dispose(); _catC.dispose(); _minStockC.dispose(); _unitC.dispose();
+    _nameC.dispose();
+    _barcodeC.dispose();
+    _priceC.dispose();
+    _purchasePriceC.dispose();
+    _mrpC.dispose();
+    _stockC.dispose();
+    _catC.dispose();
+    _minStockC.dispose();
+    _unitC.dispose();
     _inventorySearchController.dispose();
     _imageUrlC.dispose();
     InventoryManagementService.onInventoryChanged = null;
@@ -314,25 +323,36 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     }
   }
 
-  Future<void> _fetch({bool preferLocalCache = false, bool forceRemote = false}) async {
-    setState(() { _loading = true; });
+  Future<void> _fetch({
+    bool preferLocalCache = false,
+    bool forceRemote = false,
+  }) async {
+    setState(() {
+      _loading = true;
+    });
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = await SecureTokenStorage.getToken() ?? '';
 
       // 1. Load Local Offline Products
-      final Map<String, dynamic> localMap = await LocalStorageService.loadLocalProducts();
-      final List<Map<String, dynamic>> localOfflineProducts = localMap.entries.map((e) {
-        final Map<String, dynamic> data = Map<String, dynamic>.from(e.value as Map);
-        data['id'] = e.key; // Assign dummy ID for UI keying
-        data['is_offline'] = true; // Flag for UI if needed
-        if (data['is_deleted'] == true) return null;
-        return data;
-      }).whereType<Map<String, dynamic>>().toList();
+      final Map<String, dynamic> localMap =
+          await LocalStorageService.loadLocalProducts();
+      final List<Map<String, dynamic>> localOfflineProducts = localMap.entries
+          .map((e) {
+            final Map<String, dynamic> data = Map<String, dynamic>.from(
+              e.value as Map,
+            );
+            data['id'] = e.key; // Assign dummy ID for UI keying
+            data['is_offline'] = true; // Flag for UI if needed
+            if (data['is_deleted'] == true) return null;
+            return data;
+          })
+          .whereType<Map<String, dynamic>>()
+          .toList();
 
       // 2. Load Cached Backend Products
       final cachedBackend = await LocalStorageService.loadBackendProducts();
-      
+
       // 3. Show both immediately (offline items at the top)
       if (cachedBackend.isNotEmpty || localOfflineProducts.isNotEmpty) {
         if (!mounted) return;
@@ -340,7 +360,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
           _products = [...localOfflineProducts, ...cachedBackend];
           _loading = false;
         });
-        if (kDebugMode) debugPrint('💾 Inventory UI: ${cachedBackend.length} backend, ${localOfflineProducts.length} offline products');
+        if (kDebugMode)
+          debugPrint(
+            '💾 Inventory UI: ${cachedBackend.length} backend, ${localOfflineProducts.length} offline products',
+          );
       }
 
       if (preferLocalCache) return;
@@ -378,7 +401,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
           // screen stuck showing nothing. Try a fast attempt first, then
           // fall back to one longer-timeout retry before giving up.
           http.Response? res;
-          for (final attemptTimeout in const [Duration(seconds: 10), Duration(seconds: 25)]) {
+          for (final attemptTimeout in const [
+            Duration(seconds: 10),
+            Duration(seconds: 25),
+          ]) {
             try {
               res = await ApiClient.getJson(
                 '${ApiClient.inventoryPrefix}/products?skip=0&limit=1000',
@@ -386,15 +412,19 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
               ).timeout(attemptTimeout);
               break; // got a response, stop retrying
             } catch (e) {
-              if (kDebugMode) debugPrint('⚠️ Inventory fetch attempt failed ($attemptTimeout): $e');
+              if (kDebugMode)
+                debugPrint(
+                  '⚠️ Inventory fetch attempt failed ($attemptTimeout): $e',
+                );
               // try again with the longer timeout unless this was already the last attempt
             }
           }
           if (res != null && res.statusCode == 200) {
             final decoded = json.decode(res.body);
             // The shared parser handles direct lists and supported API envelopes.
-            final apiProducts =
-                InventoryStockHelper.parseProductsResponse(decoded);
+            final apiProducts = InventoryStockHelper.parseProductsResponse(
+              decoded,
+            );
             // A valid empty response is authoritative. The merge helper retains
             // only pending local mutations rather than resurrecting deleted stock.
             final effectiveApiProducts = apiProducts;
@@ -407,7 +437,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
             if (merged.isNotEmpty || apiProducts.isEmpty) {
               await LocalStorageService.saveBackendProducts(merged);
             }
-            await CacheConsistencyService.markRemoteRefresh('inventory', recordCount: merged.length);
+            await CacheConsistencyService.markRemoteRefresh(
+              'inventory',
+              recordCount: merged.length,
+            );
 
             if (!mounted) return;
             setState(() {
@@ -423,7 +456,6 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
               );
             }
             return;
-
           } else if (res == null) {
             // Both attempts failed — this is a network problem, not an
             // empty catalog. Keep whatever cache we already loaded and
@@ -431,7 +463,8 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
             _lastFetchFailed = true;
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Backend fetch failed: $e — keeping cache');
+          if (kDebugMode)
+            debugPrint('⚠️ Backend fetch failed: $e — keeping cache');
           _lastFetchFailed = true;
         }
       }
@@ -440,7 +473,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText('Could not refresh products — showing last known list ($e)'),
+          content: LiveTranslatedText(
+            'Could not refresh products — showing last known list ($e)',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -451,18 +486,25 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       _lastFetchFailed = true;
     }
     if (!mounted) return;
-    setState(() { _loading = false; });
+    setState(() {
+      _loading = false;
+    });
   }
 
   void _updateStock(Map<String, dynamic> p, double delta) {
-    final idx = _products.indexWhere((x) => x['id'].toString() == p['id'].toString());
+    final idx = _products.indexWhere(
+      (x) => x['id'].toString() == p['id'].toString(),
+    );
     if (idx != -1) {
       final updated = Map<String, dynamic>.from(_products[idx] as Map);
       final current = InventoryStockHelper.readStock(updated);
       InventoryStockHelper.writeStock(updated, current + delta);
       _products[idx] = updated;
       setState(() {}); // Update UI first
-      _saveLocal(p['id'].toString(), updated); // Then save async (outside setState)
+      _saveLocal(
+        p['id'].toString(),
+        updated,
+      ); // Then save async (outside setState)
       // 🔧 FIX: _updateLocalProductItem (sync_service.dart) reads
       // data['id'] / data['user_id'] / data['payload'] — passing `updated`
       // directly here meant every field it read was null, so the PUT it
@@ -487,7 +529,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       data['local_updated_at'] = DateTime.now().toUtc().toIso8601String();
       local[id] = data;
       await LocalStorageService.saveLocalProducts(local);
-      await CacheConsistencyService.markLocalMutation('inventory', operationId: id);
+      await CacheConsistencyService.markLocalMutation(
+        'inventory',
+        operationId: id,
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('Error saving locally: $e');
     }
@@ -495,21 +540,35 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
   Future<void> _addProduct() async {
     final purchasePrice = double.tryParse(_purchasePriceC.text);
-    final imageUrlValue = _selectedProductImageDataUrl ??
+    final imageUrlValue =
+        _selectedProductImageDataUrl ??
         (_imageUrlC.text.trim().isEmpty ? null : _imageUrlC.text.trim());
     if (imageUrlValue != null &&
         (imageUrlValue.length > 120000 ||
-         (!imageUrlValue.startsWith('https://') &&
-          !imageUrlValue.startsWith('http://') &&
-          !imageUrlValue.startsWith('data:image/')))) {
+            (!imageUrlValue.startsWith('https://') &&
+                !imageUrlValue.startsWith('http://') &&
+                !imageUrlValue.startsWith('data:image/')))) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Use an http(s) image URL or upload a supported image.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Use an http(s) image URL or upload a supported image.',
+          ),
+        ),
       );
       return;
     }
-    if (_nameC.text.isEmpty || _priceC.text.isEmpty || purchasePrice == null || !purchasePrice.isFinite || purchasePrice <= 0) {
+    if (_nameC.text.isEmpty ||
+        _priceC.text.isEmpty ||
+        purchasePrice == null ||
+        !purchasePrice.isFinite ||
+        purchasePrice <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Product name, selling price, and purchase cost (greater than zero) are required')));
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Product name, selling price, and purchase cost (greater than zero) are required',
+          ),
+        ),
+      );
       return;
     }
 
@@ -517,8 +576,8 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         ? 0.0
         : double.tryParse(_stockC.text.trim());
     final minimumStock = _minStockC.text.trim().isEmpty
-        ? 10
-        : int.tryParse(_minStockC.text.trim());
+        ? 10.0
+        : InventoryStockHelper.parseStockThresholdInput(_minStockC.text);
 
     if (currentStock == null ||
         !currentStock.isFinite ||
@@ -539,7 +598,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     if (_userId == null || _userId! <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: LiveTranslatedText('Your shop session is not verified. Please sign in again.'),
+          content: LiveTranslatedText(
+            'Your shop session is not verified. Please sign in again.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -548,7 +609,11 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
     final productData = {
       'product_name': _nameC.text.trim(),
-      'sku': (_barcodeC.text.trim().isNotEmpty ? _barcodeC.text.trim() : _nameC.text.trim()).toLowerCase(),
+      'sku':
+          (_barcodeC.text.trim().isNotEmpty
+                  ? _barcodeC.text.trim()
+                  : _nameC.text.trim())
+              .toLowerCase(),
       'unit_price': double.tryParse(_priceC.text) ?? 0,
       'purchase_price': purchasePrice,
       'mrp': double.tryParse(_mrpC.text) ?? 0,
@@ -566,7 +631,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       final sku = productData['sku'].toString();
       final previousProduct = local[sku];
       productData['sync_status'] = 'pending';
-      productData['local_updated_at'] = DateTime.now().toUtc().toIso8601String();
+      productData['local_updated_at'] = DateTime.now()
+          .toUtc()
+          .toIso8601String();
       local[sku] = productData;
       await LocalStorageService.saveLocalProducts(local);
 
@@ -594,9 +661,18 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
       if (!mounted) return;
       Navigator.pop(context);
-      _nameC.clear(); _barcodeC.clear(); _priceC.clear(); _purchasePriceC.clear(); _mrpC.clear();
-      _stockC.clear(); _catC.clear(); _minStockC.text = '10'; _unitC.text = 'pcs';
-      _imageUrlC.clear(); _selectedProductImageBytes = null; _selectedProductImageDataUrl = null;
+      _nameC.clear();
+      _barcodeC.clear();
+      _priceC.clear();
+      _purchasePriceC.clear();
+      _mrpC.clear();
+      _stockC.clear();
+      _catC.clear();
+      _minStockC.text = '10';
+      _unitC.text = 'pcs';
+      _imageUrlC.clear();
+      _selectedProductImageBytes = null;
+      _selectedProductImageDataUrl = null;
       await _fetch();
 
       // Flush the canonical outbox immediately when online. The operation
@@ -606,7 +682,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: LiveTranslatedText('✅ Product saved on this device and queued for sync'),
+            content: LiveTranslatedText(
+              '✅ Product saved on this device and queued for sync',
+            ),
           ),
         );
       }
@@ -614,7 +692,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       if (kDebugMode) debugPrint('❌ Error adding product: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -622,8 +703,11 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
   bool _isAddingProduct = false;
 
-
-  Widget _productImagePreview(Uint8List? bytes, String? imageUrl, {double size = 82}) {
+  Widget _productImagePreview(
+    Uint8List? bytes,
+    String? imageUrl, {
+    double size = 82,
+  }) {
     final value = (imageUrl ?? '').trim();
     final cacheSize = LowMemoryPerformance.decodeCacheDimension(
       size,
@@ -635,7 +719,11 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       width: size,
       height: size,
       color: const Color(0xFFF1F5F9),
-      child: Icon(Icons.inventory_2_rounded, color: Colors.blueGrey.shade400, size: size * 0.36),
+      child: Icon(
+        Icons.inventory_2_rounded,
+        color: Colors.blueGrey.shade400,
+        size: size * 0.36,
+      ),
     );
     if (bytes != null && bytes.isNotEmpty) {
       image = Image.memory(
@@ -645,7 +733,12 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         cacheWidth: cacheSize,
         cacheHeight: cacheSize,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Icon(Icons.inventory_2_rounded, color: Colors.blueGrey.shade400, size: size * 0.36));
+        errorBuilder: (_, __, ___) => Icon(
+          Icons.inventory_2_rounded,
+          color: Colors.blueGrey.shade400,
+          size: size * 0.36,
+        ),
+      );
     } else if (value.startsWith('data:image/')) {
       final comma = value.indexOf(',');
       if (comma > 0) {
@@ -657,7 +750,12 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
             cacheWidth: cacheSize,
             cacheHeight: cacheSize,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: Colors.blueGrey.shade400, size: size * 0.36));
+            errorBuilder: (_, __, ___) => Icon(
+              Icons.broken_image_outlined,
+              color: Colors.blueGrey.shade400,
+              size: size * 0.36,
+            ),
+          );
         } catch (_) {}
       }
     } else if (value.startsWith('https://') || value.startsWith('http://')) {
@@ -668,7 +766,12 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         cacheWidth: cacheSize,
         cacheHeight: cacheSize,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: Colors.blueGrey.shade400, size: size * 0.36));
+        errorBuilder: (_, __, ___) => Icon(
+          Icons.broken_image_outlined,
+          color: Colors.blueGrey.shade400,
+          size: size * 0.36,
+        ),
+      );
     }
     return Container(
       width: size,
@@ -690,14 +793,19 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     final encodedName = Uri.encodeQueryComponent(productName.trim());
     final encodedCategory = Uri.encodeQueryComponent(category.trim());
     final response = await ApiClient.getJson(
-      '/api/inventory/product-image-suggestions?product_name=' + encodedName +
-      (encodedCategory.isEmpty ? '' : '&category=' + encodedCategory),
+      '/api/inventory/product-image-suggestions?product_name=' +
+          encodedName +
+          (encodedCategory.isEmpty ? '' : '&category=' + encodedCategory),
     ).timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) {
-      String message = 'Online image search failed (HTTP ' + response.statusCode.toString() + ').';
+      String message =
+          'Online image search failed (HTTP ' +
+          response.statusCode.toString() +
+          ').';
       try {
         final body = jsonDecode(response.body);
-        if (body is Map && body['detail'] != null) message = body['detail'].toString();
+        if (body is Map && body['detail'] != null)
+          message = body['detail'].toString();
       } catch (_) {}
       throw Exception(message);
     }
@@ -707,61 +815,114 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     return raw
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
-        .where((item) => (item['image_url']?.toString() ?? '').startsWith('https://'))
+        .where(
+          (item) =>
+              (item['image_url']?.toString() ?? '').startsWith('https://'),
+        )
         .take(8)
         .toList();
   }
 
-  Future<String?> _chooseProductImage(String productName, List<Map<String, dynamic>> images) {
+  Future<String?> _chooseProductImage(
+    String productName,
+    List<Map<String, dynamic>> images,
+  ) {
     return showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: LiveTranslatedText('Choose a matching image', style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 17)),
+        title: LiveTranslatedText(
+          'Choose a matching image',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 17),
+        ),
         content: SizedBox(
           width: 440,
           height: 420,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            LiveTranslatedText('Suggestions for ' + productName + '. Check the package/brand before saving.',
-              style: GoogleFonts.poppins(fontSize: 11, color: Colors.blueGrey.shade600)),
-            const SizedBox(height: 10),
-            Expanded(
-              child: ListView.separated(
-                itemCount: images.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final item = images[index];
-                  final url = item['image_url']?.toString() ?? '';
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => Navigator.of(dialogContext).pop(url),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(children: [
-                        _productImagePreview(null, url, size: 66),
-                        const SizedBox(width: 10),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          LiveTranslatedText(item['title']?.toString() ?? productName, maxLines: 2, overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 3),
-                          LiveTranslatedText(item['source']?.toString() ?? 'Online image result', maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(fontSize: 9, color: Colors.blueGrey.shade500)),
-                          const SizedBox(height: 3),
-                          LiveTranslatedText('Use this image', style: GoogleFonts.poppins(fontSize: 9, color: _primary, fontWeight: FontWeight.w800)),
-                        ])),
-                        const Icon(Icons.chevron_right_rounded),
-                      ]),
-                    ),
-                  );
-                },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LiveTranslatedText(
+                'Suggestions for ' +
+                    productName +
+                    '. Check the package/brand before saving.',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.blueGrey.shade600,
+                ),
               ),
-            ),
-          ]),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: images.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = images[index];
+                    final url = item['image_url']?.toString() ?? '';
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => Navigator.of(dialogContext).pop(url),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            _productImagePreview(null, url, size: 66),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  LiveTranslatedText(
+                                    item['title']?.toString() ?? productName,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  LiveTranslatedText(
+                                    item['source']?.toString() ??
+                                        'Online image result',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 9,
+                                      color: Colors.blueGrey.shade500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  LiveTranslatedText(
+                                    'Use this image',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 9,
+                                      color: _primary,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const LiveTranslatedText('Cancel'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const LiveTranslatedText('Cancel'),
+          ),
+        ],
       ),
     );
   }
@@ -784,20 +945,29 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       if (bytes.length > 80 * 1024) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: LiveTranslatedText('Choose a smaller image. Please crop it or use a lower-resolution photo (80 KB max).')),
+            const SnackBar(
+              content: LiveTranslatedText(
+                'Choose a smaller image. Please crop it or use a lower-resolution photo (80 KB max).',
+              ),
+            ),
           );
         }
         return;
       }
       updateDialog(() {
         _selectedProductImageBytes = bytes;
-        _selectedProductImageDataUrl = 'data:image/jpeg;base64,' + base64Encode(bytes);
+        _selectedProductImageDataUrl =
+            'data:image/jpeg;base64,' + base64Encode(bytes);
         _imageUrlC.clear();
       });
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Could not select image: ' + error.toString())),
+          SnackBar(
+            content: LiveTranslatedText(
+              'Could not select image: ' + error.toString(),
+            ),
+          ),
         );
       }
     }
@@ -806,16 +976,25 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
   Future<void> _lookupProductImageForAdd(StateSetter updateDialog) async {
     final name = _nameC.text.trim();
     if (name.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Enter the product name first.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: LiveTranslatedText('Enter the product name first.'),
+        ),
+      );
       return;
     }
     updateDialog(() => _imageLookupLoading = true);
     try {
       final suggestions = await _findProductImageSuggestions(name, _catC.text);
       if (suggestions.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('No online images found. You can upload a photo or paste an image URL.')),
-        );
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: LiveTranslatedText(
+                'No online images found. You can upload a photo or paste an image URL.',
+              ),
+            ),
+          );
         return;
       }
       if (!mounted) return;
@@ -828,16 +1007,25 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         });
       }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText(error.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: LiveTranslatedText(
+              error.toString().replaceFirst('Exception: ', ''),
+            ),
+          ),
+        );
     } finally {
-      try { updateDialog(() => _imageLookupLoading = false); } catch (_) {}
+      try {
+        updateDialog(() => _imageLookupLoading = false);
+      } catch (_) {}
     }
   }
 
   Future<void> _showProductImageDialog(Map<String, dynamic> product) async {
-    final urlController = TextEditingController(text: product['image_url']?.toString() ?? '');
+    final urlController = TextEditingController(
+      text: product['image_url']?.toString() ?? '',
+    );
     Uint8List? selectedBytes;
     String? selectedDataUrl;
     bool lookupLoading = false;
@@ -845,7 +1033,8 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     final productName = product['product_name']?.toString() ?? 'Product';
     final category = product['category']?.toString() ?? '';
     final rawId = int.tryParse(product['id']?.toString() ?? '');
-    final sku = product['sku']?.toString() ?? product['barcode']?.toString() ?? '';
+    final sku =
+        product['sku']?.toString() ?? product['barcode']?.toString() ?? '';
 
     try {
       await showModalBottomSheet<void>(
@@ -854,229 +1043,483 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         backgroundColor: Colors.transparent,
         builder: (sheetContext) => StatefulBuilder(
           builder: (sheetContext, ss) => Container(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+            ),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(22),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Icon(Icons.photo_camera_back_rounded, color: _primary),
-                  const SizedBox(width: 9),
-                  Expanded(child: LiveTranslatedText('Product image · ' + productName, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800))),
-                  IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close)),
-                ]),
-                const SizedBox(height: 12),
-                Center(child: _productImagePreview(selectedBytes, urlController.text, size: 130)),
-                const SizedBox(height: 12),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  OutlinedButton.icon(
-                    onPressed: saving ? null : () async {
-                      try {
-                        final picked = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 28, maxWidth: 320, maxHeight: 320);
-                        if (picked == null) return;
-                        final bytes = await picked.readAsBytes();
-                        if (bytes.isEmpty || bytes.length > 80 * 1024) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Choose a smaller image (80 KB max).')));
-                          return;
-                        }
-                        ss(() {
-                          selectedBytes = bytes;
-                          selectedDataUrl = 'data:image/jpeg;base64,' + base64Encode(bytes);
-                          urlController.clear();
-                        });
-                      } catch (error) {
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText('Image selection failed: ' + error.toString())));
-                      }
-                    },
-                    icon: const Icon(Icons.photo_camera_rounded),
-                    label: const LiveTranslatedText('Take photo'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.photo_camera_back_rounded,
+                        color: _primary,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: LiveTranslatedText(
+                          'Product image · ' + productName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
                   ),
-                  OutlinedButton.icon(
-                    onPressed: saving ? null : () async {
-                      try {
-                        final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 28, maxWidth: 320, maxHeight: 320);
-                        if (picked == null) return;
-                        final bytes = await picked.readAsBytes();
-                        if (bytes.isEmpty || bytes.length > 80 * 1024) {
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Choose a smaller image (80 KB max).')));
-                          return;
-                        }
-                        ss(() {
-                          selectedBytes = bytes;
-                          selectedDataUrl = 'data:image/jpeg;base64,' + base64Encode(bytes);
-                          urlController.clear();
-                        });
-                      } catch (error) {
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText('Image selection failed: ' + error.toString())));
-                      }
-                    },
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const LiveTranslatedText('Choose photo'),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: _productImagePreview(
+                      selectedBytes,
+                      urlController.text,
+                      size: 130,
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: saving || lookupLoading ? null : () async {
-                      ss(() => lookupLoading = true);
-                      try {
-                        final suggestions = await _findProductImageSuggestions(productName, category);
-                        if (!mounted) return;
-                        if (suggestions.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('No matching images found.')));
-                        } else {
-                          final selected = await _chooseProductImage(productName, suggestions);
-                          if (selected != null) ss(() {
-                            urlController.text = selected;
-                            selectedBytes = null;
-                            selectedDataUrl = null;
-                          });
-                        }
-                      } catch (error) {
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText(error.toString().replaceFirst('Exception: ', ''))));
-                      } finally {
-                        try { ss(() => lookupLoading = false); } catch (_) {}
-                      }
-                    },
-                    icon: lookupLoading ? const SizedBox(width: 14,height: 14,child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.travel_explore_rounded),
-                    label: const LiveTranslatedText('Find online image'),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                try {
+                                  final picked = await ImagePicker().pickImage(
+                                    source: ImageSource.camera,
+                                    imageQuality: 28,
+                                    maxWidth: 320,
+                                    maxHeight: 320,
+                                  );
+                                  if (picked == null) return;
+                                  final bytes = await picked.readAsBytes();
+                                  if (bytes.isEmpty ||
+                                      bytes.length > 80 * 1024) {
+                                    if (mounted)
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: LiveTranslatedText(
+                                            'Choose a smaller image (80 KB max).',
+                                          ),
+                                        ),
+                                      );
+                                    return;
+                                  }
+                                  ss(() {
+                                    selectedBytes = bytes;
+                                    selectedDataUrl =
+                                        'data:image/jpeg;base64,' +
+                                        base64Encode(bytes);
+                                    urlController.clear();
+                                  });
+                                } catch (error) {
+                                  if (mounted)
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: LiveTranslatedText(
+                                          'Image selection failed: ' +
+                                              error.toString(),
+                                        ),
+                                      ),
+                                    );
+                                }
+                              },
+                        icon: const Icon(Icons.photo_camera_rounded),
+                        label: const LiveTranslatedText('Take photo'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                try {
+                                  final picked = await ImagePicker().pickImage(
+                                    source: ImageSource.gallery,
+                                    imageQuality: 28,
+                                    maxWidth: 320,
+                                    maxHeight: 320,
+                                  );
+                                  if (picked == null) return;
+                                  final bytes = await picked.readAsBytes();
+                                  if (bytes.isEmpty ||
+                                      bytes.length > 80 * 1024) {
+                                    if (mounted)
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: LiveTranslatedText(
+                                            'Choose a smaller image (80 KB max).',
+                                          ),
+                                        ),
+                                      );
+                                    return;
+                                  }
+                                  ss(() {
+                                    selectedBytes = bytes;
+                                    selectedDataUrl =
+                                        'data:image/jpeg;base64,' +
+                                        base64Encode(bytes);
+                                    urlController.clear();
+                                  });
+                                } catch (error) {
+                                  if (mounted)
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: LiveTranslatedText(
+                                          'Image selection failed: ' +
+                                              error.toString(),
+                                        ),
+                                      ),
+                                    );
+                                }
+                              },
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const LiveTranslatedText('Choose photo'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: saving || lookupLoading
+                            ? null
+                            : () async {
+                                ss(() => lookupLoading = true);
+                                try {
+                                  final suggestions =
+                                      await _findProductImageSuggestions(
+                                        productName,
+                                        category,
+                                      );
+                                  if (!mounted) return;
+                                  if (suggestions.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: LiveTranslatedText(
+                                          'No matching images found.',
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    final selected = await _chooseProductImage(
+                                      productName,
+                                      suggestions,
+                                    );
+                                    if (selected != null)
+                                      ss(() {
+                                        urlController.text = selected;
+                                        selectedBytes = null;
+                                        selectedDataUrl = null;
+                                      });
+                                  }
+                                } catch (error) {
+                                  if (mounted)
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: LiveTranslatedText(
+                                          error.toString().replaceFirst(
+                                            'Exception: ',
+                                            '',
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                } finally {
+                                  try {
+                                    ss(() => lookupLoading = false);
+                                  } catch (_) {}
+                                }
+                              },
+                        icon: lookupLoading
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.travel_explore_rounded),
+                        label: const LiveTranslatedText('Find online image'),
+                      ),
+                    ],
                   ),
-                ]),
-                const SizedBox(height: 18),
-                SizedBox(width: double.infinity, child: FilledButton.icon(
-                  onPressed: saving ? null : () async {
-                    final imageUrl = selectedDataUrl ?? (urlController.text.trim().isEmpty ? null : urlController.text.trim());
-                    if (imageUrl != null && !imageUrl.startsWith('https://') && !imageUrl.startsWith('http://') && !imageUrl.startsWith('data:image/')) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Use an http(s) image URL or upload a photo.')));
-                      return;
-                    }
-                    ss(() => saving = true);
-                    try {
-                      final updated = Map<String, dynamic>.from(product);
-                      updated['image_url'] = imageUrl;
-                      final timestamp = DateTime.now().toUtc().toIso8601String();
-                      updated['local_updated_at'] = timestamp;
-                      updated['sync_status'] = 'pending';
-                      final backendProducts = await LocalStorageService.loadBackendProducts();
-                      // API/cache rows can identify the same product through id,
-                      // product_id, backend_id or server_id. Resolve through the
-                      // canonical helper instead of assuming product['id'] exists.
-                      final backendProductId = _resolveBackendProductId(
-                        product,
-                        cachedProducts: backendProducts,
-                      ) ?? rawId;
-                      final backendIndex = backendProductId == null
-                          ? -1
-                          : backendProducts.indexWhere((item) =>
-                              _resolveBackendProductId(item) == backendProductId ||
-                              (sku.isNotEmpty &&
-                                  (item['sku'] ?? item['barcode'])?.toString() == sku));
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              final imageUrl =
+                                  selectedDataUrl ??
+                                  (urlController.text.trim().isEmpty
+                                      ? null
+                                      : urlController.text.trim());
+                              if (imageUrl != null &&
+                                  !imageUrl.startsWith('https://') &&
+                                  !imageUrl.startsWith('http://') &&
+                                  !imageUrl.startsWith('data:image/')) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: LiveTranslatedText(
+                                      'Use an http(s) image URL or upload a photo.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              ss(() => saving = true);
+                              try {
+                                final updated = Map<String, dynamic>.from(
+                                  product,
+                                );
+                                updated['image_url'] = imageUrl;
+                                final timestamp = DateTime.now()
+                                    .toUtc()
+                                    .toIso8601String();
+                                updated['local_updated_at'] = timestamp;
+                                updated['sync_status'] = 'pending';
+                                final backendProducts =
+                                    await LocalStorageService.loadBackendProducts();
+                                // API/cache rows can identify the same product through id,
+                                // product_id, backend_id or server_id. Resolve through the
+                                // canonical helper instead of assuming product['id'] exists.
+                                final backendProductId =
+                                    _resolveBackendProductId(
+                                      product,
+                                      cachedProducts: backendProducts,
+                                    ) ??
+                                    rawId;
+                                final backendIndex = backendProductId == null
+                                    ? -1
+                                    : backendProducts.indexWhere(
+                                        (item) =>
+                                            _resolveBackendProductId(item) ==
+                                                backendProductId ||
+                                            (sku.isNotEmpty &&
+                                                (item['sku'] ?? item['barcode'])
+                                                        ?.toString() ==
+                                                    sku),
+                                      );
 
-                      if (backendIndex >= 0) {
-                        final cachedProduct = Map<String, dynamic>.from(backendProducts[backendIndex]);
-                        cachedProduct['image_url'] = imageUrl;
-                        cachedProduct['local_updated_at'] = timestamp;
-                        cachedProduct['sync_status'] = 'pending';
-                        backendProducts[backendIndex] = cachedProduct;
-                        await LocalStorageService.saveBackendProducts(backendProducts);
-                      } else if (backendProductId != null) {
-                        // The API product may be visible in the current list but
-                        // not yet persisted in the cache. Add the pending row so
-                        // the next remote refresh cannot replace its image with
-                        // an older/null image_url before the update is acked.
-                        final cachedProduct = InventoryStockHelper.normalizeProduct(product);
-                        cachedProduct['id'] = backendProductId;
-                        cachedProduct['product_id'] ??= backendProductId;
-                        cachedProduct['image_url'] = imageUrl;
-                        cachedProduct['local_updated_at'] = timestamp;
-                        cachedProduct['sync_status'] = 'pending';
-                        backendProducts.add(cachedProduct);
-                        await LocalStorageService.saveBackendProducts(backendProducts);
-                      }
+                                if (backendIndex >= 0) {
+                                  final cachedProduct =
+                                      Map<String, dynamic>.from(
+                                        backendProducts[backendIndex],
+                                      );
+                                  cachedProduct['image_url'] = imageUrl;
+                                  cachedProduct['local_updated_at'] = timestamp;
+                                  cachedProduct['sync_status'] = 'pending';
+                                  backendProducts[backendIndex] = cachedProduct;
+                                  await LocalStorageService.saveBackendProducts(
+                                    backendProducts,
+                                  );
+                                } else if (backendProductId != null) {
+                                  // The API product may be visible in the current list but
+                                  // not yet persisted in the cache. Add the pending row so
+                                  // the next remote refresh cannot replace its image with
+                                  // an older/null image_url before the update is acked.
+                                  final cachedProduct =
+                                      InventoryStockHelper.normalizeProduct(
+                                        product,
+                                      );
+                                  cachedProduct['id'] = backendProductId;
+                                  cachedProduct['product_id'] ??=
+                                      backendProductId;
+                                  cachedProduct['image_url'] = imageUrl;
+                                  cachedProduct['local_updated_at'] = timestamp;
+                                  cachedProduct['sync_status'] = 'pending';
+                                  backendProducts.add(cachedProduct);
+                                  await LocalStorageService.saveBackendProducts(
+                                    backendProducts,
+                                  );
+                                }
 
-                      final local = await LocalStorageService.loadLocalProducts();
-                      final productIds = <String>{
-                        rawId?.toString() ?? '',
-                        backendProductId?.toString() ?? '',
-                        product['product_id']?.toString() ?? '',
-                        product['backend_id']?.toString() ?? '',
-                        product['server_id']?.toString() ?? '',
-                      }..removeWhere((value) => value.isEmpty || value == 'null' || value == '0');
-                      final normalizedName = productName.trim().toLowerCase();
-                      final sameNameLocalCount = normalizedName.isEmpty ? 0 : local.values
-                          .whereType<Map>()
-                          .where((value) =>
-                              (value['product_name'] ?? value['name'] ?? '').toString().trim().toLowerCase() == normalizedName)
-                          .length;
-                      final localKey = local.keys.firstWhere((key) {
-                        if (sku.isNotEmpty && key.toString() == sku) return true;
-                        final raw = local[key];
-                        if (raw is! Map) return false;
-                        final row = Map<String, dynamic>.from(raw);
-                        final localSku = (row['sku'] ?? row['barcode'] ?? '').toString();
-                        if (sku.isNotEmpty && localSku == sku) return true;
-                        final localIds = <String>{
-                          row['id']?.toString() ?? '',
-                          row['product_id']?.toString() ?? '',
-                          row['backend_id']?.toString() ?? '',
-                          row['server_id']?.toString() ?? '',
-                        };
-                        if (productIds.any(localIds.contains)) return true;
-                        return sku.isEmpty &&
-                            sameNameLocalCount == 1 &&
-                            normalizedName.isNotEmpty &&
-                            (row['product_name'] ?? row['name'] ?? '').toString().trim().toLowerCase() == normalizedName;
-                      }, orElse: () => '');
+                                final local =
+                                    await LocalStorageService.loadLocalProducts();
+                                final productIds =
+                                    <String>{
+                                      rawId?.toString() ?? '',
+                                      backendProductId?.toString() ?? '',
+                                      product['product_id']?.toString() ?? '',
+                                      product['backend_id']?.toString() ?? '',
+                                      product['server_id']?.toString() ?? '',
+                                    }..removeWhere(
+                                      (value) =>
+                                          value.isEmpty ||
+                                          value == 'null' ||
+                                          value == '0',
+                                    );
+                                final normalizedName = productName
+                                    .trim()
+                                    .toLowerCase();
+                                final sameNameLocalCount =
+                                    normalizedName.isEmpty
+                                    ? 0
+                                    : local.values
+                                          .whereType<Map>()
+                                          .where(
+                                            (value) =>
+                                                (value['product_name'] ??
+                                                        value['name'] ??
+                                                        '')
+                                                    .toString()
+                                                    .trim()
+                                                    .toLowerCase() ==
+                                                normalizedName,
+                                          )
+                                          .length;
+                                final localKey = local.keys.firstWhere((key) {
+                                  if (sku.isNotEmpty && key.toString() == sku)
+                                    return true;
+                                  final raw = local[key];
+                                  if (raw is! Map) return false;
+                                  final row = Map<String, dynamic>.from(raw);
+                                  final localSku =
+                                      (row['sku'] ?? row['barcode'] ?? '')
+                                          .toString();
+                                  if (sku.isNotEmpty && localSku == sku)
+                                    return true;
+                                  final localIds = <String>{
+                                    row['id']?.toString() ?? '',
+                                    row['product_id']?.toString() ?? '',
+                                    row['backend_id']?.toString() ?? '',
+                                    row['server_id']?.toString() ?? '',
+                                  };
+                                  if (productIds.any(localIds.contains))
+                                    return true;
+                                  return sku.isEmpty &&
+                                      sameNameLocalCount == 1 &&
+                                      normalizedName.isNotEmpty &&
+                                      (row['product_name'] ?? row['name'] ?? '')
+                                              .toString()
+                                              .trim()
+                                              .toLowerCase() ==
+                                          normalizedName;
+                                }, orElse: () => '');
 
-                      if (localKey.isNotEmpty && local[localKey] is Map) {
-                        final localRecord = Map<String, dynamic>.from(local[localKey] as Map);
-                        localRecord['image_url'] = imageUrl;
-                        localRecord['local_updated_at'] = timestamp;
-                        localRecord['sync_status'] = 'pending';
-                        local[localKey] = localRecord;
-                        await LocalStorageService.saveLocalProducts(local);
-                      }
+                                if (localKey.isNotEmpty &&
+                                    local[localKey] is Map) {
+                                  final localRecord = Map<String, dynamic>.from(
+                                    local[localKey] as Map,
+                                  );
+                                  localRecord['image_url'] = imageUrl;
+                                  localRecord['local_updated_at'] = timestamp;
+                                  localRecord['sync_status'] = 'pending';
+                                  local[localKey] = localRecord;
+                                  await LocalStorageService.saveLocalProducts(
+                                    local,
+                                  );
+                                }
 
-                      if (backendProductId != null && backendProductId > 0 && _userId != null) {
-                        final operationId = 'PRODUCT_IMAGE_UPDATE_' + backendProductId.toString() + '_' + DateTime.now().microsecondsSinceEpoch.toString();
-                        await CacheConsistencyService.markLocalMutation('inventory', operationId: operationId);
-                        await SyncQueueManager.enqueue('update_local_product', {
-                          'operation_id': operationId,
-                          'id': backendProductId,
-                          'user_id': _userId,
-                          'payload': {'image_url': imageUrl, 'local_updated_at': timestamp},
-                        });
-                        unawaited(SyncService.processQueueSafe());
-                      } else if (localKey.isEmpty) {
-                        throw StateError('Could not match this product to a saved inventory record. Refresh Inventory and try again.');
-                      }
-                      if (mounted) {
-                        setState(() {
-                          updated['id'] ??= backendProductId;
-                          final index = _products.indexWhere((item) {
-                            final itemId = _resolveBackendProductId(item, cachedProducts: backendProducts);
-                            if (backendProductId != null && itemId == backendProductId) return true;
-                            if (sku.isNotEmpty && (item['sku'] ?? item['barcode'])?.toString() == sku) return true;
-                            return sku.isEmpty &&
-                                sameNameLocalCount == 1 &&
-                                (item['product_name'] ?? item['name'] ?? '').toString().trim().toLowerCase() == normalizedName;
-                          });
-                          if (index >= 0) _products[index] = updated;
-                        });
-                        Navigator.pop(sheetContext);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Product image saved locally and queued to sync.')));
-                      }
-                    } catch (error) {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText('Could not save image: ' + error.toString())));
-                    } finally {
-                      try { ss(() => saving = false); } catch (_) {}
-                    }
-                  },
-                  icon: saving ? const SizedBox(width: 15,height: 15,child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_rounded),
-                  label: LiveTranslatedText(saving ? 'Saving…' : 'Save product image'),
-                )),
-              ]),
+                                if (backendProductId != null &&
+                                    backendProductId > 0 &&
+                                    _userId != null) {
+                                  final operationId =
+                                      'PRODUCT_IMAGE_UPDATE_' +
+                                      backendProductId.toString() +
+                                      '_' +
+                                      DateTime.now().microsecondsSinceEpoch
+                                          .toString();
+                                  await CacheConsistencyService.markLocalMutation(
+                                    'inventory',
+                                    operationId: operationId,
+                                  );
+                                  await SyncQueueManager.enqueue(
+                                    'update_local_product',
+                                    {
+                                      'operation_id': operationId,
+                                      'id': backendProductId,
+                                      'user_id': _userId,
+                                      'payload': {
+                                        'image_url': imageUrl,
+                                        'local_updated_at': timestamp,
+                                      },
+                                    },
+                                  );
+                                  unawaited(SyncService.processQueueSafe());
+                                } else if (localKey.isEmpty) {
+                                  throw StateError(
+                                    'Could not match this product to a saved inventory record. Refresh Inventory and try again.',
+                                  );
+                                }
+                                if (mounted) {
+                                  setState(() {
+                                    updated['id'] ??= backendProductId;
+                                    final index = _products.indexWhere((item) {
+                                      final itemId = _resolveBackendProductId(
+                                        item,
+                                        cachedProducts: backendProducts,
+                                      );
+                                      if (backendProductId != null &&
+                                          itemId == backendProductId)
+                                        return true;
+                                      if (sku.isNotEmpty &&
+                                          (item['sku'] ?? item['barcode'])
+                                                  ?.toString() ==
+                                              sku)
+                                        return true;
+                                      return sku.isEmpty &&
+                                          sameNameLocalCount == 1 &&
+                                          (item['product_name'] ??
+                                                      item['name'] ??
+                                                      '')
+                                                  .toString()
+                                                  .trim()
+                                                  .toLowerCase() ==
+                                              normalizedName;
+                                    });
+                                    if (index >= 0) _products[index] = updated;
+                                  });
+                                  Navigator.pop(sheetContext);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: LiveTranslatedText(
+                                        'Product image saved locally and queued to sync.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } catch (error) {
+                                if (mounted)
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: LiveTranslatedText(
+                                        'Could not save image: ' +
+                                            error.toString(),
+                                      ),
+                                    ),
+                                  );
+                              } finally {
+                                try {
+                                  ss(() => saving = false);
+                                } catch (_) {}
+                              }
+                            },
+                      icon: saving
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_rounded),
+                      label: LiveTranslatedText(
+                        saving ? 'Saving…' : 'Save product image',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1096,293 +1539,491 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(builder: (_, ss) {
-        return Container(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 4, height: 28, color: _primary,
-                    margin: const EdgeInsets.only(right: 12)),
-                LiveTranslatedText('Add New Product',
-                    style: GoogleFonts.poppins(
-                        fontSize: 18, fontWeight: FontWeight.w700)),
-                const Spacer(),
-                IconButton(icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context)),
-              ]),
-              const SizedBox(height: 16),
-              
-              // VOICE ADD + PRODUCT NAME
-              Row(
+      builder: (_) => StatefulBuilder(
+        builder: (_, ss) {
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _field(_nameC, 'Product Name *', Icons.inventory_2)),
-                  const SizedBox(width: 8),
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: InkWell(
-                      onTap: () async {
-                        if (!_isListening) {
-                          bool available = await _speech.initialize();
-                          if (available) {
-                            ss(() => _isListening = true);
-                            _speech.listen(
-                              onResult: (val) => ss(() => _nameC.text = val.recognizedWords),
-                            );
-                          }
-                        } else {
-                          ss(() => _isListening = false);
-                          _speech.stop();
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _isListening ? Colors.red.withValues(alpha: 0.1) : _primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _isListening ? Colors.red.withValues(alpha: 0.3) : _primary.withValues(alpha: 0.3)),
-                        ),
-                        child: Icon(
-                          _isListening ? Icons.mic : Icons.mic_none, 
-                          color: _isListening ? Colors.red : _primary
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 28,
+                        color: _primary,
+                        margin: const EdgeInsets.only(right: 12),
+                      ),
+                      LiveTranslatedText(
+                        'Add New Product',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              
-              // BARCODE FIELD WITH SCANNER
-              Row(
-                children: [
-                  Expanded(child: _field(_barcodeC, 'Barcode (Optional)', Icons.qr_code)),
-                  const SizedBox(width: 8),
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: InkWell(
-                      onTap: () async {
-                        final code = await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const QrScannerPage()),
-                        );
-                        if (code != null && mounted) {
-                          ss(() {
-                            _barcodeC.text = code;
-                          });
-                          
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: LiveTranslatedText('⏳ Searching Global CDN...'), duration: Duration(milliseconds: 700)),
-                          );
+                  const SizedBox(height: 16),
 
-                          final prefs = await SharedPreferences.getInstance();
-                          final stateCode = prefs.getString('shop_state') ?? 'MH';
-                          
-                          final magicProduct = await FmcgBarcodeService.fetchProductFromCdn(
-                            code,
-                            stateCode,
-                          );
-
-                          if (magicProduct != null && mounted) {
-                            ss(() {
-                              _nameC.text = magicProduct.name;
-                              if ((magicProduct.category ?? '').trim().isNotEmpty) {
-                                _catC.text = magicProduct.category!.split('>').first.trim();
+                  // VOICE ADD + PRODUCT NAME
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _nameC,
+                          'Product Name *',
+                          Icons.inventory_2,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          onTap: () async {
+                            if (!_isListening) {
+                              bool available = await _speech.initialize();
+                              if (available) {
+                                ss(() => _isListening = true);
+                                _speech.listen(
+                                  onResult: (val) => ss(
+                                    () => _nameC.text = val.recognizedWords,
+                                  ),
+                                );
                               }
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: LiveTranslatedText(
-                                  '✅ Product found: ' +
-                                      magicProduct.name +
-                                      '. Verify the selling price and MRP.',
-                                ),
-                                backgroundColor: _success,
+                            } else {
+                              ss(() => _isListening = false);
+                              _speech.stop();
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _isListening
+                                  ? Colors.red.withValues(alpha: 0.1)
+                                  : _primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _isListening
+                                    ? Colors.red.withValues(alpha: 0.3)
+                                    : _primary.withValues(alpha: 0.3),
                               ),
-                            );
-                          } else if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: LiveTranslatedText(
-                                  'Barcode ' +
-                                      code +
-                                      ' was not matched to a real catalog item. '
-                                      'Enter the product name manually.',
-                                ),
-                                backgroundColor: _warning,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _primary.withValues(alpha: 0.3)),
-                        ),
-                        child: const Icon(Icons.qr_code_scanner_rounded, color: _primary),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              _field(_purchasePriceC, 'Purchase Cost Price (₹) *', Icons.price_check,
-                  type: TextInputType.number),
-              _field(_priceC, 'Selling Price (₹) *', Icons.currency_rupee,
-                  type: TextInputType.number),
-              _field(_mrpC, 'MRP - Declared (₹) [GST Compliance]', Icons.verified_user,
-                  type: TextInputType.number),
-              _field(_stockC, 'Current Stock', Icons.numbers,
-                  type: const TextInputType.numberWithOptions(decimal: true)),
-              _field(_minStockC, 'Min Stock Alert', Icons.warning_amber,
-                  type: TextInputType.number),
-              _field(_catC, 'Category', Icons.category),
-              Container(
-                margin: const EdgeInsets.only(top: 2, bottom: 14),
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    const Icon(Icons.add_photo_alternate_rounded, color: _primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      LiveTranslatedText('Product image', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700)),
-                      LiveTranslatedText('Optional · take a photo, choose one from your device, or find a matching online image', style: GoogleFonts.poppins(fontSize: 10, color: Colors.blueGrey.shade500)),
-                    ])),
-                  ]),
-                  const SizedBox(height: 11),
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    _productImagePreview(_selectedProductImageBytes, _imageUrlC.text, size: 86),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Wrap(spacing: 7, runSpacing: 7, children: [
-                        OutlinedButton.icon(
-                          onPressed: () => _pickProductImage(
-                            ss,
-                            source: ImageSource.camera,
-                          ),
-                          icon: const Icon(Icons.photo_camera_rounded, size: 16),
-                          label: const LiveTranslatedText('Take photo'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => _pickProductImage(ss),
-                          icon: const Icon(Icons.photo_library_outlined, size: 16),
-                          label: const LiveTranslatedText('Choose photo'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => unawaited(
-                            GuidedVoiceService.instance.speakStep(
-                              'inventoryPhoto',
-                              context.read<LanguageProvider>().locale.languageCode,
+                            ),
+                            child: Icon(
+                              _isListening ? Icons.mic : Icons.mic_none,
+                              color: _isListening ? Colors.red : _primary,
                             ),
                           ),
-                          icon: const Icon(Icons.volume_up_rounded, size: 16),
-                          label: const LiveTranslatedText('Hear photo steps'),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: _imageLookupLoading ? null : () => _lookupProductImageForAdd(ss),
-                          icon: _imageLookupLoading
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.travel_explore_rounded, size: 16),
-                          label: const LiveTranslatedText('Find online'),
-                        ),
-                      ]),
-                      const SizedBox(height: 5),
-                      LiveTranslatedText('Confirm the brand/package before using an online suggestion.', style: GoogleFonts.poppins(fontSize: 9, color: Colors.blueGrey.shade500, height: 1.4)),
-                    ])),
-                  ]),
-                ]),
-              ),
-              DropdownButtonFormField<String>(
-                value: _unitC.text.isEmpty ? 'pcs' : _unitC.text,
-                decoration: InputDecoration(
-                  label: LiveTranslatedText('Unit of Measure'),
-                  prefixIcon: Icon(Icons.scale_rounded, color: _primary, size: 20),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _primary, width: 2)),
-                  filled: true, fillColor: Colors.grey.shade50,
-                ),
-                items: ['pcs', 'kg', 'g', 'litre', 'ml', 'dozen', 'box', 'pack']
-                    .map((u) => DropdownMenuItem(value: u, child: LiveTranslatedText(u)))
-                    .toList(),
-                onChanged: (v) => _unitC.text = v ?? 'pcs',
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ],
                   ),
-                  // 🔧 FIX: this button previously had no loading state at
-                  // all — tapping it while the backend POST (up to a 10s
-                  // timeout) was in flight gave no feedback and allowed a
-                  // double-tap to fire two create requests. Now disables
-                  // itself and shows a simple spinner for the duration of
-                  // _addProduct(), using the bottom sheet's own
-                  // StatefulBuilder so it doesn't interfere with the
-                  // Navigator.pop() calls _addProduct() already does.
-                  onPressed: _isAddingProduct
-                      ? null
-                      : () async {
-                          ss(() => _isAddingProduct = true);
-                          try {
-                            await _addProduct();
-                          } finally {
-                            // _addProduct() closes this sheet itself on
-                            // success/offline-fallback, but returns early
-                            // (without closing it) on validation failure —
-                            // in that case we still need to re-enable the
-                            // button. Guard with try/catch since calling ss()
-                            // after the sheet has already been popped would
-                            // throw ("setState called after dispose").
-                            _isAddingProduct = false;
-                            try {
-                              ss(() {});
-                            } catch (_) {}
-                          }
-                        },
-                  child: _isAddingProduct
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            color: Colors.white,
+
+                  // BARCODE FIELD WITH SCANNER
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _barcodeC,
+                          'Barcode (Optional)',
+                          Icons.qr_code,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          onTap: () async {
+                            final code = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const QrScannerPage(),
+                              ),
+                            );
+                            if (code != null && mounted) {
+                              ss(() {
+                                _barcodeC.text = code;
+                              });
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: LiveTranslatedText(
+                                    '⏳ Searching Global CDN...',
+                                  ),
+                                  duration: Duration(milliseconds: 700),
+                                ),
+                              );
+
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              final stateCode =
+                                  prefs.getString('shop_state') ?? 'MH';
+
+                              final magicProduct =
+                                  await FmcgBarcodeService.fetchProductFromCdn(
+                                    code,
+                                    stateCode,
+                                  );
+
+                              if (magicProduct != null && mounted) {
+                                ss(() {
+                                  _nameC.text = magicProduct.name;
+                                  if ((magicProduct.category ?? '')
+                                      .trim()
+                                      .isNotEmpty) {
+                                    _catC.text = magicProduct.category!
+                                        .split('>')
+                                        .first
+                                        .trim();
+                                  }
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: LiveTranslatedText(
+                                      '✅ Product found: ' +
+                                          magicProduct.name +
+                                          '. Verify the selling price and MRP.',
+                                    ),
+                                    backgroundColor: _success,
+                                  ),
+                                );
+                              } else if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: LiveTranslatedText(
+                                      'Barcode ' +
+                                          code +
+                                          ' was not matched to a real catalog item. '
+                                              'Enter the product name manually.',
+                                    ),
+                                    backgroundColor: _warning,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _primary.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.qr_code_scanner_rounded,
+                              color: _primary,
+                            ),
                           ),
-                        )
-                      : LiveTranslatedText('Add Product',
-                          style: GoogleFonts.poppins(
-                              fontSize: 16, fontWeight: FontWeight.w600)),
-                ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  _field(
+                    _purchasePriceC,
+                    'Purchase Cost Price (₹) *',
+                    Icons.price_check,
+                    type: TextInputType.number,
+                  ),
+                  _field(
+                    _priceC,
+                    'Selling Price (₹) *',
+                    Icons.currency_rupee,
+                    type: TextInputType.number,
+                  ),
+                  _field(
+                    _mrpC,
+                    'MRP - Declared (₹) [GST Compliance]',
+                    Icons.verified_user,
+                    type: TextInputType.number,
+                  ),
+                  _field(
+                    _stockC,
+                    'Current Stock',
+                    Icons.numbers,
+                    type: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  _field(
+                    _minStockC,
+                    'Min Stock Alert',
+                    Icons.warning_amber,
+                    type: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  _field(_catC, 'Category', Icons.category),
+                  Container(
+                    margin: const EdgeInsets.only(top: 2, bottom: 14),
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.add_photo_alternate_rounded,
+                              color: _primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  LiveTranslatedText(
+                                    'Product image',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  LiveTranslatedText(
+                                    'Optional · take a photo, choose one from your device, or find a matching online image',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 10,
+                                      color: Colors.blueGrey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 11),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _productImagePreview(
+                              _selectedProductImageBytes,
+                              _imageUrlC.text,
+                              size: 86,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
+                                    spacing: 7,
+                                    runSpacing: 7,
+                                    children: [
+                                      OutlinedButton.icon(
+                                        onPressed: () => _pickProductImage(
+                                          ss,
+                                          source: ImageSource.camera,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.photo_camera_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const LiveTranslatedText(
+                                          'Take photo',
+                                        ),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: () => _pickProductImage(ss),
+                                        icon: const Icon(
+                                          Icons.photo_library_outlined,
+                                          size: 16,
+                                        ),
+                                        label: const LiveTranslatedText(
+                                          'Choose photo',
+                                        ),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: () => unawaited(
+                                          GuidedVoiceService.instance.speakStep(
+                                            'inventoryPhoto',
+                                            context
+                                                .read<LanguageProvider>()
+                                                .locale
+                                                .languageCode,
+                                          ),
+                                        ),
+                                        icon: const Icon(
+                                          Icons.volume_up_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const LiveTranslatedText(
+                                          'Hear photo steps',
+                                        ),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: _imageLookupLoading
+                                            ? null
+                                            : () =>
+                                                  _lookupProductImageForAdd(ss),
+                                        icon: _imageLookupLoading
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.travel_explore_rounded,
+                                                size: 16,
+                                              ),
+                                        label: const LiveTranslatedText(
+                                          'Find online',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  LiveTranslatedText(
+                                    'Confirm the brand/package before using an online suggestion.',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 9,
+                                      color: Colors.blueGrey.shade500,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: _unitC.text.isEmpty ? 'pcs' : _unitC.text,
+                    decoration: InputDecoration(
+                      label: LiveTranslatedText('Unit of Measure'),
+                      prefixIcon: Icon(
+                        Icons.scale_rounded,
+                        color: _primary,
+                        size: 20,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: _primary, width: 2),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    items:
+                        [
+                              'pcs',
+                              'kg',
+                              'g',
+                              'litre',
+                              'ml',
+                              'dozen',
+                              'box',
+                              'pack',
+                            ]
+                            .map(
+                              (u) => DropdownMenuItem(
+                                value: u,
+                                child: LiveTranslatedText(u),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: (v) => _unitC.text = v ?? 'pcs',
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      // 🔧 FIX: this button previously had no loading state at
+                      // all — tapping it while the backend POST (up to a 10s
+                      // timeout) was in flight gave no feedback and allowed a
+                      // double-tap to fire two create requests. Now disables
+                      // itself and shows a simple spinner for the duration of
+                      // _addProduct(), using the bottom sheet's own
+                      // StatefulBuilder so it doesn't interfere with the
+                      // Navigator.pop() calls _addProduct() already does.
+                      onPressed: _isAddingProduct
+                          ? null
+                          : () async {
+                              ss(() => _isAddingProduct = true);
+                              try {
+                                await _addProduct();
+                              } finally {
+                                // _addProduct() closes this sheet itself on
+                                // success/offline-fallback, but returns early
+                                // (without closing it) on validation failure —
+                                // in that case we still need to re-enable the
+                                // button. Guard with try/catch since calling ss()
+                                // after the sheet has already been popped would
+                                // throw ("setState called after dispose").
+                                _isAddingProduct = false;
+                                try {
+                                  ss(() {});
+                                } catch (_) {}
+                              }
+                            },
+                      child: _isAddingProduct
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : LiveTranslatedText(
+                              'Add Product',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
               ),
-              const SizedBox(height: 12),
-            ]),
-          ),
-        );
-      }),
+            ),
+          );
+        },
+      ),
     );
   }
 
-  Widget _field(TextEditingController c, String label, IconData icon,
-      {TextInputType type = TextInputType.text}) {
+  Widget _field(
+    TextEditingController c,
+    String label,
+    IconData icon, {
+    TextInputType type = TextInputType.text,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
@@ -1396,15 +2037,20 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
             controller: c,
             languageCode: context.read<LanguageProvider>().locale.languageCode,
           ),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300)),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
           enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300)),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
           focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: _primary, width: 2)),
-          filled: true, fillColor: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _primary, width: 2),
+          ),
+          filled: true,
+          fillColor: Colors.grey.shade50,
         ),
       ),
     );
@@ -1422,8 +2068,13 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: LiveTranslatedText(AppLocalizations.of(context).inventory, style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w800, color: const Color(0xFF172554))),
+        title: LiveTranslatedText(
+          AppLocalizations.of(context).inventory,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF172554),
+          ),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF172554),
         surfaceTintColor: Colors.white,
@@ -1435,7 +2086,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const InventoryUploadPage()),
+                MaterialPageRoute(
+                  builder: (context) => const InventoryUploadPage(),
+                ),
               );
             },
           ),
@@ -1451,63 +2104,94 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                 // Check if it's in local inventory first
                 bool foundLocal = false;
                 setState(() {
-                  final filtered = _products.where((p) => p['sku'].toString() == code).toList();
+                  final filtered = _products
+                      .where((p) => p['sku'].toString() == code)
+                      .toList();
                   if (filtered.isNotEmpty) {
-                     _products = filtered;
-                     foundLocal = true;
+                    _products = filtered;
+                    foundLocal = true;
                   }
                 });
-                
+
                 if (foundLocal) {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     const SnackBar(content: LiveTranslatedText('✅ Product found in local inventory!'), backgroundColor: Colors.green),
-                   );
-                   return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: LiveTranslatedText(
+                        '✅ Product found in local inventory!',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  return;
                 }
 
                 // If not found locally, suggest adding it via Global CDN!
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: LiveTranslatedText('Product not found locally. Querying Global CDN for $code...')),
+                  SnackBar(
+                    content: LiveTranslatedText(
+                      'Product not found locally. Querying Global CDN for $code...',
+                    ),
+                  ),
                 );
-                
+
                 final prefs = await SharedPreferences.getInstance();
                 final stateCode = prefs.getString('shop_state') ?? 'MH';
-                final magicProduct = await FmcgBarcodeService.fetchProductFromCdn(code, stateCode);
+                final magicProduct =
+                    await FmcgBarcodeService.fetchProductFromCdn(
+                      code,
+                      stateCode,
+                    );
 
                 if (magicProduct != null && mounted) {
-                   _showAddDialog(); // Open the dialog to add
-                   Future.delayed(const Duration(milliseconds: 300), () {
-                     _barcodeC.text = magicProduct.barcode;
-                     _nameC.text = magicProduct.name;
-                     _priceC.text = magicProduct.adjustedPrice.toString();
-                   });
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     SnackBar(content: LiveTranslatedText('✨ Auto-filled ${magicProduct.name} from CDN!'), backgroundColor: Colors.green),
-                   );
+                  _showAddDialog(); // Open the dialog to add
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    _barcodeC.text = magicProduct.barcode;
+                    _nameC.text = magicProduct.name;
+                    _priceC.text = magicProduct.adjustedPrice.toString();
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: LiveTranslatedText(
+                        '✨ Auto-filled ${magicProduct.name} from CDN!',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
                 } else if (mounted) {
-                   _fetch(); // Reset view
-                   ScaffoldMessenger.of(context).showSnackBar(
-                     const SnackBar(content: LiveTranslatedText('❌ Not found in Local Inventory or Global CDN.'), backgroundColor: Colors.red),
-                   );
+                  _fetch(); // Reset view
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: LiveTranslatedText(
+                        '❌ Not found in Local Inventory or Global CDN.',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
               }
             },
           ),
           _buildLanguageSwitcher(),
-          IconButton(icon: const Icon(Icons.refresh),
-              onPressed: () => _fetch(forceRemote: true)),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _fetch(forceRemote: true),
+          ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _products.isEmpty ? _emptyState() : _buildList(lowStock),
+          : _products.isEmpty
+          ? _emptyState()
+          : _buildList(lowStock),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddDialog,
         backgroundColor: _primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
-        label: LiveTranslatedText(AppLocalizations.of(context).addProduct,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        label: LiveTranslatedText(
+          AppLocalizations.of(context).addProduct,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -1533,7 +2217,11 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                 ),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.inventory_2_outlined, size: 62, color: _primary),
+              child: Icon(
+                Icons.inventory_2_outlined,
+                size: 62,
+                color: _primary,
+              ),
             ),
             const SizedBox(height: 22),
             LiveTranslatedText(
@@ -1562,11 +2250,17 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.22)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.22),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.cloud_off_rounded, size: 18, color: Colors.orange),
+                    const Icon(
+                      Icons.cloud_off_rounded,
+                      size: 18,
+                      color: Colors.orange,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: LiveTranslatedText(
@@ -1589,7 +2283,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _primary,
                   side: BorderSide(color: _primary.withValues(alpha: 0.35)),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 11,
+                  ),
                 ),
               ),
             ],
@@ -1611,9 +2308,21 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
               ),
               child: Column(
                 children: [
-                  _guideStep('1', 'Tap + Add Product', Icons.add_circle_outline),
-                  _guideStep('2', 'Enter name, price and stock', Icons.edit_outlined),
-                  _guideStep('3', 'Your product syncs to the server', Icons.cloud_done_outlined),
+                  _guideStep(
+                    '1',
+                    'Tap + Add Product',
+                    Icons.add_circle_outline,
+                  ),
+                  _guideStep(
+                    '2',
+                    'Enter name, price and stock',
+                    Icons.edit_outlined,
+                  ),
+                  _guideStep(
+                    '3',
+                    'Your product syncs to the server',
+                    Icons.cloud_done_outlined,
+                  ),
                 ],
               ),
             ),
@@ -1626,20 +2335,34 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
   Widget _guideStep(String num, String text, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(children: [
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(color: _primary, shape: BoxShape.circle),
-          child: Center(child: LiveTranslatedText(num,
-              style: const TextStyle(color: Colors.white,
-                  fontWeight: FontWeight.bold))),
-        ),
-        const SizedBox(width: 12),
-        Icon(icon, size: 20, color: _primary),
-        const SizedBox(width: 8),
-        LiveTranslatedText(text, style: GoogleFonts.poppins(fontSize: 13,
-            color: Colors.grey.shade700)),
-      ]),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(color: _primary, shape: BoxShape.circle),
+            child: Center(
+              child: LiveTranslatedText(
+                num,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(icon, size: 20, color: _primary),
+          const SizedBox(width: 8),
+          LiveTranslatedText(
+            text,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1655,10 +2378,14 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       final stock = _stockNumber(product['current_stock']);
       final minimum = _stockNumber(product['min_stock'], fallback: 10);
       switch (filter) {
-        case 'Low Stock': return stock > 0 && stock <= minimum;
-        case 'Out of Stock': return stock <= 0;
-        case 'In Stock': return stock > minimum;
-        default: return true;
+        case 'Low Stock':
+          return stock > 0 && stock <= minimum;
+        case 'Out of Stock':
+          return stock <= 0;
+        case 'In Stock':
+          return stock > minimum;
+        default:
+          return true;
       }
     }).length;
   }
@@ -1668,14 +2395,24 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
-        label: LiveTranslatedText('$filter (' + _inventoryFilterCount(filter).toString() + ')'),
+        label: LiveTranslatedText(
+          '$filter (' + _inventoryFilterCount(filter).toString() + ')',
+        ),
         selected: selected,
         onSelected: (_) => setState(() => _stockFilter = filter),
         showCheckmark: false,
         selectedColor: const Color(0xFFEDE9FE),
         backgroundColor: const Color(0xFFF7F8FC),
-        side: BorderSide(color: selected ? _primary.withValues(alpha: 0.3) : const Color(0xFFE5E7EB)),
-        labelStyle: GoogleFonts.poppins(color: selected ? _primary : const Color(0xFF64748B), fontSize: 11, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+        side: BorderSide(
+          color: selected
+              ? _primary.withValues(alpha: 0.3)
+              : const Color(0xFFE5E7EB),
+        ),
+        labelStyle: GoogleFonts.poppins(
+          color: selected ? _primary : const Color(0xFF64748B),
+          fontSize: 11,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       ),
     );
@@ -1683,41 +2420,74 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
   Widget _buildList(int lowStock) {
     final outOfStock = _inventoryFilterCount('Out of Stock');
-    final filteredProducts = _products.where((raw) {
-      if (raw is! Map) return false;
-      final product = Map<String, dynamic>.from(raw);
-      final stock = _stockNumber(product['current_stock']);
-      final minimum = _stockNumber(product['min_stock'], fallback: 10);
-      final search = _inventorySearch.trim().toLowerCase();
-      final searchable = [product['product_name'], product['category'], product['sku'], product['barcode']]
-          .where((value) => value != null).join(' ').toLowerCase();
-      final matchesSearch = search.isEmpty || searchable.contains(search);
-      var matchesFilter = true;
-      if (_stockFilter == 'Low Stock') {
-        matchesFilter = stock > 0 && stock <= minimum;
-      } else if (_stockFilter == 'Out of Stock') {
-        matchesFilter = stock <= 0;
-      } else if (_stockFilter == 'In Stock') {
-        matchesFilter = stock > minimum;
-      }
-      return matchesSearch && matchesFilter;
-    }).map((raw) => Map<String, dynamic>.from(raw as Map)).toList();
+    final filteredProducts = _products
+        .where((raw) {
+          if (raw is! Map) return false;
+          final product = Map<String, dynamic>.from(raw);
+          final stock = _stockNumber(product['current_stock']);
+          final minimum = _stockNumber(product['min_stock'], fallback: 10);
+          final search = _inventorySearch.trim().toLowerCase();
+          final searchable = [
+            product['product_name'],
+            product['category'],
+            product['sku'],
+            product['barcode'],
+          ].where((value) => value != null).join(' ').toLowerCase();
+          final matchesSearch = search.isEmpty || searchable.contains(search);
+          var matchesFilter = true;
+          if (_stockFilter == 'Low Stock') {
+            matchesFilter = stock > 0 && stock <= minimum;
+          } else if (_stockFilter == 'Out of Stock') {
+            matchesFilter = stock <= 0;
+          } else if (_stockFilter == 'In Stock') {
+            matchesFilter = stock > minimum;
+          }
+          return matchesSearch && matchesFilter;
+        })
+        .map((raw) => Map<String, dynamic>.from(raw as Map))
+        .toList();
 
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          decoration: const BoxDecoration(color: Colors.white, border: Border(bottom: BorderSide(color: Color(0xFFE8ECF4)))),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Color(0xFFE8ECF4))),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Expanded(child: _statChip('Products', _products.length.toString(), Icons.inventory_2_rounded, color: _primary)),
+                  Expanded(
+                    child: _statChip(
+                      'Products',
+                      _products.length.toString(),
+                      Icons.inventory_2_rounded,
+                      color: _primary,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _statChip('Low stock', lowStock.toString(), Icons.warning_amber_rounded, color: lowStock > 0 ? _warning : _success)),
+                  Expanded(
+                    child: _statChip(
+                      'Low stock',
+                      lowStock.toString(),
+                      Icons.warning_amber_rounded,
+                      color: lowStock > 0 ? _warning : _success,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _statChip('Out of stock', outOfStock.toString(), Icons.remove_shopping_cart_rounded, color: outOfStock > 0 ? const Color(0xFFDC2626) : _success)),
+                  Expanded(
+                    child: _statChip(
+                      'Out of stock',
+                      outOfStock.toString(),
+                      Icons.remove_shopping_cart_rounded,
+                      color: outOfStock > 0
+                          ? const Color(0xFFDC2626)
+                          : _success,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -1726,42 +2496,68 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                 onChanged: (value) => setState(() => _inventorySearch = value),
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
-                  hint: LiveTranslatedText('Search products, barcode, or category'),
-                  hintStyle: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF94A3B8)),
-                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 21),
+                  hint: LiveTranslatedText(
+                    'Search products, barcode, or category',
+                  ),
+                  hintStyle: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: const Color(0xFF94A3B8),
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: Color(0xFF64748B),
+                    size: 21,
+                  ),
                   suffixIcon: GuidedFieldControls(
                     step: 'inputField',
                     controller: _inventorySearchController,
-                    languageCode: context.read<LanguageProvider>().locale.languageCode,
+                    languageCode: context
+                        .read<LanguageProvider>()
+                        .locale
+                        .languageCode,
                     trailing: _inventorySearch.isNotEmpty
                         ? IconButton(
-                          tooltip: 'Clear search',
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          onPressed: () => setState(() {
-                            _inventorySearch = '';
-                            _inventorySearchController.clear();
-                          }),
-                        )
+                            tooltip: 'Clear search',
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            onPressed: () => setState(() {
+                              _inventorySearch = '';
+                              _inventorySearchController.clear();
+                            }),
+                          )
                         : null,
                   ),
                   filled: true,
                   fillColor: const Color(0xFFF8FAFC),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _primary, width: 1.5)),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: _primary, width: 1.5),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                child: Row(children: [
-                  _stockFilterChip('All'),
-                  _stockFilterChip('Low Stock'),
-                  _stockFilterChip('Out of Stock'),
-                  _stockFilterChip('In Stock'),
-                ]),
+                child: Row(
+                  children: [
+                    _stockFilterChip('All'),
+                    _stockFilterChip('Low Stock'),
+                    _stockFilterChip('Out of Stock'),
+                    _stockFilterChip('In Stock'),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1774,11 +2570,36 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(padding: const EdgeInsets.all(18), decoration: const BoxDecoration(color: Color(0xFFEDE9FE), shape: BoxShape.circle), child: const Icon(Icons.search_off_rounded, color: _primary, size: 34)),
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEDE9FE),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.search_off_rounded,
+                            color: _primary,
+                            size: 34,
+                          ),
+                        ),
                         const SizedBox(height: 14),
-                        LiveTranslatedText('No matching products', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF172554))),
+                        LiveTranslatedText(
+                          'No matching products',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF172554),
+                          ),
+                        ),
                         const SizedBox(height: 5),
-                        LiveTranslatedText('Try another search or stock filter.', textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF64748B))),
+                        LiveTranslatedText(
+                          'Try another search or stock filter.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         TextButton.icon(
                           onPressed: () => setState(() {
@@ -1804,27 +2625,64 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     );
   }
 
-  Widget _statChip(String label, String val, IconData icon, {Color color = _primary}) {
+  Widget _statChip(
+    String label,
+    String val,
+    IconData icon, {
+    Color color = _primary,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: const Color(0xFFE8ECF4)),
-        boxShadow: [BoxShadow(color: const Color(0xFF172554).withValues(alpha: 0.035), blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF172554).withValues(alpha: 0.035),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Container(padding: const EdgeInsets.all(7), decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 17, color: color)),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 17, color: color),
+          ),
           const SizedBox(width: 7),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                LiveTranslatedText(val, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(fontSize: 17, height: 1.2, fontWeight: FontWeight.w800, color: const Color(0xFF172554))),
+                LiveTranslatedText(
+                  val,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 17,
+                    height: 1.2,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF172554),
+                  ),
+                ),
                 const SizedBox(height: 2),
-                LiveTranslatedText(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(fontSize: 9.5, color: const Color(0xFF64748B), fontWeight: FontWeight.w500)),
+                LiveTranslatedText(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 9.5,
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1846,170 +2704,267 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: isLow ? Border.all(color: statusColor.withValues(alpha: 0.5)) : null,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8, offset: const Offset(0, 2))],
+        border: isLow
+            ? Border.all(color: statusColor.withValues(alpha: 0.5))
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          // ✨ Enhanced Stock Status Icon with Animation
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: 50, height: 50,
-            decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusColor.withValues(alpha: 0.3), width: 2)),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                _productImagePreview(null, p['image_url']?.toString(), size: 46),
-                // ✨ Pulse animation for low stock
-                if (isLow)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            LiveTranslatedText('${p['product_name'] ?? ''}',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600, fontSize: 14),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            LiveTranslatedText('${p['sku'] != null && p['sku'].toString().isNotEmpty ? 'Barcode: ${p['sku']} · ' : ''}${p['category'] ?? 'General'}',
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: Colors.grey.shade500),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            LiveTranslatedText('\u20b9${p['unit_price'] ?? 0}',
-                style: GoogleFonts.poppins(
-                    fontSize: 12, color: _primary,
-                    fontWeight: FontWeight.w600)),
-          ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            // ✨ Enhanced Status Badge with Animation
+        child: Row(
+          children: [
+            // ✨ Enhanced Stock Status Icon with Animation
             AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.4), width: 1.5)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+                color: statusColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  // Status Icon
-                  Icon(
-                    isOut ? Icons.block : isLow ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
-                    size: 12,
-                    color: statusColor,
+                  _productImagePreview(
+                    null,
+                    p['image_url']?.toString(),
+                    size: 46,
                   ),
-                  const SizedBox(width: 4),
-                  LiveTranslatedText(statusText, style: GoogleFonts.poppins(
-                      fontSize: 11, fontWeight: FontWeight.bold,
-                      color: statusColor)),
+                  // ✨ Pulse animation for low stock
+                  if (isLow)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-            const SizedBox(height: 6),
-            // ✨ Animated Stock Count
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 300),
-              style: GoogleFonts.poppins(
-                  fontSize: 24, fontWeight: FontWeight.w700,
-                  color: statusColor),
-              child: LiveTranslatedText('${p['current_stock']}'),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LiveTranslatedText(
+                    '${p['product_name'] ?? ''}',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  LiveTranslatedText(
+                    '${p['sku'] != null && p['sku'].toString().isNotEmpty ? 'Barcode: ${p['sku']} · ' : ''}${p['category'] ?? 'General'}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  LiveTranslatedText(
+                    '\u20b9${p['unit_price'] ?? 0}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: _primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            LiveTranslatedText('${p['unit'] ?? 'pcs'}',
-                style: GoogleFonts.poppins(
-                    fontSize: 10, color: Colors.grey.shade400)),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                GestureDetector(
-                  onTap: () => _showEditDialog(p),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.edit_rounded, size: 16, color: _primary),
+                // ✨ Enhanced Status Badge with Animation
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
                   ),
-                ),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: () => _showProductImageDialog(Map<String, dynamic>.from(p)),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.teal.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      (p['image_url']?.toString().isNotEmpty ?? false)
-                        ? Icons.photo_camera_back_rounded
-                        : Icons.add_photo_alternate_outlined,
-                      size: 16,
-                      color: Colors.teal.shade700,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.4),
+                      width: 1.5,
                     ),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Status Icon
+                      Icon(
+                        isOut
+                            ? Icons.block
+                            : isLow
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle_rounded,
+                        size: 12,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 4),
+                      LiveTranslatedText(
+                        statusText,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 6),
-                if (isLow)
-                GestureDetector(
-                  onTap: () async {
-                    // Show a quick loading toast/snackbar
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('🤖 AI is thinking... generating negotiation message.')));
-                    
-                    final msg = await AiNegotiationService.generateNegotiationMessage(
-                      productName: p['product_name'] ?? 'Product',
-                      currentStock: (p['current_stock'] as num).toDouble(),
-                      minStock: (p['min_stock'] as num).toDouble(),
-                      unitPrice: (p['unit_price'] as num).toDouble(),
-                      category: p['category'] ?? 'Retail',
-                    );
+                const SizedBox(height: 6),
+                // ✨ Animated Stock Count
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 300),
+                  style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                  child: LiveTranslatedText('${p['current_stock']}'),
+                ),
+                LiveTranslatedText(
+                  '${p['unit'] ?? 'pcs'}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: Colors.grey.shade400,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _showEditDialog(p),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.edit_rounded,
+                          size: 16,
+                          color: _primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () =>
+                          _showProductImageDialog(Map<String, dynamic>.from(p)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          (p['image_url']?.toString().isNotEmpty ?? false)
+                              ? Icons.photo_camera_back_rounded
+                              : Icons.add_photo_alternate_outlined,
+                          size: 16,
+                          color: Colors.teal.shade700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (isLow)
+                      GestureDetector(
+                        onTap: () async {
+                          // Show a quick loading toast/snackbar
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: LiveTranslatedText(
+                                '🤖 AI is thinking... generating negotiation message.',
+                              ),
+                            ),
+                          );
 
-                    if (mounted) {
-                      Share.share(msg, subject: 'Negotiation for ${p['product_name']}');
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                          final msg =
+                              await AiNegotiationService.generateNegotiationMessage(
+                                productName: p['product_name'] ?? 'Product',
+                                currentStock: (p['current_stock'] as num)
+                                    .toDouble(),
+                                minStock: (p['min_stock'] as num).toDouble(),
+                                unitPrice: (p['unit_price'] as num).toDouble(),
+                                category: p['category'] ?? 'Retail',
+                              );
+
+                          if (mounted) {
+                            Share.share(
+                              msg,
+                              subject: 'Negotiation for ${p['product_name']}',
+                            );
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.blue.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 16,
+                            color: Colors.blueAccent,
+                          ),
+                        ),
+                      ),
+                    GestureDetector(
+                      onTap: () => _confirmDelete(p),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.delete_outline_rounded,
+                          size: 16,
+                          color: Colors.redAccent,
+                        ),
+                      ),
                     ),
-                    child: const Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.blueAccent),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => _confirmDelete(p),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.delete_outline_rounded, size: 16, color: Colors.redAccent),
-                  ),
+                  ],
                 ),
               ],
             ),
-          ]),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -2019,15 +2974,27 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: LiveTranslatedText('Delete Product?', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-        content: LiveTranslatedText('Are you sure you want to remove "${p['product_name']}" from inventory?',
-            style: GoogleFonts.poppins(fontSize: 13)),
+        title: LiveTranslatedText(
+          'Delete Product?',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
+        content: LiveTranslatedText(
+          'Are you sure you want to remove "${p['product_name']}" from inventory?',
+          style: GoogleFonts.poppins(fontSize: 13),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context),
-              child: LiveTranslatedText('Cancel', style: GoogleFonts.poppins())),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: LiveTranslatedText('Cancel', style: GoogleFonts.poppins()),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             onPressed: () async {
               Navigator.pop(context);
               // 🔧 FIX: give the user feedback while the delete request
@@ -2037,7 +3004,10 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
                 return _deleteProduct(p);
               });
             },
-            child: LiveTranslatedText('Delete', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            child: LiveTranslatedText(
+              'Delete',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -2089,9 +3059,7 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     return null;
   }
 
-  Future<void> _deleteUnsyncedLocalProduct(
-    Map<String, dynamic> product,
-  ) async {
+  Future<void> _deleteUnsyncedLocalProduct(Map<String, dynamic> product) async {
     final localProducts = await LocalStorageService.loadLocalProducts();
 
     final identityCandidates = <String>{
@@ -2119,10 +3087,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     final operationId = product['operation_id']?.toString().isNotEmpty == true
         ? product['operation_id'].toString()
         : 'PRODUCT_CREATE_${product['id'] ?? product['sku'] ?? product['product_name']}';
-    await SyncQueueManager.removeByBusinessIdentifier(
-      'create_local_product',
-      {'operation_id': operationId},
-    );
+    await SyncQueueManager.removeByBusinessIdentifier('create_local_product', {
+      'operation_id': operationId,
+    });
 
     if (!mounted) return;
     setState(() {
@@ -2142,13 +3109,11 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
 
   Future<void> _deleteProduct(Map<String, dynamic> p) async {
     final cached = await LocalStorageService.loadBackendProducts();
-    final productId = _resolveBackendProductId(
-      p,
-      cachedProducts: cached,
-    );
+    final productId = _resolveBackendProductId(p, cachedProducts: cached);
 
     if (productId == null) {
-      final isUnsyncedLocal = p['is_offline'] == true ||
+      final isUnsyncedLocal =
+          p['is_offline'] == true ||
           p['sync_status']?.toString().toLowerCase() == 'pending' ||
           p['sync_status']?.toString().toLowerCase() == 'local';
 
@@ -2158,7 +3123,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: LiveTranslatedText('✅ Local product removed. It was not synced to the backend yet.'),
+                content: LiveTranslatedText(
+                  '✅ Local product removed. It was not synced to the backend yet.',
+                ),
               ),
             );
           }
@@ -2166,7 +3133,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: LiveTranslatedText('Could not remove local product: $e'),
+                content: LiveTranslatedText(
+                  'Could not remove local product: $e',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -2193,15 +3162,12 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       final operationId = 'PRODUCT_DELETE_${_userId ?? 0}_$productId';
       final queued = _userId == null
           ? false
-          : await SyncQueueManager.enqueue(
-              'delete_product',
-              {
-                'operation_id': operationId,
-                'id': productId,
-                'product_id': productId,
-                'user_id': _userId,
-              },
-            );
+          : await SyncQueueManager.enqueue('delete_product', {
+              'operation_id': operationId,
+              'id': productId,
+              'product_id': productId,
+              'user_id': _userId,
+            });
 
       if (!queued && _userId != null) {
         throw StateError('Could not queue product deletion');
@@ -2239,7 +3205,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: LiveTranslatedText('✅ Product deletion queued and syncing.'),
+            content: LiveTranslatedText(
+              '✅ Product deletion queued and syncing.',
+            ),
           ),
         );
       }
@@ -2255,18 +3223,36 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
     }
   }
 
-
   void _showEditDialog(Map<String, dynamic> p) {
-    final nameC = TextEditingController(text: p['product_name']?.toString() ?? '');
+    final nameC = TextEditingController(
+      text: p['product_name']?.toString() ?? '',
+    );
     final barcodeC = TextEditingController(
       text: (p['barcode'] ?? p['sku'] ?? '').toString(),
     );
-    final priceC = TextEditingController(text: p['unit_price']?.toString() ?? '');
-    final purchasePriceC = TextEditingController(text: (p['purchase_price'] ?? p['cost_price'] ?? 0).toString());
-    final stockC = TextEditingController(text: p['current_stock']?.toString() ?? '');
-    final minC = TextEditingController(text: p['min_stock']?.toString() ?? '10');
+    final priceC = TextEditingController(
+      text: p['unit_price']?.toString() ?? '',
+    );
+    final purchasePriceC = TextEditingController(
+      text: (p['purchase_price'] ?? p['cost_price'] ?? 0).toString(),
+    );
+    final stockC = TextEditingController(
+      text: p['current_stock']?.toString() ?? '',
+    );
+    final minC = TextEditingController(
+      text: p['min_stock']?.toString() ?? '10',
+    );
     final catC = TextEditingController(text: p['category']?.toString() ?? '');
-    const supportedUnits = ['pcs', 'kg', 'g', 'litre', 'ml', 'dozen', 'box', 'pack'];
+    const supportedUnits = [
+      'pcs',
+      'kg',
+      'g',
+      'litre',
+      'ml',
+      'dozen',
+      'box',
+      'pack',
+    ];
     var selectedUnit = supportedUnits.contains(p['unit']?.toString())
         ? p['unit'].toString()
         : 'pcs';
@@ -2277,227 +3263,333 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(builder: (_, ss) => Container(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Container(width: 4, height: 28, color: _primary, margin: const EdgeInsets.only(right: 12)),
-              LiveTranslatedText('Edit Product', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-            ]),
-            const SizedBox(height: 16),
-            _field(nameC, 'Product Name *', Icons.inventory_2),
-            _field(barcodeC, 'Barcode (Optional)', Icons.qr_code),
-            _field(purchasePriceC, 'Purchase Cost Price (₹)', Icons.price_check, type: TextInputType.number),
-            _field(priceC, 'Selling Price (₹) *', Icons.currency_rupee, type: TextInputType.number),
-            _field(stockC, 'Current Stock', Icons.numbers, type: const TextInputType.numberWithOptions(decimal: true)),
-            _field(minC, 'Min Stock Alert', Icons.warning_amber, type: TextInputType.number),
-            DropdownButtonFormField<String>(
-              value: selectedUnit,
-              decoration: InputDecoration(
-                label: const LiveTranslatedText('Unit of Measure'),
-                prefixIcon: const Icon(Icons.scale_rounded),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              items: supportedUnits
-                  .map((unit) => DropdownMenuItem<String>(
-                        value: unit,
-                        child: LiveTranslatedText(unit),
-                      ))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) ss(() => selectedUnit = value);
-              },
-            ),
-            const SizedBox(height: 12),
-            _field(catC, 'Category', Icons.category),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primary, foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (_) => StatefulBuilder(
+        builder: (_, ss) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 28,
+                      color: _primary,
+                      margin: const EdgeInsets.only(right: 12),
+                    ),
+                    LiveTranslatedText(
+                      'Edit Product',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                  ss(() => isSaving = true);
-                  try {
-                    final productName = nameC.text.trim();
-                    final sellingPrice = double.tryParse(priceC.text.trim());
-                    final purchasePrice = double.tryParse(purchasePriceC.text.trim());
-                    final newStock = double.tryParse(stockC.text.trim());
-                    final minimumStock = int.tryParse(minC.text.trim());
-
-                    if (productName.isEmpty ||
-                        sellingPrice == null ||
-                        !sellingPrice.isFinite ||
-                        sellingPrice < 0) {
-                      throw const FormatException('Enter a valid product name and selling price.');
-                    }
-                    if (purchasePriceC.text.trim().isNotEmpty &&
-                        (purchasePrice == null ||
-                            !purchasePrice.isFinite ||
-                            purchasePrice < 0)) {
-                      throw const FormatException('Enter a valid purchase cost.');
-                    }
-                    if (stockC.text.trim().isNotEmpty &&
-                        (newStock == null || !newStock.isFinite || newStock < 0)) {
-                      throw const FormatException('Enter a valid stock quantity.');
-                    }
-                    if (minC.text.trim().isNotEmpty &&
-                        (minimumStock == null || minimumStock < 0)) {
-                      throw const FormatException('Enter a valid minimum stock quantity.');
-                    }
-
-                    final cached = await LocalStorageService.loadBackendProducts();
-                    final productId = _resolveBackendProductId(
-                      p,
-                      cachedProducts: cached,
-                    );
-                    if (productId == null || productId <= 0) {
-                      throw StateError(
-                        'This product has no valid server ID. Refresh inventory and open Edit Product again.',
-                      );
-                    }
-                    if (_userId == null || _userId! <= 0) {
-                      throw StateError('Your session could not be verified. Please sign in again.');
-                    }
-
-                    final updated = Map<String, dynamic>.from(p);
-                    final barcode = barcodeC.text.trim();
-                    updated['id'] = productId;
-                    updated['product_id'] ??= productId;
-                    updated['product_name'] = productName;
-                    updated['barcode'] = barcode;
-                    updated['sku'] = barcode;
-                    updated['unit_price'] = sellingPrice;
-                    if (purchasePrice != null) updated['purchase_price'] = purchasePrice;
-                    final resolvedStock = newStock ?? InventoryStockHelper.readStock(updated);
-                    InventoryStockHelper.writeStock(updated, resolvedStock);
-                    if (minimumStock != null) updated['min_stock'] = minimumStock;
-                    updated['unit'] = selectedUnit;
-                    if (catC.text.trim().isNotEmpty) updated['category'] = catC.text.trim();
-
-                    final timestamp = DateTime.now().toUtc().toIso8601String();
-                    final operationId =
-                        'PRODUCT_UPDATE_${_userId}_${productId}_${DateTime.now().microsecondsSinceEpoch}';
-                    updated['sync_status'] = 'pending';
-                    updated['local_updated_at'] = timestamp;
-
-                    final apiUpdate = <String, dynamic>{
-                      'product_name': productName,
-                      'sku': barcode,
-                      'barcode': barcode,
-                      'unit_price': sellingPrice,
-                      'purchase_price': updated['purchase_price'] ?? updated['cost_price'] ?? 0,
-                      'current_stock': resolvedStock,
-                      'min_stock': updated['min_stock'] ?? 10.0,
-                      'category': updated['category'] ?? 'General',
-                      'unit': selectedUnit,
-                      'local_updated_at': timestamp,
-                    };
-
-                    // Persist the same optimistic row in cache and queue. Do not
-                    // fetch stale server data until the queue has had a chance
-                    // to reconcile this mutation.
-                    final idx = cached.indexWhere(
-                      (item) => _resolveBackendProductId(item) == productId,
-                    );
-                    if (idx >= 0) {
-                      cached[idx] = {
-                        ...cached[idx],
-                        ...updated,
-                      };
-                    } else {
-                      cached.add(updated);
-                    }
-                    final queued = await SyncQueueManager.enqueue('update_local_product', {
-                      'operation_id': operationId,
-                      'id': productId,
-                      'user_id': _userId,
-                      'payload': apiUpdate,
-                    });
-                    if (!queued) {
-                      throw StateError(
-                        'The update could not be added to the sync queue. Please retry when the connection is stable.',
-                      );
-                    }
-
-                    await LocalStorageService.saveBackendProducts(cached);
-                    await CacheConsistencyService.markLocalMutation(
-                      'inventory',
-                      operationId: operationId,
-                    );
-
-                    if (mounted) {
-                      setState(() {
-                        final index = _products.indexWhere(
-                          (item) => _resolveBackendProductId(
-                            Map<String, dynamic>.from(item as Map),
-                          ) == productId,
-                        );
-                        if (index >= 0) {
-                          _products[index] = {
-                            ...Map<String, dynamic>.from(_products[index] as Map),
-                            ...updated,
-                          };
-                        }
-                      });
-                      Navigator.of(context).pop();
-                    }
-
-                    // The durable queue remains available for automatic retry if
-                    // a request is already in flight or the device is offline.
-                    unawaited(SyncService.processQueueSafe());
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: LiveTranslatedText(
-                            'Changes saved on this device. Syncing to the server…',
-                          ),
-                          backgroundColor: _warning,
+                const SizedBox(height: 16),
+                _field(nameC, 'Product Name *', Icons.inventory_2),
+                _field(barcodeC, 'Barcode (Optional)', Icons.qr_code),
+                _field(
+                  purchasePriceC,
+                  'Purchase Cost Price (₹)',
+                  Icons.price_check,
+                  type: TextInputType.number,
+                ),
+                _field(
+                  priceC,
+                  'Selling Price (₹) *',
+                  Icons.currency_rupee,
+                  type: TextInputType.number,
+                ),
+                _field(
+                  stockC,
+                  'Current Stock',
+                  Icons.numbers,
+                  type: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                _field(
+                  minC,
+                  'Min Stock Alert',
+                  Icons.warning_amber,
+                  type: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                DropdownButtonFormField<String>(
+                  value: selectedUnit,
+                  decoration: InputDecoration(
+                    label: const LiveTranslatedText('Unit of Measure'),
+                    prefixIcon: const Icon(Icons.scale_rounded),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  items: supportedUnits
+                      .map(
+                        (unit) => DropdownMenuItem<String>(
+                          value: unit,
+                          child: LiveTranslatedText(unit),
                         ),
-                      );
-                    }
-                  } catch (error) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: LiveTranslatedText(
-                            'Product update was not confirmed: ${error.toString().replaceFirst('Exception: ', '')}',
-                          ),
-                          backgroundColor: Colors.red,
-                          duration: const Duration(seconds: 5),
-                        ),
-                      );
-                    }
-                  } finally {
-                    isSaving = false;
-                    try { ss(() {}); } catch (_) {}
-                  }
-                },
-                child: isSaving
-                    ? const SizedBox(
-                        width: 20, height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                       )
-                    : LiveTranslatedText('Save Changes', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) ss(() => selectedUnit = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _field(catC, 'Category', Icons.category),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            ss(() => isSaving = true);
+                            try {
+                              final productName = nameC.text.trim();
+                              final sellingPrice = double.tryParse(
+                                priceC.text.trim(),
+                              );
+                              final purchasePrice = double.tryParse(
+                                purchasePriceC.text.trim(),
+                              );
+                              final newStock = double.tryParse(
+                                stockC.text.trim(),
+                              );
+                              final minimumStock =
+                                  InventoryStockHelper.parseStockThresholdInput(
+                                    minC.text,
+                                  );
+
+                              if (productName.isEmpty ||
+                                  sellingPrice == null ||
+                                  !sellingPrice.isFinite ||
+                                  sellingPrice < 0) {
+                                throw const FormatException(
+                                  'Enter a valid product name and selling price.',
+                                );
+                              }
+                              if (purchasePriceC.text.trim().isNotEmpty &&
+                                  (purchasePrice == null ||
+                                      !purchasePrice.isFinite ||
+                                      purchasePrice < 0)) {
+                                throw const FormatException(
+                                  'Enter a valid purchase cost.',
+                                );
+                              }
+                              if (stockC.text.trim().isNotEmpty &&
+                                  (newStock == null ||
+                                      !newStock.isFinite ||
+                                      newStock < 0)) {
+                                throw const FormatException(
+                                  'Enter a valid stock quantity.',
+                                );
+                              }
+                              if (minC.text.trim().isNotEmpty &&
+                                  minimumStock == null) {
+                                throw const FormatException(
+                                  'Enter a valid minimum stock quantity.',
+                                );
+                              }
+
+                              final cached =
+                                  await LocalStorageService.loadBackendProducts();
+                              final productId = _resolveBackendProductId(
+                                p,
+                                cachedProducts: cached,
+                              );
+                              if (productId == null || productId <= 0) {
+                                throw StateError(
+                                  'This product has no valid server ID. Refresh inventory and open Edit Product again.',
+                                );
+                              }
+                              if (_userId == null || _userId! <= 0) {
+                                throw StateError(
+                                  'Your session could not be verified. Please sign in again.',
+                                );
+                              }
+
+                              final updated = Map<String, dynamic>.from(p);
+                              final barcode = barcodeC.text.trim();
+                              updated['id'] = productId;
+                              updated['product_id'] ??= productId;
+                              updated['product_name'] = productName;
+                              updated['barcode'] = barcode;
+                              updated['sku'] = barcode;
+                              updated['unit_price'] = sellingPrice;
+                              if (purchasePrice != null)
+                                updated['purchase_price'] = purchasePrice;
+                              final resolvedStock =
+                                  newStock ??
+                                  InventoryStockHelper.readStock(updated);
+                              InventoryStockHelper.writeStock(
+                                updated,
+                                resolvedStock,
+                              );
+                              if (minimumStock != null)
+                                updated['min_stock'] = minimumStock;
+                              updated['unit'] = selectedUnit;
+                              if (catC.text.trim().isNotEmpty)
+                                updated['category'] = catC.text.trim();
+
+                              final timestamp = DateTime.now()
+                                  .toUtc()
+                                  .toIso8601String();
+                              final operationId =
+                                  'PRODUCT_UPDATE_${_userId}_${productId}_${DateTime.now().microsecondsSinceEpoch}';
+                              updated['sync_status'] = 'pending';
+                              updated['local_updated_at'] = timestamp;
+
+                              final apiUpdate = <String, dynamic>{
+                                'product_name': productName,
+                                'sku': barcode,
+                                'barcode': barcode,
+                                'unit_price': sellingPrice,
+                                'purchase_price':
+                                    updated['purchase_price'] ??
+                                    updated['cost_price'] ??
+                                    0,
+                                'current_stock': resolvedStock,
+                                'min_stock': updated['min_stock'] ?? 10.0,
+                                'category': updated['category'] ?? 'General',
+                                'unit': selectedUnit,
+                                'local_updated_at': timestamp,
+                              };
+
+                              // Persist the same optimistic row in cache and queue. Do not
+                              // fetch stale server data until the queue has had a chance
+                              // to reconcile this mutation.
+                              final idx = cached.indexWhere(
+                                (item) =>
+                                    _resolveBackendProductId(item) == productId,
+                              );
+                              if (idx >= 0) {
+                                cached[idx] = {...cached[idx], ...updated};
+                              } else {
+                                cached.add(updated);
+                              }
+                              final queued = await SyncQueueManager.enqueue(
+                                'update_local_product',
+                                {
+                                  'operation_id': operationId,
+                                  'id': productId,
+                                  'user_id': _userId,
+                                  'payload': apiUpdate,
+                                },
+                              );
+                              if (!queued) {
+                                throw StateError(
+                                  'The update could not be added to the sync queue. Please retry when the connection is stable.',
+                                );
+                              }
+
+                              await LocalStorageService.saveBackendProducts(
+                                cached,
+                              );
+                              await CacheConsistencyService.markLocalMutation(
+                                'inventory',
+                                operationId: operationId,
+                              );
+
+                              if (mounted) {
+                                setState(() {
+                                  final index = _products.indexWhere(
+                                    (item) =>
+                                        _resolveBackendProductId(
+                                          Map<String, dynamic>.from(
+                                            item as Map,
+                                          ),
+                                        ) ==
+                                        productId,
+                                  );
+                                  if (index >= 0) {
+                                    _products[index] = {
+                                      ...Map<String, dynamic>.from(
+                                        _products[index] as Map,
+                                      ),
+                                      ...updated,
+                                    };
+                                  }
+                                });
+                                Navigator.of(context).pop();
+                              }
+
+                              // The durable queue remains available for automatic retry if
+                              // a request is already in flight or the device is offline.
+                              unawaited(SyncService.processQueueSafe());
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: LiveTranslatedText(
+                                      'Changes saved on this device. Syncing to the server…',
+                                    ),
+                                    backgroundColor: _warning,
+                                  ),
+                                );
+                              }
+                            } catch (error) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: LiveTranslatedText(
+                                      'Product update was not confirmed: ${error.toString().replaceFirst('Exception: ', '')}',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                    duration: const Duration(seconds: 5),
+                                  ),
+                                );
+                              }
+                            } finally {
+                              isSaving = false;
+                              try {
+                                ss(() {});
+                              } catch (_) {}
+                            }
+                          },
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : LiveTranslatedText(
+                            'Save Changes',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
-            const SizedBox(height: 12),
-          ]),
+          ),
         ),
-      )),
+      ),
     ).whenComplete(() {
       nameC.dispose();
       barcodeC.dispose();
@@ -2521,16 +3613,9 @@ class _InventoryPageState extends State<InventoryPage> with WidgetsBindingObserv
         decoration: BoxDecoration(
           color: const Color(0xFFEEF2FF),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _primary.withValues(alpha: 0.32),
-            width: 1,
-          ),
+          border: Border.all(color: _primary.withValues(alpha: 0.32), width: 1),
         ),
-        child: const Icon(
-          Icons.language_rounded,
-          color: _primary,
-          size: 23,
-        ),
+        child: const Icon(Icons.language_rounded, color: _primary, size: 23),
       ),
       tooltip: 'Change language',
       padding: const EdgeInsets.all(4),
