@@ -11,6 +11,7 @@ import '../../../inventory_sync_service.dart';
 import '../../../local_storage_service.dart';
 import '../../../sale_service.dart';
 import '../../../api_client.dart';
+import '../services/voice_billing_response_policy.dart';
 
 class SalesEntryProvider extends ChangeNotifier {
   List<SalesItem> entries = [];
@@ -26,6 +27,8 @@ class SalesEntryProvider extends ChangeNotifier {
   // Ignore rapid duplicate starts; this is a UI-level guard only, while
   // accounting idempotency remains enforced by the sale/backend pipeline.
   bool _voiceRecordingInFlight = false;
+  String? _lastVoiceAudioFingerprint;
+  String? _lastVoiceAudioClientRequestId;
   String? lastVoiceMessage;
   String? lastVoiceTranscript;
   String? lastVoiceInterpretation;
@@ -99,6 +102,22 @@ class SalesEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  String _newVoiceClientRequestId() =>
+      'rm-${DateTime.now().microsecondsSinceEpoch}';
+
+  Future<String> _voiceAudioClientRequestId(String audioPath) async {
+    final file = File(audioPath);
+    final stat = await file.stat();
+    final fingerprint =
+        '$audioPath:${stat.size}:${stat.modified.microsecondsSinceEpoch}';
+    if (_lastVoiceAudioFingerprint != fingerprint ||
+        _lastVoiceAudioClientRequestId == null) {
+      _lastVoiceAudioFingerprint = fingerprint;
+      _lastVoiceAudioClientRequestId = _newVoiceClientRequestId();
+    }
+    return _lastVoiceAudioClientRequestId!;
+  }
+
   bool _canUseOfflineVoiceFallback(String transcript, String languageCode) {
     final language = languageCode.trim().toLowerCase().replaceAll('_', '-');
     final baseLanguage = language.split('-').first;
@@ -143,10 +162,29 @@ class SalesEntryProvider extends ChangeNotifier {
         {
           'transcript': transcript,
           'language_code': languageCode,
+          'client_request_id': _newVoiceClientRequestId(),
         },
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        dynamic errorBody;
+        try {
+          errorBody = jsonDecode(response.body);
+        } catch (_) {
+          errorBody = null;
+        }
+        final detail = errorBody is Map
+            ? (errorBody['detail'] ?? errorBody['message'])?.toString().trim()
+            : null;
+        if (response.statusCode < 500) {
+          // Validation/authentication rejections must not fall through to the
+          // permissive local parser and turn rejected speech into bill lines.
+          lastVoiceMessage = detail?.isNotEmpty == true
+              ? detail!
+              : 'Voice billing rejected this request (HTTP ${response.statusCode}). Please correct the speech or enter the item manually.';
+          notifyListeners();
+          return;
+        }
         throw Exception('Voice billing request failed (HTTP ${response.statusCode})');
       }
       final decoded = jsonDecode(response.body);
@@ -273,6 +311,7 @@ class SalesEntryProvider extends ChangeNotifier {
         throw Exception('The recording file could not be found. Please record again.');
       }
       final filename = audioPath.split(Platform.pathSeparator).last;
+      final clientRequestId = await _voiceAudioClientRequestId(audioPath);
       final multipartFile = await http.MultipartFile.fromPath(
         'audio',
         audioPath,
@@ -280,7 +319,10 @@ class SalesEntryProvider extends ChangeNotifier {
       );
       final streamedResponse = await ApiClient.postMultipart(
         ApiClient.voiceBillingAudioEndpoint,
-        {'language_code': languageCode},
+        {
+          'language_code': languageCode,
+          'client_request_id': clientRequestId,
+        },
         files: [multipartFile],
         timeout: const Duration(seconds: 90),
       );
@@ -327,6 +369,16 @@ class SalesEntryProvider extends ChangeNotifier {
     }
     final interpreted = (decoded['interpreted_text_en'] ?? '').toString().trim();
     lastVoiceInterpretation = interpreted.isEmpty ? null : interpreted;
+
+    // The backend's safety flags are authoritative. Do not auto-add any
+    // line from a response that needs clarification or contains a unit,
+    // quantity, catalogue, or price confirmation requirement.
+    if (voiceBillingResponseNeedsManualReview(decoded)) {
+      lastVoiceDetectedItems = <SalesItem>[];
+      lastVoiceMessage = voiceBillingManualReviewMessage(decoded);
+      notifyListeners();
+      return;
+    }
 
     final rawItems = decoded['items'];
     final parsedItems = <SalesItem>[];
