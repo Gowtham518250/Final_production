@@ -29,8 +29,30 @@ String voiceBillingManualReviewMessage(Map<String, dynamic> payload) {
   final clarification = (payload['clarification_question'] ?? '')
       .toString()
       .trim();
+  final rawItems = payload['items'];
+  final itemWarnings = <String>[];
+  if (rawItems is List) {
+    for (final value in rawItems) {
+      if (value is Map && voiceBillingItemNeedsManualReview(value)) {
+        final warning = voiceBillingItemReviewWarning(value);
+        if (!itemWarnings.contains(warning)) itemWarnings.add(warning);
+        if (itemWarnings.length >= 3) break;
+      }
+    }
+  }
+
   if (clarification.isNotEmpty) {
-    return 'No voice items were added because the result needs manual confirmation. $clarification';
+    return [
+      'No voice items were added because the result needs manual confirmation.',
+      clarification,
+      ...itemWarnings,
+    ].join(' ');
+  }
+  if (itemWarnings.isNotEmpty) {
+    return [
+      'No voice items were added because manual review is required.',
+      ...itemWarnings,
+    ].join(' ');
   }
   return 'No voice items were added because a product, unit, quantity, or price could not be verified. Correct the item or enter it manually.';
 }
