@@ -34,6 +34,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' as audio;
 import 'utils/free_translator_service.dart';
 import 'api_client.dart';
+import 'features/sales_entry/services/voice_billing_response_policy.dart';
 
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:google_fonts/google_fonts.dart';
@@ -853,6 +854,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   bool _usingCloudAudioFallback = false;
   bool _startingCloudAudioFallback = false;
   String? _cloudRecordingPath;
+  String? _lastCloudAudioFingerprint;
+  String? _lastCloudAudioClientRequestId;
   Timer? _cloudRecordingLimitTimer;
   bool _isListening = false;
   bool _isProcessing = false;
@@ -1255,6 +1258,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     return plausible.length == 1 && identical(plausible.single, product);
   }
 
+  String _newVoiceClientRequestId() =>
+      'rm-${DateTime.now().microsecondsSinceEpoch}';
+
+  Future<String> _voiceAudioClientRequestId(String recordingPath) async {
+    final stat = await File(recordingPath).stat();
+    final fingerprint =
+        '$recordingPath:${stat.size}:${stat.modified.microsecondsSinceEpoch}';
+    if (_lastCloudAudioFingerprint != fingerprint ||
+        _lastCloudAudioClientRequestId == null) {
+      _lastCloudAudioFingerprint = fingerprint;
+      _lastCloudAudioClientRequestId = _newVoiceClientRequestId();
+    }
+    return _lastCloudAudioClientRequestId!;
+  }
+
   Future<({List<ParsedItem> items, List<String> warnings, String interpretedText})>
       _parseWithGroq(String transcript) async {
     final response = await ApiClient.postJson(
@@ -1262,6 +1280,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       {
         'transcript': transcript,
         'language_code': _selectedLang.code,
+        'client_request_id': _newVoiceClientRequestId(),
       },
     );
 
@@ -1300,6 +1319,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       for (final rawValue in rawItems) {
         if (rawValue is! Map) continue;
         final raw = Map<String, dynamic>.from(rawValue);
+        if (voiceBillingItemNeedsManualReview(raw)) {
+          final warning = voiceBillingItemReviewWarning(raw);
+          if (!warnings.contains(warning)) warnings.add(warning);
+          continue;
+        }
         final name = (raw['product_name'] ?? raw['name'] ?? raw['item'] ?? '')
             .toString()
             .trim();
@@ -1935,6 +1959,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         throw StateError('No audio was captured. Please speak and try again.');
       }
 
+      final clientRequestId = await _voiceAudioClientRequestId(recordingPath);
       final audioFile = await http.MultipartFile.fromPath(
         'audio',
         recordingPath,
@@ -1943,7 +1968,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       );
       final response = await ApiClient.postMultipart(
         ApiClient.voiceBillingAudioEndpoint,
-        {'language_code': _selectedLang.code},
+        {
+          'language_code': _selectedLang.code,
+          'client_request_id': clientRequestId,
+        },
         files: [audioFile],
         timeout: const Duration(seconds: 90),
       );
