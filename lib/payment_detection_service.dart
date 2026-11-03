@@ -5744,9 +5744,7 @@ class PaymentDetectionService {
       PaymentTransactionDirection.outgoingDebit => 'debit',
       PaymentTransactionDirection.unknown => 'unknown',
     };
-    final eventKey = event.normalizedReferenceId != null
-        ? event.fingerprint
-        : event.sourceEventFingerprint ?? event.fingerprint;
+    final eventKey = event.fingerprint;
     final sourceText = event.detectionSource.trim();
     return {
       'event_key': eventKey,
