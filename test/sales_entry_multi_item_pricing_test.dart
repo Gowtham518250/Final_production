@@ -5,6 +5,17 @@ import 'package:retail_mind/sale_service.dart';
 
 void main() {
   group('multi-item sale pricing', () {
+    test('rapidly added bill rows always receive distinct editor keys', () {
+      final provider = SalesEntryProvider();
+      provider.addEntry();
+      provider.addEntry();
+      provider.addEntry();
+
+      final ids = provider.entries.map((entry) => entry.id).toSet();
+      expect(ids, hasLength(provider.entries.length));
+      provider.dispose();
+    });
+
     test('keeps each item's own price, discount and GST rate in the total', () async {
       final provider = SalesEntryProvider();
       provider.entries = [
