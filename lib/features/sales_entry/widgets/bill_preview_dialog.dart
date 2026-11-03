@@ -316,7 +316,7 @@ class _ReceiptPaper extends StatelessWidget {
                       Expanded(
                         flex: 1,
                         child: LiveTranslatedText(
-                          item.quantity.toString(),
+                          item.billableQuantity.toString(),
                           style: GoogleFonts.spaceMono(fontSize: 11),
                         ),
                       ),
