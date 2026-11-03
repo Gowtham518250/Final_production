@@ -39,7 +39,30 @@ class SalesItem {
     );
   }
 
-  double get subtotal => quantity * price;
-  double get totalGstAmount => subtotal * (gst / 100);
-  double get finalAmount => subtotal + totalGstAmount - discount;
+  static double _money(double value) =>
+      double.parse(value.toStringAsFixed(2));
+
+  double get subtotal {
+    if (!quantity.isFinite || !price.isFinite || quantity <= 0 || price <= 0) {
+      return 0.0;
+    }
+    return _money(quantity * price);
+  }
+
+  double get discountAmount {
+    if (!discount.isFinite || discount <= 0) return 0.0;
+    return _money(discount.clamp(0.0, subtotal).toDouble());
+  }
+
+  double get taxableAmount =>
+      _money((subtotal - discountAmount).clamp(0.0, double.infinity).toDouble());
+
+  double get effectiveGstRate {
+    if (!gst.isFinite || gst <= 0) return 0.0;
+    return gst.clamp(0.0, 100.0).toDouble();
+  }
+
+  double get totalGstAmount => _money(taxableAmount * effectiveGstRate / 100);
+
+  double get finalAmount => _money(taxableAmount + totalGstAmount);
 }
