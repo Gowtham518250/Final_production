@@ -5724,16 +5724,16 @@ class PaymentDetectionService {
     // Capture only a phone number explicitly labelled as a phone/mobile/contact
     // detail; never mistake a 10-digit UTR or arbitrary message number for a phone.
     final match = RegExp(
-      r'\\b(?:phone|mobile|contact|customer\\s+number)\\D{0,12}(\\+?91[\\s-]?[6-9]\\d{9}|[6-9]\\d{9})\\b',
+      r'\b(?:phone|mobile|contact|customer\s+number)\D{0,12}(\+?91[\s-]?[6-9]\d{9}|[6-9]\d{9})\b',
       caseSensitive: false,
     ).firstMatch(text);
     final raw = match?.group(1);
     if (raw == null) return null;
-    final digits = raw.replaceAll(RegExp(r'\\D'), '');
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
     final normalized = digits.startsWith('91') && digits.length == 12
         ? digits.substring(2)
         : digits;
-    return RegExp(r'^[6-9]\\d{9}$').hasMatch(normalized)
+    return RegExp(r'^[6-9]\d{9}$').hasMatch(normalized)
         ? normalized
         : null;
   }
