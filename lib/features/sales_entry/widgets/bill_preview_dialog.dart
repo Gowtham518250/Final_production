@@ -18,8 +18,8 @@ class BillPreviewDialog extends StatelessWidget {
         .where((entry) => entry.itemName.trim().isNotEmpty && entry.quantity > 0 && entry.price >= 0)
         .map((entry) => <String, dynamic>{
               'product_name': entry.itemName.trim(),
-              'qty': entry.quantity,
-              'price': entry.price,
+              'qty': entry.billableQuantity,
+              'price': entry.billablePrice,
               'discount_amount': entry.discountAmount,
               'gst_rate': entry.effectiveGstRate,
               'line_total': entry.taxableAmount,
