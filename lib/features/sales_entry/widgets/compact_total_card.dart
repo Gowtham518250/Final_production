@@ -14,8 +14,8 @@ class CompactTotalCard extends StatelessWidget {
       builder: (context, provider, child) {
         final double subtotal = provider.subtotalAmount;
         final double totalAmount = provider.totalAmount;
-        final double cgst = provider.withTax ? subtotal * 0.09 : 0.0;
-        final double sgst = provider.withTax ? subtotal * 0.09 : 0.0;
+        final double cgst = provider.withTax ? provider.cgstAmount : 0.0;
+        final double sgst = provider.withTax ? provider.sgstAmount : 0.0;
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(20),
@@ -116,7 +116,7 @@ class CompactTotalCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   LiveTranslatedText(
-                    totalAmount.toStringAsFixed(0),
+                    totalAmount.toStringAsFixed(2),
                     style: GoogleFonts.spaceMono(
                       fontSize: 42,
                       fontWeight: FontWeight.w900,
@@ -145,15 +145,31 @@ class CompactTotalCard extends StatelessWidget {
                 ],
               ),
               
-              if (provider.withTax && subtotal > 0) ...[
+              if (subtotal > 0) ...[
                 const SizedBox(height: 16),
                 const Divider(color: Color(0xFFF3F4F6), height: 1),
                 const SizedBox(height: 12),
                 _TaxRow(label: 'Subtotal', value: '₹${subtotal.toStringAsFixed(2)}', isLight: true),
-                const SizedBox(height: 4),
-                _TaxRow(label: 'CGST (9%)', value: '₹${cgst.toStringAsFixed(2)}', color: const Color(0xFF6366F1)),
-                const SizedBox(height: 4),
-                                _TaxRow(label: 'SGST (9%)', value: '\u20b9', color: const Color(0xFF6366F1)),
+                if (provider.totalDiscountAmount > 0) ...[
+                  const SizedBox(height: 4),
+                  _TaxRow(
+                    label: 'Item discount',
+                    value: '-₹${provider.totalDiscountAmount.toStringAsFixed(2)}',
+                    color: const Color(0xFF059669),
+                  ),
+                  const SizedBox(height: 4),
+                  _TaxRow(
+                    label: 'Taxable subtotal',
+                    value: '₹${provider.taxableSubtotalAmount.toStringAsFixed(2)}',
+                    isLight: true,
+                  ),
+                ],
+                if (provider.withTax) ...[
+                  const SizedBox(height: 4),
+                  _TaxRow(label: 'CGST', value: '₹${cgst.toStringAsFixed(2)}', color: const Color(0xFF6366F1)),
+                  const SizedBox(height: 4),
+                  _TaxRow(label: 'SGST', value: '₹${sgst.toStringAsFixed(2)}', color: const Color(0xFF6366F1)),
+                ],
               ],
             ],
           ),
