@@ -32,6 +32,7 @@ class SyncQueueManager {
     'update_invoice_paid',
     'update_invoice_unpaid',
     'record_payment',
+    'payment_detection_evidence',
     'record_khata_payment',
     'decrease_stock',
     'delete_product',
