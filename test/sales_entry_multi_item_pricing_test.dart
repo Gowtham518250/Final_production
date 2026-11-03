@@ -5,7 +5,7 @@ import 'package:retail_mind/sale_service.dart';
 
 void main() {
   group('multi-item sale pricing', () {
-    test('keeps each item's own price, discount and GST rate in the total', () {
+    test('keeps each item's own price, discount and GST rate in the total', () async {
       final provider = SalesEntryProvider();
       provider.entries = [
         const SalesItem(
@@ -33,6 +33,16 @@ void main() {
       expect(provider.sgstAmount, 9.33);
       expect(provider.taxAmount, 18.66);
       expect(provider.totalAmount, 226.66);
+
+      // A row with a price but no product name must never inflate the bill
+      // total or be silently omitted from the line-item upload.
+      provider.entries.add(
+        const SalesItem(id: 'unnamed', itemName: '', quantity: 1, price: 100),
+      );
+      expect(provider.totalAmount, 226.66);
+      expect(await provider.submitSale(), isFalse);
+      expect(provider.lastVoiceMessage, contains('item name'));
+      provider.entries.removeLast();
 
       provider.toggleTax();
       expect(provider.taxAmount, 0.00);
