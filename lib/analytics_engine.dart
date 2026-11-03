@@ -532,7 +532,7 @@ class AnalyticsEngine {
         return;
       }
 
-      final quantity = _toDouble(record['quantity'] ?? record['qty'], 1);
+      final quantity = _toDouble(record['quantity'] ?? record['qty'] ?? 1);
       final unitPrice = _toDouble(record['unit_price'] ?? record['price']);
       final lineTotal = _toDouble(
         record['line_total'] ??
