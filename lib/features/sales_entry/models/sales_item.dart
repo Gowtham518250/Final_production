@@ -42,11 +42,19 @@ class SalesItem {
   static double _money(double value) =>
       double.parse(value.toStringAsFixed(2));
 
+  double get billableQuantity {
+    if (!quantity.isFinite || quantity <= 0) return 0.0;
+    return double.parse(quantity.toStringAsFixed(3));
+  }
+
+  double get billablePrice {
+    if (!price.isFinite || price <= 0) return 0.0;
+    return _money(price);
+  }
+
   double get subtotal {
-    if (!quantity.isFinite || !price.isFinite || quantity <= 0 || price <= 0) {
-      return 0.0;
-    }
-    return _money(quantity * price);
+    if (billableQuantity <= 0 || billablePrice <= 0) return 0.0;
+    return _money(billableQuantity * billablePrice);
   }
 
   double get discountAmount {
