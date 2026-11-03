@@ -56,17 +56,24 @@ class SalesEntryProvider extends ChangeNotifier {
 
   double _money(double value) => double.parse(value.toStringAsFixed(2));
 
+  bool _hasValidItemName(SalesItem entry) {
+    final name = entry.itemName.trim().toLowerCase();
+    return name.isNotEmpty && name != 'unknown' && name != 'unknown item';
+  }
+
+  Iterable<SalesItem> get _namedEntries => entries.where(_hasValidItemName);
+
   double get subtotalAmount =>
-      _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.subtotal));
+      _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.subtotal));
 
   double get totalDiscountAmount =>
-      _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.discountAmount));
+      _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.discountAmount));
 
   double get taxableSubtotalAmount =>
-      _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.taxableAmount));
+      _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.taxableAmount));
 
   double get taxAmount => withTax
-      ? _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.totalGstAmount))
+      ? _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.totalGstAmount))
       : 0.0;
 
   double get cgstAmount => _money(taxAmount / 2);
@@ -433,11 +440,21 @@ class SalesEntryProvider extends ChangeNotifier {
   }
 
   bool _validateSaleDraftPrices() {
-    final incomplete = entries.where((entry) {
-      final name = entry.itemName.trim();
-      if (name.isEmpty || name.toLowerCase() == 'unknown' || name.toLowerCase() == 'unknown item') {
-        return false;
-      }
+    final unnamedWithValues = entries.where((entry) {
+      if (_hasValidItemName(entry)) return false;
+      return entry.price != 0 ||
+          entry.discount != 0 ||
+          entry.gst != 0 ||
+          entry.quantity != 1;
+    }).toList();
+    if (unnamedWithValues.isNotEmpty) {
+      lastVoiceMessage =
+          'Enter an item name or clear the values from every unnamed bill row before saving.';
+      notifyListeners();
+      return false;
+    }
+
+    final incomplete = _namedEntries.where((entry) {
       return !entry.price.isFinite ||
           _money(entry.price) <= 0 ||
           !entry.quantity.isFinite ||
