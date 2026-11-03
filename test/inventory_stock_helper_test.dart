@@ -90,6 +90,59 @@ void main() {
     });
   });
 
+  group('InventoryStockHelper stock classification', () {
+    test('treats the minimum threshold as low stock, including decimals', () {
+      final product = InventoryStockHelper.normalizeProduct({
+        'id': 1,
+        'product_name': 'Loose Rice',
+        'current_stock': '0.500',
+        'min_stock': '0.500',
+        'unit': 'kg',
+      });
+
+      expect(InventoryStockHelper.isLowStock(product), isTrue);
+      expect(InventoryStockHelper.isOutOfStock(product), isFalse);
+      expect(InventoryStockHelper.isInStock(product), isFalse);
+    });
+
+    test('keeps zero stock in the separate out-of-stock category', () {
+      final product = InventoryStockHelper.normalizeProduct({
+        'id': 2,
+        'product_name': 'Sugar',
+        'current_stock': '0',
+        'min_stock': '2.5',
+      });
+
+      expect(InventoryStockHelper.isOutOfStock(product), isTrue);
+      expect(InventoryStockHelper.isLowStock(product), isFalse);
+      expect(InventoryStockHelper.isInStock(product), isFalse);
+    });
+
+    test('uses the legacy default threshold of 10 when missing', () {
+      final product = InventoryStockHelper.normalizeProduct({
+        'id': 3,
+        'product_name': 'Oil',
+        'current_stock': '9.5',
+      });
+
+      expect(product['min_stock'], 10.0);
+      expect(InventoryStockHelper.isLowStock(product), isTrue);
+    });
+
+    test('classifies stock above the threshold as in stock', () {
+      final product = InventoryStockHelper.normalizeProduct({
+        'id': 4,
+        'product_name': 'Soap',
+        'current_stock': '10.001',
+        'min_stock': '10',
+      });
+
+      expect(InventoryStockHelper.isInStock(product), isTrue);
+      expect(InventoryStockHelper.isLowStock(product), isFalse);
+      expect(InventoryStockHelper.isOutOfStock(product), isFalse);
+    });
+  });
+
   group('InventoryStockHelper.findDuplicateProducts', () {
     final book = <String, dynamic>{
       'id': 42, 'product_name': 'Classmate Notebook',
