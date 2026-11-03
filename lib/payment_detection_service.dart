@@ -5720,6 +5720,63 @@ class PaymentDetectionService {
     }
   }
 
+  String? _paymentDetectionPhone(String text) {
+    // Capture only a phone number explicitly labelled as a phone/mobile/contact
+    // detail; never mistake a 10-digit UTR or arbitrary message number for a phone.
+    final match = RegExp(
+      r'\\b(?:phone|mobile|contact|customer\\s+number)\\D{0,12}(\\+?91[\\s-]?[6-9]\\d{9}|[6-9]\\d{9})\\b',
+      caseSensitive: false,
+    ).firstMatch(text);
+    final raw = match?.group(1);
+    if (raw == null) return null;
+    final digits = raw.replaceAll(RegExp(r'\\D'), '');
+    final normalized = digits.startsWith('91') && digits.length == 12
+        ? digits.substring(2)
+        : digits;
+    return RegExp(r'^[6-9]\\d{9}$').hasMatch(normalized)
+        ? normalized
+        : null;
+  }
+
+  Map<String, dynamic> _paymentDetectionEvidencePayload(PaymentEvent event) {
+    final direction = switch (event.direction) {
+      PaymentTransactionDirection.incomingCredit => 'credit',
+      PaymentTransactionDirection.outgoingDebit => 'debit',
+      PaymentTransactionDirection.unknown => 'unknown',
+    };
+    final eventKey = event.normalizedReferenceId != null
+        ? event.fingerprint
+        : event.sourceEventFingerprint ??
+            'event_${sha256.convert(utf8.encode(event.id)).toString()}';
+    final sourceText = event.detectionSource.trim();
+    return {
+      'event_key': eventKey,
+      'amount': event.amount,
+      'direction': direction,
+      if (event.payerName?.trim().isNotEmpty == true)
+        'payer_name': event.payerName!.trim(),
+      if (_paymentDetectionPhone(event.rawText) != null)
+        'payer_phone': _paymentDetectionPhone(event.rawText),
+      if (event.vpa?.trim().isNotEmpty == true)
+        'payer_vpa': event.vpa!.trim(),
+      if (event.bankName?.trim().isNotEmpty == true)
+        'bank_name': event.bankName!.trim(),
+      if (event.accountSuffix?.trim().isNotEmpty == true)
+        'account_suffix': event.accountSuffix!.trim(),
+      if (event.referenceId?.trim().isNotEmpty == true)
+        'reference_id': event.referenceId!.trim(),
+      'detected_source': sourceText.isEmpty ? 'unknown' : sourceText,
+      'payment_app': event.app.name,
+      'confidence_score': event.confidenceScore.clamp(0.0, 1.0),
+      'decision': event.decision.name,
+      // A detector event must never self-assert merchant/provider verification.
+      'verification_status': 'unverified',
+      'source_event_hash': event.sourceEventFingerprint ??
+          sha256.convert(utf8.encode(event.id)).toString(),
+      'detected_at': (event.sourceTimestamp ?? event.timestamp).toIso8601String(),
+    };
+  }
+
   Future<void> _emit(
     PaymentEvent event, {
     bool isBillSettlement = false,
@@ -5893,6 +5950,19 @@ class PaymentDetectionService {
 
     // V26: Deduplicate history entries by ID (In-place update)
     history.addOrUpdate(ui);
+
+    // Keep a durable server-side audit observation for every accepted candidate.
+    // This is deliberately separate from the payments ledger and cannot settle an invoice.
+    if (event.amount.isFinite &&
+        event.amount > 0 &&
+        event.decision != PaymentDecision.rejected &&
+        !event.isFailed) {
+      unawaited(
+        SyncService.recordPaymentDetectionEvidence(
+          _paymentDetectionEvidencePayload(event),
+        ),
+      );
+    }
 
     if (event.isMerchantConfirmed) _lastConfirmed = event;
 
