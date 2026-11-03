@@ -4,6 +4,17 @@ import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'api_client.dart';
 
+double _asStockNumber(dynamic value, {double fallback = 0}) {
+  if (value is num) return value.toDouble();
+  final parsed = double.tryParse(value?.toString() ?? '');
+  return parsed != null && parsed.isFinite ? parsed : fallback;
+}
+
+int _asInteger(dynamic value, {int fallback = 0}) {
+  if (value is int) return value;
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
 /// 📊 Low Stock Alerts Service
 /// Monitors inventory and alerts when stock falls below threshold
 class LowStockAlertsService {
@@ -111,10 +122,10 @@ class LowStockProduct {
   final int productId;
   final String productName;
   final String sku;
-  final int currentStock;
-  final int minStock;
-  final int reorderLevel;
-  final int maxStock;
+  final double currentStock;
+  final double minStock;
+  final double reorderLevel;
+  final double maxStock;
   final double unitPrice;
   final String category;
   final int daysUntilStockout;
@@ -134,16 +145,19 @@ class LowStockProduct {
 
   factory LowStockProduct.fromJson(Map<String, dynamic> json) {
     return LowStockProduct(
-      productId: json['id'] ?? json['product_id'] ?? 0,
-      productName: json['product_name'] ?? json['name'] ?? '',
-      sku: json['sku'] ?? '',
-      currentStock: json['current_stock'] ?? json['stock'] ?? 0,
-      minStock: json['min_stock'] ?? 0,
-      reorderLevel: json['reorder_level'] ?? 0,
-      maxStock: json['max_stock'] ?? 0,
-      unitPrice: (json['unit_price'] ?? 0).toDouble(),
-      category: json['category'] ?? '',
-      daysUntilStockout: json['days_until_stockout'] ?? 0,
+      productId: _asInteger(json['id'] ?? json['product_id']),
+      productName: json['product_name']?.toString() ??
+          json['name']?.toString() ?? '',
+      sku: json['sku']?.toString() ?? '',
+      currentStock: _asStockNumber(
+        json['current_stock'] ?? json['stock'],
+      ),
+      minStock: _asStockNumber(json['min_stock'], fallback: 10),
+      reorderLevel: _asStockNumber(json['reorder_level']),
+      maxStock: _asStockNumber(json['max_stock']),
+      unitPrice: _asStockNumber(json['unit_price']),
+      category: json['category']?.toString() ?? '',
+      daysUntilStockout: _asInteger(json['days_until_stockout']),
     );
   }
 
@@ -163,8 +177,10 @@ class LowStockProduct {
   }
 
   // Calculate order quantity
-  int get suggestedOrderQuantity {
-    return (maxStock * 1.5).toInt() - currentStock;
+  double get suggestedOrderQuantity {
+    return ((maxStock * 1.5) - currentStock)
+        .clamp(0.0, double.infinity)
+        .toDouble();
   }
 
   // Estimate stockout date
@@ -178,9 +194,9 @@ class LowStockProduct {
 class StockAlertDetails {
   final int productId;
   final String productName;
-  final int currentStock;
-  final int minStock;
-  final int reorderLevel;
+  final double currentStock;
+  final double minStock;
+  final double reorderLevel;
   final DateTime? lastRestockDate;
   final double dailyConsumption;
   final int estimatedRestockDays;
@@ -198,20 +214,25 @@ class StockAlertDetails {
 
   factory StockAlertDetails.fromJson(Map<String, dynamic> json) {
     return StockAlertDetails(
-      productId: json['id'] ?? json['product_id'] ?? 0,
-      productName: json['product_name'] ?? '',
-      currentStock: json['current_stock'] ?? 0,
-      minStock: json['min_stock'] ?? 0,
-      reorderLevel: json['reorder_level'] ?? 0,
+      productId: _asInteger(json['id'] ?? json['product_id']),
+      productName: json['product_name']?.toString() ?? '',
+      currentStock: _asStockNumber(
+        json['current_stock'] ?? json['stock'],
+      ),
+      minStock: _asStockNumber(json['min_stock'], fallback: 10),
+      reorderLevel: _asStockNumber(json['reorder_level']),
       lastRestockDate: json['last_restock_date'] != null
-          ? DateTime.parse(json['last_restock_date'])
+          ? DateTime.tryParse(json['last_restock_date'].toString())
           : null,
-      dailyConsumption: (json['daily_consumption'] ?? 0).toDouble(),
-      estimatedRestockDays: json['estimated_restock_days'] ?? 0,
+      dailyConsumption: _asStockNumber(json['daily_consumption']),
+      estimatedRestockDays: _asInteger(json['estimated_restock_days']),
     );
   }
 
   String get alertMessage {
+    if (currentStock <= 0) {
+      return 'OUT OF STOCK: No stock is currently available.';
+    }
     if (currentStock <= minStock) {
       return 'CRITICAL: Only $currentStock units left. Will stockout in $estimatedRestockDays days!';
     }

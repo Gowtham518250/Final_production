@@ -18,6 +18,20 @@ class ExportService {
 
     final value = rawDate.toString().trim();
     final trimmed = value.replaceFirst(RegExp(r'\s+Z$'), 'Z');
+    final hasClock = RegExp(r'[ T]\d{1,2}:\d{2}').hasMatch(trimmed);
+    final hasExplicitZone = trimmed.endsWith('Z') ||
+        RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(trimmed);
+
+    // Match the transaction-history screen: timestamps without an explicit
+    // offset are backend UTC timestamps, not device-local wall-clock values.
+    if (hasClock) {
+      final parsed = DateTime.tryParse(trimmed);
+      if (parsed != null) {
+        if (hasExplicitZone) return parsed.toLocal();
+        final asUtc = DateTime.tryParse('${trimmed}Z');
+        if (asUtc != null) return asUtc.toLocal();
+      }
+    }
 
     for (final pattern in [
       'yyyy-MM-dd',
@@ -53,39 +67,86 @@ class ExportService {
     }
   }
 
+  static bool _hasRecordedClock(dynamic rawValue) {
+    if (rawValue is DateTime) return true;
+    final value = rawValue?.toString().trim() ?? '';
+    return RegExp(r'\d{1,2}:\d{2}').hasMatch(value);
+  }
+
+  static const List<String> _recordedTimestampKeys = [
+    'event_timestamp',
+    'sale_timestamp',
+    'recorded_at',
+    'recordedAt',
+    'created_at',
+    'createdAt',
+    'timestamp',
+    'paid_at',
+    'paidAt',
+    'payment_timestamp',
+    'updated_at',
+    'updatedAt',
+    'date',
+    'sale_date',
+  ];
+
   static DateTime? resolveSalesDate(Map<String, dynamic>? sale) {
     if (sale == null) return null;
 
-    final keys = [
+    // Prefer the actual event/creation timestamp over a business-date field.
+    // This prevents a date-only "date" value from masking created_at's time.
+    for (final key in _recordedTimestampKeys) {
+      final rawValue = sale[key];
+      if (!_hasRecordedClock(rawValue)) continue;
+      final parsed = parseSalesDate(rawValue);
+      if (parsed != null) return parsed;
+    }
+
+    // Business/invoice dates are a fallback for older records that never
+    // stored an event timestamp. They must not be presented as a sale time.
+    for (final key in const [
       'date',
       'sale_date',
       'business_date',
       'invoice_date',
-      'created_at',
-      'createdAt',
-      'updated_at',
-      'updatedAt',
-      'timestamp',
-      'event_timestamp',
-      'sale_timestamp',
       'paid_date',
       'payment_date',
-    ];
-
-    for (final key in keys) {
+    ]) {
       final parsed = parseSalesDate(sale[key]);
       if (parsed != null) return parsed;
     }
 
     final raw = sale['raw'];
     if (raw is Map) {
-      final nested = Map<String, dynamic>.from(raw);
-      final nestedParsed = resolveSalesDate(nested);
-      if (nestedParsed != null) return nestedParsed;
+      return resolveSalesDate(Map<String, dynamic>.from(raw));
     }
-
     return null;
   }
+
+  /// Returns null when the source record contains only a business date.
+  static DateTime? resolveSalesEventTime(Map<String, dynamic>? sale) {
+    if (sale == null) return null;
+    for (final key in _recordedTimestampKeys) {
+      final rawValue = sale[key];
+      if (!_hasRecordedClock(rawValue)) continue;
+      final parsed = parseSalesDate(rawValue);
+      if (parsed != null) return parsed;
+    }
+
+    final raw = sale['raw'];
+    if (raw is Map) {
+      return resolveSalesEventTime(Map<String, dynamic>.from(raw));
+    }
+    return null;
+  }
+
+  static String formatSalesDate(DateTime? value) => value == null
+      ? 'N/A'
+      : DateFormat('dd/MM/yyyy').format(value.toLocal());
+
+  static String formatSalesTime(DateTime? value) => value == null
+      ? 'Not recorded'
+      : DateFormat('hh:mm:ss a').format(value.toLocal());
 
   /// Generate CSV from sales data
   static Future<String> generateCSV(List<Map<String, dynamic>> sales) async {
@@ -415,16 +476,18 @@ class ExportService {
             ),
             pw.SizedBox(height: 10),
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'Product', 'Qty', 'Price', 'Total', 'Method'],
+              headers: ['Sale Date', 'Recorded Time', 'Product', 'Qty', 'Price', 'Total', 'Method'],
               data: sortedSales.map((sale) {
                 final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
                 final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
                 final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
                 final String name = (sale['product'] ?? sale['item'] ?? 'N/A').toString();
-                final String dateStr = _formatDate(resolveSalesDate(sale) ?? DateTime.now());
+                final String dateStr = formatSalesDate(resolveSalesDate(sale));
+                final String timeStr = formatSalesTime(resolveSalesEventTime(sale));
 
                 return [
                   dateStr,
+                  timeStr,
                   name,
                   qty.toString(),
                   price.toStringAsFixed(0),
@@ -548,16 +611,18 @@ class ExportService {
             ),
             pw.SizedBox(height: 10),
             pw.TableHelper.fromTextArray(
-              headers: ['Date', 'Product', 'Qty', 'Price', 'Total', 'Method'],
+              headers: ['Sale Date', 'Recorded Time', 'Product', 'Qty', 'Price', 'Total', 'Method'],
               data: sortedSales.map((sale) {
                  final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
                  final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
                  final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
                  final String name = (sale['product'] ?? sale['item'] ?? 'N/A').toString();
-                 final String dateStr = _formatDate(resolveSalesDate(sale) ?? DateTime.now());
+                 final String dateStr = formatSalesDate(resolveSalesDate(sale));
+                 final String timeStr = formatSalesTime(resolveSalesEventTime(sale));
 
                  return [
                   dateStr,
+                  timeStr,
                   name,
                   qty.toString(),
                   price.toStringAsFixed(0),

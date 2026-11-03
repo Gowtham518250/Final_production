@@ -94,6 +94,41 @@ class InventoryStockHelper {
     return 0;
   }
 
+  /// Minimum threshold shared by inventory screens and alert calculations.
+  /// Missing legacy values retain the app's established default of 10.
+  static double readMinimumStock(
+    Map<String, dynamic> product, {
+    double fallback = 10,
+  }) {
+    for (final key in const [
+      'min_stock',
+      'minStock',
+      'minimum_stock',
+      'minimumStock',
+    ]) {
+      final value = product[key];
+      if (value == null) continue;
+      final parsed = double.tryParse(value.toString());
+      if (parsed != null && parsed.isFinite && parsed >= 0) return parsed;
+    }
+    return fallback;
+  }
+
+  static bool isOutOfStock(Map<String, dynamic> product) =>
+      readStock(product) <= 0;
+
+  /// "Low stock" is a positive balance at/below the reorder threshold.
+  /// Zero or negative balances belong to the separate "Out of Stock" group.
+  static bool isLowStock(Map<String, dynamic> product) {
+    final stock = readStock(product);
+    return stock > 0 && stock <= readMinimumStock(product);
+  }
+
+  static bool isInStock(Map<String, dynamic> product) {
+    final stock = readStock(product);
+    return stock > readMinimumStock(product);
+  }
+
   static double? parseStockThresholdInput(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;
@@ -170,8 +205,7 @@ class InventoryStockHelper {
     if (name.isNotEmpty) product['product_name'] = name;
 
     writeStock(product, readStock(product));
-    product['min_stock'] =
-        double.tryParse(product['min_stock']?.toString() ?? '10') ?? 10;
+    product['min_stock'] = readMinimumStock(product);
     return product;
   }
 

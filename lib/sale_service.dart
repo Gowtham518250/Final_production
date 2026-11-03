@@ -472,9 +472,9 @@ try {
     try {
       StockAlertService.checkAndAlertLowStock(
         productName: item['product_name']?.toString() ?? 'Unknown',
-        quantitySold: (item['qty'] is num
+        quantitySold: item['qty'] is num
             ? (item['qty'] as num).toDouble()
-            : double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0).round(),
+            : double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0,
         productId: int.tryParse((item['product_id'] ?? item['id'] ?? '0').toString()) ?? 0,
       );
     } catch (_) {}

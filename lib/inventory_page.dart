@@ -2183,10 +2183,11 @@ class _InventoryPageState extends State<InventoryPage>
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final lowStock = _products.where((p) {
-      final stock = _stockNumber(p['current_stock']);
-      final minimum = _stockNumber(p['min_stock'], fallback: 10);
-      return stock > 0 && stock <= minimum;
+    final lowStock = _products.where((raw) {
+      if (raw is! Map) return false;
+      return InventoryStockHelper.isLowStock(
+        Map<String, dynamic>.from(raw),
+      );
     }).length;
 
     return Scaffold(
@@ -2499,15 +2500,13 @@ class _InventoryPageState extends State<InventoryPage>
     return _products.where((raw) {
       if (raw is! Map) return false;
       final product = Map<String, dynamic>.from(raw);
-      final stock = _stockNumber(product['current_stock']);
-      final minimum = _stockNumber(product['min_stock'], fallback: 10);
       switch (filter) {
         case 'Low Stock':
-          return stock > 0 && stock <= minimum;
+          return InventoryStockHelper.isLowStock(product);
         case 'Out of Stock':
-          return stock <= 0;
+          return InventoryStockHelper.isOutOfStock(product);
         case 'In Stock':
-          return stock > minimum;
+          return InventoryStockHelper.isInStock(product);
         default:
           return true;
       }
@@ -2548,8 +2547,6 @@ class _InventoryPageState extends State<InventoryPage>
         .where((raw) {
           if (raw is! Map) return false;
           final product = Map<String, dynamic>.from(raw);
-          final stock = _stockNumber(product['current_stock']);
-          final minimum = _stockNumber(product['min_stock'], fallback: 10);
           final search = _inventorySearch.trim().toLowerCase();
           final searchable = [
             product['product_name'],
@@ -2560,11 +2557,11 @@ class _InventoryPageState extends State<InventoryPage>
           final matchesSearch = search.isEmpty || searchable.contains(search);
           var matchesFilter = true;
           if (_stockFilter == 'Low Stock') {
-            matchesFilter = stock > 0 && stock <= minimum;
+            matchesFilter = InventoryStockHelper.isLowStock(product);
           } else if (_stockFilter == 'Out of Stock') {
-            matchesFilter = stock <= 0;
+            matchesFilter = InventoryStockHelper.isOutOfStock(product);
           } else if (_stockFilter == 'In Stock') {
-            matchesFilter = stock > minimum;
+            matchesFilter = InventoryStockHelper.isInStock(product);
           }
           return matchesSearch && matchesFilter;
         })
@@ -2816,10 +2813,8 @@ class _InventoryPageState extends State<InventoryPage>
   }
 
   Widget _productCard(Map<String, dynamic> p) {
-    final stock = _stockNumber(p['current_stock']);
-    final minimum = _stockNumber(p['min_stock'], fallback: 10);
-    final isLow = stock <= minimum;
-    final isOut = stock <= 0;
+    final isLow = InventoryStockHelper.isLowStock(p);
+    final isOut = InventoryStockHelper.isOutOfStock(p);
     final statusColor = isOut ? Colors.red : (isLow ? _warning : _success);
     final statusText = isOut ? 'OUT' : (isLow ? 'LOW' : 'OK');
 
@@ -2828,7 +2823,7 @@ class _InventoryPageState extends State<InventoryPage>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: isLow
+        border: (isLow || isOut)
             ? Border.all(color: statusColor.withValues(alpha: 0.5))
             : null,
         boxShadow: [
