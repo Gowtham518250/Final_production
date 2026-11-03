@@ -5746,8 +5746,7 @@ class PaymentDetectionService {
     };
     final eventKey = event.normalizedReferenceId != null
         ? event.fingerprint
-        : event.sourceEventFingerprint ??
-            'event_${sha256.convert(utf8.encode(event.id)).toString()}';
+        : event.sourceEventFingerprint ?? event.fingerprint;
     final sourceText = event.detectionSource.trim();
     return {
       'event_key': eventKey,
