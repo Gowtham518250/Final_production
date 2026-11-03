@@ -178,7 +178,9 @@ class LowStockProduct {
 
   // Calculate order quantity
   double get suggestedOrderQuantity {
-    return ((maxStock * 1.5) - currentStock).clamp(0.0, double.infinity);
+    return ((maxStock * 1.5) - currentStock)
+        .clamp(0.0, double.infinity)
+        .toDouble();
   }
 
   // Estimate stockout date
