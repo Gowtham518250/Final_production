@@ -143,6 +143,62 @@ void main() {
       );
     });
 
+    test('flat cloud rows for one invoice retain every product in analytics', () {
+      final engine = AnalyticsEngine();
+      final now = DateTime.now();
+      final businessDate =
+          '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+      final timestamp = now.toUtc().toIso8601String();
+
+      engine.recalculateAnalytics([
+        {
+          'id': '77_0',
+          'sale_id': 'BILL-FLAT-77',
+          'invoice_id': 77,
+          'invoice_number': 'BILL-FLAT-77',
+          'business_date': businessDate,
+          'created_at': timestamp,
+          'updated_at': timestamp,
+          'product_name': 'Chicken',
+          'price': 800,
+          'quantity': 1,
+          'total': 800,
+          'total_amount': 1800,
+          'paid_amount': 1800,
+        },
+        {
+          'id': '77_1',
+          'sale_id': 'BILL-FLAT-77',
+          'invoice_id': 77,
+          'invoice_number': 'BILL-FLAT-77',
+          'business_date': businessDate,
+          'created_at': timestamp,
+          'updated_at': timestamp,
+          'product_name': 'Mutton',
+          'price': 1000,
+          'quantity': 1,
+          'total': 1000,
+          'total_amount': 1800,
+          'paid_amount': 1800,
+        },
+      ], 0);
+
+      expect(engine.totalTransactions, 1);
+      expect(engine.sales, hasLength(1));
+      final lines = engine.sales.single['items'] as List;
+      expect(lines, hasLength(2));
+      expect(
+        lines.map((line) => (line as Map)['product_name']).toSet(),
+        {'Chicken', 'Mutton'},
+      );
+      expect(
+        engine.productAnalyticsCache.values.map((row) => row['total']).toSet(),
+        {800.0, 1000.0},
+      );
+    });
+
     test('four line items remain attached to one sale', () {
       final engine = AnalyticsEngine();
 
