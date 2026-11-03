@@ -65,6 +65,75 @@ class SaleService {
     return 'UNPAID';
 }
 
+  @visibleForTesting
+  static Map<String, dynamic> normalizeSaleLineItem(
+    Map<String, dynamic> item, {
+    int? resolvedProductId,
+    bool withTax = true,
+  }) {
+    double number(dynamic value, double fallback) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? '') ?? fallback;
+    }
+    double money(double value) => double.parse(value.toStringAsFixed(2));
+
+    final rawName = item['product_name'] ?? item['itemName'] ??
+        item['name'] ?? item['title'] ?? item['product'];
+    final name = rawName?.toString().trim() ?? '';
+    if (name.isEmpty || name.toLowerCase() == 'unknown' ||
+        name.toLowerCase() == 'unknown item') {
+      throw const FormatException('Sale item requires a valid product name.');
+    }
+
+    final rawQty = number(item['quantity'] ?? item['qty'] ?? 1, 1);
+    final rawPrice = number(item['price'] ?? item['unit_price'] ?? 0, 0);
+    if (!rawQty.isFinite || rawQty <= 0 || !rawPrice.isFinite || rawPrice <= 0) {
+      throw const FormatException('Sale item requires a positive finite quantity and price.');
+    }
+    final quantity = double.parse(rawQty.toStringAsFixed(3));
+    final price = money(rawPrice);
+    if (price <= 0) {
+      throw const FormatException('Sale item price must be at least one paisa.');
+    }
+
+    final grossLine = money(CurrencyManager.multiply(price, quantity));
+    final rawDiscount = number(item['discount_amount'] ?? item['discount'] ?? 0, 0);
+    if (!rawDiscount.isFinite || rawDiscount < 0) {
+      throw const FormatException('Sale item discount must be finite and non-negative.');
+    }
+    final discount = money(rawDiscount.clamp(0.0, grossLine).toDouble());
+    final lineTotal = money((grossLine - discount).clamp(0.0, double.infinity).toDouble());
+
+    final gstRate = number(item['gst_rate'] ?? item['gst'] ?? 0, 0);
+    if (!gstRate.isFinite || gstRate < 0 || gstRate > 100) {
+      throw const FormatException('GST rate must be between 0 and 100.');
+    }
+    final taxAmount = withTax ? money(lineTotal * gstRate / 100) : 0.0;
+    final totalWithTax = money(lineTotal + taxAmount);
+
+    final custom = item['stock_tracked'] == false || item['is_custom_item'] == true;
+    final rawId = resolvedProductId ??
+        (int.tryParse((item['product_id'] ?? item['id'] ?? '0').toString()) ?? 0);
+    final productId = custom ? null : (rawId > 0 ? rawId : null);
+
+    return <String, dynamic>{
+      'product_id': productId,
+      'product_name': name,
+      'stock_tracked': !custom,
+      'is_custom_item': custom,
+      'quantity': quantity,
+      'qty': quantity,
+      'unit_price': price,
+      'line_total': lineTotal,
+      'total': lineTotal,
+      'discount_amount': discount,
+      'gst': gstRate,
+      'gst_rate': gstRate,
+      'tax_amount': taxAmount,
+      'total_with_tax': totalWithTax,
+    };
+  }
+
   static Future<Map<String, dynamic>> submitSale({
     required String saleId,
     required List<Map<String, dynamic>> items,
@@ -148,83 +217,42 @@ try {
   final localProducts = await LocalStorageService.loadLocalProducts();
 
   final lineItems = items.map((item) {
-    final isCustomLine =
-        item['stock_tracked'] == false || item['is_custom_item'] == true;
-    final productIdRaw = item['product_id'] ?? item['id'] ?? '0';
-    final parsedId = int.tryParse(productIdRaw.toString()) ?? 0;
+    final custom = item['stock_tracked'] == false || item['is_custom_item'] == true;
+    final rawId = int.tryParse((item['product_id'] ?? item['id'] ?? '0').toString()) ?? 0;
+    int productId = custom ? 0 : (rawId > 0 ? rawId : 0);
 
-    // A custom line must not regain inventory identity by matching its name
-    // against a stale local cache during save/retry.
-    int validId = isCustomLine ? 0 : (parsedId > 0 ? parsedId : 0);
-    if (!isCustomLine && validId == 0) {
-      final String itemName = item['product_name'] ?? item['itemName'] ?? item['name'] ?? '';
-      final String barcode = item['barcode'] ?? '';
-      final productsList = localProducts is List ? localProducts as List : localProducts.values.toList();
-
-      for (var p in productsList) {
-        final pId = (p['id'] ?? p['product_id'] ?? '').toString();
-        final pSku = (p['sku'] ?? p['barcode'] ?? '').toString();
-        final pName = (p['product_name'] ?? p['name'] ?? '').toString().toLowerCase();
-
-        if (pId.isNotEmpty && int.tryParse(pId) != null) {
-          final int parsedPId = int.parse(pId);
-          if (barcode.isNotEmpty && pSku == barcode) {
-            validId = parsedPId;
-            break;
-          } else if (pName == itemName.toLowerCase()) {
-            validId = parsedPId;
-            break;
-          }
+    if (!custom && productId == 0) {
+      final itemName = (item['product_name'] ?? item['itemName'] ??
+              item['name'] ?? '').toString().trim();
+      final barcode = (item['barcode'] ?? '').toString();
+      final productsList = localProducts is List
+          ? localProducts as List
+          : localProducts.values.toList();
+      for (final product in productsList) {
+        final candidateId = (product['id'] ?? product['product_id'] ?? '').toString();
+        if (int.tryParse(candidateId) == null) continue;
+        final candidateName =
+            (product['product_name'] ?? product['name'] ?? '').toString().trim();
+        final candidateSku =
+            (product['sku'] ?? product['barcode'] ?? '').toString();
+        if ((barcode.isNotEmpty && candidateSku == barcode) ||
+            candidateName.toLowerCase() == itemName.toLowerCase()) {
+          productId = int.parse(candidateId);
+          break;
         }
       }
     }
 
-    final nameRaw = item['product_name'] ?? item['itemName'] ?? item['name'] ?? item['title'] ?? item['product'];
-    String validName = nameRaw?.toString().trim() ?? '';
-    if (validName.isEmpty || validName.toLowerCase() == 'unknown' || validName.toLowerCase() == 'unknown item') {
-      if (kDebugMode) debugPrint('⚠️ Warning: Empty product name detected, falling back to Custom Item');
-      validName = 'Custom Item';
-    }
-
-    final qtyRaw = item['qty'] ?? item['quantity'] ?? 1;
-    // Preserve fractional quantities (kg/litre); never truncate with toInt().
-    final qtyDouble = (qtyRaw is num)
-        ? qtyRaw.toDouble()
-        : double.tryParse(qtyRaw.toString()) ?? 1.0;
-    final qtyWire = double.parse(qtyDouble.toStringAsFixed(3));
-
-    final priceRaw = item['price'] ?? item['unit_price'] ?? 0;
-    final price = (priceRaw is num) ? priceRaw.toDouble() : double.tryParse(priceRaw.toString()) ?? 0.0;
-    final lineTotalFromItem = item['line_total'] ?? item['total_with_tax'];
-    final lineTotal = (lineTotalFromItem is num)
-        ? lineTotalFromItem.toDouble()
-        : (double.tryParse(lineTotalFromItem?.toString() ?? '') ??
-            CurrencyManager.multiply(price, qtyWire));
-
-    return {
-      'product_id': validId > 0 ? validId : null,
-      'product_name': validName,
-      // Preserve custom-line intent through the server invoice-sync payload.
-      'stock_tracked': !isCustomLine,
-      'is_custom_item': isCustomLine,
-      'quantity': qtyWire,
-      'qty': qtyWire,
-      'unit_price': price,
-      'line_total': lineTotal,
-      'discount_amount': (
-        item['discount_amount'] is num
-            ? (item['discount_amount'] as num).toDouble()
-            : double.tryParse(item['discount_amount']?.toString() ?? '0') ?? 0.0
-      ),
-      if (item['discount'] != null) 'discount': item['discount'],
-      if (item['original_price'] != null) 'original_price': item['original_price'],
-      if (item['discount_reason'] != null &&
-          item['discount_reason'].toString().trim().isNotEmpty)
-        'discount_reason': item['discount_reason'],
-      if (item['discount_source'] != null &&
-          item['discount_source'].toString().trim().isNotEmpty)
-        'discount_source': item['discount_source'],
-    };
+    return normalizeSaleLineItem(
+      <String, dynamic>{
+        ...item,
+        'product_name': item['product_name'] ?? item['itemName'] ??
+            item['name'] ?? item['title'] ?? item['product'],
+        'product_id': productId > 0 ? productId : null,
+      },
+      resolvedProductId: productId,
+      withTax: withTax,
+    );
   }).toList();
 
   final invalidItem = lineItems.firstWhere(
@@ -273,6 +301,17 @@ try {
   final DateTime saleTimestamp = DateTime.now().toUtc();
   final String saleTimestampIso = saleTimestamp.toIso8601String();
 
+  double parseMoney(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+  }
+  final declaredTax = totals.containsKey('tax')
+      ? parseMoney(totals['tax'])
+      : parseMoney(totals['cgst']) + parseMoney(totals['sgst']);
+  final invoiceTax = withTax && declaredTax.isFinite && declaredTax > 0
+      ? double.parse(declaredTax.toStringAsFixed(2))
+      : 0.0;
+
   final invoicePayload = {
     'invoice_number': canonicalInvoiceNumber,
     'offline_id': offlineId,
@@ -283,7 +322,7 @@ try {
     'paid_amount': paidAmount,
     'payment_method': paymentMethod,
     'is_borrow': isBorrow,
-    'tax': withTax ? (totals['tax'] ?? 0.0) : 0.0,
+    'tax': invoiceTax,
     'payment_status': paymentStatusFor(paidAmount, grandTotal),
     'invoice_date': saleTimestampIso.split('T')[0],
     'sale_timestamp': saleTimestampIso,
@@ -607,9 +646,22 @@ try {
       final double qty = (item['quantity'] ?? item['qty'] ?? 1) is num
           ? (item['quantity'] ?? item['qty'] ?? 1).toDouble()
           : double.tryParse((item['quantity'] ?? item['qty'] ?? '1').toString()) ?? 1.0;
-      final double lineTotal = (item['line_total'] ?? item['total']) is num
-          ? (item['line_total'] ?? item['total']).toDouble()
-          : CurrencyManager.multiply(price, qty);
+      final double grossLine = CurrencyManager.multiply(price, qty);
+      final double rawDiscount = item['discount_amount'] is num
+          ? (item['discount_amount'] as num).toDouble()
+          : double.tryParse(item['discount_amount']?.toString() ?? '0') ?? 0.0;
+      final double discount = double.parse(
+        rawDiscount.clamp(0.0, grossLine).toStringAsFixed(2),
+      );
+      final double lineTotal = item['line_total'] is num
+          ? (item['line_total'] as num).toDouble()
+          : double.parse((grossLine - discount).toStringAsFixed(2));
+      final double taxAmount = item['tax_amount'] is num
+          ? (item['tax_amount'] as num).toDouble()
+          : double.tryParse(item['tax_amount']?.toString() ?? '0') ?? 0.0;
+      final double totalWithTax = item['total_with_tax'] is num
+          ? (item['total_with_tax'] as num).toDouble()
+          : double.parse((lineTotal + taxAmount).toStringAsFixed(2));
 
       return {
         ...item,
@@ -619,9 +671,11 @@ try {
         'qty': qty,
         'quantity': qty,
         'qty_str': qty.toString(),
+        'discount_amount': discount,
+        'tax_amount': taxAmount,
         'total': lineTotal,
         'line_total': lineTotal,
-        'total_with_tax': lineTotal,
+        'total_with_tax': totalWithTax,
         'product': item['product_name'] ?? item['product'] ?? item['item'] ?? '',
         'name': item['product_name'] ?? item['product'] ?? item['item'] ?? '',
         'item': item['product_name'] ?? item['product'] ?? item['item'] ?? '',
@@ -652,7 +706,7 @@ try {
       'guest_id': safePhone,
       'items': normalizedItems,
       'business_date': businessDate,
-      'subtotal': totals['subtotal'].toString(),
+      'subtotal': (totals['subtotal'] ?? (grandTotal - invoiceTax)).toString(),
       'total': grandTotal.toString(),
       'total_amount': grandTotal,
       'paid_amount': paidAmount.toString(),
