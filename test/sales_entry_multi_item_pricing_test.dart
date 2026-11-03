@@ -16,7 +16,7 @@ void main() {
       provider.dispose();
     });
 
-    test('keeps each item's own price, discount and GST rate in the total', () async {
+    test("keeps each item's own price, discount and GST rate in the total", () async {
       final provider = SalesEntryProvider();
       provider.entries = [
         const SalesItem(
