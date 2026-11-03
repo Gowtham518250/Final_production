@@ -45,12 +45,19 @@ class SalesEntryProvider extends ChangeNotifier {
 
   String? get draftBillNumber => _draftBillNumber;
 
+  static int _entryIdSequence = 0;
+
+  String _newEntryId() {
+    _entryIdSequence += 1;
+    return 'sale-entry-${DateTime.now().microsecondsSinceEpoch}-$_entryIdSequence';
+  }
+
   SalesEntryProvider() {
     _initializeEmptyRow();
   }
 
   void _initializeEmptyRow() {
-    entries.add(SalesItem(id: DateTime.now().millisecondsSinceEpoch.toString()));
+    entries.add(SalesItem(id: _newEntryId()));
     notifyListeners();
   }
 
@@ -82,7 +89,7 @@ class SalesEntryProvider extends ChangeNotifier {
   double get totalAmount => _money(taxableSubtotalAmount + taxAmount);
 
   void addEntry() {
-    entries.add(SalesItem(id: DateTime.now().millisecondsSinceEpoch.toString()));
+    entries.add(SalesItem(id: _newEntryId()));
     notifyListeners();
   }
 
@@ -224,7 +231,7 @@ class SalesEntryProvider extends ChangeNotifier {
 
           safeItems.add(
             SalesItem(
-              id: '${DateTime.now().microsecondsSinceEpoch}_${safeItems.length}',
+              id: _newEntryId(),
               itemName: knownProduct?['name']?.toString() ?? spokenName,
               productId: knownProduct == null
                   ? null
@@ -388,7 +395,7 @@ class SalesEntryProvider extends ChangeNotifier {
 
         parsedItems.add(
           SalesItem(
-            id: '${DateTime.now().microsecondsSinceEpoch}_${parsedItems.length}',
+            id: _newEntryId(),
             itemName: name,
             productId: productId,
             quantity: quantity,
