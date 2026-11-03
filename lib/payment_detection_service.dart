@@ -6232,6 +6232,16 @@ class PaymentDetectionService {
       direction: event.direction,
     );
     history.addOrUpdate(ui);
+    if (event.amount.isFinite &&
+        event.amount > 0 &&
+        !event.isFailed &&
+        event.decision != PaymentDecision.rejected) {
+      unawaited(
+        SyncService.recordPaymentDetectionEvidence(
+          _paymentDetectionEvidencePayload(event),
+        ),
+      );
+    }
     _eventCtrl.add(event);
     _uiCtrl.add(ui);
     _voice.enqueue(event, ui);
