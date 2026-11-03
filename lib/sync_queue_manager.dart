@@ -135,6 +135,7 @@ class SyncQueueManager {
 
     return firstNonEmpty(<dynamic>[
       data['sale_id'],
+      data['event_key'],
       data['offline_id'],
       data['operation_id'],
       data['idempotency_key'],
