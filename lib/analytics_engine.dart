@@ -457,55 +457,113 @@ class AnalyticsEngine {
       merged['customer_phone'] = incomingPhone;
     }
 
-    // Merge line items without duplicating the same line from local + cloud copies.
+    // Merge nested item arrays and also convert legacy /sales feed rows
+    // (one top-level product per invoice row) into line items. Without this
+    // fallback, multiple rows sharing a sale_id collapse to the first product.
     final lines = <Map<String, dynamic>>[];
-    void addLines(dynamic raw) {
-      if (raw is! List) return;
-      for (final value in raw) {
-        if (value is! Map) continue;
-        final line = Map<String, dynamic>.from(value);
-        final productId = (line['product_id'] ?? line['id'] ?? '')
+
+    String lineName(Map<String, dynamic> line) =>
+        (line['product_name'] ??
+                line['product'] ??
+                line['item'] ??
+                line['description'] ??
+                '')
             .toString()
-            .trim();
-        final name =
-            (line['product_name'] ??
-                    line['product'] ??
-                    line['item'] ??
-                    line['description'] ??
-                    '')
-                .toString()
-                .trim()
-                .toLowerCase();
-        final qty = _toDouble(line['quantity'] ?? line['qty']);
-        final price = _toDouble(line['unit_price'] ?? line['price']);
-        final key =
-            '$productId|$name|${qty.toStringAsFixed(3)}|${price.toStringAsFixed(2)}';
-        if (!lines.any((existing) {
-          final eProductId = (existing['product_id'] ?? existing['id'] ?? '')
-              .toString()
-              .trim();
-          final eName =
-              (existing['product_name'] ??
-                      existing['product'] ??
-                      existing['item'] ??
-                      existing['description'] ??
-                      '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
-          final eQty = _toDouble(existing['quantity'] ?? existing['qty']);
-          final ePrice = _toDouble(existing['unit_price'] ?? existing['price']);
-          return '$eProductId|$eName|${eQty.toStringAsFixed(3)}|${ePrice.toStringAsFixed(2)}' ==
-              key;
-        })) {
-          lines.add(line);
-        }
+            .trim()
+            .toLowerCase();
+
+    bool sameLine(Map<String, dynamic> left, Map<String, dynamic> right) {
+      final leftId = (left['product_id'] ?? '').toString().trim();
+      final rightId = (right['product_id'] ?? '').toString().trim();
+      final leftName = lineName(left);
+      final rightName = lineName(right);
+      final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
+          ? leftId == rightId
+          : leftName.isNotEmpty && leftName == rightName;
+      if (!sameProduct) return false;
+      final leftQty = _toDouble(left['quantity'] ?? left['qty']);
+      final rightQty = _toDouble(right['quantity'] ?? right['qty']);
+      final leftPrice = _toDouble(left['unit_price'] ?? left['price']);
+      final rightPrice = _toDouble(right['unit_price'] ?? right['price']);
+      return leftQty.toStringAsFixed(3) == rightQty.toStringAsFixed(3) &&
+          leftPrice.toStringAsFixed(2) == rightPrice.toStringAsFixed(2);
+    }
+
+    void addLine(Map<String, dynamic> line) {
+      final existingIndex = lines.indexWhere((existing) => sameLine(existing, line));
+      if (existingIndex < 0) {
+        lines.add(line);
+      } else {
+        // Keep the richer fields from either the local or cloud mirror.
+        lines[existingIndex] = <String, dynamic>{
+          ...lines[existingIndex],
+          ...line,
+        }..removeWhere((key, value) => value == null);
       }
     }
 
-    addLines(current['items'] ?? current['line_items']);
-    addLines(incoming['items'] ?? incoming['line_items']);
-    if (lines.isNotEmpty) merged['items'] = lines;
+    void addRecordLines(Map<String, dynamic> record) {
+      var foundNestedLine = false;
+      for (final field in const ['items', 'line_items']) {
+        final raw = record[field];
+        if (raw is! List) continue;
+        for (final value in raw) {
+          if (value is! Map) continue;
+          foundNestedLine = true;
+          addLine(Map<String, dynamic>.from(value));
+        }
+      }
+
+      if (foundNestedLine) return;
+
+      // Legacy GET /sales returns one flat row per invoice line. These records
+      // share sale_id/invoice_number but do not contain items/line_items.
+      final name = (record['product_name'] ??
+              record['product'] ??
+              record['item'] ??
+              record['name'] ??
+              record['description'] ??
+              '')
+          .toString()
+          .trim();
+      if (name.isEmpty ||
+          AnalyticsEngine.isPlaceholderProductName(name) ||
+          name.toLowerCase() == 'unknown product') {
+        return;
+      }
+
+      final quantity = _toDouble(record['quantity'] ?? record['qty'], 1);
+      final unitPrice = _toDouble(record['unit_price'] ?? record['price']);
+      final lineTotal = _toDouble(
+        record['line_total'] ??
+            record['final_amount'] ??
+            record['total'] ??
+            record['totalAmount'],
+      );
+      if (quantity <= 0 || (unitPrice <= 0 && lineTotal <= 0)) return;
+
+      addLine(<String, dynamic>{
+        'product_id': record['product_id'],
+        'product_name': name,
+        'quantity': quantity,
+        'qty': quantity,
+        'unit_price': unitPrice,
+        'price': unitPrice,
+        'line_total': lineTotal > 0
+            ? lineTotal
+            : CurrencyManager.multiply(unitPrice, quantity),
+        'total': lineTotal > 0
+            ? lineTotal
+            : CurrencyManager.multiply(unitPrice, quantity),
+      });
+    }
+
+    addRecordLines(current);
+    addRecordLines(incoming);
+    if (lines.isNotEmpty) {
+      merged['items'] = lines;
+      merged['line_items'] = lines;
+    }
 
     // Keep the strongest monetary values. Paid amount is monotonic for normal
     // retail payments and therefore using the larger value prevents a cloud
