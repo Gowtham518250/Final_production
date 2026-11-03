@@ -27,13 +27,46 @@ class BillGeneratorService {
 
     final now = DateTime.now();
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(now);
-    final paymentStatus = paidAmount >= totalAmount - 0.5 ? 'PAID' : (paidAmount > 0 ? 'PARTIAL' : 'UNPAID');
+    final paymentStatus = paidAmount + 0.01 >= totalAmount
+        ? 'PAID'
+        : (paidAmount > 0 ? 'PARTIAL' : 'UNPAID');
     final due = totalAmount - paidAmount;
-    final specialDiscount = items.fold<double>(
+    double money(double value) => double.parse(value.toStringAsFixed(2));
+    double readNumber(dynamic value, [double fallback = 0.0]) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? '') ?? fallback;
+    }
+    final grossSubtotal = money(items.fold<double>(
       0.0,
-      (sum, item) => sum +
-          (double.tryParse(item['discount_amount']?.toString() ?? '0') ?? 0.0),
-    );
+      (sum, item) =>
+          sum + readNumber(item['qty'], 1) * readNumber(item['price']),
+    ));
+    final specialDiscount = money(items.fold<double>(
+      0.0,
+      (sum, item) => sum + readNumber(item['discount_amount']),
+    ));
+    final taxableSubtotal = money((grossSubtotal - specialDiscount)
+        .clamp(0.0, double.infinity)
+        .toDouble());
+    final taxTotal = withTax
+        ? money(items.fold<double>(
+            0.0,
+            (sum, item) {
+              final qty = readNumber(item['qty'], 1);
+              final price = readNumber(item['price']);
+              final discount = readNumber(item['discount_amount'])
+                  .clamp(0.0, qty * price)
+                  .toDouble();
+              final taxableLine = money((qty * price - discount)
+                  .clamp(0.0, double.infinity)
+                  .toDouble());
+              final rate = readNumber(item['gst_rate'] ?? item['gst']);
+              return sum + money(taxableLine * rate / 100);
+            },
+          ))
+        : 0.0;
+    final cgst = money(taxTotal / 2);
+    final sgst = money(taxTotal - cgst);
 
     pdf.addPage(
       pw.Page(
@@ -116,16 +149,18 @@ class BillGeneratorService {
                 final i = e.key;
                 final item = e.value;
                 final name = (item['product_name'] ?? item['item'] ?? 'Item').toString();
-                final qty = double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0;
-                final rate = double.tryParse(item['price']?.toString() ?? '0') ?? 0.0;
-                final discountAmount = double.tryParse(item['discount_amount']?.toString() ?? '0') ?? 0.0;
-                final total = math.max(0.0, (qty * rate) - discountAmount);
+                final qty = readNumber(item['qty'], 1);
+                final rate = readNumber(item['price']);
+                final discountAmount = readNumber(item['discount_amount'])
+                    .clamp(0.0, qty * rate)
+                    .toDouble();
+                final total = money(math.max(0.0, (qty * rate) - discountAmount));
                 return [
                   '${i + 1}',
                   name,
                   qty % 1 == 0 ? qty.toInt().toString() : qty.toStringAsFixed(2),
-                  '₹${rate.toStringAsFixed(0)}',
-                  '₹${total.toStringAsFixed(0)}',
+                  '₹${rate.toStringAsFixed(2)}',
+                  '₹${total.toStringAsFixed(2)}',
                 ];
               }).toList(),
             ),
@@ -138,16 +173,30 @@ class BillGeneratorService {
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Divider(thickness: 0.5),
+                  pw.Text(
+                    'Subtotal: ₹${grossSubtotal.toStringAsFixed(2)}',
+                    style: pw.TextStyle(fontSize: 9),
+                  ),
                   if (specialDiscount > 0)
                     pw.Text(
-                      'Special Discount: -₹' +
-                          specialDiscount.toStringAsFixed(2),
+                      'Item Discount: -₹${specialDiscount.toStringAsFixed(2)}',
                       style: pw.TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: pw.FontWeight.bold,
                         color: PdfColors.green700,
                       ),
                     ),
+                  if (specialDiscount > 0)
+                    pw.Text(
+                      'Taxable Subtotal: ₹${taxableSubtotal.toStringAsFixed(2)}',
+                      style: pw.TextStyle(fontSize: 9),
+                    ),
+                  if (withTax) ...[
+                    pw.Text('CGST: ₹${cgst.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 9)),
+                    pw.Text('SGST: ₹${sgst.toStringAsFixed(2)}',
+                        style: pw.TextStyle(fontSize: 9)),
+                  ],
                   pw.Row(
                     mainAxisSize: pw.MainAxisSize.min,
                     children: [
