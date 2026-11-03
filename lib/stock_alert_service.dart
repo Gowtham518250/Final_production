@@ -9,7 +9,7 @@ class StockAlertService {
   /// Call this right after recording a sale
   static Future<void> checkAndAlertLowStock({
     required String productName,
-    required int quantitySold,
+    required double quantitySold,
     required int productId,
   }) async {
     try {
@@ -22,13 +22,19 @@ class StockAlertService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final currentStock = data['current_stock'] ?? 0;
-        final minStock = data['min_stock'] ?? 10;
+        final currentStock = double.tryParse(
+              (data['current_stock'] ?? data['stock'] ?? 0).toString(),
+            ) ?? 0.0;
+        final minStock = double.tryParse(
+              (data['min_stock'] ?? 10).toString(),
+            ) ?? 10.0;
 
-        if (kDebugMode) debugPrint('📊 Current stock: $currentStock, Min: $minStock');
+        if (kDebugMode) {
+          debugPrint('📊 Current stock: $currentStock, Min: $minStock');
+        }
 
-        // Check if stock is below minimum
-        if (currentStock < minStock) {
+        // The threshold is inclusive: matching inventory and backend rules.
+        if (currentStock <= minStock) {
           await _triggerLowStockAlert(
             productName: productName,
             currentStock: currentStock,
@@ -45,8 +51,8 @@ class StockAlertService {
   /// Trigger low stock alert and save to local history
   static Future<void> _triggerLowStockAlert({
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required double currentStock,
+    required double minStock,
     required int productId,
   }) async {
     // Show in-app notification
@@ -108,13 +114,20 @@ class StockAlertService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        final currentStock = double.tryParse(
+              (data['current_stock'] ?? data['stock'] ?? 0).toString(),
+            ) ?? 0.0;
+        final minStock = double.tryParse(
+              (data['min_stock'] ?? 10).toString(),
+            ) ?? 10.0;
         return {
           'success': true,
           'productName': data['product_name'] ?? 'Unknown',
-          'currentStock': data['current_stock'] ?? 0,
-          'minStock': data['min_stock'] ?? 10,
-          'maxStock': data['max_stock'] ?? 100,
-          'isLow': (data['current_stock'] ?? 0) < (data['min_stock'] ?? 10),
+          'currentStock': currentStock,
+          'minStock': minStock,
+          'maxStock': double.tryParse((data['max_stock'] ?? 100).toString()) ?? 100.0,
+          'isLow': currentStock <= minStock,
+          'isOutOfStock': currentStock <= 0,
         };
       }
       return {'success': false};
@@ -145,8 +158,8 @@ class StockAlertService {
   static Future<void> _saveAlertToHistory({
     required int productId,
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required double currentStock,
+    required double minStock,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -178,8 +191,8 @@ class StockAlertService {
   static Future<void> _notifyBackendOfAlert({
     required int productId,
     required String productName,
-    required int currentStock,
-    required int minStock,
+    required double currentStock,
+    required double minStock,
   }) async {
     try {
       // Send to backend for email notification
