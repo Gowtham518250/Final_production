@@ -146,9 +146,111 @@ class InvoiceDedupHelper {
       ..sort((a, b) => _rowTimestamp(a).compareTo(_rowTimestamp(b)));
 
     final merged = <String, dynamic>{};
+    final mergedLines = <Map<String, dynamic>>[];
     var highestPaid = 0.0;
     var newestTotal = 0.0;
     var anyPaymentState = false;
+
+    String lineName(Map<String, dynamic> line) =>
+        (line['product_name'] ??
+                line['product'] ??
+                line['item'] ??
+                line['description'] ??
+                line['name'] ??
+                '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+    bool sameLine(Map<String, dynamic> left, Map<String, dynamic> right) {
+      final leftId = (left['product_id'] ?? '').toString().trim();
+      final rightId = (right['product_id'] ?? '').toString().trim();
+      final leftName = lineName(left);
+      final rightName = lineName(right);
+      final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
+          ? leftId == rightId
+          : leftName.isNotEmpty && leftName == rightName;
+      if (!sameProduct) return false;
+      final leftQty = _number(left['quantity'] ?? left['qty'], 1);
+      final rightQty = _number(right['quantity'] ?? right['qty'], 1);
+      final leftPrice = _number(left['unit_price'] ?? left['price']);
+      final rightPrice = _number(right['unit_price'] ?? right['price']);
+      return leftQty.toStringAsFixed(3) == rightQty.toStringAsFixed(3) &&
+          leftPrice.toStringAsFixed(2) == rightPrice.toStringAsFixed(2);
+    }
+
+    void addLine(Map<String, dynamic> line) {
+      final index = mergedLines.indexWhere((existing) => sameLine(existing, line));
+      if (index < 0) {
+        mergedLines.add(line);
+      } else {
+        mergedLines[index] = <String, dynamic>{
+          ...mergedLines[index],
+          ...line,
+        }..removeWhere((key, value) => value == null);
+      }
+    }
+
+    void addRowLines(Map<String, dynamic> row) {
+      var foundNestedLine = false;
+      for (final field in const ['items', 'line_items']) {
+        final raw = row[field];
+        if (raw is! List) continue;
+        for (final value in raw) {
+          if (value is! Map) continue;
+          foundNestedLine = true;
+          addLine(Map<String, dynamic>.from(value));
+        }
+      }
+
+      if (foundNestedLine) return;
+
+      // Legacy history feeds can expose one invoice line as top-level fields.
+      final name = (row['product_name'] ??
+              row['product'] ??
+              row['item'] ??
+              row['name'] ??
+              row['description'] ??
+              '')
+          .toString()
+          .trim();
+      if (name.isEmpty ||
+          name.toLowerCase() == 'unknown' ||
+          name.toLowerCase() == 'unknown product' ||
+          name.toLowerCase() == 'unknown item') {
+        return;
+      }
+
+      final quantity = _number(row['quantity'] ?? row['qty'], 1);
+      final unitPrice = _number(row['unit_price'] ?? row['price']);
+      final lineTotal = _number(
+        row['line_total'] ??
+            row['final_amount'] ??
+            row['total'] ??
+            row['totalAmount'],
+      );
+      if (quantity <= 0 || (unitPrice <= 0 && lineTotal <= 0)) return;
+
+      addLine(<String, dynamic>{
+        'product_id': row['product_id'],
+        'product_name': name,
+        'description': name,
+        'quantity': quantity,
+        'qty': quantity,
+        'unit_price': unitPrice,
+        'price': unitPrice,
+        'line_total': lineTotal > 0
+            ? lineTotal
+            : unitPrice * quantity,
+        'total': lineTotal > 0
+            ? lineTotal
+            : unitPrice * quantity,
+      });
+    }
+
+    for (final row in ordered) {
+      addRowLines(row);
+    }
 
     for (final row in ordered) {
       final total = _rowTotal(row);
@@ -207,6 +309,11 @@ class InvoiceDedupHelper {
           merged['status'] = 'UNPAID';
         }
       }
+    }
+
+    if (mergedLines.isNotEmpty) {
+      merged['items'] = mergedLines;
+      merged['line_items'] = mergedLines;
     }
 
     return merged;
