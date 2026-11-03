@@ -1395,6 +1395,31 @@ class SyncService {
     }
   }
 
+  /// Persist payment notification/SMS evidence through the durable offline outbox.
+  /// This is an observation only; it never writes the canonical payments ledger.
+  static Future<void> recordPaymentDetectionEvidence(
+    Map<String, dynamic> evidence,
+  ) async {
+    try {
+      final eventKey = (evidence['event_key'] ?? '').toString().trim();
+      if (eventKey.length < 8) {
+        throw ArgumentError('Payment detection evidence requires a stable event_key.');
+      }
+      await SyncQueueManager.enqueue(
+        'payment_detection_evidence',
+        Map<String, dynamic>.from(evidence),
+      );
+      _syncStatusController.add(await SyncQueueManager.getQueueSize());
+      await processQueueSafe();
+    } catch (e) {
+      await ErrorLogHelper.logException(
+        e,
+        StackTrace.current,
+        context: 'SyncService.recordPaymentDetectionEvidence',
+      );
+    }
+  }
+
   /// Process sync queue - Thread-safe with Lock.
   ///
   /// UI-critical attendance actions may request a short wait for an already
@@ -1509,6 +1534,10 @@ class SyncService {
 
             case 'record_payment':
               success = await _recordPaymentItem(data);
+              break;
+
+            case 'payment_detection_evidence':
+              success = await _syncPaymentDetectionEvidenceItem(data);
               break;
 
             case 'update_payment':
@@ -1652,6 +1681,7 @@ class SyncService {
               'record_khata_payment',
               'update_khata_deadline',
               'record_payment',
+              'payment_detection_evidence',
               'decrease_stock',
               'create_purchase_order',
               'update_purchase_order_status',
@@ -2038,6 +2068,26 @@ class SyncService {
           res.statusCode == 409;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error recording payment: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _syncPaymentDetectionEvidenceItem(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final token = await SecureTokenStorage.getToken() ?? '';
+      if (token.isEmpty) return false;
+      final response = await ApiClient.postJson(
+        '${ApiClient.invoicesPrefix}/payment-detections',
+        data,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 12));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Payment detection evidence sync deferred: $e');
+      }
       return false;
     }
   }
