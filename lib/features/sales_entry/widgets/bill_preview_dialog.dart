@@ -20,7 +20,12 @@ class BillPreviewDialog extends StatelessWidget {
               'product_name': entry.itemName.trim(),
               'qty': entry.quantity,
               'price': entry.price,
-              'discount_amount': entry.discount,
+              'discount_amount': entry.discountAmount,
+              'gst_rate': entry.effectiveGstRate,
+              'line_total': entry.taxableAmount,
+              'tax_amount': provider.withTax ? entry.totalGstAmount : 0.0,
+              'total_with_tax': entry.taxableAmount +
+                  (provider.withTax ? entry.totalGstAmount : 0.0),
             })
         .toList();
     if (items.isEmpty) throw Exception('Add at least one item before creating a bill.');
@@ -318,7 +323,7 @@ class _ReceiptPaper extends StatelessWidget {
                       Expanded(
                         flex: 1,
                         child: LiveTranslatedText(
-                          item.price.toStringAsFixed(0),
+                          item.price.toStringAsFixed(2),
                           style: GoogleFonts.spaceMono(fontSize: 11),
                         ),
                       ),
@@ -327,7 +332,7 @@ class _ReceiptPaper extends StatelessWidget {
                         child: Align(
                           alignment: Alignment.centerRight,
                           child: LiveTranslatedText(
-                            item.subtotal.toStringAsFixed(0),
+                            item.taxableAmount.toStringAsFixed(2),
                             style: GoogleFonts.spaceMono(fontSize: 11),
                           ),
                         ),
@@ -339,18 +344,22 @@ class _ReceiptPaper extends StatelessWidget {
               const SizedBox(height: 12),
               const Divider(color: Colors.black12, thickness: 1),
 
-              // Totals
+              // Totals: discounts are applied before each item's GST rate.
               const SizedBox(height: 8),
+              _TotalRow(label: 'Subtotal', amount: provider.subtotalAmount),
+              if (provider.totalDiscountAmount > 0)
+                _TotalRow(
+                  label: 'Item discount',
+                  amount: -provider.totalDiscountAmount,
+                ),
+              if (provider.totalDiscountAmount > 0)
+                _TotalRow(
+                  label: 'Taxable subtotal',
+                  amount: provider.taxableSubtotalAmount,
+                ),
               if (provider.withTax) ...[
-                _TotalRow(label: 'Subtotal', amount: provider.subtotalAmount),
-                _TotalRow(
-                  label: 'CGST (9%)',
-                  amount: provider.subtotalAmount * 0.09,
-                ),
-                _TotalRow(
-                  label: 'SGST (9%)',
-                  amount: provider.subtotalAmount * 0.09,
-                ),
+                _TotalRow(label: 'CGST', amount: provider.cgstAmount),
+                _TotalRow(label: 'SGST', amount: provider.sgstAmount),
               ],
 
               const SizedBox(height: 8),
