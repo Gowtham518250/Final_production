@@ -54,21 +54,25 @@ class SalesEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get totalAmount {
-    double total = 0.0;
-    for (var entry in entries) {
-      total += entry.finalAmount;
-    }
-    return total;
-  }
+  double _money(double value) => double.parse(value.toStringAsFixed(2));
 
-  double get subtotalAmount {
-    double total = 0.0;
-    for (var entry in entries) {
-      total += entry.subtotal;
-    }
-    return total;
-  }
+  double get subtotalAmount =>
+      _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.subtotal));
+
+  double get totalDiscountAmount =>
+      _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.discountAmount));
+
+  double get taxableSubtotalAmount =>
+      _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.taxableAmount));
+
+  double get taxAmount => withTax
+      ? _money(entries.fold<double>(0.0, (sum, entry) => sum + entry.totalGstAmount))
+      : 0.0;
+
+  double get cgstAmount => _money(taxAmount / 2);
+  double get sgstAmount => _money(taxAmount - cgstAmount);
+
+  double get totalAmount => _money(taxableSubtotalAmount + taxAmount);
 
   void addEntry() {
     entries.add(SalesItem(id: DateTime.now().millisecondsSinceEpoch.toString()));
@@ -435,9 +439,15 @@ class SalesEntryProvider extends ChangeNotifier {
         return false;
       }
       return !entry.price.isFinite ||
-          entry.price <= 0 ||
+          _money(entry.price) <= 0 ||
           !entry.quantity.isFinite ||
-          entry.quantity <= 0;
+          entry.quantity <= 0 ||
+          !entry.gst.isFinite ||
+          entry.gst < 0 ||
+          entry.gst > 100 ||
+          !entry.discount.isFinite ||
+          entry.discount < 0 ||
+          entry.discount > entry.subtotal;
     }).toList();
     if (incomplete.isEmpty) return true;
 
@@ -445,6 +455,27 @@ class SalesEntryProvider extends ChangeNotifier {
         "Enter a positive selling price and quantity for: ${incomplete.take(4).map((entry) => entry.itemName).join(', ')} before saving.";
     notifyListeners();
     return false;
+  }
+
+  Future<Map<String, dynamic>> _buildSaleLinePayload(SalesItem entry) async {
+    final actualProductId = entry.productId != null && entry.productId! > 0
+        ? entry.productId!
+        : await _lookupProductIdByName(entry.itemName);
+
+    final tax = withTax ? entry.totalGstAmount : 0.0;
+    return <String, dynamic>{
+      'itemName': entry.itemName.trim(),
+      'product_name': entry.itemName.trim(),
+      'product_id': actualProductId > 0 ? actualProductId : null,
+      'quantity': entry.quantity,
+      'price': _money(entry.price),
+      'gst': entry.effectiveGstRate,
+      'gst_rate': entry.effectiveGstRate,
+      'discount_amount': entry.discountAmount,
+      'line_total': entry.taxableAmount,
+      'tax_amount': tax,
+      'total_with_tax': _money(entry.taxableAmount + tax),
+    };
   }
 
   Future<bool> submitSale() async {
@@ -459,24 +490,17 @@ class SalesEntryProvider extends ChangeNotifier {
       await _ensureProductsAvailable();
 
       final itemsPayload = <Map<String, dynamic>>[];
-      for (final e in entries.where((e) => e.itemName.isNotEmpty && e.itemName.trim() != 'Unknown' && e.price > 0)) {
-        final actualProductId = e.productId != null && e.productId! > 0
-            ? e.productId!
-            : await _lookupProductIdByName(e.itemName);
-
-        if (actualProductId == 0 && kDebugMode) {
-          debugPrint('⚠️ Product lookup failed for: ${e.itemName}, submitting without stock deduction');
-        }
-
-        itemsPayload.add({
-          'itemName': e.itemName,
-          'product_id': actualProductId > 0 ? actualProductId : null,
-          'quantity': e.quantity,
-          'price': e.price,
-          'gst': e.gst,
-          'discount': e.discount,
-          'total': e.finalAmount,
-        });
+      for (final entry in entries.where((entry) {
+        final name = entry.itemName.trim().toLowerCase();
+        return name.isNotEmpty &&
+            name != 'unknown' &&
+            name != 'unknown item' &&
+            entry.price.isFinite &&
+            _money(entry.price) > 0 &&
+            entry.quantity.isFinite &&
+            entry.quantity > 0;
+      })) {
+        itemsPayload.add(await _buildSaleLinePayload(entry));
       }
 
       if (itemsPayload.isEmpty) {
@@ -494,9 +518,11 @@ class SalesEntryProvider extends ChangeNotifier {
         customerPhone: customerPhoneController.text.trim(),
         withTax: withTax,
         totals: {
-          'subtotal': subtotalAmount,
-          'cgst': withTax ? subtotalAmount * 0.09 : 0.0,
-          'sgst': withTax ? subtotalAmount * 0.09 : 0.0,
+          'subtotal': taxableSubtotalAmount,
+          'tax': taxAmount,
+          'cgst': cgstAmount,
+          'sgst': sgstAmount,
+          'discount_total': totalDiscountAmount,
         },
         paymentMethod: selectedPaymentMethod,
         invoiceNumber: billNumber,
@@ -572,24 +598,17 @@ class SalesEntryProvider extends ChangeNotifier {
       await _ensureProductsAvailable();
 
       final itemsPayload = <Map<String, dynamic>>[];
-      for (final e in entries.where((e) => e.itemName.isNotEmpty && e.itemName.trim() != 'Unknown' && e.price > 0)) {
-        final actualProductId = e.productId != null && e.productId! > 0
-            ? e.productId!
-            : await _lookupProductIdByName(e.itemName);
-
-        if (actualProductId == 0 && kDebugMode) {
-          debugPrint('Product is untracked or unmatched: ${e.itemName}; submitting without stock deduction');
-        }
-
-        itemsPayload.add({
-          'itemName': e.itemName,
-          'product_id': actualProductId > 0 ? actualProductId : null,
-          'quantity': e.quantity,
-          'price': e.price,
-          'gst': e.gst,
-          'discount': e.discount,
-          'total': e.finalAmount,
-        });
+      for (final entry in entries.where((entry) {
+        final name = entry.itemName.trim().toLowerCase();
+        return name.isNotEmpty &&
+            name != 'unknown' &&
+            name != 'unknown item' &&
+            entry.price.isFinite &&
+            _money(entry.price) > 0 &&
+            entry.quantity.isFinite &&
+            entry.quantity > 0;
+      })) {
+        itemsPayload.add(await _buildSaleLinePayload(entry));
       }
 
       if (itemsPayload.isEmpty) {
@@ -607,9 +626,11 @@ class SalesEntryProvider extends ChangeNotifier {
         customerPhone: customerPhone,
         withTax: withTax,
         totals: {
-          'subtotal': subtotalAmount,
-          'cgst': withTax ? subtotalAmount * 0.09 : 0.0,
-          'sgst': withTax ? subtotalAmount * 0.09 : 0.0,
+          'subtotal': taxableSubtotalAmount,
+          'tax': taxAmount,
+          'cgst': cgstAmount,
+          'sgst': sgstAmount,
+          'discount_total': totalDiscountAmount,
         },
         paymentMethod: 'Credit',
         isBorrow: true,
