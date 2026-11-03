@@ -38,16 +38,28 @@ class BillGeneratorService {
     }
     final grossSubtotal = money(items.fold<double>(
       0.0,
-      (sum, item) =>
-          sum + readNumber(item['qty'], 1) * readNumber(item['price']),
+      (sum, item) => sum + money(
+        readNumber(item['qty'], 1) * readNumber(item['price']),
+      ),
     ));
     final specialDiscount = money(items.fold<double>(
       0.0,
-      (sum, item) => sum + readNumber(item['discount_amount']),
+      (sum, item) => sum + money(readNumber(item['discount_amount'])),
     ));
-    final taxableSubtotal = money((grossSubtotal - specialDiscount)
-        .clamp(0.0, double.infinity)
-        .toDouble());
+    final taxableSubtotal = money(items.fold<double>(
+      0.0,
+      (sum, item) {
+        final grossLine = money(
+          readNumber(item['qty'], 1) * readNumber(item['price']),
+        );
+        final discount = money(readNumber(item['discount_amount'])
+            .clamp(0.0, grossLine)
+            .toDouble());
+        return sum + money((grossLine - discount)
+            .clamp(0.0, double.infinity)
+            .toDouble());
+      },
+    ));
     final taxTotal = withTax
         ? money(items.fold<double>(
             0.0,
