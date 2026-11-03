@@ -137,6 +137,55 @@ void main() {
       expect(result.single['paid_amount'], 36.0);
     });
 
+    test('invoice mirrors combine all item rows instead of replacing them', () {
+      final canonical = InvoiceDedupHelper.canonicalizeInvoiceLedger(
+        [
+          {
+            'id': 77,
+            'invoice_number': 'BILL-MULTI-77',
+            'total_amount': 1800,
+            'paid_amount': 1800,
+            'line_items': [
+              {
+                'product_id': null,
+                'description': 'Chicken',
+                'quantity': 1,
+                'unit_price': 800,
+                'line_total': 800,
+              },
+            ],
+          },
+        ],
+        [
+          {
+            'sale_id': 'SALE-77',
+            'invoice_number': 'BILL-MULTI-77',
+            'backend_id': 77,
+            'total_amount': 1800,
+            'paid_amount': 1800,
+            'items': [
+              {
+                'product_name': 'Mutton',
+                'quantity': 1,
+                'unit_price': 1000,
+                'line_total': 1000,
+              },
+            ],
+          },
+        ],
+      );
+
+      expect(canonical, hasLength(1));
+      final row = canonical.single;
+      final lines = (row['line_items'] ?? row['items']) as List;
+      expect(lines, hasLength(2));
+      final names = lines.map((line) {
+        final item = Map<String, dynamic>.from(line as Map);
+        return (item['product_name'] ?? item['description'] ?? item['product']).toString();
+      }).toSet();
+      expect(names, containsAll(['Chicken', 'Mutton']));
+    });
+
     test('a sale mirror is merged when it matches a real invoice', () {
       final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
         [
