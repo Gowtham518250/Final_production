@@ -319,62 +319,13 @@ class InvoiceDedupHelper {
     return merged;
   }
 
-  static bool _intersectsLinkFields(
-    Map<String, dynamic> left,
-    List<String> leftFields,
-    Map<String, dynamic> right,
-    List<String> rightFields,
-  ) {
-    final leftValues = leftFields
-        .map((field) => _normalized(left[field]))
-        .where((value) => value.isNotEmpty)
-        .toSet();
-    if (leftValues.isEmpty) return false;
-    return rightFields
-        .map((field) => _normalized(right[field]))
-        .any((value) => value.isNotEmpty && leftValues.contains(value));
-  }
-
-  /// A sale belongs in invoice analytics only when a field explicitly links
-  /// it to an invoice. Never compare generic sale.id to generic invoice.id:
-  /// those IDs come from different tables and can collide by coincidence.
-  static bool _isSaleMirrorOfInvoice(
-    Map<String, dynamic> invoice,
-    Map<String, dynamic> sale,
-  ) {
-    // Foreign keys that explicitly identify the invoice from a sales row.
-    if (_intersectsLinkFields(
-      sale,
-      const ['invoice_id', 'invoiceId', 'backend_invoice_id'],
-      invoice,
-      const ['id', 'invoice_id', 'invoiceId', 'backend_id', 'server_id'],
-    )) {
-      return true;
-    }
-
-    // The customer-facing bill number is another safe cross-table link.
-    if (_intersectsLinkFields(
-      sale,
-      const ['invoice_number', 'invoice_no', 'bill_number', 'bill_no'],
-      invoice,
-      const ['invoice_number', 'invoice_no', 'bill_number', 'bill_no', 'number'],
-    )) {
-      return true;
-    }
-
-    // Offline transaction keys are valid only when the invoice row stores the
-    // same key as a sale/source reference, not merely as its own database ID.
-    if (_intersectsLinkFields(
-      sale,
-      const ['sale_id', 'offline_id', 'local_sale_id', 'source_sale_id', 'id'],
-      invoice,
-      const ['sale_id', 'offline_id', 'local_sale_id', 'source_sale_id', 'original_sale_id'],
-    )) {
-      return true;
-    }
-
-    return false;
-  }
+  static Set<String> _fieldValues(
+    Map<String, dynamic> row,
+    List<String> fields,
+  ) => fields
+      .map((field) => _normalized(row[field]))
+      .where((value) => value.isNotEmpty)
+      .toSet();
 
   /// Invoice Analytics is an invoice ledger, not the general sales ledger.
   /// Standalone retail sales remain in Sales reporting. Only sales with an
@@ -394,8 +345,50 @@ class InvoiceDedupHelper {
         .map((row) => Map<String, dynamic>.from(row))
         .toList();
 
-    final saleMirrors = saleRows.where((sale) =>
-        invoiceRows.any((invoice) => _isSaleMirrorOfInvoice(invoice, sale)));
+    // Index each explicit invoice link once. The previous implementation
+    // scanned every invoice for every sale row (O(invoices × sales)), which
+    // made opening Khata increasingly slow as a shop's history grew.
+    final invoiceIds = <String>{};
+    final invoiceNumbers = <String>{};
+    final invoiceSaleReferences = <String>{};
+
+    for (final invoice in invoiceRows) {
+      invoiceIds.addAll(
+        _fieldValues(invoice, const [
+          'id', 'invoice_id', 'invoiceId', 'backend_id', 'server_id',
+        ]),
+      );
+      invoiceNumbers.addAll(
+        _fieldValues(invoice, const [
+          'invoice_number', 'invoice_no', 'bill_number', 'bill_no', 'number',
+        ]),
+      );
+      invoiceSaleReferences.addAll(
+        _fieldValues(invoice, const [
+          'sale_id', 'offline_id', 'local_sale_id', 'source_sale_id',
+          'original_sale_id',
+        ]),
+      );
+    }
+
+    final saleMirrors = <Map<String, dynamic>>[];
+    for (final sale in saleRows) {
+      final foreignKeys = _fieldValues(sale, const [
+        'invoice_id', 'invoiceId', 'backend_invoice_id',
+      ]);
+      final billNumbers = _fieldValues(sale, const [
+        'invoice_number', 'invoice_no', 'bill_number', 'bill_no',
+      ]);
+      final saleReferences = _fieldValues(sale, const [
+        'sale_id', 'offline_id', 'local_sale_id', 'source_sale_id', 'id',
+      ]);
+
+      if (foreignKeys.any(invoiceIds.contains) ||
+          billNumbers.any(invoiceNumbers.contains) ||
+          saleReferences.any(invoiceSaleReferences.contains)) {
+        saleMirrors.add(sale);
+      }
+    }
 
     return canonicalizeInvoices(<dynamic>[
       ...invoiceRows,
