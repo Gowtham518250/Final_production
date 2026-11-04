@@ -1166,6 +1166,34 @@ class LocalStorageService {
     return value?.toString();
   }
 
+  /// Reads deadlines for multiple customers using one authenticated Hive-box
+  /// lookup. Khata previously opened/validated the box separately for every
+  /// customer while building its first screen.
+  static Future<Map<String, String>> loadKhataDeadlines(
+    Iterable<String> customerIdsOrPhones,
+  ) async {
+    if (!await _hasValidUserId()) return {};
+
+    final keys = customerIdsOrPhones
+        .map((value) => value.trim())
+        .where((value) =>
+            value.isNotEmpty &&
+            value != '0' &&
+            value.toLowerCase() != 'null')
+        .toSet();
+    if (keys.isEmpty) return {};
+
+    final box = await _getBox(_khataBoxBase, encrypted: true);
+    final deadlines = <String, String>{};
+    for (final customerKey in keys) {
+      final value = box.get(_khataDeadlineKey(customerKey))?.toString().trim();
+      if (value != null && value.isNotEmpty) {
+        deadlines[customerKey] = value;
+      }
+    }
+    return deadlines;
+  }
+
   static Future<void> saveKhataBalances(Map<String, double> balances) async {
     if (!await _hasValidUserId()) return;
     final box = await _getBox(_khataBoxBase, encrypted: true);
@@ -1216,13 +1244,31 @@ class LocalStorageService {
     ]);
     final canonical = <String, Map<String, dynamic>>{};
 
+    // Identity lookup replaces the repeated invoice scan for every combined
+    // row. Keep original invoice tokens here because a canonical merge can
+    // legitimately prefer one alias over another.
+    final invoiceTokens = <String>{};
+    for (final raw in invoices) {
+      if (raw is Map) {
+        invoiceTokens.addAll(
+          InvoiceDedupHelper.identityTokens(Map<String, dynamic>.from(raw)),
+        );
+      }
+    }
+
+    // Preserve the old "first matching invoice wins" behaviour while making
+    // mirror lookup constant-time instead of scanning the whole invoice list.
+    final firstInvoiceIndexByToken = <String, int>{};
+    for (var i = 0; i < invoiceOnlyCanonical.length; i++) {
+      for (final token
+          in InvoiceDedupHelper.identityTokens(invoiceOnlyCanonical[i])) {
+        firstInvoiceIndexByToken.putIfAbsent(token, () => i);
+      }
+    }
+
     bool hasInvoiceMirror(Map<String, dynamic> row) {
       final tokens = InvoiceDedupHelper.identityTokens(row);
-      if (tokens.isEmpty) return false;
-      return invoices.whereType<Map>().any(
-        (raw) =>
-            InvoiceDedupHelper.sameInvoice(row, Map<String, dynamic>.from(raw)),
-      );
+      return tokens.any(invoiceTokens.contains);
     }
 
     for (var index = 0; index < combinedRows.length; index++) {
@@ -1297,15 +1343,21 @@ class LocalStorageService {
     // no longer change once the local ledger has been reconciled.
     var needsPersist = combinedRows.length != invoiceOnlyCanonical.length;
     for (final row in combinedRows) {
-      Map<String, dynamic>? mirror;
-      for (final candidate in invoiceOnlyCanonical) {
-        if (InvoiceDedupHelper.sameInvoice(row, candidate)) {
-          mirror = candidate;
-          break;
+      final rowTokens = InvoiceDedupHelper.identityTokens(row);
+      var mirrorIndex = -1;
+      for (final token in rowTokens) {
+        final candidateIndex = firstInvoiceIndexByToken[token];
+        if (candidateIndex != null &&
+            (mirrorIndex < 0 || candidateIndex < mirrorIndex)) {
+          mirrorIndex = candidateIndex;
         }
       }
+      final Map<String, dynamic>? mirror = mirrorIndex >= 0
+          ? invoiceOnlyCanonical[mirrorIndex]
+          : null;
+
       if (mirror == null) {
-        if (InvoiceDedupHelper.identityTokens(row).isNotEmpty) {
+        if (rowTokens.isNotEmpty) {
           needsPersist = true;
         }
         continue;
