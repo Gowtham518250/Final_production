@@ -225,5 +225,48 @@ void main() {
       expect(result.single['paid_amount'], 75.0);
       expect(result.single['payment_status'], 'PAID');
     });
+
+    test('large sales history only imports rows explicitly linked to invoices', () {
+      final invoices = [
+        for (var i = 0; i < 600; i++)
+          {
+            'id': 1000 + i,
+            'invoice_number': 'BILL-$i',
+            'total_amount': 100.0 + i,
+            'paid_amount': 0.0,
+          },
+      ];
+      final sales = [
+        for (var i = 0; i < 600; i++)
+          if (i % 3 == 0)
+            {
+              'sale_id': 'SALE-$i',
+              'invoice_id': 1000 + i,
+              'invoice_number': 'BILL-$i',
+              'total_amount': 100.0 + i,
+              'paid_amount': 100.0 + i,
+              'payment_status': 'PAID',
+            }
+          else
+            {
+              'sale_id': 'POS-$i',
+              'total_amount': 25.0,
+              'paid_amount': 25.0,
+              'payment_status': 'PAID',
+            },
+      ];
+
+      final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
+        invoices,
+        sales,
+      );
+
+      expect(result, hasLength(600));
+      final linked = result.singleWhere(
+        (row) => row['invoice_number'] == 'BILL-0',
+      );
+      expect(linked['sale_id'], 'SALE-0');
+      expect(linked['paid_amount'], 100.0);
+    });
   });
 }
