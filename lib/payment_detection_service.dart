@@ -2169,7 +2169,7 @@ class PriorityVoiceQueue {
       }
       final weakWindow = PaymentDetectionService().billContext.weakPairWindow(
         event.amount,
-        noBillWindow: _crossSourceEchoWindow,
+        noBillWindow: PaymentIdentityMatcher.weakModalityWindow,
       );
       final weakModalityPair =
           weakWindow > Duration.zero &&
