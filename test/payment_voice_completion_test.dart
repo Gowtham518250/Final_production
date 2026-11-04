@@ -144,6 +144,43 @@ void main() {
   });
 
   group('QueueManager speech result delivery', () {
+    test('critical payment announcement jumps ahead of queued routine prompts', () async {
+      final queue = QueueManager();
+      final activeSpeechStarted = Completer<void>();
+      final releaseActiveSpeech = Completer<void>();
+      final order = <String>[];
+
+      queue.enqueue(QueueItem(
+        priority: AnnouncementPriority.normal,
+        ttsText: 'currently speaking',
+        timeoutSec: 5,
+        task: () async {
+          activeSpeechStarted.complete();
+          await releaseActiveSpeech.future;
+          order.add('active');
+        },
+      ));
+      await activeSpeechStarted.future;
+
+      queue.enqueue(QueueItem(
+        priority: AnnouncementPriority.low,
+        ttsText: 'routine prompt',
+        timeoutSec: 5,
+        task: () async => order.add('routine'),
+      ));
+      queue.enqueue(QueueItem(
+        priority: AnnouncementPriority.critical,
+        ttsText: 'payment alert',
+        timeoutSec: 5,
+        task: () async => order.add('payment'),
+      ));
+
+      releaseActiveSpeech.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(order, ['active', 'payment', 'routine']);
+    });
+
     test('timeout reports failure and does not block the next queued item', () async {
       final queue = QueueManager();
       final results = <String, bool>{};
