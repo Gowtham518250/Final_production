@@ -545,8 +545,12 @@ final class NativePaymentAnnouncementFallback {
                     SCHEDULED.remove(request.eventKey);
                     continue;
                 }
+                // Keep the durable event explicitly unhandled while TTS is in
+                // flight. The SQLite identity claim prevents Flutter from also
+                // speaking it. Only onDone (or a successful audible OS fallback)
+                // may persist nativeAnnouncementHandled=true.
                 if (!NotificationRelayReceiver.markNativeAnnouncementHandled(
-                        request.context, request.eventKey, true)) {
+                        request.context, request.eventKey, false)) {
                     AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
                             request.context, stableIdentity(request.eventKey));
                     SCHEDULED.remove(request.eventKey);
