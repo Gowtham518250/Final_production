@@ -3682,6 +3682,15 @@ class PaymentDetectionService {
 
   // ── Public API ────────────────────────────────────────────────────────────
   set onSpeak(void Function(String) cb) => _voice.onSpeak = cb;
+
+  /// Preferred path: returns true only after the TTS queue completes.
+  set speaker(Future<bool> Function(String text, String? dedupeKey)? cb) =>
+      _voice.speaker = cb;
+
+  /// Called when payment speech fails or produces no usable text.
+  set onSpeakFailed(void Function(String text, PaymentEvent? event)? cb) =>
+      _voice.onSpeakFailed = cb;
+
   PdsSessionStats get sessionStats => _stats;
 
   /// FIX-3: sets language on the instance; no global state mutation.
