@@ -250,6 +250,20 @@ class InvoiceDedupHelper {
         } else {
           addNestedSnapshot(incoming);
         }
+
+        // Some clients serialize partial line collections independently under
+        // items and line_items. Merge the alternate list too when it is not
+        // the exact same list object; identical snapshots reconcile one-to-one.
+        if (lineItems is List &&
+            items is List &&
+            !identical(lineItems, items)) {
+          final alternate = identical(raw, lineItems) ? items : lineItems;
+          final alternateLines = alternate
+              .whereType<Map>()
+              .map((value) => Map<String, dynamic>.from(value))
+              .toList();
+          addNestedSnapshot(alternateLines);
+        }
         return;
       }
 
