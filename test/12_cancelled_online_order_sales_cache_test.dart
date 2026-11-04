@@ -3,7 +3,7 @@ import 'package:retail_mind/cache_consistency_service.dart';
 
 void main() {
   group('Cancelled online-order sales cache', () {
-    test('prunes all synced line rows for an online invoice missing remotely', () {
+    test('does not prune an online invoice from a possibly partial response', () {
       final local = <Map<String, dynamic>>[
         {
           'sale_id': 'ONL-101',
@@ -29,6 +29,32 @@ void main() {
 
       final result =
           CacheConsistencyService.reconcileOnlineOrderSales(local, const []);
+
+      expect(result, hasLength(3));
+      expect(result.map((row) => row['invoice_number']),
+          containsAll(['ONL-101', 'BILL-88']));
+    });
+
+    test('prunes only when caller proves snapshot is authoritative', () {
+      final local = <Map<String, dynamic>>[
+        {
+          'sale_id': 'ONL-101',
+          'invoice_number': 'ONL-101',
+          'sync_status': 'synced',
+          'source': 'cloud_restore',
+        },
+        {
+          'sale_id': 'BILL-88',
+          'invoice_number': 'BILL-88',
+          'sync_status': 'synced',
+        },
+      ];
+
+      final result = CacheConsistencyService.reconcileOnlineOrderSales(
+        local,
+        const [],
+        authoritativeSnapshot: true,
+      );
 
       expect(result, hasLength(1));
       expect(result.single['invoice_number'], 'BILL-88');
