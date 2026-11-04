@@ -124,7 +124,9 @@ class SalesDedupHelper {
     for (final entry in raw) {
       if (entry is! Map) continue;
       final sale = Map<String, dynamic>.from(entry);
-      if (!isValidBill(sale)) continue;
+      // Preserve incomplete but identified records until reconciliation. The
+      // analytics layer filters invalid values; storage must not erase them.
+
 
       if (sale['status']?.toString().toUpperCase() == 'CANCELLED') {
         cancelled.add(sale);
