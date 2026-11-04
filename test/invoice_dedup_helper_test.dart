@@ -186,6 +186,75 @@ void main() {
       expect(names, containsAll(['Chicken', 'Mutton']));
     });
 
+    test('both items and line_items contribute unique partial lines', () {
+      final result = InvoiceDedupHelper.canonicalizeInvoices([
+        {
+          'invoice_number': 'BILL-ALIASES-1',
+          'total_amount': 300.0,
+          'line_items': [
+            {
+              'product_name': 'Monitor',
+              'quantity': 1,
+              'unit_price': 200,
+              'line_total': 200,
+            },
+          ],
+          'items': [
+            {
+              'product_name': 'Keyboard',
+              'quantity': 1,
+              'unit_price': 100,
+              'line_total': 100,
+            },
+          ],
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      final lines = List<Map<String, dynamic>>.from(
+        result.single['line_items'] as List,
+      );
+      expect(lines, hasLength(2));
+      expect(
+        lines.map((line) => line['product_name']).toSet(),
+        containsAll(['Monitor', 'Keyboard']),
+      );
+    });
+
+    test('missing price in an invoice mirror does not duplicate a known line', () {
+      final result = InvoiceDedupHelper.canonicalizeInvoices([
+        {
+          'invoice_number': 'BILL-PARTIAL-LINE',
+          'total_amount': 50.0,
+          'items': [
+            {
+              'product_name': 'Tea',
+              'quantity': 1,
+              'unit_price': 50,
+              'line_total': 50,
+            },
+          ],
+        },
+        {
+          'invoice_number': 'BILL-PARTIAL-LINE',
+          'total_amount': 50.0,
+          'line_items': [
+            {
+              'description': 'Tea',
+              'quantity': 1,
+            },
+          ],
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      expect((result.single['line_items'] as List), hasLength(1));
+      expect(
+        (result.single['line_items'] as List).first['unit_price'],
+        50,
+      );
+    });
+
     test('a sale mirror is merged when it matches a real invoice', () {
       final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
         [
