@@ -101,9 +101,29 @@ Future<PaymentEvent?> _persistPaymentHistory(
       handledEvent =
           await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
 
-      if (!handledEvent.isDuplicate && !handledEvent.hasReferenceConflict) {
-        await OnlinePaymentHistoryService.recordIncomingPayment(handledEvent);
+      final requiresIncomingReceiptHistory =
+          OnlinePaymentHistoryService.isIncomingCredit(handledEvent) &&
+          handledEvent.amount.isFinite &&
+          handledEvent.amount > 0 &&
+          !handledEvent.isFailed &&
+          handledEvent.decision != PaymentDecision.rejected;
+      if (requiresIncomingReceiptHistory) {
+        if (!handledEvent.isDuplicate && !handledEvent.hasReferenceConflict) {
+          await OnlinePaymentHistoryService.recordIncomingPayment(handledEvent);
+        }
+        final isDurablyRepresented =
+            await OnlinePaymentHistoryService.hasDurableRecordForEvent(
+              handledEvent,
+            );
+        if (!isDurablyRepresented) {
+          throw StateError(
+            'Incoming payment has no durable canonical history row yet.',
+          );
+        }
       }
+      // Outgoing debits and rejected/failed alerts are detector events, not
+      // incoming customer receipts. They are routed to the detector UI/voice
+      // path but are intentionally excluded from this receipt ledger.
 
       try {
         final savedHistory = await OnlinePaymentHistoryService.load();
