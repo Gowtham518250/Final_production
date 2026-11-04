@@ -3158,6 +3158,17 @@ class PaymentDetectionService {
     if (_recentConfirmed.length > 50) _recentConfirmed.removeAt(0);
   }
 
+  /// Futures emitted while a native notification is being routed. The
+  /// listener waits for these before deciding whether the source event is safe
+  /// to acknowledge.
+  final Map<String, List<Future<void>>> _notificationEmissionFutures =
+      <String, List<Future<void>>>{};
+
+  /// Payment events whose durable local history write has not yet completed.
+  final Set<String> _nativeNotificationHistoryPending = <String>{};
+  final Map<String, Completer<bool>> _nativeNotificationHistoryWaiters =
+      <String, Completer<bool>>{};
+
   /// Event id -> channels that already echoed it (one echo per channel).
   final Map<String, Set<String>> _echoClaims = {};
   final LinkedHashSet<String> _possibleRepeatEventIds = LinkedHashSet<String>();
@@ -3234,7 +3245,7 @@ class PaymentDetectionService {
       _processTruecallerIncomingTransfer(packageName, text);
 
   @visibleForTesting
-  void debugHandleNotification(ServiceNotificationEvent event) =>
+  Future<bool> debugHandleNotification(ServiceNotificationEvent event) =>
       _handleNotification(event);
 
   @visibleForTesting
@@ -4302,7 +4313,7 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        _processNotificationWithRetry,
+        (event) => unawaited(_processNotificationWithRetry(event)),
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
@@ -4531,35 +4542,104 @@ class PaymentDetectionService {
   /// Route durable native events before acknowledging them. A synchronous
   /// parsing/routing exception gets a few bounded retries; after that the
   /// native queue retains the event for the next stream re-attachment.
-  void _processNotificationWithRetry(
+  Future<void> _processNotificationWithRetry(
     ServiceNotificationEvent event, {
     int attempt = 1,
-  }) {
-    final handled = _handleNotification(event);
+  }) async {
     final key = event.eventKey?.trim();
-    if (handled) {
-      if (key != null && key.isNotEmpty) {
-        unawaited(NotificationListenerService.acknowledgeNotification(key));
+    if (key == null || key.isEmpty) {
+      final handled = await _handleNotification(event);
+      if (!handled) {
+        PdsLogger.w('L1', 'Notification without a durable key could not be routed');
       }
       return;
     }
 
-    if (key == null || key.isEmpty) {
-      PdsLogger.w('L1', 'Notification route failed without a durable event key');
-      return;
-    }
-    if (attempt >= 3) {
-      PdsLogger.w(
-        'L1',
-        'Notification route failed after $attempt attempts; '
-            'event retained in native durable queue',
-      );
-      return;
-    }
-    Future<void>.delayed(
-      Duration(milliseconds: 300 * attempt),
-      () => _processNotificationWithRetry(event, attempt: attempt + 1),
+    final historyWaiter = _nativeNotificationHistoryWaiters.putIfAbsent(
+      key,
+      Completer<bool>.new,
     );
+    final handled = await _handleNotification(event);
+    if (!handled) {
+      if (attempt >= 3) {
+        PdsLogger.w(
+          'L1',
+          'Notification route failed after $attempt attempts; '
+              'event retained in native durable queue',
+        );
+        return;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
+      await _processNotificationWithRetry(event, attempt: attempt + 1);
+      return;
+    }
+
+    // A parsed payment must first be written by the background history
+    // subscriber. Classification-only/no-payment notifications can be
+    // acknowledged as soon as routing has completed.
+    if (_nativeNotificationHistoryPending.contains(key) ||
+        historyWaiter.isCompleted) {
+      var historySaved = false;
+      try {
+        historySaved = await historyWaiter.future.timeout(
+          const Duration(seconds: 30),
+        );
+      } catch (_) {
+        historySaved = false;
+      }
+      if (!historySaved) {
+        PdsLogger.w(
+          'L1',
+          'Payment history is not durable yet; native event remains queued',
+        );
+      }
+      return;
+    }
+
+    _nativeNotificationHistoryWaiters.remove(key);
+    try {
+      await NotificationListenerService.acknowledgeNotification(key);
+    } catch (error, stackTrace) {
+      PdsLogger.e('L1', 'Could not acknowledge routed notification', error, stackTrace);
+    }
+  }
+
+  /// Called by the isolate that owns OnlinePaymentHistoryService after it has
+  /// completed the durable write (or established that the event is already
+  /// represented by a durable reference row).
+  Future<void> completeNativeNotificationHistory(
+    String? eventKey, {
+    required bool persisted,
+  }) async {
+    final key = eventKey?.trim();
+    if (key == null ||
+        key.isEmpty ||
+        !_nativeNotificationHistoryPending.contains(key)) {
+      return;
+    }
+
+    var acknowledged = persisted;
+    if (acknowledged) {
+      try {
+        await NotificationListenerService.acknowledgeNotification(key);
+      } catch (error, stackTrace) {
+        PdsLogger.e(
+          'L1',
+          'History saved but native event acknowledgement failed',
+          error,
+          stackTrace,
+        );
+        acknowledged = false;
+      }
+    }
+
+    if (acknowledged) {
+      _nativeNotificationHistoryPending.remove(key);
+    }
+    final waiter = _nativeNotificationHistoryWaiters.remove(key);
+    if (waiter != null && !waiter.isCompleted) {
+      waiter.complete(acknowledged);
+    }
   }
 
   // Late source times are tracked separately so echo matching still compares
@@ -4595,23 +4675,45 @@ class PaymentDetectionService {
     return postedAt.isAfter(now) ? now : postedAt;
   }
 
-  bool _handleNotification(ServiceNotificationEvent event) {
-    _sourceEventKey = _safe(
+  Future<bool> _handleNotification(ServiceNotificationEvent event) async {
+    final key = _safe(
       () => (event as dynamic).eventKey as String?,
     )?.trim();
+    final emissions = <Future<void>>[];
+    if (key != null && key.isNotEmpty) {
+      _notificationEmissionFutures[key] = emissions;
+    }
+
+    var handled = true;
+    _sourceEventKey = key;
     _sourcePostedAt = postedAtFromEventKey(_sourceEventKey);
     _sourceNativeAnnouncementHandled = event.nativeAnnouncementHandled == true;
     try {
+      // The parser remains synchronous, but every PaymentEvent emission
+      // started by it is captured and awaited below.
       _handleNotificationCore(event);
-      return true;
     } catch (error, stackTrace) {
       PdsLogger.e('L1', 'Notification route failed', error, stackTrace);
-      return false;
+      handled = false;
     } finally {
       _sourcePostedAt = null;
       _sourceEventKey = null;
       _sourceNativeAnnouncementHandled = false;
     }
+
+    try {
+      if (emissions.isNotEmpty) {
+        await Future.wait(emissions);
+      }
+    } catch (error, stackTrace) {
+      PdsLogger.e('L1', 'Payment event emission failed', error, stackTrace);
+      handled = false;
+    } finally {
+      if (key != null && key.isNotEmpty) {
+        _notificationEmissionFutures.remove(key);
+      }
+    }
+    return handled;
   }
 
   void _handleNotificationCore(ServiceNotificationEvent event) {
@@ -4961,6 +5063,23 @@ class PaymentDetectionService {
   // CORE PIPELINE
   // ==========================================================================
 
+  Future<void> _emitTrackedFromNotification(
+    PaymentEvent event, {
+    bool isBillSettlement = false,
+    bool forceMute = false,
+  }) {
+    final future = _emit(
+      event,
+      isBillSettlement: isBillSettlement,
+      forceMute: forceMute,
+    );
+    final key = event.sourceEventKey?.trim();
+    if (key != null && key.isNotEmpty) {
+      _notificationEmissionFutures[key]?.add(future);
+    }
+    return future;
+  }
+
   void _processText(
     String rawText,
     PaymentApp app, {
@@ -5211,7 +5330,11 @@ class PaymentDetectionService {
         }
         consumedByUser = true;
         PdsLogger.t('EMIT', 'kind=debit source=$source');
-        unawaited(_emit(tempEvent.copyWith(decision: PaymentDecision.likely)));
+        unawaited(
+          _emitTrackedFromNotification(
+            tempEvent.copyWith(decision: PaymentDecision.likely),
+          ),
+        );
         return;
       }
 
@@ -5611,7 +5734,12 @@ class PaymentDetectionService {
         consumedByUser = true;
         PdsLogger.t('EMIT', 'source=$source decision=${event.decision.name}');
         _pendingBuffer.add(event, voiceSpoken: false);
-        unawaited(_emit(event, isBillSettlement: isBillSettled));
+        unawaited(
+          _emitTrackedFromNotification(
+            event,
+            isBillSettlement: isBillSettled,
+          ),
+        );
         _pendingBuffer.markVoiceSpoken(event.id);
         return;
       }
@@ -5635,7 +5763,11 @@ class PaymentDetectionService {
             'AMBIGUOUS SMS correlation retained as provisional and muted',
           );
           unawaited(
-            _emit(ambiguousEvent, isBillSettlement: false, forceMute: true),
+            _emitTrackedFromNotification(
+              ambiguousEvent,
+              isBillSettlement: false,
+              forceMute: true,
+            ),
           );
           return;
         }
@@ -5665,7 +5797,12 @@ class PaymentDetectionService {
         if (matched != null) matched.emitted = true;
         consumedByUser = true;
         PdsLogger.t('EMIT', 'source=sms decision=${eventToEmit.decision.name}');
-        unawaited(_emit(eventToEmit, isBillSettlement: isBillSettled));
+        unawaited(
+          _emitTrackedFromNotification(
+            eventToEmit,
+            isBillSettlement: isBillSettled,
+          ),
+        );
       }
     } finally {
       if (registeredActiveFingerprint) _activeFingerprints.remove(fp);
@@ -6191,6 +6328,15 @@ class PaymentDetectionService {
         debugPrint(
           '✅ Auto-upgraded likely event to CONFIRMED due to invoice match',
         );
+    }
+
+    final nativeEventKey = finalEvent.sourceEventKey?.trim();
+    if (nativeEventKey != null &&
+        nativeEventKey.isNotEmpty &&
+        _notificationEmissionFutures.containsKey(nativeEventKey)) {
+      // Do not remove the native durable event until the background isolate
+      // confirms that this final event is represented in local payment history.
+      _nativeNotificationHistoryPending.add(nativeEventKey);
     }
 
     _eventCtrl.add(finalEvent);
