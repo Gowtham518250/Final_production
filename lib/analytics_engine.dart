@@ -270,7 +270,9 @@ class AnalyticsEngine {
       }
 
       if (businessRaw == null || businessRaw.isEmpty) {
-        return getEventDate(sale);
+        // No business date: fall back to the event timestamp without calling
+        // getEventDate() -> getLocalDate() recursively when both are absent.
+        return _parseEventDate(sale) ?? DateTime(1970);
       }
 
       final dateOnly = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(businessRaw);
@@ -313,6 +315,10 @@ class AnalyticsEngine {
   /// Technical backend timestamps such as created_at are stored as naive UTC.
   /// Explicitly zoned values keep their supplied offset.
   DateTime getEventDate(Map<String, dynamic> sale) {
+    return _parseEventDate(sale) ?? getLocalDate(sale);
+  }
+
+  DateTime? _parseEventDate(Map<String, dynamic> sale) {
     for (final field in const [
       'sale_timestamp',
       'invoice_timestamp',
@@ -328,7 +334,7 @@ class AnalyticsEngine {
       final parsed = _parseBackendTimestamp(raw);
       if (parsed != null) return parsed;
     }
-    return getLocalDate(sale);
+    return null;
   }
 
   DateTime? _parseBackendTimestamp(String str) {

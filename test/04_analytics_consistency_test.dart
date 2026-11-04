@@ -265,5 +265,54 @@ void main() {
         );
       },
     );
+
+    test('event date helpers safely handle records without any timestamp', () {
+      final engine = AnalyticsEngine();
+
+      expect(engine.getLocalDate({}), DateTime(1970));
+      expect(engine.getEventDate({}), DateTime(1970));
+    });
+
+    test('headline dashboard metrics use one consistent selected-period set', () {
+      final engine = AnalyticsEngine();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      String businessDate(DateTime value) {
+        return DateTime(
+          value.year,
+          value.month,
+          value.day,
+          12,
+        ).toIso8601String();
+      }
+
+      final rows = [
+        {'sale_id': 'TODAY', 'business_date': businessDate(today), 'total_amount': 100.0},
+        {'sale_id': 'WEEK', 'business_date': businessDate(today.subtract(const Duration(days: 3))), 'total_amount': 50.0},
+        {'sale_id': 'MONTH', 'business_date': businessDate(today.subtract(const Duration(days: 10))), 'total_amount': 25.0},
+        {'sale_id': 'YEAR', 'business_date': businessDate(DateTime(now.year, 1, 1)), 'total_amount': 60.0},
+        {'sale_id': 'OLDER', 'business_date': businessDate(DateTime(now.year - 1, now.month, now.day)), 'total_amount': 200.0},
+      ];
+
+      void expectPeriod(int filter, double revenue, int transactions) {
+        engine.recalculateAnalytics(rows, filter);
+        expect(engine.displayRevenue, revenue);
+        expect(engine.displayTransactions, transactions);
+        expect(
+          engine.filteredAverageSale,
+          closeTo(transactions == 0 ? 0 : revenue / transactions, 0.001),
+        );
+      }
+
+      expectPeriod(0, 100.0, 1);
+      expectPeriod(1, 150.0, 2);
+      expectPeriod(2, 175.0, 3);
+      expectPeriod(3, 235.0, 4);
+
+      // Lifetime totals remain separate from the selected-period headline KPIs.
+      expect(engine.totalSales, 435.0);
+      expect(engine.totalTransactions, 5);
+    });
   });
 }
