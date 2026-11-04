@@ -264,58 +264,77 @@ class PaymentAnnouncementService {
     );
   }
 
-  // Same-isolate guard is keyed by payment identity, never by speech text:
-  // two genuine payments can produce identical spoken wording.
+  // A completed payment key is remembered briefly; in-flight callers share
+  // one Future so a retry cannot be mistaken for an already successful speech.
   static const Duration _sameKeyWindow = Duration(seconds: 4);
   static const Duration _maxQueueWait = Duration(minutes: 2);
   final Map<String, DateTime> _recentSpeechKeys = <String, DateTime>{};
+  final Map<String, Future<bool>> _inFlightSpeech =
+      <String, Future<bool>>{};
 
-  /// Completes true only after TTS completes. A false result means nothing was
-  /// heard (muted, failed, timed out, expired, or cleared) and needs fallback.
+  /// Completes true only when the speech queue confirms TTS completion.
+  /// False means muted, failed, timed out, expired, or cleared.
   Future<bool> speakSimple(
     String message,
     String language, {
     String? dedupeKey,
   }) {
-    if (_config.volume <= 0) return Future<bool>.value(false);
+    if (_config.volume <= 0 || message.trim().isEmpty) {
+      return Future<bool>.value(false);
+    }
+
     final now = DateTime.now();
     _recentSpeechKeys.removeWhere(
       (_, at) => now.difference(at) > _sameKeyWindow,
     );
+
     if (dedupeKey != null && dedupeKey.isNotEmpty) {
+      final inFlight = _inFlightSpeech[dedupeKey];
+      if (inFlight != null) return inFlight;
       if (_recentSpeechKeys.containsKey(dedupeKey)) {
-        // The first invocation owns the speech for this payment.
+        // This exact payment key completed successfully very recently.
         return Future<bool>.value(true);
       }
-      _recentSpeechKeys[dedupeKey] = now;
     }
 
     final lang = _lang.resolve(language);
-    final calculatedTimeout =
-        _voice.calculateTimeout(message, _config.budgetDeviceTimeoutMultiplier);
+    final calculatedTimeout = _voice.calculateTimeout(
+      message,
+      _config.budgetDeviceTimeoutMultiplier,
+    );
     final timeout = calculatedTimeout.clamp(6, 12).toInt();
     final completer = Completer<bool>();
+    final future = completer.future;
+
+    if (dedupeKey != null && dedupeKey.isNotEmpty) {
+      _inFlightSpeech[dedupeKey] = future;
+    }
+
     _queue.enqueue(QueueItem(
       priority: AnnouncementPriority.low,
       ttsText: message,
       timeoutSec: timeout,
       expiresAt: now.add(_maxQueueWait),
       onResult: (success) {
-        if (!success && dedupeKey != null) {
-          _recentSpeechKeys.remove(dedupeKey);
-        }
         if (!completer.isCompleted) completer.complete(success);
+        if (dedupeKey != null && dedupeKey.isNotEmpty) {
+          _inFlightSpeech.remove(dedupeKey);
+          if (success) {
+            _recentSpeechKeys[dedupeKey] = DateTime.now();
+          } else {
+            _recentSpeechKeys.remove(dedupeKey);
+          }
+        }
       },
       onTimeout: () async {
-        // Stop only this stalled TTS operation. Other fresh payment items keep
-        // their queue positions and their own expiry/timeout.
         await _voice
             .stop()
             .timeout(const Duration(seconds: 2), onTimeout: () {});
       },
       task: () => _voice.speakRaw(message, lang.locale),
     ));
-    return completer.future;
+
+    return future;
   }
 
   void queryDailyTotal(String language) {
