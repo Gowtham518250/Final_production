@@ -267,9 +267,7 @@ class PaymentAnnouncementService {
   // A completed payment key is remembered briefly; in-flight callers share
   // one Future so a retry cannot be mistaken for an already successful speech.
   static const Duration _sameKeyWindow = Duration(seconds: 4);
-  // A payment alert should start promptly. If the platform is stuck, the
-  // result callback requests the existing audible OS-notification fallback.
-  static const Duration _maxQueueWait = Duration(seconds: 30);
+  static const Duration _maxQueueWait = Duration(minutes: 2);
   final Map<String, DateTime> _recentSpeechKeys = <String, DateTime>{};
   final Map<String, Future<bool>> _inFlightSpeech =
       <String, Future<bool>>{};
@@ -313,9 +311,7 @@ class PaymentAnnouncementService {
     }
 
     _queue.enqueue(QueueItem(
-      // Payment alerts outrank routine prompts and may interrupt non-payment
-      // TTS already running in VoiceEngine.
-      priority: AnnouncementPriority.critical,
+      priority: AnnouncementPriority.low,
       ttsText: message,
       timeoutSec: timeout,
       expiresAt: now.add(_maxQueueWait),
@@ -335,11 +331,7 @@ class PaymentAnnouncementService {
             .stop()
             .timeout(const Duration(seconds: 2), onTimeout: () {});
       },
-      task: () => _voice.speakRaw(
-        message,
-        lang.locale,
-        priority: SpeechPriority.critical,
-      ),
+      task: () => _voice.speakRaw(message, lang.locale),
     ));
 
     return future;
