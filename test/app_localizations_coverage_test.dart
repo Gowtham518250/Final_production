@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/app_localizations.dart';
-import 'package:retail_mind/language_provider.dart';
 
 const supportedLanguageCodes = <String>{
   'en',
@@ -15,7 +14,6 @@ const supportedLanguageCodes = <String>{
   'bn',
 };
 
-
 void main() {
   test('all supported locales have the same dictionary keys', () {
     expect(
@@ -26,7 +24,8 @@ void main() {
     final englishKeys = AppLocalizations.translations['en']!.keys.toSet();
     final mismatches = <String>[];
     for (final languageCode in supportedLanguageCodes) {
-      final localeKeys = AppLocalizations.translations[languageCode]!.keys.toSet();
+      final localeKeys = AppLocalizations.translations[languageCode]!.keys
+          .toSet();
       final missing = englishKeys.difference(localeKeys).toList()..sort();
       final extra = localeKeys.difference(englishKeys).toList()..sort();
       if (missing.isNotEmpty || extra.isNotEmpty) {
@@ -61,6 +60,21 @@ void main() {
       'Logout',
       'LOGOUT',
       'Logging out...',
+      'Delete Account',
+      'This action cannot be undone',
+      'When you delete your account:',
+      'Your account and all associated data will be permanently deleted from our servers',
+      'All sales records, customer data, and inventory information will be removed',
+      'Your authentication credentials will be revoked',
+      'This cannot be reversed or recovered',
+      'I understand and accept the permanent deletion of all my data',
+      'Type this phrase exactly to confirm:',
+      'Type the confirmation phrase',
+      'PERMANENT DELETE',
+      'Please confirm that you understand the consequences',
+      'Confirmation phrase does not match',
+      'Account deleted successfully. All data has been cleared.',
+      'Could not delete the account. Please try again.',
     ];
 
     expect(
@@ -102,9 +116,29 @@ void main() {
 
   test('selectable languages include all curated UI locales', () {
     const selectableLanguageCodes = <String>{
-      'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
-      'or', 'as', 'brx', 'doi', 'ks', 'kok', 'mai', 'mni', 'ne',
-      'sa', 'sat', 'sd', 'ur',
+      'en',
+      'te',
+      'hi',
+      'ta',
+      'kn',
+      'ml',
+      'bn',
+      'mr',
+      'gu',
+      'pa',
+      'or',
+      'as',
+      'brx',
+      'doi',
+      'ks',
+      'kok',
+      'mai',
+      'mni',
+      'ne',
+      'sa',
+      'sat',
+      'sd',
+      'ur',
     };
     expect(selectableLanguageCodes, hasLength(23));
 
@@ -114,7 +148,16 @@ void main() {
     expect(
       curatedUiCodes,
       containsAll(<String>{
-        'en', 'te', 'hi', 'ta', 'kn', 'ml', 'bn', 'mr', 'gu', 'pa',
+        'en',
+        'te',
+        'hi',
+        'ta',
+        'kn',
+        'ml',
+        'bn',
+        'mr',
+        'gu',
+        'pa',
       }),
     );
     expect(curatedUiCodes.length, 10);

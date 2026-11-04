@@ -35,25 +35,37 @@ SignalIdentity sig(
   text: text,
 );
 
-SignalIdentity sms(String id, {int sec = 0, String? reference, String? payer, String? account}) =>
-    sig(id,
-        channel: 'sms|banksms',
-        origin: 'sms',
-        sec: sec,
-        reference: reference,
-        payer: payer,
-        account: account);
+SignalIdentity sms(
+  String id, {
+  int sec = 0,
+  String? reference,
+  String? payer,
+  String? account,
+}) => sig(
+  id,
+  channel: 'sms|banksms',
+  origin: 'sms',
+  sec: sec,
+  reference: reference,
+  payer: payer,
+  account: account,
+);
 
 void main() {
   group('pairwise compare', () {
     test('different amount is always distinct', () {
-      final d = PaymentIdentityMatcher.compare(sig('a'), sig('b', amount: 501, source: 'x'));
+      final d = PaymentIdentityMatcher.compare(
+        sig('a'),
+        sig('b', amount: 501, source: 'x'),
+      );
       expect(d.verdict, IdentityVerdict.distinct);
     });
 
     test('same native post with updated text is one transfer', () {
       final d = PaymentIdentityMatcher.compare(
-          sig('a', source: 'p|1|100'), sig('b', source: 'p|1|100', sec: 3));
+        sig('a', source: 'p|1|100'),
+        sig('b', source: 'p|1|100', sec: 3),
+      );
       expect(d.verdict, IdentityVerdict.sameTransfer);
       expect(d.reason, 'same_native_post');
     });
@@ -86,7 +98,13 @@ void main() {
     test('same reference but credit vs debit is a conflict, not a merge', () {
       final d = PaymentIdentityMatcher.compare(
         sig('a', reference: '412345678901'),
-        sig('b', reference: '412345678901', direction: 'debit', channel: 'sms|banksms', origin: 'sms'),
+        sig(
+          'b',
+          reference: '412345678901',
+          direction: 'debit',
+          channel: 'sms|banksms',
+          origin: 'sms',
+        ),
       );
       expect(d.verdict, IdentityVerdict.distinct);
     });
@@ -147,17 +165,26 @@ void main() {
         sig('n', payer: 'anna devi'),
       );
       expect(paired.verdict, IdentityVerdict.candidateEcho);
-      final unpaired = PaymentIdentityMatcher.compare(sms('s', sec: 90 * 60), sig('n'));
+      final unpaired = PaymentIdentityMatcher.compare(
+        sms('s', sec: 90 * 60),
+        sig('n'),
+      );
       expect(unpaired.verdict, IdentityVerdict.distinct);
     });
 
     test('unknown or different direction never fuzzy-matches', () {
       expect(
-        PaymentIdentityMatcher.compare(sms('s', sec: 5), sig('n', direction: 'unknown')).verdict,
+        PaymentIdentityMatcher.compare(
+          sms('s', sec: 5),
+          sig('n', direction: 'unknown'),
+        ).verdict,
         IdentityVerdict.distinct,
       );
       expect(
-        PaymentIdentityMatcher.compare(sms('s', sec: 5), sig('n', direction: 'debit')).verdict,
+        PaymentIdentityMatcher.compare(
+          sms('s', sec: 5),
+          sig('n', direction: 'debit'),
+        ).verdict,
         IdentityVerdict.distinct,
       );
     });
@@ -170,28 +197,31 @@ void main() {
       expect(d.verdict, IdentityVerdict.distinct);
     });
 
-    test('same notification slot update within source-time window is one alert', () {
-      final d = PaymentIdentityMatcher.compare(
-        sig(
-          'first',
-          source: 'post-a',
-          notificationStream: 'package|tag|id',
-          notificationAt: _t0,
-          notificationPayer: 'रवि कुमार',
-        ),
-        sig(
-          'update',
-          source: 'post-b',
-          notificationStream: 'package|tag|id',
-          notificationAt: _t0.add(const Duration(seconds: 20)),
-          notificationPayer: 'रवि कुमार',
-          sec: 60,
-        ),
-      );
+    test(
+      'same notification slot update within source-time window is one alert',
+      () {
+        final d = PaymentIdentityMatcher.compare(
+          sig(
+            'first',
+            source: 'post-a',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0,
+            notificationPayer: 'रवि कुमार',
+          ),
+          sig(
+            'update',
+            source: 'post-b',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0.add(const Duration(seconds: 20)),
+            notificationPayer: 'रवि कुमार',
+            sec: 60,
+          ),
+        );
 
-      expect(d.verdict, IdentityVerdict.sameTransfer);
-      expect(d.reason, 'same_notification_update');
-    });
+        expect(d.verdict, IdentityVerdict.sameTransfer);
+        expect(d.reason, 'same_notification_update');
+      },
+    );
 
     test('notification repost conflicts stay distinct', () {
       final first = sig(
@@ -263,44 +293,57 @@ void main() {
       expect(d.verdict, IdentityVerdict.distinct);
     });
 
-    test('same notification slot without payer/account evidence stays distinct', () {
-      final d = PaymentIdentityMatcher.compare(
-        sig(
-          'first',
-          source: 'post-a',
-          notificationStream: 'package|tag|id',
-          notificationAt: _t0,
-        ),
-        sig(
-          'second-payment',
-          source: 'post-b',
-          notificationStream: 'package|tag|id',
-          notificationAt: _t0.add(const Duration(seconds: 2)),
-          sec: 2,
-        ),
-      );
+    test(
+      'same notification slot without payer/account evidence stays distinct',
+      () {
+        final d = PaymentIdentityMatcher.compare(
+          sig(
+            'first',
+            source: 'post-a',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0,
+          ),
+          sig(
+            'second-payment',
+            source: 'post-b',
+            notificationStream: 'package|tag|id',
+            notificationAt: _t0.add(const Duration(seconds: 2)),
+            sec: 2,
+          ),
+        );
 
-      expect(d.verdict, IdentityVerdict.distinct);
-    });
+        expect(d.verdict, IdentityVerdict.distinct);
+      },
+    );
 
     test('same-channel exact replay: proof inside window, distinct after', () {
       final inside = PaymentIdentityMatcher.compare(
-          sig('b', sec: 2, text: 'paid'), sig('a', text: 'paid'));
+        sig('b', sec: 2, text: 'paid'),
+        sig('a', text: 'paid'),
+      );
       expect(inside.verdict, IdentityVerdict.sameTransfer);
       final outside = PaymentIdentityMatcher.compare(
-          sig('b', sec: 30, text: 'paid'), sig('a', text: 'paid'));
+        sig('b', sec: 30, text: 'paid'),
+        sig('a', text: 'paid'),
+      );
       expect(outside.verdict, IdentityVerdict.distinct);
     });
 
     test('truecaller mirror: 8s window and trusted counterpart only', () {
-      SignalIdentity tc(int sec) => sig('t',
-          channel: 'truecaller_notification|truecaller',
-          origin: 'truecaller_notification',
-          sec: sec);
-      expect(PaymentIdentityMatcher.compare(tc(5), sig('n')).verdict,
-          IdentityVerdict.candidateEcho);
-      expect(PaymentIdentityMatcher.compare(tc(9), sig('n')).verdict,
-          IdentityVerdict.distinct);
+      SignalIdentity tc(int sec) => sig(
+        't',
+        channel: 'truecaller_notification|truecaller',
+        origin: 'truecaller_notification',
+        sec: sec,
+      );
+      expect(
+        PaymentIdentityMatcher.compare(tc(5), sig('n')).verdict,
+        IdentityVerdict.candidateEcho,
+      );
+      expect(
+        PaymentIdentityMatcher.compare(tc(9), sig('n')).verdict,
+        IdentityVerdict.distinct,
+      );
       expect(
         PaymentIdentityMatcher.compare(
           tc(5),
@@ -309,11 +352,69 @@ void main() {
         IdentityVerdict.distinct,
       );
     });
+
+    test('Truecaller bank label does not conflict with a payer name', () {
+      final truecaller = sig(
+        'truecaller',
+        channel: 'truecaller_notification|truecaller',
+        origin: 'truecaller_notification',
+        payer: 'apg bank',
+        account: '4222',
+        sec: 5,
+      );
+      final paymentApp = sig('payment-app', payer: 'Anna Devi');
+
+      final result = PaymentIdentityMatcher.compare(truecaller, paymentApp);
+      expect(result.verdict, IdentityVerdict.candidateEcho);
+      expect(result.reason, 'truecaller_mirror');
+    });
+
+    test('Truecaller mirror never overrides a conflicting account', () {
+      final truecaller = sig(
+        'truecaller',
+        channel: 'truecaller_notification|truecaller',
+        origin: 'truecaller_notification',
+        payer: 'apg bank',
+        account: '4222',
+        sec: 5,
+      );
+      final paymentApp = sig(
+        'payment-app',
+        payer: 'Anna Devi',
+        account: '9999',
+      );
+
+      final result = PaymentIdentityMatcher.compare(truecaller, paymentApp);
+      expect(result.verdict, IdentityVerdict.distinct);
+      expect(result.reason, 'account_conflict');
+    });
+
+    test('Truecaller bank label is ignored for one-sided reference checks', () {
+      final truecaller = sig(
+        'truecaller',
+        channel: 'truecaller_notification|truecaller',
+        origin: 'truecaller_notification',
+        payer: 'apg bank',
+        sec: 5,
+      );
+      final paymentApp = sig(
+        'payment-app',
+        payer: 'Anna Devi',
+        reference: '412345678901',
+      );
+
+      final result = PaymentIdentityMatcher.compare(truecaller, paymentApp);
+      expect(result.verdict, IdentityVerdict.candidateEcho);
+      expect(result.reason, 'truecaller_mirror');
+    });
   });
 
   group('resolve (uniqueness and claims)', () {
     test('notification then SMS within 20s becomes one payment', () {
-      final r = PaymentIdentityMatcher.resolve(sms('s', sec: 20, reference: '412345678901'), [sig('n')]);
+      final r = PaymentIdentityMatcher.resolve(
+        sms('s', sec: 20, reference: '412345678901'),
+        [sig('n')],
+      );
       expect(r.isEcho, true);
       expect(r.matchedId, 'n');
       expect(r.claimChannel, 'sms|banksms');
@@ -323,19 +424,18 @@ void main() {
       final r = PaymentIdentityMatcher.resolve(
         sms('s2', sec: 30),
         [sig('n')],
-        claims: {'n': {'sms|banksms'}},
+        claims: {
+          'n': {'sms|banksms'},
+        },
       );
       expect(r.isEcho, false);
     });
 
     test('one SMS matching two earlier notifications keeps both separate', () {
-      final r = PaymentIdentityMatcher.resolve(
-        sms('s', sec: 15),
-        [
-          sig('n1'),
-          sig('n2', channel: 'notification|googlepay', sec: 5),
-        ],
-      );
+      final r = PaymentIdentityMatcher.resolve(sms('s', sec: 15), [
+        sig('n1'),
+        sig('n2', channel: 'notification|googlepay', sec: 5),
+      ]);
       expect(r.isEcho, false);
       expect(r.ambiguous, true);
     });
@@ -348,7 +448,10 @@ void main() {
     test('proof wins even when other candidates exist', () {
       final r = PaymentIdentityMatcher.resolve(
         sms('s', sec: 20, reference: '412345678901'),
-        [sig('x', channel: 'notification|googlepay'), sig('n', reference: '412345678901')],
+        [
+          sig('x', channel: 'notification|googlepay'),
+          sig('n', reference: '412345678901'),
+        ],
       );
       expect(r.isEcho, true);
       expect(r.matchedId, 'n');
@@ -372,8 +475,12 @@ void main() {
     test('SMS plus Truecaller uses the existing trusted mirror rule', () {
       final d = PaymentIdentityMatcher.compare(
         sms('s'),
-        sig('t', channel: 'truecaller_notification|truecaller',
-            origin: 'truecaller_notification', sec: 5),
+        sig(
+          't',
+          channel: 'truecaller_notification|truecaller',
+          origin: 'truecaller_notification',
+          sec: 5,
+        ),
       );
       expect(d.verdict, IdentityVerdict.candidateEcho);
       expect(d.reason, 'truecaller_mirror');
@@ -384,5 +491,4 @@ void main() {
       expect(d.verdict, IdentityVerdict.candidateEcho);
     });
   });
-
 }

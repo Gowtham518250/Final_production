@@ -72,15 +72,31 @@ void main() {
       expect(events, isEmpty);
     });
 
-    test('PhonePe notification + Truecaller mirror of the same payment = 1',
-        () async {
-      final now = DateTime.now();
-      final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, payer: 'Anna Devi', accountSuffix: '4222'),
-        _credit(id: 't1', app: PaymentApp.bankApp, source: 'notification', at: now, payer: 'Anna Devi', accountSuffix: '4222'),
-      ]);
-      expect(events, hasLength(1));
-    });
+    test(
+      'PhonePe notification + Truecaller mirror of the same payment = 1',
+      () async {
+        final now = DateTime.now();
+        final events = await emitAll([
+          _credit(
+            id: 'n1',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            payer: 'Anna Devi',
+            accountSuffix: '4222',
+          ),
+          _credit(
+            id: 't1',
+            app: PaymentApp.bankApp,
+            source: 'notification',
+            at: now,
+            payer: 'Anna Devi',
+            accountSuffix: '4222',
+          ),
+        ]);
+        expect(events, hasLength(1));
+      },
+    );
 
     test('same customer pays Rs 5 twice via PhonePe = 2 payments', () async {
       final now = DateTime.now();
@@ -115,76 +131,111 @@ void main() {
           at: now.subtract(const Duration(minutes: 20)),
           payer: 'Anna Devi',
         ),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, payer: 'Anna Devi'),
-      ]);
-      expect(events, hasLength(1));
-    });
-
-    test('two payments + two late SMS = 2, a third unmatched SMS = 3', () async {
-      final now = DateTime.now();
-      PaymentEvent n(String id, int minsAgo, String payer) => _credit(
-        id: id,
-        app: PaymentApp.phonePe,
-        source: 'notification',
-        at: now.subtract(Duration(minutes: minsAgo)),
-        payer: payer,
-      );
-      PaymentEvent s(String id, String payer) => _credit(
-        id: id,
-        app: PaymentApp.bankSms,
-        source: 'sms',
-        at: now,
-        payer: payer,
-      );
-
-      final two = await emitAll([
-        n('n1', 21, 'Anna Devi'),
-        n('n2', 20, 'Meena Devi'),
-        s('s1', 'Anna Devi'),
-        s('s2', 'Meena Devi'),
-      ]);
-      expect(two, hasLength(2));
-
-      final three = await emitAll([
-        n('n1', 21, 'Anna Devi'),
-        n('n2', 20, 'Meena Devi'),
-        s('s1', 'Anna Devi'),
-        s('s2', 'Meena Devi'),
-        s('s3', 'Ravi Kumar'),
-      ]);
-      expect(three, hasLength(3));
-    });
-
-    test('different references are always different payments', () async {
-      final now = DateTime.now();
-      final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, ref: '412345678901'),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, ref: '412345678902'),
-      ]);
-      expect(events, hasLength(2));
-    });
-
-    test('app notification (payer only) + bank SMS (UTR only) within 60s = 1',
-        () async {
-      final now = DateTime.now();
-      final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500),
         _credit(
           id: 's1',
           app: PaymentApp.bankSms,
           source: 'sms',
-          at: now.add(const Duration(seconds: 20)),
-          amount: 500,
-          ref: '412345678901',
+          at: now,
+          payer: 'Anna Devi',
         ),
       ]);
       expect(events, hasLength(1));
     });
 
+    test(
+      'two payments + two late SMS = 2, a third unmatched SMS = 3',
+      () async {
+        final now = DateTime.now();
+        PaymentEvent n(String id, int minsAgo, String payer) => _credit(
+          id: id,
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now.subtract(Duration(minutes: minsAgo)),
+          payer: payer,
+        );
+        PaymentEvent s(String id, String payer) => _credit(
+          id: id,
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now,
+          payer: payer,
+        );
+
+        final two = await emitAll([
+          n('n1', 21, 'Anna Devi'),
+          n('n2', 20, 'Meena Devi'),
+          s('s1', 'Anna Devi'),
+          s('s2', 'Meena Devi'),
+        ]);
+        expect(two, hasLength(2));
+
+        final three = await emitAll([
+          n('n1', 21, 'Anna Devi'),
+          n('n2', 20, 'Meena Devi'),
+          s('s1', 'Anna Devi'),
+          s('s2', 'Meena Devi'),
+          s('s3', 'Ravi Kumar'),
+        ]);
+        expect(three, hasLength(3));
+      },
+    );
+
+    test('different references are always different payments', () async {
+      final now = DateTime.now();
+      final events = await emitAll([
+        _credit(
+          id: 'n1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now,
+          ref: '412345678901',
+        ),
+        _credit(
+          id: 's1',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now,
+          ref: '412345678902',
+        ),
+      ]);
+      expect(events, hasLength(2));
+    });
+
+    test(
+      'app notification (payer only) + bank SMS (UTR only) within 60s = 1',
+      () async {
+        final now = DateTime.now();
+        final events = await emitAll([
+          _credit(
+            id: 'n1',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            amount: 500,
+          ),
+          _credit(
+            id: 's1',
+            app: PaymentApp.bankSms,
+            source: 'sms',
+            at: now.add(const Duration(seconds: 20)),
+            amount: 500,
+            ref: '412345678901',
+          ),
+        ]);
+        expect(events, hasLength(1));
+      },
+    );
+
     test('same pair 5 minutes apart with no shared evidence stays 2', () async {
       final now = DateTime.now();
       final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500),
+        _credit(
+          id: 'n1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now,
+          amount: 500,
+        ),
         _credit(
           id: 's1',
           app: PaymentApp.bankSms,
@@ -196,37 +247,80 @@ void main() {
       expect(events, hasLength(2));
     });
 
-    test('two same-amount app notifications 10s apart stay 2 (same modality)',
-        () async {
-      final now = DateTime.now();
-      final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500,
-            sourceEventKey: 'com.phonepe.app|1|1000|aa'),
-        _credit(id: 'n2', app: PaymentApp.googlePay, source: 'notification',
-            at: now.add(const Duration(seconds: 10)), amount: 500,
-            sourceEventKey: 'com.google.android.apps.nbu.paisa.user|2|2000|bb'),
-      ]);
-      expect(events, hasLength(2));
-    });
+    test(
+      'two same-amount app notifications 10s apart stay 2 (same modality)',
+      () async {
+        final now = DateTime.now();
+        final events = await emitAll([
+          _credit(
+            id: 'n1',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            amount: 500,
+            sourceEventKey: 'com.phonepe.app|1|1000|aa',
+          ),
+          _credit(
+            id: 'n2',
+            app: PaymentApp.googlePay,
+            source: 'notification',
+            at: now.add(const Duration(seconds: 10)),
+            amount: 500,
+            sourceEventKey: 'com.google.android.apps.nbu.paisa.user|2|2000|bb',
+          ),
+        ]);
+        expect(events, hasLength(2));
+      },
+    );
 
-    test('one SMS cannot swallow two earlier notifications (ambiguous = keep)',
-        () async {
-      final now = DateTime.now();
-      final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, amount: 500),
-        _credit(id: 'n2', app: PaymentApp.googlePay, source: 'notification',
-            at: now.add(const Duration(seconds: 5)), amount: 500),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms',
-            at: now.add(const Duration(seconds: 15)), amount: 500),
-      ]);
-      expect(events.length, greaterThanOrEqualTo(2));
-    });
+    test(
+      'one SMS cannot swallow two earlier notifications (ambiguous = keep)',
+      () async {
+        final now = DateTime.now();
+        final events = await emitAll([
+          _credit(
+            id: 'n1',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            amount: 500,
+          ),
+          _credit(
+            id: 'n2',
+            app: PaymentApp.googlePay,
+            source: 'notification',
+            at: now.add(const Duration(seconds: 5)),
+            amount: 500,
+          ),
+          _credit(
+            id: 's1',
+            app: PaymentApp.bankSms,
+            source: 'sms',
+            at: now.add(const Duration(seconds: 15)),
+            amount: 500,
+          ),
+        ]);
+        expect(events.length, greaterThanOrEqualTo(2));
+      },
+    );
 
     test('same reference on two channels is one payment', () async {
       final now = DateTime.now();
       final events = await emitAll([
-        _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification', at: now, ref: '412345678901'),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, ref: '412345678901'),
+        _credit(
+          id: 'n1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now,
+          ref: '412345678901',
+        ),
+        _credit(
+          id: 's1',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now,
+          ref: '412345678901',
+        ),
       ]);
       expect(events, hasLength(1));
     });
@@ -241,7 +335,13 @@ void main() {
           at: now.subtract(const Duration(minutes: 90)),
           payer: 'Anna Devi',
         ),
-        _credit(id: 's1', app: PaymentApp.bankSms, source: 'sms', at: now, payer: 'Anna Devi'),
+        _credit(
+          id: 's1',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now,
+          payer: 'Anna Devi',
+        ),
       ]);
       expect(events, hasLength(1));
     });
@@ -440,10 +540,10 @@ void main() {
         queue.enqueue(repost, ui(repost));
         await Future<void>.delayed(const Duration(milliseconds: 300));
 
-        expect(emitted.map((event) => event.id), containsAll(<String>[
-          'repost-first',
-          'repost-update',
-        ]));
+        expect(
+          emitted.map((event) => event.id),
+          containsAll(<String>['repost-first', 'repost-update']),
+        );
         expect(spoken, hasLength(1));
 
         queue.dispose();
@@ -451,6 +551,76 @@ void main() {
         service.clearBill();
         service.debugResetTransientDetectionState();
         PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+      },
+    );
+
+    test(
+      'possible repeat stays reviewable but is muted unless explicitly enabled',
+      () async {
+        final originalVoiceEnabled = PdsConfig.isVoiceEnabled;
+        final originalRepeatAlert = PdsConfig.speakPossibleRepeatAlert;
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+
+        try {
+          PdsConfig.isVoiceEnabled = true;
+          PdsConfig.speakPossibleRepeatAlert = false;
+          final now = DateTime.now();
+          final notification = _credit(
+            id: 'possible-repeat-notification',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            amount: 500,
+          );
+          final sms = _credit(
+            id: 'possible-repeat-sms',
+            app: PaymentApp.bankSms,
+            source: 'sms',
+            at: now.add(const Duration(seconds: 20)),
+            amount: 500,
+          );
+          PaymentUiState ui(
+            PaymentEvent event, {
+            bool possibleRepeat = false,
+          }) => PaymentUiState(
+            id: event.id,
+            decision: event.decision,
+            amount: event.amount,
+            payerName: event.payerName,
+            bankName: event.bankName,
+            isFailed: event.isFailed,
+            detectedAt: event.timestamp,
+            rawText: event.rawText,
+            direction: event.direction,
+            isPossibleRepeat: possibleRepeat,
+          );
+
+          queue.enqueue(notification, ui(notification));
+          queue.enqueue(sms, ui(sms, possibleRepeat: true));
+          await Future<void>.delayed(const Duration(milliseconds: 2600));
+          expect(spoken, hasLength(1));
+
+          PdsConfig.speakPossibleRepeatAlert = true;
+          final explicitlyEnabled = _credit(
+            id: 'possible-repeat-enabled',
+            app: PaymentApp.bankSms,
+            source: 'sms',
+            at: now.add(const Duration(minutes: 30)),
+            amount: 777,
+          );
+          queue.enqueue(
+            explicitlyEnabled,
+            ui(explicitlyEnabled, possibleRepeat: true),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 2600));
+          expect(spoken, hasLength(2));
+        } finally {
+          queue.dispose();
+          PdsConfig.speakPossibleRepeatAlert = originalRepeatAlert;
+          PdsConfig.isVoiceEnabled = originalVoiceEnabled;
+        }
       },
     );
 
@@ -500,50 +670,72 @@ void main() {
       },
     );
 
-    test('confirmation dialog can warn about a likely late duplicate', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final now = DateTime.now();
-      final first = _credit(
-        id: 'c1',
-        app: PaymentApp.phonePe,
-        source: 'notification',
-        at: now.subtract(const Duration(minutes: 100)),
-        payer: 'Anna Devi',
-      );
-      expect(await service.confirmDetectedPayment(first), isTrue);
-      final late = _credit(
-        id: 'c2',
-        app: PaymentApp.bankSms,
-        source: 'sms',
-        at: now,
-        payer: 'Anna Devi',
-      );
-      expect(service.similarRecentlyConfirmed(late)?.id, 'c1');
-      final other = _credit(
-        id: 'c3',
-        app: PaymentApp.bankSms,
-        source: 'sms',
-        at: now,
-        payer: 'Ravi Kumar',
-      );
-      expect(service.similarRecentlyConfirmed(other), isNull);
-    });
-  test('SMS echo of second same-value payment pairs with nearest notification', () async {
+    test(
+      'confirmation dialog can warn about a likely late duplicate',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final now = DateTime.now();
+        final first = _credit(
+          id: 'c1',
+          app: PaymentApp.phonePe,
+          source: 'notification',
+          at: now.subtract(const Duration(minutes: 100)),
+          payer: 'Anna Devi',
+        );
+        expect(await service.confirmDetectedPayment(first), isTrue);
+        final late = _credit(
+          id: 'c2',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now,
+          payer: 'Anna Devi',
+        );
+        expect(service.similarRecentlyConfirmed(late)?.id, 'c1');
+        final other = _credit(
+          id: 'c3',
+          app: PaymentApp.bankSms,
+          source: 'sms',
+          at: now,
+          payer: 'Ravi Kumar',
+        );
+        expect(service.similarRecentlyConfirmed(other), isNull);
+      },
+    );
+    test(
+      'SMS echo of second same-value payment pairs with nearest notification',
+      () async {
         final now = DateTime.now();
         final events = await emitAll([
-          _credit(id: 'n1', app: PaymentApp.phonePe, source: 'notification',
-              at: now, amount: 500, accountSuffix: '4222',
-              sourceEventKey: 'com.phonepe.app|1|1000|aa'),
-          _credit(id: 'n2', app: PaymentApp.phonePe, source: 'notification',
-              at: now.add(const Duration(minutes: 5)), amount: 500,
-              accountSuffix: '4222',
-              sourceEventKey: 'com.phonepe.app|2|2000|bb'),
-          _credit(id: 's2', app: PaymentApp.bankSms, source: 'sms',
-              at: now.add(const Duration(minutes: 5, seconds: 20)), amount: 500,
-              accountSuffix: '4222'),
+          _credit(
+            id: 'n1',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now,
+            amount: 500,
+            accountSuffix: '4222',
+            sourceEventKey: 'com.phonepe.app|1|1000|aa',
+          ),
+          _credit(
+            id: 'n2',
+            app: PaymentApp.phonePe,
+            source: 'notification',
+            at: now.add(const Duration(minutes: 5)),
+            amount: 500,
+            accountSuffix: '4222',
+            sourceEventKey: 'com.phonepe.app|2|2000|bb',
+          ),
+          _credit(
+            id: 's2',
+            app: PaymentApp.bankSms,
+            source: 'sms',
+            at: now.add(const Duration(minutes: 5, seconds: 20)),
+            amount: 500,
+            accountSuffix: '4222',
+          ),
         ]);
         expect(events, hasLength(2));
-      });
+      },
+    );
   });
 }

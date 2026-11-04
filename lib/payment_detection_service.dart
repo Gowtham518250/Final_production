@@ -941,6 +941,7 @@ class PdsConfig {
   static bool isNotificationEnabled = true;
   static bool isAccessibilityEnabled = false; // off by default (ANTI-05)
   static bool isVoiceEnabled = true;
+  static bool speakPossibleRepeatAlert = false;
   static bool isBehaviorMemoryEnabled = true;
   static bool isFraudTelemetryEnabled = true;
   static bool isTrustedSenderEnabled = true;
@@ -1861,7 +1862,14 @@ abstract class _SenderValidator {
     'ICICIT',
     'AXISBK',
     'AXISBN', 'KOTAKB', 'PNBSMS', 'UNIONB', 'IDFCFB', 'RBLBNK', 'YESBNK',
-    'INDBNK', 'CANBNK', 'BOBIBK', 'PAYTM', 'PHONPE', 'PHONEPE', 'GOOGPY', 'AMZNPY',
+    'INDBNK',
+    'CANBNK',
+    'BOBIBK',
+    'PAYTM',
+    'PHONPE',
+    'PHONEPE',
+    'GOOGPY',
+    'AMZNPY',
     'BHIMUP', 'CREDCL', 'FRCHRG', 'MOBKWK',
   };
 
@@ -1945,7 +1953,9 @@ class PriorityVoiceQueue {
   // enriches it. For unreferenced candidates, suppress only the duplicate
   // sound when the same payer or receiving account also matches. The event
   // still remains in history for merchant review; it is not a ledger decision.
-  static const Duration _truecallerReplayAnnouncementWindow = Duration(seconds: 10);
+  static const Duration _truecallerReplayAnnouncementWindow = Duration(
+    seconds: 10,
+  );
 
   final _queue = SplayTreeSet<_VI>(
     (a, b) =>
@@ -1987,8 +1997,10 @@ class PriorityVoiceQueue {
   final Map<String, Set<String>> _echoClaims = {};
 
   static String? _normalizedVoicePayer(String? value) {
-    final normalized =
-        value?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+    final normalized = value
+        ?.toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
@@ -1998,8 +2010,9 @@ class PriorityVoiceQueue {
   /// Amount alone is never enough to merge two otherwise unrelated payments.
   bool _isRecentCrossSourceEcho(PaymentEvent event) {
     if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
-    final currentDirection =
-        PaymentDetectionService._eventPaymentDirection(event);
+    final currentDirection = PaymentDetectionService._eventPaymentDirection(
+      event,
+    );
     if (currentDirection == PaymentDirection.unknown) return false;
 
     final now = event.timestamp;
@@ -2038,7 +2051,8 @@ class PriorityVoiceQueue {
       final oldChannel = PaymentDetectionService._channelKey(old);
       final currentSourceFingerprint = event.sourceEventFingerprint;
       final oldSourceFingerprint = old.sourceEventFingerprint;
-      final sameNativePost = currentSourceFingerprint != null &&
+      final sameNativePost =
+          currentSourceFingerprint != null &&
           oldSourceFingerprint != null &&
           currentSourceFingerprint == oldSourceFingerprint;
       final hasNativeIdentity =
@@ -2048,51 +2062,60 @@ class PriorityVoiceQueue {
           (event.amount - old.amount).abs() < 0.01 &&
           currentDirection ==
               PaymentDetectionService._eventPaymentDirection(old);
-        final notificationAt = event.sourceTimestamp ?? event.timestamp;
-        final previousNotificationAt = old.sourceTimestamp ?? old.timestamp;
-        final currentNotificationPayer = event.notificationPayerIdentity;
-        final previousNotificationPayer = old.notificationPayerIdentity;
-        final sameNotificationPayer = currentNotificationPayer != null &&
+      final notificationAt = event.sourceTimestamp ?? event.timestamp;
+      final previousNotificationAt = old.sourceTimestamp ?? old.timestamp;
+      final currentNotificationPayer = event.notificationPayerIdentity;
+      final previousNotificationPayer = old.notificationPayerIdentity;
+      final sameNotificationPayer =
+          currentNotificationPayer != null &&
           previousNotificationPayer != null &&
           currentNotificationPayer == previousNotificationPayer;
-        final sameNotificationAccount = event.accountSuffix != null &&
+      final sameNotificationAccount =
+          event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-        final notificationAccountConflict = event.accountSuffix != null &&
+      final notificationAccountConflict =
+          event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix != old.accountSuffix;
-        final notificationPayerConflict = currentNotificationPayer != null &&
+      final notificationPayerConflict =
+          currentNotificationPayer != null &&
           previousNotificationPayer != null &&
           currentNotificationPayer != previousNotificationPayer;
-        if (currentReference == null &&
+      if (currentReference == null &&
           priorReference == null &&
           event.sourceNotificationStream != null &&
           event.sourceNotificationStream == old.sourceNotificationStream &&
           sameAmountAndDirection &&
           notificationAt.difference(previousNotificationAt).abs() <=
-            PaymentIdentityMatcher.notificationUpdateWindow &&
+              PaymentIdentityMatcher.notificationUpdateWindow &&
           !notificationAccountConflict &&
           !notificationPayerConflict &&
           (sameNotificationAccount || sameNotificationPayer)) {
-        PdsLogger.d('VOICE', 'Reposted notification update announcement suppressed');
+        PdsLogger.d(
+          'VOICE',
+          'Reposted notification update announcement suppressed',
+        );
         return true;
-        }
+      }
       final currentPayer = _normalizedVoicePayer(event.payerName);
       final priorPayer = _normalizedVoicePayer(old.payerName);
-      final sameKnownPayer = currentPayer != null &&
+      final sameKnownPayer =
+          currentPayer != null &&
           priorPayer != null &&
           (currentPayer == priorPayer ||
               currentPayer.contains(priorPayer) ||
               priorPayer.contains(currentPayer));
-      final sameAccount = event.accountSuffix != null &&
+      final sameAccount =
+          event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-      final differentAccounts = event.accountSuffix != null &&
+      final differentAccounts =
+          event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix != old.accountSuffix;
-      final differentKnownPayers = currentPayer != null &&
-          priorPayer != null &&
-          !sameKnownPayer;
+      final differentKnownPayers =
+          currentPayer != null && priorPayer != null && !sameKnownPayer;
 
       if (oldChannel == currentChannel) {
         if (hasNativeIdentity && !sameNativePost) {
@@ -2106,13 +2129,15 @@ class PriorityVoiceQueue {
 
         final noNativeIdentityOnEitherSide =
             currentSourceFingerprint == null && oldSourceFingerprint == null;
-        final identicalImmediateReplay = noNativeIdentityOnEitherSide &&
+        final identicalImmediateReplay =
+            noNativeIdentityOnEitherSide &&
             age <= const Duration(seconds: 3) &&
             sameAmountAndDirection &&
             PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
             PaymentDetectionService._echoText(event.rawText) ==
                 PaymentDetectionService._echoText(old.rawText);
-        final sameTruecallerPaymentClues = noNativeIdentityOnEitherSide &&
+        final sameTruecallerPaymentClues =
+            noNativeIdentityOnEitherSide &&
             age <= _truecallerReplayAnnouncementWindow &&
             sameAmountAndDirection &&
             PaymentDetectionService._eventOrigin(event.detectionSource) ==
@@ -2146,12 +2171,13 @@ class PriorityVoiceQueue {
         event.amount,
         noBillWindow: _crossSourceEchoWindow,
       );
-      final weakModalityPair = weakWindow > Duration.zero &&
+      final weakModalityPair =
+          weakWindow > Duration.zero &&
           age <= weakWindow &&
           PaymentIdentityMatcher.isWeakModalityPair(
-          PaymentDetectionService._eventOrigin(event.detectionSource),
-          PaymentDetectionService._eventOrigin(old.detectionSource),
-        );
+            PaymentDetectionService._eventOrigin(event.detectionSource),
+            PaymentDetectionService._eventOrigin(old.detectionSource),
+          );
       if (!sameAccount && !sameKnownPayer && !weakModalityPair) continue;
 
       // More than one plausible same-value event is ambiguous; preserve the
@@ -2163,7 +2189,8 @@ class PriorityVoiceQueue {
     if (echoCandidates.length == 1) {
       echoOf = echoCandidates.single;
     } else if (echoCandidates.length > 1) {
-      final byAge = [...echoCandidates]..sort(
+      final byAge = [...echoCandidates]
+        ..sort(
           (a, b) => event.timestamp
               .difference(a.timestamp)
               .abs()
@@ -2227,7 +2254,8 @@ class PriorityVoiceQueue {
         final expiry = DateTime.tryParse(iso as String);
         if (expiry != null && expiry.isAfter(now)) {
           final current = _spokenFps[fp];
-          if (current == null || expiry.isAfter(current)) _spokenFps[fp] = expiry;
+          if (current == null || expiry.isAfter(current))
+            _spokenFps[fp] = expiry;
         }
       });
     } catch (_) {}
@@ -2244,6 +2272,7 @@ class PriorityVoiceQueue {
       await prefs.setString(_kSpokenPrefs, jsonEncode(out));
     } catch (_) {}
   }
+
   void enqueue(PaymentEvent e, PaymentUiState ui) {
     if (!PdsConfig.isVoiceEnabled) return;
     if (e.isDuplicate || e.hasReferenceConflict) {
@@ -2258,6 +2287,18 @@ class PriorityVoiceQueue {
         'DROP',
         'reason=voice_duplicate_or_conflict dup=${e.isDuplicate} conflict=${e.hasReferenceConflict}',
       );
+      return;
+    }
+
+    // Keep possible repeats available for review without speaking them twice.
+    if (ui.isPossibleRepeat &&
+        !PdsConfig.speakPossibleRepeatAlert &&
+        !(ui.decision == PaymentDecision.confirmed && ui.isUserConfirmed)) {
+      PdsLogger.d(
+        'VOICE',
+        'POSSIBLE REPEAT ANNOUNCEMENT MUTED: id=${e.id} amount=${e.amount}',
+      );
+      PdsLogger.t('DROP', 'reason=voice_possible_repeat_muted');
       return;
     }
 
@@ -2363,7 +2404,8 @@ class PriorityVoiceQueue {
     final normals = _queue
         .where(
           (i) =>
-              i.priority == _VP.normal && i.direction == PaymentDirection.credited,
+              i.priority == _VP.normal &&
+              i.direction == PaymentDirection.credited,
         )
         .toList();
     if (_recentTs.length >= PdsConfig.voiceBurstCount &&
@@ -2565,8 +2607,7 @@ class PendingPaymentBuffer {
   bool hasUnconfirmedReference(String reference) {
     return _buffer.any(
       (entry) =>
-          !entry.confirmed &&
-          entry.event.normalizedReferenceId == reference,
+          !entry.confirmed && entry.event.normalizedReferenceId == reference,
     );
   }
 
@@ -2582,9 +2623,9 @@ class PendingPaymentBuffer {
     final pending = _buffer.where((entry) => !entry.confirmed).toList();
     final normalizedUtr = utr?.trim().toUpperCase();
     if (normalizedUtr != null && normalizedUtr.isNotEmpty) {
-      final utrMatches = pending.where((entry) =>
-        entry.event.normalizedReferenceId == normalizedUtr
-      ).toList();
+      final utrMatches = pending
+          .where((entry) => entry.event.normalizedReferenceId == normalizedUtr)
+          .toList();
       if (utrMatches.length == 1) {
         final candidate = utrMatches.single;
         if ((candidate.event.amount - amount).abs() < 0.01) {
@@ -2609,14 +2650,17 @@ class PendingPaymentBuffer {
     final strong = <_PendingEntry>[];
     for (final entry in pending) {
       final existingUtr = entry.event.normalizedReferenceId;
-      if (normalizedUtr != null && normalizedUtr.isNotEmpty &&
-          existingUtr != null && existingUtr.isNotEmpty &&
+      if (normalizedUtr != null &&
+          normalizedUtr.isNotEmpty &&
+          existingUtr != null &&
+          existingUtr.isNotEmpty &&
           existingUtr != normalizedUtr) {
         continue;
       }
 
       final amountMatch = (entry.event.amount - amount).abs() < 0.01;
-      final timeMatch = now.difference(entry.event.timestamp).abs() <=
+      final timeMatch =
+          now.difference(entry.event.timestamp).abs() <=
           PdsConfig.tcmSmsMatchWindow(entry.event.amount);
       if (!amountMatch || !timeMatch) continue;
 
@@ -2629,11 +2673,13 @@ class PendingPaymentBuffer {
     // amount/time-only match is ambiguous and must remain a separate candidate.
     if (strong.length == 1 && possible.length == 1) {
       strong.single.confirmed = true;
-      PdsLogger.i('TCM', 'MATCH AMOUNT+TIME+PAYER ₹${strong.single.event.amount}');
+      PdsLogger.i(
+        'TCM',
+        'MATCH AMOUNT+TIME+PAYER ₹${strong.single.event.amount}',
+      );
       return strong.single;
     }
-    if (possible.isNotEmpty &&
-        (strong.length != 1 || possible.length != 1)) {
+    if (possible.isNotEmpty && (strong.length != 1 || possible.length != 1)) {
       lastMatchAmbiguous = true;
       PdsLogger.w(
         'TCM',
@@ -3580,10 +3626,7 @@ class PaymentDetectionService {
   /// Delivers a payment detected by the background isolate to UI-isolate
   /// listeners without replaying its voice announcement. Background events
   /// can mark history as already persisted to avoid a second UI-isolate write.
-  void forwardPaymentEvent(
-    PaymentEvent event, {
-    bool historyHandled = false,
-  }) {
+  void forwardPaymentEvent(PaymentEvent event, {bool historyHandled = false}) {
     if (historyHandled) {
       _historyHandledEventIds.add(event.id);
       if (_historyHandledEventIds.length > 500) {
@@ -3718,8 +3761,7 @@ class PaymentDetectionService {
       PdsLogger.i('SVC', 'Notification channel disabled by config');
     } else {
       try {
-        final granted =
-            await NotificationListenerService.isPermissionGranted();
+        final granted = await NotificationListenerService.isPermissionGranted();
         if (granted) {
           PdsLogger.i('SVC', 'Notification access is granted');
         } else {
@@ -3727,10 +3769,7 @@ class PaymentDetectionService {
             'SVC',
             'Notification access missing; enable it from the Dashboard',
           );
-          _emitStatus(
-            ChannelType.notification,
-            ChannelStatus.permissionDenied,
-          );
+          _emitStatus(ChannelType.notification, ChannelStatus.permissionDenied);
         }
       } catch (e, st) {
         PdsLogger.e('SVC', 'Notification permission check failed', e, st);
@@ -3930,16 +3969,17 @@ class PaymentDetectionService {
           // History timestamps now reflect when the source notification/SMS
           // was posted. Review cooldowns must instead start from processing
           // time, otherwise a delayed event may immediately re-alert on unlock.
-          final value =
-              (record['detected_at'] ?? record['timestamp'])?.toString();
+          final value = (record['detected_at'] ?? record['timestamp'])
+              ?.toString();
           if (value != null && value.isNotEmpty) {
             detectedAt = DateTime.parse(value);
           }
         } on FormatException {
           detectedAt = null;
         }
-        final reminderAt = (detectedAt ?? now)
-            .add(PdsConfig.dedupNativeNotificationTtl);
+        final reminderAt = (detectedAt ?? now).add(
+          PdsConfig.dedupNativeNotificationTtl,
+        );
         if (reminderAt.isAfter(now)) {
           _dedupStore[fingerprint] = reminderAt;
         } else {
@@ -3987,8 +4027,9 @@ class PaymentDetectionService {
       referenceId: reference,
     );
     if (referenceEvent.normalizedReferenceId == null) return;
-    _dedupStore[referenceEvent.fingerprint] =
-        DateTime.now().add(PdsConfig.dedupUtrTtl);
+    _dedupStore[referenceEvent.fingerprint] = DateTime.now().add(
+      PdsConfig.dedupUtrTtl,
+    );
     _dedupDirty = true;
     unawaited(PdsStateStore.saveDedup(_dedupStore));
   }
@@ -4153,7 +4194,9 @@ class PaymentDetectionService {
             // Keep the native queue until payment classification and emission
             // routing has synchronously completed, even across engine restarts.
             unawaited(
-              NotificationListenerService.acknowledgeNotification(event.eventKey),
+              NotificationListenerService.acknowledgeNotification(
+                event.eventKey,
+              ),
             );
           }
         },
@@ -4509,8 +4552,9 @@ class PaymentDetectionService {
           PdsLogger.d('L1', 'Durable native notification replay suppressed');
           return;
         }
-        _dedupStore[nativeFingerprint] =
-            now.add(PdsConfig.dedupNativeNotificationTtl);
+        _dedupStore[nativeFingerprint] = now.add(
+          PdsConfig.dedupNativeNotificationTtl,
+        );
         _dedupDirty = true;
         // Save immediately; the debounced save timer is a fallback only.
         unawaited(PdsStateStore.saveDedup(_dedupStore));
@@ -4536,8 +4580,9 @@ class PaymentDetectionService {
         PdsLogger.d('L1', 'Duplicate notification replay suppressed');
         return;
       }
-      _recentNotificationPayloads[notificationFingerprint] =
-          now.add(const Duration(seconds: 3));
+      _recentNotificationPayloads[notificationFingerprint] = now.add(
+        const Duration(seconds: 3),
+      );
       if (_recentNotificationPayloads.length > 100) {
         _recentNotificationPayloads.remove(
           _recentNotificationPayloads.keys.first,
@@ -4604,8 +4649,7 @@ class PaymentDetectionService {
         final looksLikeDebit =
             classification == _ClassifyResult.debit &&
             hasIndependentTransactionAnchor;
-        if (amount == null ||
-            (!looksLikeIncomingPayment && !looksLikeDebit)) {
+        if (amount == null || (!looksLikeIncomingPayment && !looksLikeDebit)) {
           PdsLogger.t(
             'DROP',
             'reason=unknown_pkg_no_anchor pkg=$pkg amount=${amount != null} '
@@ -4896,15 +4940,13 @@ class PaymentDetectionService {
         storedExpiry != null && nowForDedup.isBefore(storedExpiry);
     final isActive = _activeFingerprints.contains(fp);
 
-    if (normalizedReference != null &&
-        !storeStillActive &&
-        !isActive) {
+    if (normalizedReference != null && !storeStillActive && !isActive) {
       // Expired local identity must not permanently poison a later payment.
       _dedupReferenceAmounts.remove(normalizedReference);
     }
 
-    final previousReferenceAmount = normalizedReference != null &&
-            (storeStillActive || isActive)
+    final previousReferenceAmount =
+        normalizedReference != null && (storeStillActive || isActive)
         ? _dedupReferenceAmounts[normalizedReference]
         : null;
     final referenceAmountConflict =
@@ -4933,7 +4975,10 @@ class PaymentDetectionService {
       // A bank/PSP SMS with the same UTR can strengthen the earlier PhonePe
       // candidate via TCM. It remains one transaction: the SMS path is muted
       // when the original candidate already announced it.
-      PdsLogger.i('L4.5', 'SAME UTR SMS CORROBORATION allowed silently: ref=$normalizedReference');
+      PdsLogger.i(
+        'L4.5',
+        'SAME UTR SMS CORROBORATION allowed silently: ref=$normalizedReference',
+      );
     }
     if (referenceAmountConflict) {
       PdsLogger.w(
@@ -4941,8 +4986,7 @@ class PaymentDetectionService {
         'REFERENCE AMOUNT CONFLICT: ref=$normalizedReference '
             'stored=₹$previousReferenceAmount incoming=₹$amount; routing for review',
       );
-    } else if (normalizedReference != null &&
-        previousReferenceAmount == null) {
+    } else if (normalizedReference != null && previousReferenceAmount == null) {
       _dedupReferenceAmounts[normalizedReference] = amount;
     }
 
@@ -4995,7 +5039,10 @@ class PaymentDetectionService {
       if (fraud.isHardBlock) {
         PdsLogger.w('L5', 'HARD_BLOCK ${fraud.verdict.name}: ${fraud.reason}');
         _stats.recordFraud();
-        PdsLogger.t('DROP', 'reason=hard_block:${fraud.verdict.name} source=$source');
+        PdsLogger.t(
+          'DROP',
+          'reason=hard_block:${fraud.verdict.name} source=$source',
+        );
         _emitFraud(
           fraud.verdict,
           fraud.reason,
@@ -5403,13 +5450,15 @@ class PaymentDetectionService {
           isPartialPayment: isPartial,
           isBillMatch: isBillSettled || isPartial,
           remainingAmount: isPartial
-              ? math.max(
-              0.0,
-              billContext.tentativeRemaining(
-                excludingId: matched?.event.id ?? tempEvent.id,
-                  ) -
-                  amount,
-                ).toDouble()
+              ? math
+                    .max(
+                      0.0,
+                      billContext.tentativeRemaining(
+                            excludingId: matched?.event.id ?? tempEvent.id,
+                          ) -
+                          amount,
+                    )
+                    .toDouble()
               : 0.0,
           hasReferenceConflict: referenceAmountConflict,
         ),
@@ -5434,7 +5483,8 @@ class PaymentDetectionService {
                 PdsConfig.confirmedThreshold - 0.01,
               ),
               decision: PaymentDecision.likely,
-              detectionSource: '${event.detectionSource}:ambiguous_cross_source_match',
+              detectionSource:
+                  '${event.detectionSource}:ambiguous_cross_source_match',
             ),
           );
           consumedByUser = true;
@@ -5502,7 +5552,8 @@ class PaymentDetectionService {
     // Preserve the identity of Truecaller Business Chat notifications. They
     // must be distinguishable from the original payment-app notification for
     // one-to-one cross-source echo suppression.
-    if (value.startsWith('truecaller_notification')) return 'truecaller_notification';
+    if (value.startsWith('truecaller_notification'))
+      return 'truecaller_notification';
     if (value.startsWith('notification+sms')) return 'notification+sms';
     if (value.startsWith('notification')) return 'notification';
     if (value.startsWith('sms')) return 'sms';
@@ -5616,20 +5667,22 @@ class PaymentDetectionService {
       final claimed = _echoClaims[old.id];
       if (claimed != null && claimed.contains(channel)) continue;
 
-      final sameAccount = event.accountSuffix != null &&
+      final sameAccount =
+          event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix == old.accountSuffix;
-      final differentAccounts = event.accountSuffix != null &&
+      final differentAccounts =
+          event.accountSuffix != null &&
           old.accountSuffix != null &&
           event.accountSuffix != old.accountSuffix;
       final currentPayer = _normalizedPayer(event.payerName);
       final previousPayer = _normalizedPayer(old.payerName);
-      final sameKnownPayer = currentPayer != null &&
+      final sameKnownPayer =
+          currentPayer != null &&
           previousPayer != null &&
           _payersCompatible(event.payerName, old.payerName);
-      final differentKnownPayers = currentPayer != null &&
-          previousPayer != null &&
-          !sameKnownPayer;
+      final differentKnownPayers =
+          currentPayer != null && previousPayer != null && !sameKnownPayer;
       if (differentAccounts || differentKnownPayers) continue;
 
       // Amount + direction alone are not transaction identity, except for a
@@ -5663,7 +5716,8 @@ class PaymentDetectionService {
     if (echoCandidates.length == 1) {
       echoOf = echoCandidates.single;
     } else if (echoCandidates.length > 1) {
-      final byAge = [...echoCandidates]..sort(
+      final byAge = [...echoCandidates]
+        ..sort(
           (a, b) => event.timestamp
               .difference(a.timestamp)
               .abs()
@@ -5815,9 +5869,12 @@ class PaymentDetectionService {
       _stats.recordDupe();
       PdsLogger.i(
         'EMIT',
-        'Cross-source echo suppressed: amount=' + event.amount.toString() +
-            ', origin=' + _eventOrigin(event.detectionSource) +
-            ', account=' + (event.accountSuffix ?? 'unknown'),
+        'Cross-source echo suppressed: amount=' +
+            event.amount.toString() +
+            ', origin=' +
+            _eventOrigin(event.detectionSource) +
+            ', account=' +
+            (event.accountSuffix ?? 'unknown'),
       );
       return;
     }
@@ -5905,7 +5962,7 @@ class PaymentDetectionService {
     }
 
     if (!suppressRepeatedAnnouncement &&
-      billContext.isActive &&
+        billContext.isActive &&
         event.decision == PaymentDecision.likely &&
         !event.isMerchantConfirmed &&
         isSafeIncomingCredit(event)) {
@@ -5936,7 +5993,11 @@ class PaymentDetectionService {
         : event.decision.name;
     PdsLogger.i(
       'EMIT',
-      '${event.isMerchantConfirmed ? "✅" : event.decision == PaymentDecision.confirmed ? "ℹ️" : "⚠️"} '
+      '${event.isMerchantConfirmed
+              ? "✅"
+              : event.decision == PaymentDecision.confirmed
+              ? "ℹ️"
+              : "⚠️"} '
           '₹${event.amount} $decisionLabel '
           'conf=${event.confidenceScore.toStringAsFixed(2)} '
           'src=${event.detectionSource}',
@@ -5995,9 +6056,9 @@ class PaymentDetectionService {
 
     // Voice Rule: Bill settlement message PREVENTS standard amount voice
     if (isSettled &&
-      !forceMute &&
-      !suppressRepeatedAnnouncement &&
-      !finalEvent.nativeAnnouncementHandled) {
+        !forceMute &&
+        !suppressRepeatedAnnouncement &&
+        !finalEvent.nativeAnnouncementHandled) {
       final t = VoiceBuilder.received(finalEvent.amount, null, _voiceLanguage);
       _voice.enqueueRaw(
         'Payment Confirmed. $t',
@@ -6005,8 +6066,8 @@ class PaymentDetectionService {
         fingerprint: finalEvent.fingerprint,
       );
     } else if (!forceMute &&
-      !suppressRepeatedAnnouncement &&
-      !finalEvent.nativeAnnouncementHandled) {
+        !suppressRepeatedAnnouncement &&
+        !finalEvent.nativeAnnouncementHandled) {
       _voice.enqueue(finalEvent, finalUi);
     }
 
@@ -6345,8 +6406,7 @@ class PaymentDetectionService {
     // Only route DLT-shaped Truecaller titles through the bank-SMS path.
     if (pkg == 'com.truecaller') {
       final header = (sender ?? '').trim().toUpperCase();
-      if (!RegExp(r'^[A-Z]{2}-[A-Z0-9]{3,20}(?:-[A-Z])?$')
-          .hasMatch(header)) {
+      if (!RegExp(r'^[A-Z]{2}-[A-Z0-9]{3,20}(?:-[A-Z])?$').hasMatch(header)) {
         return false;
       }
     }

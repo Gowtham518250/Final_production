@@ -106,25 +106,25 @@ class EchoResolution {
   });
 
   const EchoResolution.none({bool ambiguous = false})
-      : this._(
-          isEcho: false,
-          reason: ambiguous ? 'ambiguous_candidates_kept_separate' : 'no_match',
-          ambiguous: ambiguous,
-        );
+    : this._(
+        isEcho: false,
+        reason: ambiguous ? 'ambiguous_candidates_kept_separate' : 'no_match',
+        ambiguous: ambiguous,
+      );
 
   const EchoResolution.proof(String matchedId, String reason)
-      : this._(isEcho: true, reason: reason, matchedId: matchedId);
+    : this._(isEcho: true, reason: reason, matchedId: matchedId);
 
   const EchoResolution.echo(
     String matchedId,
     String reason,
     String claimChannel,
   ) : this._(
-          isEcho: true,
-          reason: reason,
-          matchedId: matchedId,
-          claimChannel: claimChannel,
-        );
+        isEcho: true,
+        reason: reason,
+        matchedId: matchedId,
+        claimChannel: claimChannel,
+      );
 
   final bool isEcho;
   final String reason;
@@ -190,7 +190,8 @@ class PaymentIdentityMatcher {
     'com.kotak.mobile.banking',
   };
 
-  static bool _isTruecaller(String origin) => origin == 'truecaller_notification';
+  static bool _isTruecaller(String origin) =>
+      origin == 'truecaller_notification';
 
   /// Only pair a plain bank SMS with a payment-app notification on weak evidence.
   static bool isWeakModalityPair(String a, String b) =>
@@ -224,25 +225,34 @@ class PaymentIdentityMatcher {
       return const IdentityDecision(IdentityVerdict.distinct, 'amount_differs');
     }
 
-    final directionCompatible = current.direction == previous.direction ||
+    final directionCompatible =
+        current.direction == previous.direction ||
         current.direction == 'unknown' ||
         previous.direction == 'unknown';
     final directionKnownEqual =
-        current.direction == previous.direction && current.direction != 'unknown';
-    final bothReferences = current.reference != null && previous.reference != null;
+        current.direction == previous.direction &&
+        current.direction != 'unknown';
+    final bothReferences =
+        current.reference != null && previous.reference != null;
 
     // 1. Same Android notification post (text may have been updated).
     if (current.sourceIdentity != null &&
         current.sourceIdentity == previous.sourceIdentity) {
       if (bothReferences && current.reference != previous.reference) {
         return const IdentityDecision(
-            IdentityVerdict.distinct, 'same_post_different_reference');
+          IdentityVerdict.distinct,
+          'same_post_different_reference',
+        );
       }
       return directionCompatible
           ? const IdentityDecision(
-              IdentityVerdict.sameTransfer, 'same_native_post')
+              IdentityVerdict.sameTransfer,
+              'same_native_post',
+            )
           : const IdentityDecision(
-              IdentityVerdict.distinct, 'same_post_direction_conflict');
+              IdentityVerdict.distinct,
+              'same_post_direction_conflict',
+            );
     }
 
     // 2. References: two different ones are two payments; equal is one.
@@ -250,35 +260,42 @@ class PaymentIdentityMatcher {
     if (bothReferences) {
       if (current.reference != previous.reference) {
         return const IdentityDecision(
-            IdentityVerdict.distinct, 'different_reference');
+          IdentityVerdict.distinct,
+          'different_reference',
+        );
       }
       return directionCompatible
-          ? const IdentityDecision(IdentityVerdict.sameTransfer, 'same_reference')
+          ? const IdentityDecision(
+              IdentityVerdict.sameTransfer,
+              'same_reference',
+            )
           : const IdentityDecision(
-              IdentityVerdict.distinct, 'same_reference_direction_conflict');
+              IdentityVerdict.distinct,
+              'same_reference_direction_conflict',
+            );
     }
 
     final notificationAt = current.notificationAt ?? current.at;
     final previousNotificationAt = previous.notificationAt ?? previous.at;
-    final notificationAccountConflict = current.account != null &&
+    final notificationAccountConflict =
+        current.account != null &&
         previous.account != null &&
         current.account != previous.account;
-    final currentNotificationPayer =
-      current.notificationPayer ?? current.payer;
+    final currentNotificationPayer = current.notificationPayer ?? current.payer;
     final previousNotificationPayer =
-      previous.notificationPayer ?? previous.payer;
-    final notificationPayerConflict = currentNotificationPayer != null &&
-      previousNotificationPayer != null &&
-      currentNotificationPayer != previousNotificationPayer;
-    final sameNotificationAccount = current.account != null &&
+        previous.notificationPayer ?? previous.payer;
+    final notificationPayerConflict =
+        currentNotificationPayer != null &&
+        previousNotificationPayer != null &&
+        currentNotificationPayer != previousNotificationPayer;
+    final sameNotificationAccount =
+        current.account != null &&
         previous.account != null &&
         current.account == previous.account;
-    final sameNotificationPayer = currentNotificationPayer != null &&
+    final sameNotificationPayer =
+        currentNotificationPayer != null &&
         previousNotificationPayer != null &&
-        _payersCompatible(
-          currentNotificationPayer,
-          previousNotificationPayer,
-        );
+        _payersCompatible(currentNotificationPayer, previousNotificationPayer);
     if (current.reference == null &&
         previous.reference == null &&
         current.notificationStream != null &&
@@ -298,7 +315,9 @@ class PaymentIdentityMatcher {
     // Everything below is fuzzy and needs a known, equal direction.
     if (!directionKnownEqual) {
       return const IdentityDecision(
-          IdentityVerdict.distinct, 'direction_unknown_or_differs');
+        IdentityVerdict.distinct,
+        'direction_unknown_or_differs',
+      );
     }
 
     final age = current.at.difference(previous.at).abs();
@@ -308,33 +327,49 @@ class PaymentIdentityMatcher {
     if (current.channel == previous.channel) {
       if (current.sourceIdentity != null || previous.sourceIdentity != null) {
         return const IdentityDecision(
-            IdentityVerdict.distinct, 'distinct_native_posts');
+          IdentityVerdict.distinct,
+          'distinct_native_posts',
+        );
       }
       if (age <= sameChannelReplayWindow &&
           current.text.isNotEmpty &&
           current.text == previous.text) {
         return const IdentityDecision(
-            IdentityVerdict.sameTransfer, 'same_channel_exact_replay');
+          IdentityVerdict.sameTransfer,
+          'same_channel_exact_replay',
+        );
       }
       return const IdentityDecision(
-          IdentityVerdict.distinct, 'same_channel_no_proof');
+        IdentityVerdict.distinct,
+        'same_channel_no_proof',
+      );
     }
 
     // 4. Cross-channel echo.
-    final allowed = (_involvesSms(current.origin) || _involvesSms(previous.origin))
+    final allowed =
+        (_involvesSms(current.origin) || _involvesSms(previous.origin))
         ? smsWindow
         : crossAppWindow;
     if (age > allowed) {
       return const IdentityDecision(IdentityVerdict.distinct, 'outside_window');
     }
 
-    final accountConflict = current.account != null &&
+    final accountConflict =
+        current.account != null &&
         previous.account != null &&
         current.account != previous.account;
     if (accountConflict) {
-      return const IdentityDecision(IdentityVerdict.distinct, 'account_conflict');
+      return const IdentityDecision(
+        IdentityVerdict.distinct,
+        'account_conflict',
+      );
     }
-    final payerConflict = current.payer != null &&
+    // Truecaller may extract a bank label as the payer from Business Chat text.
+    final ignorePayer =
+        _isTruecaller(current.origin) || _isTruecaller(previous.origin);
+    final payerConflict =
+        !ignorePayer &&
+        current.payer != null &&
         previous.payer != null &&
         !_payersCompatible(current.payer!, previous.payer!);
     if (payerConflict) {
@@ -350,7 +385,9 @@ class PaymentIdentityMatcher {
         (current.reference == null) != (previous.reference == null);
     if (oneSidedReference &&
         ((current.account != null && current.account == previous.account) ||
-            (current.payer != null && previous.payer != null))) {
+            (!ignorePayer &&
+                current.payer != null &&
+                previous.payer != null))) {
       return const IdentityDecision(
         IdentityVerdict.distinct,
         'one_sided_reference_not_fuzzy_matched',
@@ -358,31 +395,44 @@ class PaymentIdentityMatcher {
     }
 
     if (current.account != null && current.account == previous.account) {
-      return const IdentityDecision(IdentityVerdict.candidateEcho, 'same_account');
+      return const IdentityDecision(
+        IdentityVerdict.candidateEcho,
+        'same_account',
+      );
     }
-    if (current.payer != null && previous.payer != null) {
-      return const IdentityDecision(IdentityVerdict.candidateEcho, 'same_payer');
+    if (!ignorePayer && current.payer != null && previous.payer != null) {
+      return const IdentityDecision(
+        IdentityVerdict.candidateEcho,
+        'same_payer',
+      );
     }
 
-    final truecallerMirror = age <= truecallerWindow &&
+    final truecallerMirror =
+        age <= truecallerWindow &&
         _isTruecaller(current.origin) != _isTruecaller(previous.origin) &&
         _trustedCounterpart(
           _isTruecaller(current.origin) ? previous.channel : current.channel,
         );
     if (truecallerMirror) {
       return const IdentityDecision(
-          IdentityVerdict.candidateEcho, 'truecaller_mirror');
+        IdentityVerdict.candidateEcho,
+        'truecaller_mirror',
+      );
     }
 
     if (weakWindow > Duration.zero &&
-      age <= weakWindow &&
-         isWeakModalityPair(current.origin, previous.origin)) {
+        age <= weakWindow &&
+        isWeakModalityPair(current.origin, previous.origin)) {
       return const IdentityDecision(
-          IdentityVerdict.candidateEcho, 'weak_modality_pair');
+        IdentityVerdict.candidateEcho,
+        'weak_modality_pair',
+      );
     }
 
     return const IdentityDecision(
-        IdentityVerdict.distinct, 'no_shared_evidence');
+      IdentityVerdict.distinct,
+      'no_shared_evidence',
+    );
   }
 
   /// Compare [current] against recent signals and apply the safety rules that
@@ -428,7 +478,11 @@ class PaymentIdentityMatcher {
     }
 
     if (candidate != null && !ambiguous) {
-      return EchoResolution.echo(candidate.id, candidateReason, current.channel);
+      return EchoResolution.echo(
+        candidate.id,
+        candidateReason,
+        current.channel,
+      );
     }
     return EchoResolution.none(ambiguous: ambiguous);
   }

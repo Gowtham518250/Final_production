@@ -248,15 +248,17 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                         ? SMS_ECHO_MS : CROSS_APP_MS;
                 if (age > allowedAge) continue;
 
+                boolean currentTruecaller = isTruecallerChannel(channel, origin);
+                boolean oldTruecaller = isTruecallerChannel(old.channel, old.origin);
+                boolean ignorePayer = currentTruecaller || oldTruecaller;
                 if (notEmpty(accountHash) && notEmpty(old.accountHash)
                         && !accountHash.equals(old.accountHash)) continue;
-                if (notEmpty(payerHash) && notEmpty(old.payerHash)
+                if (!ignorePayer && notEmpty(payerHash) && notEmpty(old.payerHash)
                         && !payerHash.equals(old.payerHash)) continue;
 
                 boolean sameAccount = notEmpty(accountHash) && accountHash.equals(old.accountHash);
-                boolean samePayer = notEmpty(payerHash) && payerHash.equals(old.payerHash);
-                boolean currentTruecaller = isTruecallerChannel(channel, origin);
-                boolean oldTruecaller = isTruecallerChannel(old.channel, old.origin);
+                boolean samePayer = !ignorePayer
+                    && notEmpty(payerHash) && payerHash.equals(old.payerHash);
                 String counterpartChannel = currentTruecaller ? old.channel : channel;
                 boolean truecallerCrossAppEcho =
                         currentTruecaller != oldTruecaller

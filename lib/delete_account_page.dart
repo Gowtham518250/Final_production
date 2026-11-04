@@ -1,6 +1,7 @@
 import 'live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_localizations.dart';
 import 'api_client.dart';
 import 'session_logout_service.dart';
 
@@ -30,17 +31,32 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
     super.dispose();
   }
 
+  String _normalizeConfirmation(String value) =>
+      value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  bool _matchesConfirmation(String expectedPhrase) =>
+      _normalizeConfirmation(_confirmController.text) ==
+      _normalizeConfirmation(expectedPhrase);
+
   Future<void> _deleteAccount() async {
+    final localizations = AppLocalizations.of(context);
+    final confirmationPhrase = localizations.translate('PERMANENT DELETE');
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Please confirm that you understand the consequences')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Please confirm that you understand the consequences',
+          ),
+        ),
       );
       return;
     }
 
-    if (_confirmController.text != 'PERMANENT DELETE') {
+    if (!_matchesConfirmation(confirmationPhrase)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Please type PERMANENT DELETE to confirm')),
+        const SnackBar(
+          content: LiveTranslatedText('Confirmation phrase does not match'),
+        ),
       );
       return;
     }
@@ -48,40 +64,38 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
     setState(() => _isDeleting = true);
 
     try {
-      // 1. Call API to delete account on backend
-      try {
-        await ApiClient.deleteJson('/api/auth/account');
-      } catch (e) {
-        debugPrint('Error deleting account on backend: $e');
-        // Continue anyway - we still want to clear local data
+      // Do not wipe local data unless the server confirms the account deletion.
+      final response = await ApiClient.deleteJson('/api/auth/account');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError(
+          'Account deletion failed with HTTP ${response.statusCode}.',
+        );
       }
 
-      // 2. Full local wipe (tokens, prefs, queues)
+      // Full local wipe (tokens, prefs, queues)
       await SessionLogoutService.performFullLogout(notifyServer: false);
 
-      // 3. Navigate to login and don't allow back navigation
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/login',
-          (_) => false,
-        );
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: LiveTranslatedText('✅ Account deleted successfully. All data has been cleared.'),
+            content: LiveTranslatedText(
+              'Account deleted successfully. All data has been cleared.',
+            ),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       debugPrint('Error during account deletion: $e');
-      setState(() => _isDeleting = false);
-
       if (mounted) {
+        setState(() => _isDeleting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: LiveTranslatedText('Error deleting account: $e'),
+          const SnackBar(
+            content: LiveTranslatedText(
+              'Could not delete the account. Please try again.',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -91,6 +105,10 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
 
   @override
   Widget build(BuildContext context) {
+    final confirmationPhrase = AppLocalizations.of(
+      context,
+    ).translate('PERMANENT DELETE');
+    final confirmationMatches = _matchesConfirmation(confirmationPhrase);
     return Scaffold(
       appBar: AppBar(
         title: const LiveTranslatedText('Delete Account'),
@@ -111,7 +129,11 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_rounded, color: Colors.red.shade700, size: 28),
+                  Icon(
+                    Icons.warning_rounded,
+                    color: Colors.red.shade700,
+                    size: 28,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: LiveTranslatedText(
@@ -131,12 +153,21 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
             // Explanation
             LiveTranslatedText(
               'When you delete your account:',
-              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 12),
-            _buildBulletPoint('Your account and all associated data will be permanently deleted from our servers'),
-            _buildBulletPoint('All sales records, customer data, and inventory information will be removed'),
-            _buildBulletPoint('Your authentication credentials will be revoked'),
+            _buildBulletPoint(
+              'Your account and all associated data will be permanently deleted from our servers',
+            ),
+            _buildBulletPoint(
+              'All sales records, customer data, and inventory information will be removed',
+            ),
+            _buildBulletPoint(
+              'Your authentication credentials will be revoked',
+            ),
             _buildBulletPoint('This cannot be reversed or recovered'),
 
             const SizedBox(height: 24),
@@ -144,7 +175,8 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
             // Confirmation checkbox
             CheckboxListTile(
               value: _acceptedTerms,
-              onChanged: (value) => setState(() => _acceptedTerms = value ?? false),
+              onChanged: (value) =>
+                  setState(() => _acceptedTerms = value ?? false),
               title: LiveTranslatedText(
                 'I understand and accept the permanent deletion of all my data',
                 style: GoogleFonts.poppins(fontSize: 14),
@@ -156,15 +188,30 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
 
             // Text confirmation
             LiveTranslatedText(
-              'Please type PERMANENT DELETE to confirm:',
-              style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500),
+              'Type this phrase exactly to confirm:',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            LiveTranslatedText(
+              confirmationPhrase,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Colors.red.shade700,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _confirmController,
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hint: LiveTranslatedText('Type PERMANENT DELETE'),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                hint: const LiveTranslatedText('Type the confirmation phrase'),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
 
@@ -174,7 +221,10 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isDeleting ? null : _deleteAccount,
+                onPressed:
+                    _isDeleting || !_acceptedTerms || !confirmationMatches
+                    ? null
+                    : _deleteAccount,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   disabledBackgroundColor: Colors.grey,
@@ -233,7 +283,10 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const LiveTranslatedText('• ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const LiveTranslatedText(
+            '• ',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           Expanded(
             child: LiveTranslatedText(
               text,
