@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/payment_detection_service.dart';
 import 'package:retail_mind/payment_event.dart';
 import 'package:retail_mind/queue_manager.dart';
+import 'package:retail_mind/language_engine.dart';
 
 PaymentEvent _payment(String id) {
   return PaymentEvent(
