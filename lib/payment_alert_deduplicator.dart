@@ -78,21 +78,12 @@ class PaymentAlertDeduplicator {
           !_payersCompatible(payer, updatePreviousPayer);
       final notificationPayer = event.notificationPayerIdentity;
       final previousNotificationPayer = previous.notificationPayer;
-      final sameNotificationAccount =
-          account.isNotEmpty &&
-          previous.account.isNotEmpty &&
-          account == previous.account;
-      final sameNotificationPayer =
-          notificationPayer != null &&
-          previousNotificationPayer != null &&
-          notificationPayer == previousNotificationPayer;
       if (notificationStream != null &&
           notificationStream == previous.notificationStream &&
           notificationAt.difference(previousNotificationAt).abs() <=
-              PaymentIdentityMatcher.notificationUpdateWindow &&
+              PaymentIdentityMatcher.sameStreamRepostWindow &&
           !notificationAccountConflict &&
-          !notificationPayerConflict &&
-          (sameNotificationAccount || sameNotificationPayer)) {
+          !notificationPayerConflict) {
         previous.notificationAt = notificationAt;
         previous.notificationPayer = notificationPayer;
         previous.seenAt = moment;
