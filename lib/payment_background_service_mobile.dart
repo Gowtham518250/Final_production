@@ -149,7 +149,7 @@ Future<void> _persistPaymentHistoryThenForward(
     persisted: historyHandled,
   );
 
-  if (!historyHandled) {
+  if (persistedEvent == null) {
     // Do not forward a transient-only event as if it had been saved. The
     // native listener retains it and will replay when notification routing is
     // reattached after recovery.
