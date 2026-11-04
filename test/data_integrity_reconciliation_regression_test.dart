@@ -188,6 +188,55 @@ void main() {
           containsAll(['BILL-A', 'BILL-B']));
     });
 
+    test('customers sharing a phone remain separate without stable IDs', () {
+      final first = <String, dynamic>{
+        'name': 'Anita',
+        'phone': '9876543210',
+        'balance': 120.0,
+      };
+      final second = <String, dynamic>{
+        'name': 'Ravi',
+        'phone': '9876543210',
+        'balance': 80.0,
+      };
+
+      final result = CacheConsistencyService.mergeLists(
+        [first],
+        [second],
+        dataset: 'customers',
+      );
+
+      expect(result, hasLength(2));
+      expect(result.map((row) => row['name']).toSet(),
+          containsAll(['Anita', 'Ravi']));
+    });
+
+    test('customer local and server aliases merge when stable IDs match', () {
+      final local = <String, dynamic>{
+        'id': 'CUSTOMER-42',
+        'name': 'Anita',
+        'phone': '9876543210',
+        'sync_status': 'synced',
+      };
+      final remote = <String, dynamic>{
+        'customer_id': 'CUSTOMER-42',
+        'name': 'Anita Reddy',
+        'email': 'anita@example.com',
+        'sync_status': 'synced',
+      };
+
+      final result = CacheConsistencyService.mergeLists(
+        [local],
+        [remote],
+        dataset: 'customers',
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single['id'], 'CUSTOMER-42');
+      expect(result.single['customer_id'], 'CUSTOMER-42');
+      expect(result.single['email'], 'anita@example.com');
+    });
+
     test('anonymous equal-content sales remain separate', () {
       final row = <String, dynamic>{
         'customer_name': 'Cash Customer',
