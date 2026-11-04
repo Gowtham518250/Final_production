@@ -2118,33 +2118,11 @@ class LocalStorageService {
     List<dynamic> localLedger,
     List<dynamic> cloudLedger,
   ) {
-    final Map<String, dynamic> merged = {};
-
-    // Add local records
-    for (var item in localLedger) {
-      final id = item['id']?.toString() ?? item['invoice_id']?.toString();
-      if (id != null) merged[id] = item;
-    }
-
-    // Merge cloud records using Last Write Wins
-    for (var cloudItem in cloudLedger) {
-      final id =
-          cloudItem['id']?.toString() ?? cloudItem['invoice_id']?.toString();
-      if (id != null) {
-        if (merged.containsKey(id)) {
-          final localTime = merged[id]['last_updated'] ?? 0;
-          final cloudTime = cloudItem['last_updated'] ?? 0;
-
-          if (cloudTime > localTime) {
-            merged[id] = cloudItem; // Cloud is newer
-          }
-        } else {
-          merged[id] = cloudItem; // Cloud has new record
-        }
-      }
-    }
-
-    return merged.values.toList();
+    return CacheConsistencyService.mergeLists(
+      localLedger,
+      cloudLedger,
+      dataset: 'invoices',
+    );
   }
 
   // =========== REFUND WORKFLOW ===========
