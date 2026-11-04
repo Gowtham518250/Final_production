@@ -3,6 +3,8 @@ package notification.listener.service;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
@@ -418,6 +420,17 @@ final class NativePaymentAnnouncementFallback {
             NotificationManager manager = (NotificationManager)
                     context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+                    !manager.areNotificationsEnabled()) {
+                Log.w(TAG, "System notifications are disabled; retain the payment event.");
+                return false;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "POST_NOTIFICATIONS permission is not granted; retain the payment event.");
+                return false;
+            }
 
             final String channelId = "retailmind_native_payment_fallback";
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
