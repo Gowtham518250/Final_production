@@ -3168,6 +3168,10 @@ class PaymentDetectionService {
   final Set<String> _nativeNotificationHistoryPending = <String>{};
   final Map<String, Completer<bool>> _nativeNotificationHistoryWaiters =
       <String, Completer<bool>>{};
+  final Map<String, String> _nativeHistorySourceIdentities =
+      <String, String>{};
+  final Map<String, String> _nativeHistorySourceFingerprints =
+      <String, String>{};
 
   /// Event id -> channels that already echoed it (one echo per channel).
   final Map<String, Set<String>> _echoClaims = {};
@@ -4619,7 +4623,7 @@ class PaymentDetectionService {
     }
 
     var acknowledged = persisted;
-    if (acknowledged) {
+    if (persisted) {
       try {
         await NotificationListenerService.acknowledgeNotification(key);
       } catch (error, stackTrace) {
@@ -4631,10 +4635,40 @@ class PaymentDetectionService {
         );
         acknowledged = false;
       }
+    } else {
+      // The dedup claim is provisional until history is durable. Release both
+      // isolate-local SharedPreferences and Android SQLite claims so the
+      // still-queued notification can be classified and written on replay.
+      final fingerprint = _nativeHistorySourceFingerprints[key];
+      final sourceIdentity = _nativeHistorySourceIdentities[key];
+      try {
+        await CrossIsolatePaymentAnnouncementDeduplicator
+            .releaseSourceFingerprint(fingerprint);
+      } catch (error, stackTrace) {
+        PdsLogger.e(
+          'L1',
+          'Could not release Flutter payment dedup claim',
+          error,
+          stackTrace,
+        );
+      }
+      try {
+        await NotificationListenerService
+            .releasePaymentAnnouncementIdentity(sourceIdentity);
+      } catch (error, stackTrace) {
+        PdsLogger.e(
+          'L1',
+          'Could not release Android payment dedup claim',
+          error,
+          stackTrace,
+        );
+      }
     }
 
     if (acknowledged) {
       _nativeNotificationHistoryPending.remove(key);
+      _nativeHistorySourceIdentities.remove(key);
+      _nativeHistorySourceFingerprints.remove(key);
     }
     final waiter = _nativeNotificationHistoryWaiters.remove(key);
     if (waiter != null && !waiter.isCompleted) {
@@ -6337,6 +6371,14 @@ class PaymentDetectionService {
       // Do not remove the native durable event until the background isolate
       // confirms that this final event is represented in local payment history.
       _nativeNotificationHistoryPending.add(nativeEventKey);
+      final sourceIdentity = finalEvent.sourceEventIdentity;
+      final sourceFingerprint = finalEvent.sourceEventFingerprint;
+      if (sourceIdentity != null && sourceIdentity.isNotEmpty) {
+        _nativeHistorySourceIdentities[nativeEventKey] = sourceIdentity;
+      }
+      if (sourceFingerprint != null && sourceFingerprint.isNotEmpty) {
+        _nativeHistorySourceFingerprints[nativeEventKey] = sourceFingerprint;
+      }
     }
 
     _eventCtrl.add(finalEvent);
