@@ -117,7 +117,7 @@ class BillContext {
   Duration weakPairWindow(
     double amount, {
     // Keep aligned with PaymentIdentityMatcher.weakModalityWindow.
-    Duration noBillWindow = const Duration(minutes: 3),
+    Duration noBillWindow = PaymentIdentityMatcher.weakModalityWindow,
     DateTime? now,
   }) {
     final currentTime = now ?? DateTime.now();
