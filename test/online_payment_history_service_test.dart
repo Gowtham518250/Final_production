@@ -173,6 +173,43 @@ void main() {
   });
 
   test(
+    'durable history verifier rejects missing rows and accepts saved receipts',
+    () async {
+      final receipt = event(
+        id: 'durability-receipt',
+        decision: PaymentDecision.likely,
+        verification: PaymentVerificationStatus.unverified,
+        referenceId: 'DURABLE-12345',
+        sourceEventKey: 'com.phonepe.app|81|1794000000000|durable-a',
+      );
+
+      expect(
+        await OnlinePaymentHistoryService.hasDurableRecordForEvent(receipt),
+        isFalse,
+      );
+      expect(
+        await OnlinePaymentHistoryService.recordIncomingPayment(receipt),
+        isTrue,
+      );
+      expect(
+        await OnlinePaymentHistoryService.hasDurableRecordForEvent(receipt),
+        isTrue,
+      );
+
+      final debit = event(
+        id: 'durability-debit',
+        direction: PaymentTransactionDirection.outgoingDebit,
+        referenceId: null,
+      );
+      expect(OnlinePaymentHistoryService.isIncomingCredit(debit), isFalse);
+      expect(
+        await OnlinePaymentHistoryService.hasDurableRecordForEvent(debit),
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'marks same-reference amount conflicts for review instead of replacing history',
     () async {
       await OnlinePaymentHistoryService.recordIncomingPayment(
@@ -194,6 +231,16 @@ void main() {
       expect(records.single['merchant_confirmed'], isFalse);
       expect(records.single['verified'], isFalse);
       expect(records.single['conflicting_amounts'], [125.5, 200.0]);
+      expect(
+        await OnlinePaymentHistoryService.hasDurableRecordForEvent(
+          event(
+            amount: 200,
+            id: 'conflicting-alert',
+            timestamp: DateTime(2026, 10, 22, 9, 1),
+          ),
+        ),
+        isTrue,
+      );
       expect(
         await OnlinePaymentHistoryService.hasReferenceConflict(
           event(amount: 125.50, id: 'third-notification'),
