@@ -254,7 +254,14 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
                         .putString(PENDING, remaining.toString())
                         .putString(ACKED, acked.toString())
                         .commit();
-                return saved && removed;
+                if (!removed && saved) {
+                    // A prior acknowledgement may already have removed this
+                    // row, or the live event may never have been persisted.
+                    // The durable ACK tombstone is still the authoritative
+                    // success condition and makes this operation idempotent.
+                    Log.d(TAG, "Acknowledgement tombstone persisted for non-pending event");
+                }
+                return saved;
             } catch (JSONException | RuntimeException error) {
                 Log.e(TAG, "Unable to acknowledge notification event", error);
                 return false;
