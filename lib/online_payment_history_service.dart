@@ -475,6 +475,93 @@ class OnlinePaymentHistoryService {
     return updated;
   }
 
+  /// This history is the shop's incoming-receipt ledger. Outgoing debit
+  /// notifications remain detector alerts and must never be presented as
+  /// customer receipts.
+  static bool isIncomingCredit(PaymentEvent event) =>
+      event.direction == PaymentTransactionDirection.incomingCredit ||
+      (event.direction == PaymentTransactionDirection.unknown &&
+          VoiceBuilder.detectDirection(event.rawText) ==
+              PaymentDirection.credited);
+
+  /// Confirm that a false [recordIncomingPayment] result is already represented
+  /// by a canonical row (including a durable reference-conflict row). A false
+  /// result alone is not proof of persistence.
+  static Future<bool> hasDurableRecordForEvent(PaymentEvent event) async {
+    if (!isIncomingCredit(event) ||
+        !event.amount.isFinite ||
+        event.amount <= 0) {
+      return false;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await _currentUserId(prefs);
+    final prefix = _userPrefix(userId);
+    final reference = event.normalizedReferenceId;
+    final expectedDirection = _historyDirection(event);
+    final incomingFingerprint = sha256
+        .convert(utf8.encode(event.fingerprint))
+        .toString();
+    final keys = <String>{'$prefix$incomingFingerprint'};
+    final sourceIdentityKey = _sourceIdentityKey(prefix, event);
+    if (sourceIdentityKey != null) keys.add(sourceIdentityKey);
+
+    // Reference aliases may resolve to an existing canonical row whose key
+    // was created from another source's fingerprint.
+    if (reference != null) {
+      for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
+        final entry = _decodeEntry(prefs.getString(key));
+        if (entry == null || _isAlias(entry)) continue;
+        if ((entry['reference_id'] ?? '').toString().trim() == reference) {
+          keys.add(key);
+        }
+      }
+    }
+
+    for (final candidateKey in keys) {
+      final canonicalKey =
+          await _resolveCanonicalKey(prefs, candidateKey);
+      if (canonicalKey == null) continue;
+      final entry = _decodeEntry(prefs.getString(canonicalKey));
+      if (entry == null || _isAlias(entry)) continue;
+
+      final oldAmount = (entry['amount'] as num?)?.toDouble();
+      final oldDirection = (entry['direction'] ?? 'unknown').toString();
+      final rowReference = (entry['reference_id'] ?? '').toString().trim();
+      if (reference != null &&
+          rowReference.isNotEmpty &&
+          rowReference != reference) {
+        continue;
+      }
+      if (oldDirection != 'unknown' &&
+          expectedDirection != 'unknown' &&
+          oldDirection != expectedDirection) {
+        continue;
+      }
+
+      if (oldAmount != null &&
+          oldAmount.isFinite &&
+          (oldAmount - event.amount).abs() < 0.01) {
+        return true;
+      }
+
+      if ((entry['status'] ?? '').toString().toUpperCase() ==
+              'CONFLICT_REVIEW' &&
+          reference != null &&
+          rowReference == reference &&
+          entry['conflicting_amounts'] is List &&
+          (entry['conflicting_amounts'] as List).any(
+            (value) =>
+                value is num &&
+                value.toDouble().isFinite &&
+                (value.toDouble() - event.amount).abs() < 0.01,
+          )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static Future<bool> recordIncomingPayment(PaymentEvent event) async {
     if (event.isFailed ||
         event.decision == PaymentDecision.rejected ||
@@ -484,12 +571,7 @@ class OnlinePaymentHistoryService {
         event.isDuplicate) {
       return false;
     }
-    final isIncomingCredit =
-        event.direction == PaymentTransactionDirection.incomingCredit ||
-        (event.direction == PaymentTransactionDirection.unknown &&
-            VoiceBuilder.detectDirection(event.rawText) ==
-                PaymentDirection.credited);
-    if (!isIncomingCredit) return false;
+    if (!isIncomingCredit(event)) return false;
 
     final reference = event.normalizedReferenceId;
     final prefs = await SharedPreferences.getInstance();

@@ -30,6 +30,9 @@ class QueueItem {
   final String                  ttsText;
   final int                     timeoutSec;
   final Future<void> Function()? onTimeout;
+  final void Function(bool success)? onResult;
+  final DateTime? expiresAt;
+  bool _resultReported = false;
 
   QueueItem({
     required this.task,
@@ -37,7 +40,23 @@ class QueueItem {
     required this.ttsText,
     required this.timeoutSec,
     this.onTimeout,
+    this.onResult,
+    this.expiresAt,
   });
+
+  void _report(bool success) {
+    if (_resultReported) return;
+    _resultReported = true;
+    try {
+      onResult?.call(success);
+    } catch (error, stackTrace) {
+      _log.e(
+        'Queue item result callback failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +88,16 @@ class QueueManager {
     while (_queue.isNotEmpty) {
       _queue.sort((a, b) => b.priority.index.compareTo(a.priority.index));
       final item = _queue.removeAt(0);
+
+      final expiry = item.expiresAt;
+      if (expiry != null && DateTime.now().isAfter(expiry)) {
+        _log.w(
+          'Dropping stale queued speech: '
+          '"${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"',
+        );
+        item._report(false);
+        continue;
+      }
 
       _speaking = true;
       var success = false;
@@ -110,6 +139,7 @@ class QueueManager {
       }
 
       _speaking = false;
+      item._report(success);
 
       if (!success) {
         _log.e(
@@ -124,12 +154,22 @@ class QueueManager {
   }
 
   void clear() {
+    final dropped = List<QueueItem>.from(_queue);
     _queue.clear();
+    for (final item in dropped) {
+      item._report(false);
+    }
     _log.d('Queue cleared');
   }
 
   void clearLowPriority() {
-    _queue.removeWhere((i) => i.priority == AnnouncementPriority.low);
+    final dropped = _queue
+        .where((item) => item.priority == AnnouncementPriority.low)
+        .toList();
+    _queue.removeWhere((item) => item.priority == AnnouncementPriority.low);
+    for (final item in dropped) {
+      item._report(false);
+    }
   }
 
   int get length => _queue.length;

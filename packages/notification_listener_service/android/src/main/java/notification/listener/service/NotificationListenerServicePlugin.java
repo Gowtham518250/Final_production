@@ -103,6 +103,15 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
             }
             result.success(AtomicPaymentAnnouncementCoordinator.shouldSuppress(
                     context, (Map<?, ?>) call.arguments));
+        } else if (call.method.equals("releasePaymentAnnouncementIdentity")) {
+            final String sourceIdentity = call.argument("sourceIdentity");
+            if (sourceIdentity == null || sourceIdentity.trim().isEmpty()) {
+                result.error("InvalidSourceIdentity", "sourceIdentity is required", null);
+                return;
+            }
+            AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
+                    context, sourceIdentity);
+            result.success(true);
         } else if (call.method.equals("acknowledgeNotification")) {
             final String eventKey = call.argument("eventKey");
             if (eventKey == null || eventKey.trim().isEmpty()) {

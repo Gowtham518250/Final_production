@@ -173,39 +173,110 @@ class InvoiceDedupHelper {
       if (!sameProduct) return false;
       final leftQty = _number(left['quantity'] ?? left['qty'], 1);
       final rightQty = _number(right['quantity'] ?? right['qty'], 1);
-      final leftPrice = _number(left['unit_price'] ?? left['price']);
-      final rightPrice = _number(right['unit_price'] ?? right['price']);
-      return leftQty.toStringAsFixed(3) == rightQty.toStringAsFixed(3) &&
-          leftPrice.toStringAsFixed(2) == rightPrice.toStringAsFixed(2);
-    }
-
-    void addLine(Map<String, dynamic> line) {
-      final index = mergedLines.indexWhere((existing) => sameLine(existing, line));
-      if (index < 0) {
-        mergedLines.add(line);
-      } else {
-        mergedLines[index] = <String, dynamic>{
-          ...mergedLines[index],
-          ...line,
-        }..removeWhere((key, value) => value == null);
+      if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3)) {
+        return false;
       }
-    }
-
-    void addRowLines(Map<String, dynamic> row) {
-      var foundNestedLine = false;
-      for (final field in const ['items', 'line_items']) {
-        final raw = row[field];
-        if (raw is! List) continue;
-        for (final value in raw) {
-          if (value is! Map) continue;
-          foundNestedLine = true;
-          addLine(Map<String, dynamic>.from(value));
+      final leftPriceRaw = left['unit_price'] ?? left['price'];
+      final rightPriceRaw = right['unit_price'] ?? right['price'];
+      // A partial mirror may omit price. Compare only when both sides include
+      // a price, rather than turning missing data into a false mismatch.
+      if (leftPriceRaw != null && rightPriceRaw != null) {
+        final leftPrice = _number(leftPriceRaw);
+        final rightPrice = _number(rightPriceRaw);
+        if (leftPrice.toStringAsFixed(2) != rightPrice.toStringAsFixed(2)) {
+          return false;
         }
       }
+      for (final field in const [
+        'discount',
+        'discount_amount',
+        'discount_rate',
+        'tax',
+        'tax_amount',
+        'tax_rate',
+        'gst_rate',
+      ]) {
+        final a = left[field];
+        final b = right[field];
+        if (a == null || b == null) continue;
+        if (_number(a, -1) != _number(b, -1)) return false;
+      }
+      return true;
+    }
 
-      if (foundNestedLine) return;
+    void addNestedSnapshot(List<Map<String, dynamic>> incoming) {
+      if (incoming.isEmpty) return;
+      if (mergedLines.isEmpty) {
+        mergedLines.addAll(incoming);
+        return;
+      }
+      // One-to-one matching preserves repeated identical products in a bill.
+      final matched = <int>{};
+      for (final line in incoming) {
+        var matchIndex = -1;
+        for (var i = 0; i < mergedLines.length; i++) {
+          if (matched.contains(i)) continue;
+          if (sameLine(mergedLines[i], line)) {
+            matchIndex = i;
+            break;
+          }
+        }
+        if (matchIndex < 0) {
+          mergedLines.add(line);
+        } else {
+          matched.add(matchIndex);
+          mergedLines[matchIndex] = <String, dynamic>{
+            ...mergedLines[matchIndex],
+            ...line,
+          }..removeWhere((key, value) => value == null);
+        }
+      }
+    }
 
-      // Legacy history feeds can expose one invoice line as top-level fields.
+    final flatLines = <Map<String, dynamic>>[];
+    var hasNestedSnapshot = false;
+
+    void addRowLines(Map<String, dynamic> row) {
+      // items and line_items are often aliases of the same collection.
+      // Read one canonical alias rather than importing the collection twice.
+      final lineItems = row['line_items'];
+      final items = row['items'];
+      final raw = lineItems is List && lineItems.isNotEmpty
+          ? lineItems
+          : items is List
+              ? items
+              : lineItems;
+
+      if (raw is List && raw.isNotEmpty) {
+        final incoming = raw
+            .whereType<Map>()
+            .map((value) => Map<String, dynamic>.from(value))
+            .toList();
+        if (!hasNestedSnapshot) {
+          mergedLines.addAll(incoming);
+          hasNestedSnapshot = true;
+        } else {
+          addNestedSnapshot(incoming);
+        }
+
+        // Some clients serialize partial line collections independently under
+        // items and line_items. Merge the alternate list too when it is not
+        // the exact same list object; identical snapshots reconcile one-to-one.
+        if (lineItems is List &&
+            items is List &&
+            !identical(lineItems, items)) {
+          final alternate = identical(raw, lineItems) ? items : lineItems;
+          final alternateLines = alternate
+              .whereType<Map>()
+              .map((value) => Map<String, dynamic>.from(value))
+              .toList();
+          addNestedSnapshot(alternateLines);
+        }
+        return;
+      }
+
+      // Legacy invoice feeds can expose one product per top-level row. Keep
+      // every flattened row, including records with incomplete financial data.
       final name = (row['product_name'] ??
               row['product'] ??
               row['item'] ??
@@ -214,13 +285,7 @@ class InvoiceDedupHelper {
               '')
           .toString()
           .trim();
-      if (name.isEmpty ||
-          name.toLowerCase() == 'unknown' ||
-          name.toLowerCase() == 'unknown product' ||
-          name.toLowerCase() == 'unknown item') {
-        return;
-      }
-
+      if (name.isEmpty && row['product_id'] == null) return;
       final quantity = _number(row['quantity'] ?? row['qty'], 1);
       final unitPrice = _number(row['unit_price'] ?? row['price']);
       final lineTotal = _number(
@@ -229,27 +294,44 @@ class InvoiceDedupHelper {
             row['total'] ??
             row['totalAmount'],
       );
-      if (quantity <= 0 || (unitPrice <= 0 && lineTotal <= 0)) return;
-
-      addLine(<String, dynamic>{
-        'product_id': row['product_id'],
+      flatLines.add(<String, dynamic>{
+        ...row,
         'product_name': name,
-        'description': name,
+        'description': row['description'] ?? name,
         'quantity': quantity,
         'qty': quantity,
         'unit_price': unitPrice,
         'price': unitPrice,
-        'line_total': lineTotal > 0
-            ? lineTotal
-            : unitPrice * quantity,
-        'total': lineTotal > 0
-            ? lineTotal
-            : unitPrice * quantity,
+        'line_total': lineTotal > 0 ? lineTotal : unitPrice * quantity,
+        'total': lineTotal > 0 ? lineTotal : unitPrice * quantity,
       });
     }
 
     for (final row in ordered) {
       addRowLines(row);
+    }
+
+    // Flat rows can mirror a nested snapshot from another representation.
+    // Pair each match once; unmatched rows remain legitimate invoice lines.
+    final matchedNested = <int>{};
+    for (final line in flatLines) {
+      var matchIndex = -1;
+      for (var i = 0; i < mergedLines.length; i++) {
+        if (matchedNested.contains(i)) continue;
+        if (sameLine(mergedLines[i], line)) {
+          matchIndex = i;
+          break;
+        }
+      }
+      if (matchIndex < 0) {
+        mergedLines.add(line);
+      } else {
+        matchedNested.add(matchIndex);
+        mergedLines[matchIndex] = <String, dynamic>{
+          ...mergedLines[matchIndex],
+          ...line,
+        }..removeWhere((key, value) => value == null);
+      }
     }
 
     for (final row in ordered) {

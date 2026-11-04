@@ -1925,12 +1925,16 @@ class _VI implements Comparable<_VI> {
   final String? payerName;
   final PaymentDirection direction;
   final DateTime at;
+  final String? fingerprint;
+  final PaymentEvent? event;
   _VI(
     this.text,
     this.priority, {
     this.amount,
     this.payerName,
     this.direction = PaymentDirection.unknown,
+    this.fingerprint,
+    this.event,
   }) : at = DateTime.now();
   @override
   int compareTo(_VI o) {
@@ -1965,7 +1969,15 @@ class PriorityVoiceQueue {
   DateTime? _lastAt;
   Timer? _timer;
 
+  /// Legacy fire-and-forget callback; new callers should set [speaker].
   void Function(String)? onSpeak;
+
+  /// Returns true only when the TTS provider confirms completion.
+  Future<bool> Function(String text, String? dedupeKey)? speaker;
+
+  /// Called when a payment was not spoken and needs an audible OS fallback.
+  void Function(String text, PaymentEvent? event)? onSpeakFailed;
+
   // FIX-3: language supplied by the caller instead of reading global state
   VoiceLanguage Function()? getLanguage;
 
@@ -2169,7 +2181,7 @@ class PriorityVoiceQueue {
       }
       final weakWindow = PaymentDetectionService().billContext.weakPairWindow(
         event.amount,
-        noBillWindow: _crossSourceEchoWindow,
+        noBillWindow: PaymentIdentityMatcher.weakModalityWindow,
       );
       final weakModalityPair =
           weakWindow > Duration.zero &&
@@ -2236,10 +2248,56 @@ class PriorityVoiceQueue {
   static const Duration _spokenMemory = Duration(hours: 6);
   static const String _kSpokenPrefs = 'pds_spoken_v1';
 
-  void _markSpoken(String fp) {
+  /// Claim the fingerprint while the item is queued so concurrent echoes do
+  /// not enqueue a second speech. Do not persist it until TTS succeeds.
+  void _claimSpoken(String fp) {
+    _spokenFps[fp] = DateTime.now().add(_spokenMemory);
+    _spokenFps.removeWhere((_, exp) => DateTime.now().isAfter(exp));
+  }
+
+  void _commitSpoken(String fp) {
     _spokenFps[fp] = DateTime.now().add(_spokenMemory);
     _spokenFps.removeWhere((_, exp) => DateTime.now().isAfter(exp));
     unawaited(_persistSpoken());
+  }
+
+  void _releaseSpoken(String fp, {PaymentEvent? event}) {
+    _spokenFps.remove(fp);
+    if (event != null) {
+      _recentPayments.removeWhere((entry) => entry.event.id == event.id);
+      _echoClaims.remove(event.id);
+    }
+    unawaited(_persistSpoken());
+  }
+
+  void _settleSpeech(String text, List<_VI> items, bool spoken) {
+    if (spoken) {
+      for (final item in items) {
+        final fingerprint = item.fingerprint;
+        if (fingerprint != null) _commitSpoken(fingerprint);
+      }
+      return;
+    }
+
+    PdsLogger.w('VOICE', 'TTS did not complete; requesting audible fallback');
+    PdsLogger.t('DROP', 'reason=voice_not_spoken');
+    final failedItems = items.where((item) => item.event != null).toList();
+    for (final item in items) {
+      final fingerprint = item.fingerprint;
+      if (fingerprint != null) {
+        _releaseSpoken(fingerprint, event: item.event);
+      }
+    }
+
+    final fallback = onSpeakFailed;
+    if (fallback == null) return;
+    try {
+      for (final item in failedItems) {
+        fallback(item.text, item.event);
+      }
+    } catch (error) {
+      PdsLogger.w('VOICE', 'Audible fallback callback failed: $error');
+    }
   }
 
   Future<void> restoreSpoken() async {
@@ -2337,14 +2395,20 @@ class PriorityVoiceQueue {
       // another later transaction with the same amount.
       return;
     }
-    _markSpoken(fingerprint);
-    _rememberPayment(e);
-
     final text = ui.voiceText(_lang);
-    if (text.isEmpty) {
+    if (text.trim().isEmpty) {
       PdsLogger.t('DROP', 'reason=voice_text_empty');
+      // Do not leave an unspoken payment in the spoken set.
+      try {
+        onSpeakFailed?.call('', e);
+      } catch (error) {
+        PdsLogger.w('VOICE', 'Empty voice fallback callback failed: $error');
+      }
       return;
     }
+
+    _claimSpoken(fingerprint);
+    _rememberPayment(e);
     final priority = e.isFailed
         ? _VP.high
         : e.decision == PaymentDecision.likely
@@ -2356,6 +2420,8 @@ class PriorityVoiceQueue {
       _VI(
         text,
         priority,
+        fingerprint: fingerprint,
+        event: e,
         amount: e.amount,
         payerName: e.payerName,
         direction: ui.direction == PaymentTransactionDirection.incomingCredit
@@ -2377,9 +2443,19 @@ class PriorityVoiceQueue {
           ? fingerprint
           : 'voice_$fingerprint';
       if (_isAlreadySpoken(voiceFingerprint)) return;
-      _markSpoken(voiceFingerprint);
+      _claimSpoken(voiceFingerprint);
     }
-    _queue.add(_VI(text, priority));
+    _queue.add(
+      _VI(
+        text,
+        priority,
+        fingerprint: fingerprint == null
+            ? null
+            : (fingerprint.startsWith('voice_')
+                  ? fingerprint
+                  : 'voice_$fingerprint'),
+      ),
+    );
     _schedule();
   }
 
@@ -2416,7 +2492,7 @@ class PriorityVoiceQueue {
           .map((i) => (i.amount!, i.payerName))
           .toList();
       final text = VoiceBuilder.burst(payments, _lang);
-      _speak(text);
+      _speak(text, normals);
       if (_queue.isNotEmpty) {
         _timer?.cancel();
         _timer = Timer(PdsConfig.voiceMinGap, _drain);
@@ -2426,18 +2502,48 @@ class PriorityVoiceQueue {
 
     final item = _queue.first;
     _queue.remove(item);
-    _speak(item.text);
+    _speak(item.text, [item]);
     if (_queue.isNotEmpty) {
       _timer?.cancel();
       _timer = Timer(PdsConfig.voiceMinGap, _drain);
     }
   }
 
-  void _speak(String t) {
+  void _speak(String text, List<_VI> items) {
     _lastAt = DateTime.now();
-    PdsLogger.i('VOICE', 'SPEAK "$t"');
-    PdsLogger.t('SPEAK', 'handler=${onSpeak != null}');
-    onSpeak?.call(t);
+    PdsLogger.i('VOICE', 'SPEAK "$text"');
+
+    final asyncSpeaker = speaker;
+    if (asyncSpeaker != null) {
+      unawaited(() async {
+        var spoken = false;
+        try {
+          final dedupeKey = items.length == 1 ? items.single.fingerprint : null;
+          spoken = await asyncSpeaker(text, dedupeKey);
+        } catch (error) {
+          PdsLogger.w('VOICE', 'TTS provider failed: $error');
+        }
+        _settleSpeech(text, items, spoken);
+      }());
+      return;
+    }
+
+    // Preserve compatibility for any older consumer still using onSpeak.
+    // It cannot report asynchronous TTS failure, so only synchronous success
+    // can be treated as success here. The background service uses [speaker].
+    final legacySpeaker = onSpeak;
+    if (legacySpeaker != null) {
+      try {
+        legacySpeaker(text);
+        _settleSpeech(text, items, true);
+      } catch (error) {
+        PdsLogger.w('VOICE', 'Legacy speaker failed: $error');
+        _settleSpeech(text, items, false);
+      }
+      return;
+    }
+
+    _settleSpeech(text, items, false);
   }
 
   void _cleanTs() {
@@ -2744,6 +2850,12 @@ class PendingPaymentBuffer {
         return;
       }
     }
+  }
+
+  /// Remove only an event whose durable history write failed. Its native
+  /// notification remains queued and will be reclassified on stream replay.
+  void remove(String id) {
+    _buffer.removeWhere((entry) => entry.event.id == id);
   }
 }
 
@@ -3052,6 +3164,32 @@ class PaymentDetectionService {
     if (_recentConfirmed.length > 50) _recentConfirmed.removeAt(0);
   }
 
+  /// Futures emitted while a native notification is being routed. The
+  /// listener waits for these before deciding whether the source event is safe
+  /// to acknowledge.
+  final Map<String, List<Future<void>>> _notificationEmissionFutures =
+      <String, List<Future<void>>>{};
+  final Map<String, Future<void>> _notificationRouteInFlight =
+      <String, Future<void>>{};
+
+  /// Payment events whose durable local history write has not yet completed.
+  final Set<String> _nativeNotificationHistoryPending = <String>{};
+  final Map<String, Completer<bool>> _nativeNotificationHistoryWaiters =
+      <String, Completer<bool>>{};
+  final Map<String, String> _nativeHistorySourceIdentities =
+      <String, String>{};
+  final Map<String, String> _nativeHistorySourceFingerprints =
+      <String, String>{};
+  final Map<String, String> _nativeHistoryEventIds = <String, String>{};
+  final Map<String, String> _nativeHistoryDedupFingerprints =
+      <String, String>{};
+  final Map<String, String> _nativeHistoryReferences = <String, String>{};
+  final Map<String, String> _nativeHistoryTransportFingerprints =
+      <String, String>{};
+  final Map<String, String> _nativeHistoryPayloadFingerprints =
+      <String, String>{};
+  final Map<String, int> _nativeHistoryReplayAttempts = <String, int>{};
+
   /// Event id -> channels that already echoed it (one echo per channel).
   final Map<String, Set<String>> _echoClaims = {};
   final LinkedHashSet<String> _possibleRepeatEventIds = LinkedHashSet<String>();
@@ -3128,7 +3266,7 @@ class PaymentDetectionService {
       _processTruecallerIncomingTransfer(packageName, text);
 
   @visibleForTesting
-  void debugHandleNotification(ServiceNotificationEvent event) =>
+  Future<bool> debugHandleNotification(ServiceNotificationEvent event) =>
       _handleNotification(event);
 
   @visibleForTesting
@@ -3576,6 +3714,15 @@ class PaymentDetectionService {
 
   // ── Public API ────────────────────────────────────────────────────────────
   set onSpeak(void Function(String) cb) => _voice.onSpeak = cb;
+
+  /// Preferred path: returns true only after the TTS queue completes.
+  set speaker(Future<bool> Function(String text, String? dedupeKey)? cb) =>
+      _voice.speaker = cb;
+
+  /// Called when payment speech fails or produces no usable text.
+  set onSpeakFailed(void Function(String text, PaymentEvent? event)? cb) =>
+      _voice.onSpeakFailed = cb;
+
   PdsSessionStats get sessionStats => _stats;
 
   /// FIX-3: sets language on the instance; no global state mutation.
@@ -4187,19 +4334,7 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        (event) {
-          try {
-            _handleNotification(event);
-          } finally {
-            // Keep the native queue until payment classification and emission
-            // routing has synchronously completed, even across engine restarts.
-            unawaited(
-              NotificationListenerService.acknowledgeNotification(
-                event.eventKey,
-              ),
-            );
-          }
-        },
+        (event) => unawaited(_processNotificationOnce(event)),
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
@@ -4425,6 +4560,255 @@ class PaymentDetectionService {
 
   bool _firstNotificationTraced = false;
 
+  /// Route durable native events before acknowledging them. A synchronous
+  /// parsing/routing exception gets a few bounded retries; after that the
+  /// native queue retains the event for the next stream re-attachment.
+  /// Prevent concurrent routing of the same durable notification key.
+  /// Android can surface the same event through a live relay and stream replay
+  /// while its first asynchronous history write is still running.
+  Future<void> _processNotificationOnce(ServiceNotificationEvent event) async {
+    final key = _safe(
+      () => (event as dynamic).eventKey as String?,
+    )?.trim();
+    if (key == null || key.isEmpty) {
+      await _processNotificationWithRetry(event);
+      return;
+    }
+
+    final existing = _notificationRouteInFlight[key];
+    if (existing != null) {
+      await existing;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _notificationRouteInFlight[key] = completer.future;
+    try {
+      await _processNotificationWithRetry(event);
+    } finally {
+      _notificationRouteInFlight.remove(key);
+      if (!completer.isCompleted) completer.complete();
+    }
+  }
+
+  Future<void> _processNotificationWithRetry(
+    ServiceNotificationEvent event, {
+    int attempt = 1,
+  }) async {
+    final key = event.eventKey?.trim();
+    if (key == null || key.isEmpty) {
+      final handled = await _handleNotification(event);
+      if (!handled) {
+        PdsLogger.w('L1', 'Notification without a durable key could not be routed');
+      }
+      return;
+    }
+
+    final historyWaiter = _nativeNotificationHistoryWaiters.putIfAbsent(
+      key,
+      Completer<bool>.new,
+    );
+    final handled = await _handleNotification(event);
+    if (!handled) {
+      if (attempt >= 3) {
+        PdsLogger.w(
+          'L1',
+          'Notification route failed after $attempt attempts; '
+              'event retained in native durable queue',
+        );
+        return;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
+      await _processNotificationWithRetry(event, attempt: attempt + 1);
+      return;
+    }
+
+    // A parsed payment must first be written by the background history
+    // subscriber. Classification-only/no-payment notifications can be
+    // acknowledged as soon as routing has completed.
+    if (_nativeNotificationHistoryPending.contains(key) ||
+        historyWaiter.isCompleted) {
+      var historySaved = false;
+      try {
+        historySaved = await historyWaiter.future.timeout(
+          const Duration(seconds: 30),
+        );
+      } catch (_) {
+        historySaved = false;
+      }
+      if (!historySaved) {
+        PdsLogger.w(
+          'L1',
+          'Payment history is not durable yet; native event remains queued',
+        );
+        final replayAttempt =
+            (_nativeHistoryReplayAttempts[key] ?? 0) + 1;
+        _nativeHistoryReplayAttempts[key] = replayAttempt;
+        if (replayAttempt <= 2) {
+          // Reattach to the plugin stream. Its onListen callback replays
+          // unacknowledged events from native SharedPreferences.
+          Future<void>.delayed(
+            Duration(seconds: replayAttempt * 2),
+            _startNotificationListener,
+          );
+        } else {
+          PdsLogger.w(
+            'L1',
+            'Automatic same-session replay limit reached; native event remains '
+                'queued for the next listener/app restart',
+          );
+        }
+      }
+      return;
+    }
+
+    _nativeNotificationHistoryWaiters.remove(key);
+    try {
+      final acknowledged =
+          await NotificationListenerService.acknowledgeNotification(key);
+      if (!acknowledged) {
+        PdsLogger.w(
+          'L1',
+          'Android did not confirm removal of the classified notification; '
+              'it remains queued for replay',
+        );
+      }
+    } catch (error, stackTrace) {
+      PdsLogger.e('L1', 'Could not acknowledge routed notification', error, stackTrace);
+    }
+  }
+
+  /// Called by the isolate that owns OnlinePaymentHistoryService after it has
+  /// completed the durable write (or established that the event is already
+  /// represented by a durable reference row).
+  Future<void> completeNativeNotificationHistory(
+    String? eventKey, {
+    required bool persisted,
+  }) async {
+    final key = eventKey?.trim();
+    if (key == null ||
+        key.isEmpty ||
+        !_nativeNotificationHistoryPending.contains(key)) {
+      return;
+    }
+
+    var acknowledged = persisted;
+    if (persisted) {
+      // A persisted payment record is the source of truth. Only now commit the
+      // native transport replay key, so a failed history write cannot leave a
+      // durable dedup marker that blocks recovery after process restart.
+      final transportFingerprint =
+          _nativeHistoryTransportFingerprints[key];
+      if (transportFingerprint != null &&
+          transportFingerprint.isNotEmpty) {
+        _dedupStore[transportFingerprint] = DateTime.now().add(
+          PdsConfig.dedupNativeNotificationTtl,
+        );
+        _dedupDirty = true;
+        await PdsStateStore.saveDedup(_dedupStore);
+      }
+      try {
+        acknowledged =
+            await NotificationListenerService.acknowledgeNotification(key);
+        if (!acknowledged) {
+          PdsLogger.w(
+            'L1',
+            'History saved, but Android did not confirm notification removal; '
+                'event remains pending for safe retry',
+          );
+        }
+      } catch (error, stackTrace) {
+        PdsLogger.e(
+          'L1',
+          'History saved but native event acknowledgement failed',
+          error,
+          stackTrace,
+        );
+        acknowledged = false;
+      }
+    } else {
+      // The dedup claim is provisional until history is durable. Release both
+      // isolate-local SharedPreferences and Android SQLite claims, plus only
+      // this event's in-memory dedup state, so a stream replay can retry it.
+      final sourceFingerprint = _nativeHistorySourceFingerprints[key];
+      final sourceIdentity = _nativeHistorySourceIdentities[key];
+      final eventId = _nativeHistoryEventIds[key];
+      final dedupFingerprint = _nativeHistoryDedupFingerprints[key];
+      final reference = _nativeHistoryReferences[key];
+      final transportFingerprint = _nativeHistoryTransportFingerprints[key];
+      final payloadFingerprint = _nativeHistoryPayloadFingerprints[key];
+
+      try {
+        await CrossIsolatePaymentAnnouncementDeduplicator
+            .releaseSourceFingerprint(sourceFingerprint);
+      } catch (error, stackTrace) {
+        PdsLogger.e(
+          'L1',
+          'Could not release Flutter payment dedup claim',
+          error,
+          stackTrace,
+        );
+      }
+      try {
+        await NotificationListenerService
+            .releasePaymentAnnouncementIdentity(sourceIdentity);
+      } catch (error, stackTrace) {
+        PdsLogger.e(
+          'L1',
+          'Could not release Android payment dedup claim',
+          error,
+          stackTrace,
+        );
+      }
+
+      if (eventId != null && eventId.isNotEmpty) {
+        _recentEmittedPayments.removeWhere(
+          (event) =>
+              event.id == eventId ||
+              (sourceIdentity != null &&
+                  event.sourceEventIdentity == sourceIdentity),
+        );
+        _echoClaims.remove(eventId);
+        _possibleRepeatEventIds.remove(eventId);
+        _historyHandledEventIds.remove(eventId);
+        _pendingBuffer.remove(eventId);
+      }
+      if (dedupFingerprint != null && dedupFingerprint.isNotEmpty) {
+        _dedupStore.remove(dedupFingerprint);
+        _activeFingerprints.remove(dedupFingerprint);
+      }
+      if (transportFingerprint != null &&
+          transportFingerprint.isNotEmpty) {
+        _dedupStore.remove(transportFingerprint);
+        _dedupDirty = true;
+        await PdsStateStore.saveDedup(_dedupStore);
+      }
+      if (payloadFingerprint != null && payloadFingerprint.isNotEmpty) {
+        _recentNotificationPayloads.remove(payloadFingerprint);
+      }
+      if (reference != null && reference.isNotEmpty) {
+        _dedupReferenceAmounts.remove(reference);
+      }
+    }
+
+    if (acknowledged) {
+      _nativeNotificationHistoryPending.remove(key);
+      _nativeHistoryReplayAttempts.remove(key);
+    }
+    _nativeHistorySourceIdentities.remove(key);
+    _nativeHistorySourceFingerprints.remove(key);
+    _nativeHistoryEventIds.remove(key);
+    _nativeHistoryDedupFingerprints.remove(key);
+    _nativeHistoryReferences.remove(key);
+    _nativeHistoryTransportFingerprints.remove(key);
+    _nativeHistoryPayloadFingerprints.remove(key);
+
+    final waiter = _nativeNotificationHistoryWaiters.remove(key);
+    if (waiter != null && !waiter.isCompleted) {
+      waiter.complete(acknowledged);
+    }
+  }
+
   // Late source times are tracked separately so echo matching still compares
   // current detection timestamps, not hours-old timestamps from queued events.
   DateTime? _sourcePostedAt;
@@ -4446,6 +4830,43 @@ class PaymentDetectionService {
   }
 
   /// Native notification keys use package|notificationId|postTimeMillis|hash.
+  static String _notificationPayloadFingerprint({
+    required String packageName,
+    required String? sender,
+    required String normalizedPayload,
+    String? eventKey,
+  }) {
+    final key = eventKey?.trim();
+    String sourceIdentity;
+    if (key != null && key.isNotEmpty) {
+      final parts = key.split('|');
+      final hasStableNativeSlot = parts.length >= 4 &&
+          int.tryParse(parts[parts.length - 2]) != null;
+      sourceIdentity = hasStableNativeSlot
+          ? parts.take(parts.length - 1).join('|')
+          : key;
+    } else {
+      sourceIdentity =
+          'fallback|${packageName.toLowerCase()}|${sender?.toLowerCase() ?? ''}';
+    }
+    return sha256
+        .convert(utf8.encode('$sourceIdentity|$normalizedPayload'))
+        .toString();
+  }
+
+  @visibleForTesting
+  static String debugNotificationPayloadFingerprint({
+    required String packageName,
+    required String? sender,
+    required String payload,
+    String? eventKey,
+  }) => _notificationPayloadFingerprint(
+    packageName: packageName,
+    sender: sender,
+    normalizedPayload: payload.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim(),
+    eventKey: eventKey,
+  );
+
   @visibleForTesting
   static DateTime? postedAtFromEventKey(String? eventKey) {
     if (eventKey == null) return null;
@@ -4458,19 +4879,51 @@ class PaymentDetectionService {
     return postedAt.isAfter(now) ? now : postedAt;
   }
 
-  void _handleNotification(ServiceNotificationEvent event) {
-    _sourceEventKey = _safe(
+  Future<bool> _handleNotification(ServiceNotificationEvent event) async {
+    final key = _safe(
       () => (event as dynamic).eventKey as String?,
     )?.trim();
+    final emissions = <Future<void>>[];
+    if (key != null && key.isNotEmpty) {
+      _notificationEmissionFutures[key] = emissions;
+    }
+
+    var handled = true;
+    _sourceEventKey = key;
     _sourcePostedAt = postedAtFromEventKey(_sourceEventKey);
     _sourceNativeAnnouncementHandled = event.nativeAnnouncementHandled == true;
     try {
+      // The parser remains synchronous, but every PaymentEvent emission
+      // started by it is captured and awaited below.
       _handleNotificationCore(event);
+    } catch (error, stackTrace) {
+      PdsLogger.e('L1', 'Notification route failed', error, stackTrace);
+      handled = false;
     } finally {
       _sourcePostedAt = null;
       _sourceEventKey = null;
       _sourceNativeAnnouncementHandled = false;
     }
+
+    try {
+      if (emissions.isNotEmpty) {
+        await Future.wait(emissions);
+      }
+    } catch (error, stackTrace) {
+      PdsLogger.e('L1', 'Payment event emission failed', error, stackTrace);
+      handled = false;
+    } finally {
+      if (key != null && key.isNotEmpty) {
+        _notificationEmissionFutures.remove(key);
+        if (!_nativeNotificationHistoryPending.contains(key)) {
+          // No durable payment-history write was started, so there is no
+          // provisional transport identity to retain after classification.
+          _nativeHistoryTransportFingerprints.remove(key);
+          _nativeHistoryPayloadFingerprints.remove(key);
+        }
+      }
+    }
+    return handled;
   }
 
   void _handleNotificationCore(ServiceNotificationEvent event) {
@@ -4552,12 +5005,13 @@ class PaymentDetectionService {
           PdsLogger.d('L1', 'Durable native notification replay suppressed');
           return;
         }
-        _dedupStore[nativeFingerprint] = now.add(
-          PdsConfig.dedupNativeNotificationTtl,
-        );
-        _dedupDirty = true;
-        // Save immediately; the debounced save timer is a fallback only.
-        unawaited(PdsStateStore.saveDedup(_dedupStore));
+        // Persist the transport replay key only after the receipt/history
+        // writer confirms a durable local record. If history fails, the native
+        // event must remain eligible for replay.
+        if (_notificationEmissionFutures.containsKey(nativeEventKey)) {
+          _nativeHistoryTransportFingerprints[nativeEventKey] =
+              nativeFingerprint;
+        }
       }
 
       _recentNotificationPayloads.removeWhere(
@@ -4567,13 +5021,18 @@ class PaymentDetectionService {
           .toLowerCase()
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
-      final notificationFingerprint = sha256
-          .convert(
-            utf8.encode(
-              '${pkg.toLowerCase()}|${notificationSender?.toLowerCase() ?? ''}|$normalizedPayload',
-            ),
-          )
-          .toString();
+      final notificationFingerprint = _notificationPayloadFingerprint(
+        packageName: pkg,
+        sender: notificationSender,
+        normalizedPayload: normalizedPayload,
+        eventKey: nativeEventKey,
+      );
+      if (nativeEventKey != null &&
+          nativeEventKey.isNotEmpty &&
+          _notificationEmissionFutures.containsKey(nativeEventKey)) {
+        _nativeHistoryPayloadFingerprints[nativeEventKey] =
+            notificationFingerprint;
+      }
       final duplicateExpiry =
           _recentNotificationPayloads[notificationFingerprint];
       if (duplicateExpiry != null && duplicateExpiry.isAfter(now)) {
@@ -4716,6 +5175,7 @@ class PaymentDetectionService {
       );
     } catch (e, st) {
       PdsLogger.e('L1', 'Handler error', e, st);
+      rethrow;
     }
   }
 
@@ -4818,6 +5278,23 @@ class PaymentDetectionService {
   // ==========================================================================
   // CORE PIPELINE
   // ==========================================================================
+
+  Future<void> _emitTrackedFromNotification(
+    PaymentEvent event, {
+    bool isBillSettlement = false,
+    bool forceMute = false,
+  }) {
+    final future = _emit(
+      event,
+      isBillSettlement: isBillSettlement,
+      forceMute: forceMute,
+    );
+    final key = event.sourceEventKey?.trim();
+    if (key != null && key.isNotEmpty) {
+      _notificationEmissionFutures[key]?.add(future);
+    }
+    return future;
+  }
 
   void _processText(
     String rawText,
@@ -5069,7 +5546,11 @@ class PaymentDetectionService {
         }
         consumedByUser = true;
         PdsLogger.t('EMIT', 'kind=debit source=$source');
-        unawaited(_emit(tempEvent.copyWith(decision: PaymentDecision.likely)));
+        unawaited(
+          _emitTrackedFromNotification(
+            tempEvent.copyWith(decision: PaymentDecision.likely),
+          ),
+        );
         return;
       }
 
@@ -5469,7 +5950,12 @@ class PaymentDetectionService {
         consumedByUser = true;
         PdsLogger.t('EMIT', 'source=$source decision=${event.decision.name}');
         _pendingBuffer.add(event, voiceSpoken: false);
-        unawaited(_emit(event, isBillSettlement: isBillSettled));
+        unawaited(
+          _emitTrackedFromNotification(
+            event,
+            isBillSettlement: isBillSettled,
+          ),
+        );
         _pendingBuffer.markVoiceSpoken(event.id);
         return;
       }
@@ -5493,7 +5979,11 @@ class PaymentDetectionService {
             'AMBIGUOUS SMS correlation retained as provisional and muted',
           );
           unawaited(
-            _emit(ambiguousEvent, isBillSettlement: false, forceMute: true),
+            _emitTrackedFromNotification(
+              ambiguousEvent,
+              isBillSettlement: false,
+              forceMute: true,
+            ),
           );
           return;
         }
@@ -5523,7 +6013,12 @@ class PaymentDetectionService {
         if (matched != null) matched.emitted = true;
         consumedByUser = true;
         PdsLogger.t('EMIT', 'source=sms decision=${eventToEmit.decision.name}');
-        unawaited(_emit(eventToEmit, isBillSettlement: isBillSettled));
+        unawaited(
+          _emitTrackedFromNotification(
+            eventToEmit,
+            isBillSettlement: isBillSettled,
+          ),
+        );
       }
     } finally {
       if (registeredActiveFingerprint) _activeFingerprints.remove(fp);
@@ -6049,6 +6544,33 @@ class PaymentDetectionService {
         debugPrint(
           '✅ Auto-upgraded likely event to CONFIRMED due to invoice match',
         );
+    }
+
+    final nativeEventKey = finalEvent.sourceEventKey?.trim();
+    if (nativeEventKey != null &&
+        nativeEventKey.isNotEmpty &&
+        _notificationEmissionFutures.containsKey(nativeEventKey)) {
+      // Do not remove the native durable event until the background isolate
+      // confirms that this final event is represented in local payment history.
+      _nativeNotificationHistoryPending.add(nativeEventKey);
+      final sourceIdentity = finalEvent.sourceEventIdentity;
+      final sourceFingerprint = finalEvent.sourceEventFingerprint;
+      if (sourceIdentity != null && sourceIdentity.isNotEmpty) {
+        _nativeHistorySourceIdentities[nativeEventKey] = sourceIdentity;
+      }
+      if (sourceFingerprint != null && sourceFingerprint.isNotEmpty) {
+        _nativeHistorySourceFingerprints[nativeEventKey] = sourceFingerprint;
+      }
+      _nativeHistoryEventIds[nativeEventKey] = finalEvent.id;
+      _nativeHistoryDedupFingerprints[nativeEventKey] = finalEvent.fingerprint;
+      final reference = finalEvent.normalizedReferenceId;
+      if (!finalEvent.hasReferenceConflict &&
+          reference != null &&
+          reference.isNotEmpty) {
+        // Do not roll back an older valid UTR amount when this event is already
+        // marked as a reference conflict.
+        _nativeHistoryReferences[nativeEventKey] = reference;
+      }
     }
 
     _eventCtrl.add(finalEvent);

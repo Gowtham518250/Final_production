@@ -264,48 +264,77 @@ class PaymentAnnouncementService {
     );
   }
 
-  // Last line of defence against one payment being spoken twice by two code
-  // paths in the same isolate: identical text within a few seconds is one
-  // announcement. Genuinely separate payments are normally further apart, and
-  // earlier layers already tell distinct payments apart.
-  static const Duration _identicalSpeechWindow = Duration(seconds: 4);
-  String? _lastSimpleMessage;
-  DateTime? _lastSimpleAt;
+  // A completed payment key is remembered briefly; in-flight callers share
+  // one Future so a retry cannot be mistaken for an already successful speech.
+  static const Duration _sameKeyWindow = Duration(seconds: 4);
+  static const Duration _maxQueueWait = Duration(minutes: 2);
+  final Map<String, DateTime> _recentSpeechKeys = <String, DateTime>{};
+  final Map<String, Future<bool>> _inFlightSpeech =
+      <String, Future<bool>>{};
 
-  void speakSimple(String message, String language) {
-    if (_config.volume <= 0) return;
-    final spokenKey = '$language|' + message.trim();
-    final spokenAt = DateTime.now();
-    if (_lastSimpleMessage == spokenKey &&
-        _lastSimpleAt != null &&
-        spokenAt.difference(_lastSimpleAt!) < _identicalSpeechWindow) {
-      return;
+  /// Completes true only when the speech queue confirms TTS completion.
+  /// False means muted, failed, timed out, expired, or cleared.
+  Future<bool> speakSimple(
+    String message,
+    String language, {
+    String? dedupeKey,
+  }) {
+    if (_config.volume <= 0 || message.trim().isEmpty) {
+      return Future<bool>.value(false);
     }
-    _lastSimpleMessage = spokenKey;
-    _lastSimpleAt = spokenAt;
+
+    final now = DateTime.now();
+    _recentSpeechKeys.removeWhere(
+      (_, at) => now.difference(at) > _sameKeyWindow,
+    );
+
+    if (dedupeKey != null && dedupeKey.isNotEmpty) {
+      final inFlight = _inFlightSpeech[dedupeKey];
+      if (inFlight != null) return inFlight;
+      if (_recentSpeechKeys.containsKey(dedupeKey)) {
+        // This exact payment key completed successfully very recently.
+        return Future<bool>.value(true);
+      }
+    }
+
     final lang = _lang.resolve(language);
-    final calculatedTimeout =
-        _voice.calculateTimeout(message, _config.budgetDeviceTimeoutMultiplier);
-    // Payment messages are short. Bound background TTS wait so a locked-screen
-    // callback cannot leave hours of announcements queued until the user opens
-    // Retail Mind. The audible Android notification is the immediate fallback.
+    final calculatedTimeout = _voice.calculateTimeout(
+      message,
+      _config.budgetDeviceTimeoutMultiplier,
+    );
     final timeout = calculatedTimeout.clamp(6, 12).toInt();
+    final completer = Completer<bool>();
+    final future = completer.future;
+
+    if (dedupeKey != null && dedupeKey.isNotEmpty) {
+      _inFlightSpeech[dedupeKey] = future;
+    }
+
     _queue.enqueue(QueueItem(
       priority: AnnouncementPriority.low,
       ttsText: message,
       timeoutSec: timeout,
+      expiresAt: now.add(_maxQueueWait),
+      onResult: (success) {
+        if (!completer.isCompleted) completer.complete(success);
+        if (dedupeKey != null && dedupeKey.isNotEmpty) {
+          _inFlightSpeech.remove(dedupeKey);
+          if (success) {
+            _recentSpeechKeys[dedupeKey] = DateTime.now();
+          } else {
+            _recentSpeechKeys.remove(dedupeKey);
+          }
+        }
+      },
       onTimeout: () async {
-        // Stop any native TTS call that was waiting on a completion callback
-        // and discard old low-priority payment speech. Do not replay a backlog
-        // of stale payments after the phone unlocks.
-        // Do not let a broken platform stop callback block timeout recovery.
         await _voice
             .stop()
             .timeout(const Duration(seconds: 2), onTimeout: () {});
-        _queue.clearLowPriority();
       },
       task: () => _voice.speakRaw(message, lang.locale),
     ));
+
+    return future;
   }
 
   void queryDailyTotal(String language) {

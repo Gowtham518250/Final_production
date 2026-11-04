@@ -548,7 +548,14 @@ class VoiceEngine {
             _log.w('TTS speak timed out after 8s: "$text"');
             _setSpeaking(false);
             _stopAmpTimer();
-            return 0;
+            // Stop a possibly late native utterance before the payment is
+            // escalated to an audible fallback notification.
+            unawaited(
+              _tts.stop().catchError((Object error) {
+                _log.w('Could not stop timed-out TTS: $error');
+              }),
+            );
+            throw TimeoutException('TTS playback did not complete within 8 seconds.');
           },
         );
         return;

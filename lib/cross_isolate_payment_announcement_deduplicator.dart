@@ -197,7 +197,9 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     if (resolution.isEcho) {
       final claimChannel = resolution.claimChannel;
       final index = stored.indexWhere((e) => e['id'] == resolution.matchedId);
-      if (index >= 0 && resolution.reason == 'same_notification_update') {
+      if (index >= 0 &&
+          (resolution.reason == 'same_notification_update' ||
+              resolution.reason == 'same_notification_stream_amount')) {
         stored[index]['seenAt'] = now.toIso8601String();
         stored[index]['notificationAt'] =
             event.sourceTimestamp?.toIso8601String();
@@ -246,6 +248,38 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     }
     await prefs.setString(_storageKey, jsonEncode(stored));
     return false;
+  }
+
+  /// Roll back a notification claim when the payment-history write fails.
+  /// This makes the durable native event eligible for replay; it does not
+  /// delete payment history or alter the financial ledger.
+  static Future<void> releaseSourceFingerprint(String? fingerprint) {
+    final value = fingerprint?.trim();
+    if (value == null || value.isEmpty) return Future<void>.value();
+
+    final completer = Completer<void>();
+    _tail = _tail.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.reload();
+        final stored = _readEntries(prefs.getString(_storageKey));
+        stored.removeWhere(
+          (entry) =>
+              (entry['sourceEventFingerprint'] ?? '').toString() == value,
+        );
+        await prefs.setString(_storageKey, jsonEncode(stored));
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not release failed payment announcement claim',
+          name: 'PAYMENT_DEDUP',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      } finally {
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    return completer.future;
   }
 
   static List<Map<String, dynamic>> _readEntries(String? raw) {

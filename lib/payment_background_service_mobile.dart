@@ -85,46 +85,98 @@ void _listenForBackgroundPayments(FlutterBackgroundService service) {
 }
 
 
+Future<PaymentEvent?> _persistPaymentHistory(
+  PaymentEvent event,
+  PaymentDetectionService pds,
+) async {
+  var handledEvent = event;
+  Object? lastError;
+
+  // Retry local writes before leaving the native notification unacknowledged.
+  // This is deliberately not a blind success path: only a completed local
+  // history write or a duplicate/conflict already represented by history
+  // returns a non-null event.
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    try {
+      handledEvent =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
+
+      final requiresIncomingReceiptHistory =
+          OnlinePaymentHistoryService.isIncomingCredit(handledEvent) &&
+          handledEvent.amount.isFinite &&
+          handledEvent.amount > 0 &&
+          !handledEvent.isFailed &&
+          handledEvent.decision != PaymentDecision.rejected;
+      if (requiresIncomingReceiptHistory) {
+        if (!handledEvent.isDuplicate && !handledEvent.hasReferenceConflict) {
+          await OnlinePaymentHistoryService.recordIncomingPayment(handledEvent);
+        }
+        final isDurablyRepresented =
+            await OnlinePaymentHistoryService.hasDurableRecordForEvent(
+              handledEvent,
+            );
+        if (!isDurablyRepresented) {
+          throw StateError(
+            'Incoming payment has no durable canonical history row yet.',
+          );
+        }
+      }
+      // Outgoing debits and rejected/failed alerts are detector events, not
+      // incoming customer receipts. They are routed to the detector UI/voice
+      // path but are intentionally excluded from this receipt ledger.
+
+      try {
+        final savedHistory = await OnlinePaymentHistoryService.load();
+        await pds.syncDedupWindowsFromPaymentHistory(savedHistory);
+      } catch (syncError) {
+        // Dedup-window refresh is secondary; the durable receipt write above
+        // is the acknowledgement gate.
+        debugPrint('Could not refresh payment review cooldowns: $syncError');
+      }
+      return handledEvent;
+    } catch (error, stackTrace) {
+      lastError = error;
+      debugPrint(
+        'Payment history write attempt $attempt/3 failed: $error\\n$stackTrace',
+      );
+      if (attempt < 3) {
+        await Future<void>.delayed(
+          Duration(milliseconds: 250 * attempt),
+        );
+      }
+    }
+  }
+
+  debugPrint(
+    'Payment history could not be made durable. Native event remains queued. '
+    'Last error: $lastError',
+  );
+  return null;
+}
+
 Future<void> _persistPaymentHistoryThenForward(
   ServiceInstance service,
   PaymentEvent event,
   PaymentDetectionService pds,
 ) async {
-  var forwardedEvent = event;
-  var historyHandled = false;
-  try {
-    forwardedEvent =
-        await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
+  final persistedEvent = await _persistPaymentHistory(event, pds);
+  final historyHandled = persistedEvent != null;
 
-    // An exact reference duplicate stays attached to the original history
-    // row. A conflicting reference is already moved to CONFLICT_REVIEW by
-    // annotateKnownReferenceState. Don't overwrite either state with the
-    // second notification's pending status.
-    if (!forwardedEvent.isDuplicate &&
-        !forwardedEvent.hasReferenceConflict) {
-      await OnlinePaymentHistoryService.recordIncomingPayment(forwardedEvent);
-    }
-    // Reconcile the replay cache against durable payment status. Pending
-    // references get a six-hour review cooldown; confirmed/rejected references
-    // keep the longer suppression window, including across service restarts.
-    try {
-      final savedHistory = await OnlinePaymentHistoryService.load();
-      await PaymentDetectionService()
-          .syncDedupWindowsFromPaymentHistory(savedHistory);
-    } catch (syncError) {
-      debugPrint('⚠️ Could not refresh payment review cooldowns: $syncError');
-    }
+  // Acknowledge only after the history writer confirms that the event is
+  // durable (or already represented by a matching persistent reference row).
+  await pds.completeNativeNotificationHistory(
+    event.sourceEventKey,
+    persisted: historyHandled,
+  );
 
-    // Even when this exact reference is already present or conflicted, this
-    // isolate has checked persistent history; don't repeat the same I/O in UI.
-    historyHandled = true;
-  } catch (error, stackTrace) {
-    debugPrint('⚠️ Could not save background payment receipt: $error');
-    debugPrint(stackTrace.toString());
+  if (persistedEvent == null) {
+    // Do not forward a transient-only event as if it had been saved. The
+    // native listener retains it and will replay when notification routing is
+    // reattached after recovery.
+    return;
   }
 
-  // Carry durable reference state across isolates. This prevents a late
-  // Truecaller/PhonePe/SMS replay from reopening confirmation after restart.
+  var forwardedEvent = persistedEvent;
   if (forwardedEvent.hasReferenceConflict) {
     forwardedEvent = forwardedEvent.copyWith(
       hasReferenceConflict: true,
@@ -139,14 +191,30 @@ Future<void> _persistPaymentHistoryThenForward(
       verificationStatus: PaymentVerificationStatus.unverified,
     );
   }
-  // Persist the alert after history has classified this event, so a replay
-  // marked duplicate by durable history never creates a fresh background alert.
+
   if (!forwardedEvent.nativeAnnouncementHandled) {
     await _postBackgroundPaymentAlert(pds, forwardedEvent);
   }
   final payload = forwardedEvent.toJson();
-  payload['history_handled'] = historyHandled;
+  payload['history_handled'] = true;
   service.invoke('payment_detected', payload);
+}
+
+Future<void> _persistPaymentHistoryFallback(
+  PaymentEvent event,
+  PaymentDetectionService pds,
+) async {
+  final persistedEvent = await _persistPaymentHistory(event, pds);
+  final historyHandled = persistedEvent != null;
+  await pds.completeNativeNotificationHistory(
+    event.sourceEventKey,
+    persisted: historyHandled,
+  );
+  if (!historyHandled || persistedEvent == null) return;
+
+  if (!persistedEvent.nativeAnnouncementHandled) {
+    await _postBackgroundPaymentAlert(pds, persistedEvent);
+  }
 }
 
 // ───────────────────────── Background alert + outage tracking ───────────────
@@ -155,6 +223,37 @@ const String _kHeartbeatMs = 'pds_service_heartbeat_ms';
 const String _kOutageNotice = 'pds_service_outage_notice';
 const Duration _heartbeatEvery = Duration(minutes: 5);
 const Duration _outageThreshold = Duration(minutes: 20);
+
+/// Prevent concurrent failed-TTS callbacks from posting duplicate sounding alerts.
+final Set<String> _audibleFallbackEventIds = <String>{};
+
+void _wirePaymentSpeech(PaymentDetectionService pds) {
+  pds.speaker = (text, dedupeKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final language = prefs.getString('payment_sound_lang') ?? 'en-US';
+      return await PaymentAnnouncementService().speakSimple(
+        text,
+        language,
+        dedupeKey: dedupeKey,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Payment TTS failed: $error\\n$stackTrace');
+      return false;
+    }
+  };
+
+  pds.onSpeakFailed = (text, event) {
+    if (event == null) return;
+    unawaited(
+      _postBackgroundPaymentAlert(
+        pds,
+        event,
+        forceAudible: true,
+      ),
+    );
+  };
+}
 
 Future<void> _ensureAlertPlugin() async {
   if (_alertPluginReady) return;
@@ -177,10 +276,20 @@ String _clock(DateTime time) {
 /// TTS when it is enabled and use a sounding notification when voice is off.
 Future<void> _postBackgroundPaymentAlert(
   PaymentDetectionService pds,
-  PaymentEvent event,
-) async {
+  PaymentEvent event, {
+  bool forceAudible = false,
+}) async {
   if (!Platform.isAndroid || event.isDuplicate || event.isFailed) return;
-  if (_backgroundAlertDeduplicator.shouldSuppress(event)) return;
+
+  if (forceAudible) {
+    if (!_audibleFallbackEventIds.add(event.id)) return;
+    while (_audibleFallbackEventIds.length > 200) {
+      _audibleFallbackEventIds.remove(_audibleFallbackEventIds.first);
+    }
+  } else {
+    if (_audibleFallbackEventIds.contains(event.id)) return;
+    if (_backgroundAlertDeduplicator.shouldSuppress(event)) return;
+  }
 
   try {
     final lateAt = pds.originalTimeIfLate(event.id);
@@ -233,11 +342,12 @@ Future<void> _postBackgroundPaymentAlert(
     // Unverified incoming credits need an audible fallback: a background TTS
     // engine may be unavailable even though voice is enabled in preferences.
     // The alert remains deduplicated per payment by _backgroundAlertDeduplicator.
-    final audible = shouldUseAudiblePaymentAlert(
-      isLate: lateAt != null,
-      voiceEnabled: PdsConfig.isVoiceEnabled,
-      hasConflict: conflict,
-    );
+    final audible = forceAudible ||
+        shouldUseAudiblePaymentAlert(
+          isLate: lateAt != null,
+          voiceEnabled: PdsConfig.isVoiceEnabled,
+          hasConflict: conflict,
+        );
     final channelId = audible
         ? 'payment_detection_alerts_audible'
         : 'payment_detection_alerts_silent';
@@ -259,8 +369,16 @@ Future<void> _postBackgroundPaymentAlert(
         showBadge: false,
       ),
     );
+    final normalNotificationId = event.id.hashCode & 0x7fffffff;
+    if (forceAudible) {
+      // Replace an earlier silent heads-up with a separate sounding alert.
+      await _backgroundAlertPlugin.cancel(normalNotificationId);
+    }
+    final notificationId = forceAudible
+        ? (normalNotificationId ^ 0x40000000)
+        : normalNotificationId;
     await _backgroundAlertPlugin.show(
-      event.id.hashCode & 0x7fffffff,
+      notificationId,
       title,
       body,
       NotificationDetails(
@@ -283,7 +401,8 @@ Future<void> _postBackgroundPaymentAlert(
       '🔔 Background payment alert posted (late=${lateAt != null}, audible=$audible)',
     );
   } catch (error, stackTrace) {
-    debugPrint('⚠️ Background payment alert failed: $error\n$stackTrace');
+    if (forceAudible) _audibleFallbackEventIds.remove(event.id);
+    debugPrint('⚠️ Background payment alert failed: $error\\n$stackTrace');
   }
 }
 
@@ -409,11 +528,7 @@ Future<bool> onStart(ServiceInstance service) async {
     PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
-    pds.onSpeak = (text) async {
-      final prefs = await SharedPreferences.getInstance();
-      final lang = prefs.getString('payment_sound_lang') ?? 'en-US';
-      PaymentAnnouncementService().speakSimple(text, lang);
-    };
+    _wirePaymentSpeech(pds);
 
     await _paymentForwardSubscription?.cancel();
     _paymentForwardSubscription = pds.onPaymentDetected.listen((event) {
@@ -695,11 +810,12 @@ Future<void> _initializeFallback() async {
     PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
-    pds.onSpeak = (text) async {
-      final prefs = await SharedPreferences.getInstance();
-      final lang = prefs.getString('payment_sound_lang') ?? 'en-US';
-      PaymentAnnouncementService().speakSimple(text, lang);
-    };
+    _wirePaymentSpeech(pds);
+
+    await _paymentForwardSubscription?.cancel();
+    _paymentForwardSubscription = pds.onPaymentDetected.listen((event) {
+      unawaited(_persistPaymentHistoryFallback(event, pds));
+    });
 
     List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
     try {

@@ -114,6 +114,157 @@ class SalesDedupHelper {
     return total > 0 || items.isNotEmpty;
   }
 
+  static String _lineName(Map<String, dynamic> line) =>
+      (line['product_name'] ??
+              line['product'] ??
+              line['item'] ??
+              line['description'] ??
+              line['name'] ??
+              '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+  static double _lineNumber(Object? value, [double fallback = 0]) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static bool _sameBillLine(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+  ) {
+    final leftId =
+        (left['product_id'] ?? left['id'] ?? '').toString().trim();
+    final rightId =
+        (right['product_id'] ?? right['id'] ?? '').toString().trim();
+    final leftName = _lineName(left);
+    final rightName = _lineName(right);
+    final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
+        ? leftId == rightId
+        : leftName.isNotEmpty && leftName == rightName;
+    if (!sameProduct) return false;
+
+    final leftQty = _lineNumber(left['quantity'] ?? left['qty'], 1);
+    final rightQty = _lineNumber(right['quantity'] ?? right['qty'], 1);
+    if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3)) {
+      return false;
+    }
+    final leftPriceRaw = left['unit_price'] ?? left['price'];
+    final rightPriceRaw = right['unit_price'] ?? right['price'];
+    if (leftPriceRaw != null && rightPriceRaw != null) {
+      if (_lineNumber(leftPriceRaw).toStringAsFixed(2) !=
+          _lineNumber(rightPriceRaw).toStringAsFixed(2)) {
+        return false;
+      }
+    }
+    for (final field in const [
+      'discount',
+      'discount_amount',
+      'discount_rate',
+      'tax',
+      'tax_amount',
+      'tax_rate',
+      'gst_rate',
+    ]) {
+      final a = left[field];
+      final b = right[field];
+      if (a == null || b == null) continue;
+      if (_lineNumber(a, -1) != _lineNumber(b, -1)) return false;
+    }
+    return true;
+  }
+
+  static List<Map<String, dynamic>> _saleLineSnapshot(
+    Map<String, dynamic> sale,
+  ) {
+    final lines = <Map<String, dynamic>>[];
+
+    void addSnapshot(dynamic raw) {
+      if (raw is! List || raw.isEmpty) return;
+      final incoming = raw
+          .whereType<Map>()
+          .map((line) => Map<String, dynamic>.from(line))
+          .toList();
+      if (lines.isEmpty) {
+        lines.addAll(incoming);
+        return;
+      }
+
+      final matched = <int>{};
+      for (final line in incoming) {
+        var matchIndex = -1;
+        for (var i = 0; i < lines.length; i++) {
+          if (matched.contains(i)) continue;
+          if (_sameBillLine(lines[i], line)) {
+            matchIndex = i;
+            break;
+          }
+        }
+        if (matchIndex < 0) {
+          lines.add(line);
+        } else {
+          matched.add(matchIndex);
+          lines[matchIndex] = <String, dynamic>{...lines[matchIndex], ...line}
+            ..removeWhere((key, value) => value == null);
+        }
+      }
+    }
+
+    final itemList = sale['items'];
+    final lineItemList = sale['line_items'];
+    addSnapshot(
+      lineItemList is List && lineItemList.isNotEmpty
+          ? lineItemList
+          : itemList,
+    );
+    if (itemList is List &&
+        lineItemList is List &&
+        !identical(itemList, lineItemList)) {
+      addSnapshot(
+        identical(lineItemList, itemList) ? const [] : itemList,
+      );
+    }
+
+    if (lines.isEmpty) {
+      final name = _lineName(sale);
+      if (name.isNotEmpty || sale['product_id'] != null) {
+        lines.add(<String, dynamic>{
+          ...sale,
+          if (name.isNotEmpty) 'product_name': name,
+        });
+      }
+    }
+    return lines;
+  }
+
+  static List<Map<String, dynamic>> _mergeBillLineSnapshots(
+    Map<String, dynamic> existing,
+    Map<String, dynamic> incoming,
+  ) {
+    final result = _saleLineSnapshot(existing);
+    final additions = _saleLineSnapshot(incoming);
+    final matched = <int>{};
+    for (final line in additions) {
+      var matchIndex = -1;
+      for (var i = 0; i < result.length; i++) {
+        if (matched.contains(i)) continue;
+        if (_sameBillLine(result[i], line)) {
+          matchIndex = i;
+          break;
+        }
+      }
+      if (matchIndex < 0) {
+        result.add(Map<String, dynamic>.from(line));
+      } else {
+        matched.add(matchIndex);
+        result[matchIndex] = <String, dynamic>{...result[matchIndex], ...line}
+          ..removeWhere((key, value) => value == null);
+      }
+    }
+    return result;
+  }
+
   /// Remove only true duplicate records. Stable business identities always win;
   /// content similarity alone must NEVER merge two legitimate sales.
   static List<Map<String, dynamic>> dedupeBills(List<dynamic> raw) {
@@ -124,7 +275,9 @@ class SalesDedupHelper {
     for (final entry in raw) {
       if (entry is! Map) continue;
       final sale = Map<String, dynamic>.from(entry);
-      if (!isValidBill(sale)) continue;
+      // Preserve incomplete but identified records until reconciliation. The
+      // analytics layer filters invalid values; storage must not erase them.
+
 
       if (sale['status']?.toString().toUpperCase() == 'CANCELLED') {
         cancelled.add(sale);
@@ -184,6 +337,7 @@ class SalesDedupHelper {
       for (final incomingRaw in group.skip(1)) {
         final incoming = Map<String, dynamic>.from(incomingRaw);
         final previous = Map<String, dynamic>.from(merged);
+        final reconciledLines = _mergeBillLineSnapshots(merged, incoming);
 
         if (_preferIncomingBill(merged, incoming)) {
           merged = <String, dynamic>{...merged, ...incoming};
@@ -205,6 +359,10 @@ class SalesDedupHelper {
               merged[entry.key] = value;
             }
           }
+        }
+        if (reconciledLines.isNotEmpty) {
+          merged['items'] = reconciledLines;
+          merged['line_items'] = reconciledLines;
         }
       }
       deduped.add(merged);

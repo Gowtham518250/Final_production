@@ -9,62 +9,96 @@ class TransactionReconciliationHelper {
     return eventTime?.toUtc().toIso8601String();
   }
 
-  /// Deduplicate only records that share a stable identity alias.
-  ///
-  /// Sale content (same amount/items/time) is never enough to merge records:
-  /// two genuine purchases may have identical contents.
+  /// Deduplicate only records sharing a stable identity alias.
+  /// Equal content never proves that two retail transactions are identical.
+  /// Union all aliases so bridge rows connect all mirrors of one bill.
   static List<Map<String, dynamic>> dedupe(
     List<Map<String, dynamic>> transactions,
   ) {
-    final result = <Map<String, dynamic>>[];
-
-    Map<String, dynamic> identityRow(Map<String, dynamic> transaction) {
-      final raw = transaction['raw'];
-      if (raw is Map) return Map<String, dynamic>.from(raw);
-      return transaction;
+    Map<String, dynamic> identityRow(Map<String, dynamic> row) {
+      final raw = row['raw'];
+      return raw is Map ? Map<String, dynamic>.from(raw) : row;
     }
 
-    for (final incoming in transactions) {
-      final incomingRaw = identityRow(incoming);
-      var matchIndex = -1;
+    Set<String> tokens(Map<String, dynamic> row) {
+      final result = InvoiceDedupHelper.identityTokens(identityRow(row));
+      final id = row['id']?.toString().trim() ?? '';
+      final type = (row['type'] ?? '').toString().trim().toLowerCase();
+      if (id.isNotEmpty && type.isNotEmpty && id.toLowerCase() != 'null') {
+        result.add('display:$type:${id.toLowerCase()}');
+      }
+      return result;
+    }
 
-      for (var index = 0; index < result.length; index++) {
-        final existing = result[index];
-        final existingRaw = identityRow(existing);
-        final existingId = existing['id']?.toString().trim() ?? '';
-        final incomingId = incoming['id']?.toString().trim() ?? '';
-        final sameDisplayId = existingId.isNotEmpty && existingId == incomingId;
-        if (sameDisplayId ||
-            InvoiceDedupHelper.sameInvoice(existingRaw, incomingRaw)) {
-          matchIndex = index;
-          break;
+    if (transactions.length < 2) {
+      return transactions.map((row) => Map<String, dynamic>.from(row)).toList();
+    }
+
+    final parents = List<int>.generate(transactions.length, (i) => i);
+    int root(int index) {
+      var current = index;
+      while (parents[current] != current) {
+        parents[current] = parents[parents[current]];
+        current = parents[current];
+      }
+      return current;
+    }
+    void union(int a, int b) {
+      final left = root(a);
+      final right = root(b);
+      if (left != right) parents[right] = left;
+    }
+
+    final owner = <String, int>{};
+    final rowTokens = <int, Set<String>>{};
+    for (var i = 0; i < transactions.length; i++) {
+      final currentTokens = tokens(transactions[i]);
+      rowTokens[i] = currentTokens;
+      for (final token in currentTokens) {
+        final previous = owner[token];
+        if (previous == null) {
+          owner[token] = i;
+        } else {
+          union(i, previous);
         }
       }
-
-      if (matchIndex < 0) {
-        result.add(Map<String, dynamic>.from(incoming));
-        continue;
-      }
-
-      final existing = result[matchIndex];
-      final mergedRaw = Map<String, dynamic>.from(identityRow(existing));
-      for (final entry in incomingRaw.entries) {
-        final value = entry.value;
-        if (value == null) continue;
-        if (value is String && value.trim().isEmpty) continue;
-        mergedRaw[entry.key] = value;
-      }
-
-      // Incoming records are loaded in category order with invoices last.
-      // Prefer the invoice wrapper when a local sale and server invoice mirror
-      // match, while preserving aliases from both sides in mergedRaw.
-      result[matchIndex] = <String, dynamic>{
-        ...existing,
-        ...incoming,
-        'raw': mergedRaw,
-      };
     }
 
+    final groups = <int, List<int>>{};
+    final anonymous = <int>[];
+    for (var i = 0; i < transactions.length; i++) {
+      if (rowTokens[i]!.isEmpty) {
+        anonymous.add(i);
+      } else {
+        groups.putIfAbsent(root(i), () => <int>[]).add(i);
+      }
+    }
+
+    final result = <Map<String, dynamic>>[];
+    for (final group in groups.values) {
+      var merged = Map<String, dynamic>.from(transactions[group.first]);
+      for (final index in group.skip(1)) {
+        final incoming = transactions[index];
+        final raw = <String, dynamic>{...identityRow(merged)};
+        for (final entry in identityRow(incoming).entries) {
+          final value = entry.value;
+          if (value == null || (value is String && value.trim().isEmpty)) {
+            continue;
+          }
+          raw[entry.key] = value;
+        }
+        merged = <String, dynamic>{
+          ...merged,
+          ...incoming,
+          'raw': raw,
+        };
+      }
+      result.add(merged);
+    }
+
+    for (final index in anonymous) {
+      result.add(Map<String, dynamic>.from(transactions[index]));
+    }
     return result;
   }
 }

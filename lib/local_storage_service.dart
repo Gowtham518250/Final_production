@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'inventory_stock_helper.dart';
 import 'sales_dedup_helper.dart';
+import 'cache_consistency_service.dart';
 import 'invoice_dedup_helper.dart';
 import 'stored_sale.dart';
 import 'payment_idempotency_ledger.dart';
@@ -1853,6 +1854,9 @@ class LocalStorageService {
       final customers = await loadLocalCustomers();
       final invoices = await loadLocalInvoices();
       final inventory = await loadInventory();
+      final purchaseOrders = await loadPurchaseOrders();
+      final expenses = await loadExpenses();
+      final khataBalances = await loadKhataBalances();
       final prefs = await SharedPreferences.getInstance();
 
       final Map<String, dynamic> backupData = {
@@ -1865,6 +1869,9 @@ class LocalStorageService {
         'customers': customers,
         'invoices': invoices,
         'inventory': inventory,
+        'purchase_orders': purchaseOrders,
+        'expenses': expenses,
+        'khata_balances': khataBalances,
         'scoped_preferences': prefs
             .getKeys()
             .where((k) => !k.contains('token') && !k.contains('password'))
@@ -1893,54 +1900,212 @@ class LocalStorageService {
 
   static Future<bool> importSecureBackup(String jsonPayload) async {
     try {
-      final Map<String, dynamic> backupData = jsonDecode(jsonPayload);
-
-      final sales = backupData['sales'] as List<dynamic>? ?? [];
-      final products = backupData['products'] as List<dynamic>? ?? [];
-      final backendProducts =
-          backupData['backend_products'] as List<dynamic>? ?? [];
-      final customers = backupData['customers'] as List<dynamic>? ?? [];
-      final invoices = backupData['invoices'] as List<dynamic>? ?? [];
-      final inventory = backupData['inventory'] as List<dynamic>? ?? [];
+      final decoded = jsonDecode(jsonPayload);
+      if (decoded is! Map) {
+        throw const FormatException('Backup root must be a JSON object.');
+      }
+      final backupData = Map<String, dynamic>.from(decoded);
 
       final expectedUser = await _getUserId();
+      if (expectedUser == null || expectedUser <= 0) {
+        throw StateError('Log in before restoring a user-scoped backup.');
+      }
       final backupUser = int.tryParse(backupData['user_id']?.toString() ?? '');
-      if (expectedUser != null &&
-          backupUser != null &&
-          expectedUser != backupUser) {
-        throw Exception('Backup belongs to a different account');
+      if (backupUser == null || backupUser <= 0) {
+        throw const FormatException(
+          'Backup does not contain a verifiable account ID.',
+        );
+      }
+      if (backupUser != expectedUser) {
+        throw StateError('Backup belongs to a different account.');
       }
 
-      final salesBox = await _getBox(_salesBoxBase, encrypted: true);
-      final productsBox = await _getBox(_productsBoxBase, encrypted: true);
-      final customersBox = await _getBox(_customersBoxBase, encrypted: true);
-
-      await salesBox.clear();
-      await productsBox.clear();
-      await customersBox.clear();
-
-      await salesBox.put('all_sales', sales);
-
-      for (var p in products) {
-        if (p is Map && p.containsKey('product_id')) {
-          await productsBox.put(p['product_id'], p);
-        } else if (p is Map && p.containsKey('barcode')) {
-          await productsBox.put(p['barcode'], p);
+      // Validate each included collection before the first write. A missing
+      // key indicates an older backup schema, not an empty dataset.
+      List<dynamic> readRecordList(String key) {
+        if (!backupData.containsKey(key)) return <dynamic>[];
+        final raw = backupData[key];
+        if (raw is! List) {
+          throw FormatException('Backup field $key must be a list.');
         }
+        final records = <dynamic>[];
+        for (var index = 0; index < raw.length; index++) {
+          final row = raw[index];
+          if (row is! Map) {
+            throw FormatException(
+              'Backup field $key has an invalid record at index $index.',
+            );
+          }
+          records.add(Map<String, dynamic>.from(row));
+        }
+        return records;
       }
 
-      await customersBox.put('customers', customers);
-      final backendProductsBox = await _getBox(
-        _productsBoxBase,
-        encrypted: true,
-      );
-      await backendProductsBox.put('backend_products', backendProducts);
-      final invoicesBox = await _getBox(_invoicesBoxBase, encrypted: true);
-      await invoicesBox.put('all_invoices', invoices);
-      final inventoryBox = await _getBox(_inventoryBoxBase, encrypted: true);
-      await inventoryBox.put('all_inventory', inventory);
+      Map<String, dynamic> readLocalProducts() {
+        if (!backupData.containsKey('products')) {
+          return <String, dynamic>{};
+        }
+        final raw = backupData['products'];
+        if (raw is Map) return Map<String, dynamic>.from(raw);
+        // Earlier backup formats stored local products as a list.
+        if (raw is List) {
+          final result = <String, dynamic>{};
+          for (var index = 0; index < raw.length; index++) {
+            final row = raw[index];
+            if (row is! Map) {
+              throw FormatException(
+                'Backup products has an invalid record at index $index.',
+              );
+            }
+            final product = Map<String, dynamic>.from(row);
+            final key = (product['product_id'] ??
+                    product['id'] ??
+                    product['barcode'] ??
+                    product['sku'] ??
+                    '')
+                .toString()
+                .trim();
+            if (key.isEmpty) {
+              throw FormatException(
+                'Backup product at index $index has no stable key.',
+              );
+            }
+            result[key] = product;
+          }
+          return result;
+        }
+        throw const FormatException(
+          'Backup field products must be an object or a list.',
+        );
+      }
 
-      if (kDebugMode) debugPrint('✅ Backup imported successfully');
+      Map<String, double> readKhataBalances() {
+        if (!backupData.containsKey('khata_balances')) {
+          return <String, double>{};
+        }
+        final raw = backupData['khata_balances'];
+        if (raw is! Map) {
+          throw const FormatException(
+            'Backup field khata_balances must be an object.',
+          );
+        }
+        final result = <String, double>{};
+        for (final entry in raw.entries) {
+          final value = entry.value;
+          final parsed = value is num
+              ? value.toDouble()
+              : double.tryParse(value?.toString() ?? '');
+          if (parsed == null || !parsed.isFinite) {
+            throw FormatException(
+              'Backup contains an invalid Khata balance for ' +
+                  entry.key.toString(),
+            );
+          }
+          result[entry.key.toString()] = parsed;
+        }
+        return result;
+      }
+
+      final sales = readRecordList('sales');
+      final backendProducts = readRecordList('backend_products');
+      final customers = readRecordList('customers');
+      final invoices = readRecordList('invoices');
+      final inventory = readRecordList('inventory');
+      final purchaseOrders = readRecordList('purchase_orders');
+      final expenses = readRecordList('expenses');
+      final products = readLocalProducts();
+      final backupBalances = readKhataBalances();
+
+      // Restore additively and idempotently. Never clear a live box as part of
+      // a multi-box restore; an interrupted restore must not erase business data.
+      if (backupData.containsKey('sales')) {
+        final existing = await loadSales();
+        await saveSales(<dynamic>[...existing, ...sales]);
+      }
+
+      if (backupData.containsKey('products')) {
+        final existing = await loadLocalProducts();
+        await saveLocalProducts(<String, dynamic>{...products, ...existing});
+      }
+
+      if (backupData.containsKey('backend_products')) {
+        final existing = await loadBackendProducts();
+        final merged = CacheConsistencyService.mergeLists(
+          existing,
+          backendProducts,
+          dataset: 'inventory',
+        );
+        await saveBackendProducts(merged);
+      }
+
+      if (backupData.containsKey('customers')) {
+        final existing = await loadLocalCustomers();
+        final merged = CacheConsistencyService.mergeLists(
+          existing,
+          customers,
+          dataset: 'customers',
+        );
+        await saveLocalCustomers(merged);
+      }
+
+      if (backupData.containsKey('invoices')) {
+        // Normal invoice reads use manual_invoices. Migrate any legacy rows
+        // from all_invoices and write through the canonical storage method.
+        final invoiceBox = await _getBox(_invoicesBoxBase);
+        final legacy = invoiceBox.get('all_invoices', defaultValue: const []);
+        final legacyRows = legacy is List
+            ? legacy.whereType<Map>().map(
+                (row) => Map<String, dynamic>.from(row),
+              ).toList()
+            : <Map<String, dynamic>>[];
+        await saveLocalInvoices(<dynamic>[...legacyRows, ...invoices]);
+      }
+
+      if (backupData.containsKey('inventory')) {
+        final existing = await loadInventory();
+        final merged = CacheConsistencyService.mergeLists(
+          existing,
+          inventory,
+          dataset: 'inventory',
+        );
+        await saveInventory(merged);
+      }
+
+      if (backupData.containsKey('purchase_orders')) {
+        final existing = await loadPurchaseOrders();
+        final merged = CacheConsistencyService.mergeLists(
+          existing,
+          purchaseOrders,
+          dataset: 'purchase_orders',
+        );
+        await savePurchaseOrders(merged);
+      }
+
+      if (backupData.containsKey('expenses')) {
+        final existing = await loadExpenses();
+        final merged = CacheConsistencyService.mergeLists(
+          existing,
+          expenses,
+          dataset: 'expenses',
+        );
+        await saveExpenses(merged);
+      }
+
+      if (backupData.containsKey('khata_balances')) {
+        final existing = await loadKhataBalances();
+        // Existing device values take precedence; backup fills missing keys.
+        await saveKhataBalances(<String, double>{
+          ...backupBalances,
+          ...existing,
+        });
+      }
+
+      if (kDebugMode) {
+        debugPrint(
+          '✅ Additive backup import completed for account ' +
+              expectedUser.toString(),
+        );
+      }
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Backup import failed: $e');
@@ -1953,33 +2118,11 @@ class LocalStorageService {
     List<dynamic> localLedger,
     List<dynamic> cloudLedger,
   ) {
-    final Map<String, dynamic> merged = {};
-
-    // Add local records
-    for (var item in localLedger) {
-      final id = item['id']?.toString() ?? item['invoice_id']?.toString();
-      if (id != null) merged[id] = item;
-    }
-
-    // Merge cloud records using Last Write Wins
-    for (var cloudItem in cloudLedger) {
-      final id =
-          cloudItem['id']?.toString() ?? cloudItem['invoice_id']?.toString();
-      if (id != null) {
-        if (merged.containsKey(id)) {
-          final localTime = merged[id]['last_updated'] ?? 0;
-          final cloudTime = cloudItem['last_updated'] ?? 0;
-
-          if (cloudTime > localTime) {
-            merged[id] = cloudItem; // Cloud is newer
-          }
-        } else {
-          merged[id] = cloudItem; // Cloud has new record
-        }
-      }
-    }
-
-    return merged.values.toList();
+    return CacheConsistencyService.mergeLists(
+      localLedger,
+      cloudLedger,
+      dataset: 'invoices',
+    );
   }
 
   // =========== REFUND WORKFLOW ===========

@@ -1,18 +1,26 @@
 package notification.listener.service;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.RingtoneManager;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -40,6 +48,10 @@ final class NativePaymentAnnouncementFallback {
     private static final Set<String> SCHEDULED =
             Collections.synchronizedSet(new HashSet<String>());
     private static final List<SpeakRequest> WAITING = new ArrayList<SpeakRequest>();
+    private static final Map<String, SpeakRequest> IN_FLIGHT =
+            new HashMap<String, SpeakRequest>();
+    private static final Set<String> RETRIED =
+            Collections.synchronizedSet(new HashSet<String>());
 
     private static TextToSpeech tts;
     private static boolean ttsInitializing;
@@ -317,6 +329,9 @@ final class NativePaymentAnnouncementFallback {
                                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                                     .build());
                         }
+                        if (ttsReady) {
+                            installProgressListener();
+                        }
                         if (!ttsReady) {
                             for (SpeakRequest request : WAITING) SCHEDULED.remove(request.eventKey);
                             WAITING.clear();
@@ -330,70 +345,271 @@ final class NativePaymentAnnouncementFallback {
         }
     }
 
+    private static void installProgressListener() {
+        if (tts == null) return;
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {
+                // The event remains claimed until onDone or onError.
+            }
+
+            @Override
+            public void onDone(String utteranceId) {
+                completeUtterance(utteranceId);
+            }
+
+            @Override
+            public void onError(String utteranceId) {
+                failUtterance(utteranceId, "tts_callback_error");
+            }
+        });
+    }
+
+    private static void completeUtterance(String utteranceId) {
+        SpeakRequest request;
+        synchronized (LOCK) {
+            request = IN_FLIGHT.remove(utteranceId);
+        }
+        if (request == null) return;
+
+        NotificationRelayReceiver.markNativeAnnouncementHandled(
+                request.context, request.eventKey, true);
+        RETRIED.remove(request.eventKey);
+        SCHEDULED.remove(request.eventKey);
+        releaseWakeLockIfIdle();
+        Log.i(TAG, "Native payment speech completed.");
+    }
+
+    private static void failUtterance(String utteranceId, String reason) {
+        SpeakRequest request;
+        synchronized (LOCK) {
+            request = IN_FLIGHT.remove(utteranceId);
+        }
+        if (request == null) return;
+        handleRequestFailure(request, reason);
+    }
+
+    private static void handleRequestFailure(SpeakRequest request, String reason) {
+        NotificationRelayReceiver.markNativeAnnouncementHandled(
+                request.context, request.eventKey, false);
+        AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
+                request.context, stableIdentity(request.eventKey));
+        SCHEDULED.remove(request.eventKey);
+        releaseWakeLockIfIdle();
+
+        final boolean stillPending = NotificationRelayReceiver.isPendingEvent(
+                request.context, request.eventKey);
+        if (stillPending && RETRIED.add(request.eventKey)) {
+            Log.w(TAG, "Native TTS failed (" + reason + "); scheduling one retry.");
+            MAIN.postDelayed(
+                    () -> schedule(request.context, request.eventKey),
+                    1000L);
+            return;
+        }
+
+        // If Flutter already acknowledged the event, its durable queue is no
+        // longer available for replay. Post a separate sounding OS alert so a
+        // TTS callback failure cannot make a payment notification disappear.
+        if (postAudibleFallback(request, reason)) {
+            Log.w(TAG, "Posted audible OS fallback after native TTS failure.");
+        } else {
+            Log.w(TAG, "Native TTS fallback failed; durable event remains unacknowledged.");
+        }
+    }
+
+    private static boolean postAudibleFallback(SpeakRequest request, String reason) {
+        try {
+            Context context = request.context;
+            NotificationManager manager = (NotificationManager)
+                    context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+                    !manager.areNotificationsEnabled()) {
+                Log.w(TAG, "System notifications are disabled; retain the payment event.");
+                return false;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "POST_NOTIFICATIONS permission is not granted; retain the payment event.");
+                return false;
+            }
+
+            final String channelId = "retailmind_native_payment_fallback";
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel channel = new NotificationChannel(
+                        channelId,
+                        "Payment alerts",
+                        NotificationManager.IMPORTANCE_HIGH);
+                channel.setDescription(
+                        "Audible fallback when payment announcement speech is unavailable.");
+                channel.enableVibration(true);
+                channel.setVibrationPattern(new long[]{0L, 250L, 150L, 250L});
+                channel.setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                        new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build());
+                manager.createNotificationChannel(channel);
+            }
+
+            String amount = BigDecimal.valueOf(request.announcement.amountValue)
+                    .stripTrailingZeros().toPlainString();
+            boolean debit = "debit".equalsIgnoreCase(request.announcement.direction);
+            String title = debit ? "Debit detected" : "Payment detected";
+            String body = debit
+                    ? "₹" + amount + " debited. Verify in your bank or UPI app."
+                    : "₹" + amount + " credit reported. Verify in your bank or UPI app.";
+
+            Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    ? new Notification.Builder(context, channelId)
+                    : new Notification.Builder(context);
+            builder.setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(new Notification.BigTextStyle().bigText(body))
+                    .setPriority(Notification.PRIORITY_HIGH)
+                    .setAutoCancel(true);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                builder.setCategory(Notification.CATEGORY_MESSAGE);
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                builder.setDefaults(Notification.DEFAULT_ALL)
+                        .setSound(RingtoneManager.getDefaultUri(
+                                RingtoneManager.TYPE_NOTIFICATION))
+                        .setVibrate(new long[]{0L, 250L, 150L, 250L});
+            }
+
+            int notificationId = request.eventKey.hashCode() & 0x7fffffff;
+            manager.notify(notificationId, builder.build());
+
+            // If the native event is still queued, this marker prevents Flutter
+            // from producing a second speech/alert while it still writes history.
+            NotificationRelayReceiver.markNativeAnnouncementHandled(
+                    context, request.eventKey, true);
+            RETRIED.remove(request.eventKey);
+            return true;
+        } catch (SecurityException error) {
+            Log.w(TAG, "Notification permission denied for audible fallback", error);
+            return false;
+        } catch (RuntimeException error) {
+            Log.e(TAG, "Unable to post audible payment fallback (" + reason + ")", error);
+            return false;
+        }
+    }
+
+    private static void releaseWakeLockIfIdle() {
+        synchronized (LOCK) {
+            if (!IN_FLIGHT.isEmpty() || !WAITING.isEmpty()) return;
+            if (announcementWakeLock != null && announcementWakeLock.isHeld()) {
+                try {
+                    announcementWakeLock.release();
+                } catch (RuntimeException error) {
+                    Log.w(TAG, "Unable to release native announcement wake lock", error);
+                }
+            }
+        }
+    }
+
     private static void drainWaiting() {
         if (!ttsReady || tts == null) return;
         List<SpeakRequest> requests = new ArrayList<>(WAITING);
         WAITING.clear();
         for (SpeakRequest request : requests) {
-            if (!NotificationRelayReceiver.isPendingEvent(request.context, request.eventKey)) {
-                SCHEDULED.remove(request.eventKey);
-                continue;
-            }
-            Map<String, Object> claim = new java.util.HashMap<>();
-            String packageName = value(request.event.get("packageName"));
-            claim.put("amount", request.announcement.amountValue);
-            claim.put("direction", request.announcement.direction);
-            claim.put("referenceId", request.announcement.referenceId);
-            claim.put("sourceEventKey", request.eventKey);
-            claim.put("sourceIdentity", stableIdentity(request.eventKey));
-            claim.put("sourceTimestamp", postedAt(request.eventKey));
-            claim.put("timestamp", System.currentTimeMillis());
-            claim.put("origin", "notification");
-            claim.put("channel", "notification|" + packageName);
-            claim.put("packageName", packageName);
-            claim.put("payerName", extractPayer(request.announcement.rawText));
-            claim.put("accountSuffix", extractAccount(request.announcement.rawText));
-            claim.put("rawText", request.announcement.rawText);
-            if (AtomicPaymentAnnouncementCoordinator.shouldSuppress(request.context, claim)) {
-                // Another Flutter/native worker already owns this announcement.
-                // Preserve the event for later history/review without repeating speech.
-                NotificationRelayReceiver.markNativeAnnouncementHandled(
-                        request.context, request.eventKey, true);
-                SCHEDULED.remove(request.eventKey);
-                continue;
-            }
-            if (!NotificationRelayReceiver.markNativeAnnouncementHandled(
-                    request.context, request.eventKey, true)) {
-                AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
-                        request.context, stableIdentity(request.eventKey));
-                SCHEDULED.remove(request.eventKey);
-                continue;
-            }
+            String utteranceId = null;
+            try {
+                if (!NotificationRelayReceiver.isPendingEvent(request.context, request.eventKey)) {
+                    SCHEDULED.remove(request.eventKey);
+                    continue;
+                }
+                Map<String, Object> claim = new java.util.HashMap<>();
+                String packageName = value(request.event.get("packageName"));
+                claim.put("amount", request.announcement.amountValue);
+                claim.put("direction", request.announcement.direction);
+                claim.put("referenceId", request.announcement.referenceId);
+                claim.put("sourceEventKey", request.eventKey);
+                claim.put("sourceIdentity", stableIdentity(request.eventKey));
+                claim.put("sourceTimestamp", postedAt(request.eventKey));
+                claim.put("timestamp", System.currentTimeMillis());
+                claim.put("origin", "notification");
+                claim.put("channel", "notification|" + packageName);
+                claim.put("packageName", packageName);
+                claim.put("payerName", extractPayer(request.announcement.rawText));
+                claim.put("accountSuffix", extractAccount(request.announcement.rawText));
+                claim.put("rawText", request.announcement.rawText);
+                if (AtomicPaymentAnnouncementCoordinator.shouldSuppress(request.context, claim)) {
+                    // Another Flutter/native worker already owns this announcement.
+                    NotificationRelayReceiver.markNativeAnnouncementHandled(
+                            request.context, request.eventKey, true);
+                    SCHEDULED.remove(request.eventKey);
+                    continue;
+                }
+                // Keep the durable event explicitly unhandled while TTS is in
+                // flight. The SQLite identity claim prevents Flutter from also
+                // speaking it. Only onDone (or a successful audible OS fallback)
+                // may persist nativeAnnouncementHandled=true.
+                if (!NotificationRelayReceiver.markNativeAnnouncementHandled(
+                        request.context, request.eventKey, false)) {
+                    AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
+                            request.context, stableIdentity(request.eventKey));
+                    SCHEDULED.remove(request.eventKey);
+                    continue;
+                }
 
-            Locale locale = localeFor(request.announcement.language);
-            int availability = tts.isLanguageAvailable(locale);
-            String message = request.announcement.localized;
-            if (availability < TextToSpeech.LANG_AVAILABLE) {
-                locale = new Locale("en", "IN");
-                int englishAvailability = tts.isLanguageAvailable(locale);
-                if (englishAvailability < TextToSpeech.LANG_AVAILABLE) locale = Locale.US;
-                message = request.announcement.english;
+                Locale locale = localeFor(request.announcement.language);
+                int availability = tts.isLanguageAvailable(locale);
+                String message = request.announcement.localized;
+                if (availability < TextToSpeech.LANG_AVAILABLE) {
+                    locale = new Locale("en", "IN");
+                    int englishAvailability = tts.isLanguageAvailable(locale);
+                    if (englishAvailability < TextToSpeech.LANG_AVAILABLE) {
+                        locale = Locale.US;
+                    }
+                    message = request.announcement.english;
+                }
+
+                int languageResult = tts.setLanguage(locale);
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                        languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    locale = Locale.US;
+                    message = request.announcement.english;
+                    languageResult = tts.setLanguage(locale);
+                }
+                if (languageResult == TextToSpeech.ERROR) {
+                    throw new IllegalStateException("Android TTS rejected the selected language.");
+                }
+
+                utteranceId = "retailmind_" +
+                        Integer.toHexString(request.eventKey.hashCode()) + "_" +
+                        System.nanoTime();
+                java.util.HashMap<String, String> params = new java.util.HashMap<>();
+                params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId);
+                synchronized (LOCK) {
+                    IN_FLIGHT.put(utteranceId, request);
+                }
+
+                final String scheduledUtteranceId = utteranceId;
+                // A broken OEM TTS engine can fail to call either onDone or onError.
+                // The watchdog releases the claim after a bounded wait.
+                MAIN.postDelayed(
+                        () -> failUtterance(scheduledUtteranceId, "tts_completion_timeout"),
+                        45000L);
+
+                int result = tts.speak(message, TextToSpeech.QUEUE_ADD, params);
+                if (result == TextToSpeech.ERROR) {
+                    failUtterance(utteranceId, "tts_speak_rejected");
+                }
+            } catch (RuntimeException error) {
+                Log.e(TAG, "Unable to queue native payment speech", error);
+                if (utteranceId != null) {
+                    failUtterance(utteranceId, "tts_queue_exception");
+                } else {
+                    handleRequestFailure(request, "tts_setup_exception");
+                }
             }
-            tts.setLanguage(locale);
-            java.util.HashMap<String, String> params = new java.util.HashMap<>();
-            params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "retailmind_" + Math.abs(request.eventKey.hashCode()));
-            int result = tts.speak(message, TextToSpeech.QUEUE_ADD, params);
-            if (result == TextToSpeech.ERROR) {
-                NotificationRelayReceiver.markNativeAnnouncementHandled(
-                        request.context, request.eventKey, false);
-                AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
-                        request.context, stableIdentity(request.eventKey));
-                Log.w(TAG, "TTS rejected native payment announcement");
-            } else {
-                Log.i(TAG, "Native fallback announced a payment notification; financial verification is still required.");
-            }
-            SCHEDULED.remove(request.eventKey);
         }
+        releaseWakeLockIfIdle();
     }
 
     private static String stableIdentity(String eventKey) {

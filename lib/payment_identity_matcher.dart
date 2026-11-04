@@ -144,9 +144,13 @@ class EchoResolution {
 class PaymentIdentityMatcher {
   PaymentIdentityMatcher._();
 
-  /// App notification + bank SMS of one transfer usually land within a minute
-  /// but share no payer, account or UTR. Pair one-to-one only.
+  /// Amount/direction alone is weak evidence. Keep the cross-channel window
+  /// short so a genuine second same-value payment is not swallowed.
   static const Duration weakModalityWindow = Duration(seconds: 60);
+
+  /// Same notification slot, amount and direction can be an update/repost even
+  /// without payer/account/reference fields. Conflicts still block this match.
+  static const Duration sameStreamRepostWindow = Duration(seconds: 60);
   static const Duration crossAppWindow = Duration(minutes: 10);
 
   /// Operators can queue bank SMS for an hour or more.
@@ -302,13 +306,14 @@ class PaymentIdentityMatcher {
         current.notificationStream == previous.notificationStream &&
         directionKnownEqual &&
         notificationAt.difference(previousNotificationAt).abs() <=
-            notificationUpdateWindow &&
+            sameStreamRepostWindow &&
         !notificationAccountConflict &&
-        !notificationPayerConflict &&
-        (sameNotificationAccount || sameNotificationPayer)) {
-      return const IdentityDecision(
+        !notificationPayerConflict) {
+      return IdentityDecision(
         IdentityVerdict.sameTransfer,
-        'same_notification_update',
+        sameNotificationAccount || sameNotificationPayer
+            ? 'same_notification_update'
+            : 'same_notification_stream_amount',
       );
     }
 
