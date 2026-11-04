@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'local_storage_service.dart';
+import 'cache_consistency_service.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
 
@@ -91,63 +92,109 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     if (mounted) setState(() => _isLoading = true);
 
     try {
+      final localExpenses = await LocalStorageService.loadExpenses();
       final token = await SecureTokenStorage.getToken();
+      var remoteLoaded = false;
+      List<Map<String, dynamic>> remoteExpenses = [];
+
       if (token != null && token.isNotEmpty) {
         final response = await ApiClient.getJson(
           '/expenses?limit=500',
           headers: {'Authorization': 'Bearer $token'},
         );
-
         if (response.statusCode == 200) {
-          final data = jsonDecode(response.body) as Map<String, dynamic>;
-          final items = List<dynamic>.from(data['expenses'] ?? []);
-          final backendExpenses = items
-              .map((raw) {
-                final item = Map<String, dynamic>.from(raw as Map);
-                return Expense.fromMap({
-                  'id': item['id'],
-                  'category': item['category'],
-                  'amount': item['amount'],
-                  'description': item['description'],
-                  'date': item['expense_date'],
-                });
-              })
-              .toList()
-            ..sort((a, b) => b.date.compareTo(a.date));
-
-          if (mounted) {
-            setState(() {
-              _expenses = backendExpenses;
-              _loadWarning = null;
-              _isLoading = false;
-            });
+          final decoded = jsonDecode(response.body);
+          final rawItems = decoded is List
+              ? decoded
+              : decoded is Map
+                  ? (decoded['expenses'] ?? decoded['results'])
+                  : null;
+          if (rawItems is! List) {
+            throw const FormatException(
+              'Expense response did not contain an expense list.',
+            );
           }
-          return;
+
+          remoteExpenses = rawItems.whereType<Map>().map((raw) {
+            final item = Map<String, dynamic>.from(raw);
+            final serverId =
+                item['id'] ?? item['expense_id'] ?? item['server_id'];
+            final dateValue =
+                item['expense_date'] ?? item['date'] ?? item['created_at'];
+            return <String, dynamic>{
+              ...item,
+              if (serverId != null) 'id': serverId.toString(),
+              if (serverId != null) 'server_id': serverId.toString(),
+              if (serverId != null) 'expense_id': serverId.toString(),
+              'date': dateValue?.toString() ?? DateTime.now().toIso8601String(),
+              'sync_status': 'synced',
+              'is_synced': true,
+            };
+          }).toList();
+          remoteLoaded = true;
         }
       }
 
-      final expenses = await LocalStorageService.loadExpenses();
+      // A page of 500 remote expenses is not permission to replace the local
+      // ledger. Merge by expense identity and retain unmatched local writes.
+      final merged = CacheConsistencyService.mergeLists(
+        localExpenses,
+        remoteExpenses,
+        dataset: 'expenses',
+      );
+
+      if (remoteLoaded) {
+        final confirmedServerIds = remoteExpenses
+            .map((row) => row['server_id'] ?? row['id'])
+            .where((value) => value != null)
+            .map((value) => value.toString())
+            .toSet();
+        for (final row in merged) {
+          final serverId =
+              (row['server_id'] ?? row['expense_id'] ?? '').toString();
+          if (serverId.isNotEmpty && confirmedServerIds.contains(serverId)) {
+            row['sync_status'] = 'synced';
+            row['is_synced'] = true;
+            row.remove('is_offline');
+            row.remove('pending_sync');
+          }
+        }
+        await LocalStorageService.saveExpenses(merged);
+      }
+
+      final parsedExpenses = merged.map((raw) {
+        final row = Map<String, dynamic>.from(raw);
+        row['date'] ??=
+            row['expense_date'] ?? row['created_at'] ?? DateTime.now().toIso8601String();
+        return Expense.fromMap(row);
+      }).toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+
       if (mounted) {
         setState(() {
-          _loadWarning = 'Showing device-saved expenses only. Server records may not be included until connection is restored.';
-          _expenses = expenses
-              .map((e) => Expense.fromMap(e as Map<String, dynamic>))
-              .toList()
-            ..sort((a, b) => b.date.compareTo(a.date));
+          _expenses = parsedExpenses;
+          _loadWarning = remoteLoaded
+              ? null
+              : 'Showing device-saved expenses. Server records will be merged when connection is restored.';
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint('Error loading backend expenses: $e');
+      debugPrint('Error reconciling expenses: $e');
       try {
         final expenses = await LocalStorageService.loadExpenses();
+        final parsedExpenses = expenses.map((raw) {
+          final row = Map<String, dynamic>.from(raw as Map);
+          row['date'] ??=
+              row['expense_date'] ?? row['created_at'] ?? DateTime.now().toIso8601String();
+          return Expense.fromMap(row);
+        }).toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
         if (mounted) {
           setState(() {
-            _loadWarning = 'Server could not be reached. Showing device-saved expenses; these may not include all server records.';
-            _expenses = expenses
-                .map((e) => Expense.fromMap(e as Map<String, dynamic>))
-                .toList()
-              ..sort((a, b) => b.date.compareTo(a.date));
+            _loadWarning =
+                'Server could not be reached. Showing all device-saved expenses; they have not been discarded.';
+            _expenses = parsedExpenses;
             _isLoading = false;
           });
         }
@@ -592,47 +639,114 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                     return;
                   }
 
+                  final expenseId =
+                      DateTime.now().microsecondsSinceEpoch.toString();
                   final expense = Expense(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
+                    id: expenseId,
                     category: selectedCategory,
                     amount: amount,
                     description: description,
                     date: DateTime.now(),
                   );
+                  final operationId = 'expense_$expenseId';
+                  final localRecord = <String, dynamic>{
+                    ...expense.toMap(),
+                    'local_id': expenseId,
+                    'operation_id': operationId,
+                    'sync_status': 'pending',
+                    'is_synced': false,
+                    'local_updated_at': DateTime.now().toUtc().toIso8601String(),
+                  };
+
+                  // Commit locally before attempting HTTP. A network timeout
+                  // must not undo a cashier's expense entry.
+                  final expenses = await LocalStorageService.loadExpenses();
+                  expenses.add(localRecord);
+                  await LocalStorageService.saveExpenses(expenses);
 
                   final token = await SecureTokenStorage.getToken();
+                  var serverConfirmed = false;
+                  String? serverId;
                   if (token != null && token.isNotEmpty) {
-                    final response = await ApiClient.postJson(
-                      '/expenses',
-                      {
-                        'category': selectedCategory.name,
-                        'amount': amount,
-                        'description': description,
-                        'expense_date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                      },
-                      headers: {'Authorization': 'Bearer $token'},
-                    );
-                    if (response.statusCode < 200 || response.statusCode >= 300) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: LiveTranslatedText('Expense was not saved on the server (HTTP ${response.statusCode}). Please retry.')),
-                      );
-                      return;
+                    try {
+                      final response = await ApiClient.postJson(
+                        '/expenses',
+                        {
+                          'category': selectedCategory.name,
+                          'amount': amount,
+                          'description': description,
+                          'expense_date':
+                              DateFormat('yyyy-MM-dd').format(expense.date),
+                        },
+                        headers: {'Authorization': 'Bearer $token'},
+                      ).timeout(const Duration(seconds: 12));
+
+                      if (response.statusCode >= 200 &&
+                          response.statusCode < 300) {
+                        try {
+                          final decoded = jsonDecode(response.body);
+                          final payload = decoded is Map && decoded['expense'] is Map
+                              ? Map<String, dynamic>.from(decoded['expense'])
+                              : decoded is Map
+                                  ? Map<String, dynamic>.from(decoded)
+                                  : <String, dynamic>{};
+                          final value = payload['id'] ??
+                              payload['expense_id'] ??
+                              payload['server_id'];
+                          if (value != null) serverId = value.toString();
+                        } catch (_) {
+                          // An empty success body cannot prove the server ID.
+                        }
+                        serverConfirmed = serverId != null && serverId!.isNotEmpty;
+                      } else {
+                        debugPrint(
+                          'Expense HTTP \${response.statusCode}; local copy retained.',
+                        );
+                      }
+                    } catch (error) {
+                      debugPrint('Expense sync pending after request error: $error');
                     }
-                    if (kDebugMode) debugPrint('✅ Expense saved to backend');
                   }
 
-                  final expenses = await LocalStorageService.loadExpenses();
-                  expenses.add(expense.toMap());
-                  await LocalStorageService.saveExpenses(expenses);
+                  final latest = await LocalStorageService.loadExpenses();
+                  final rowIndex = latest.indexWhere((raw) {
+                    if (raw is! Map) return false;
+                    final row = Map<String, dynamic>.from(raw);
+                    return row['operation_id'] == operationId ||
+                        row['local_id']?.toString() == expenseId;
+                  });
+                  if (rowIndex >= 0) {
+                    final row = Map<String, dynamic>.from(latest[rowIndex] as Map);
+                    if (serverConfirmed) {
+                      row['id'] = serverId;
+                      row['server_id'] = serverId;
+                      row['expense_id'] = serverId;
+                      row['sync_status'] = 'synced';
+                      row['is_synced'] = true;
+                      row.remove('is_offline');
+                      row.remove('pending_sync');
+                    } else {
+                      row['sync_status'] = 'pending_confirmation';
+                      row['is_synced'] = false;
+                    }
+                    row['updated_at'] = DateTime.now().toUtc().toIso8601String();
+                    latest[rowIndex] = row;
+                    await LocalStorageService.saveExpenses(latest);
+                  }
 
                   if (!mounted) return;
                   Navigator.pop(context);
-                  if (token == null || token.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: LiveTranslatedText('Saved on this device only. This expense has not been sent to the server.')),
-                    );
-                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: LiveTranslatedText(
+                        serverConfirmed
+                            ? 'Expense saved and confirmed on the server.'
+                            : 'Expense saved on this device. Server confirmation is pending; the record has not been discarded.',
+                      ),
+                    ),
+                  );
                   await _loadExpenses();
+
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
