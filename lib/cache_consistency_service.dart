@@ -365,6 +365,290 @@ class CacheConsistencyService {
     return output;
   }
 
+  static String _salesLineName(Map<String, dynamic> line) =>
+      (line['product_name'] ??
+              line['product'] ??
+              line['item'] ??
+              line['description'] ??
+              line['name'] ??
+              '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+  static double _salesNumber(Object? value, [double fallback = 0]) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  static bool _sameSalesLine(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+  ) {
+    final leftId = _normalized(left['product_id'] ?? left['id']);
+    final rightId = _normalized(right['product_id'] ?? right['id']);
+    final leftName = _salesLineName(left);
+    final rightName = _salesLineName(right);
+    final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
+        ? leftId == rightId
+        : leftName.isNotEmpty && leftName == rightName;
+    if (!sameProduct) return false;
+
+    final leftQty = _salesNumber(left['quantity'] ?? left['qty'], 1);
+    final rightQty = _salesNumber(right['quantity'] ?? right['qty'], 1);
+    if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3)) {
+      return false;
+    }
+    final leftPrice = _salesNumber(left['unit_price'] ?? left['price'], -1);
+    final rightPrice = _salesNumber(right['unit_price'] ?? right['price'], -1);
+    if (leftPrice >= 0 &&
+        rightPrice >= 0 &&
+        leftPrice.toStringAsFixed(2) != rightPrice.toStringAsFixed(2)) {
+      return false;
+    }
+    for (final field in const [
+      'discount',
+      'discount_amount',
+      'discount_rate',
+      'tax',
+      'tax_amount',
+      'tax_rate',
+      'gst_rate',
+    ]) {
+      final a = left[field];
+      final b = right[field];
+      if (a == null || b == null) continue;
+      if (_salesNumber(a, -1) != _salesNumber(b, -1)) return false;
+    }
+    return true;
+  }
+
+  /// Build one side's line list. items and line_items are aliases, not two
+  /// independent collections. Repeated items in one snapshot are preserved;
+  /// mirror snapshots are merged one-to-one.
+  static List<Map<String, dynamic>> _salesLinesForRows(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final nested = <Map<String, dynamic>>[];
+    final flattened = <Map<String, dynamic>>[];
+    var hasNestedSnapshot = false;
+
+    for (final row in rows) {
+      final lineItems = row['line_items'];
+      final items = row['items'];
+      final raw = lineItems is List && lineItems.isNotEmpty
+          ? lineItems
+          : items is List
+              ? items
+              : lineItems;
+      if (raw is List && raw.isNotEmpty) {
+        final incoming = raw
+            .whereType<Map>()
+            .map((line) => Map<String, dynamic>.from(line))
+            .toList();
+        if (!hasNestedSnapshot) {
+          nested.addAll(incoming);
+          hasNestedSnapshot = true;
+        } else {
+          final matched = <int>{};
+          for (final line in incoming) {
+            var matchIndex = -1;
+            for (var i = 0; i < nested.length; i++) {
+              if (matched.contains(i)) continue;
+              if (_sameSalesLine(nested[i], line)) {
+                matchIndex = i;
+                break;
+              }
+            }
+            if (matchIndex < 0) {
+              nested.add(line);
+            } else {
+              matched.add(matchIndex);
+              nested[matchIndex] = _mergeMissing(nested[matchIndex], line);
+            }
+          }
+        }
+        continue;
+      }
+
+      final name = (row['product_name'] ??
+              row['product'] ??
+              row['item'] ??
+              row['description'] ??
+              row['name'] ??
+              '')
+          .toString()
+          .trim();
+      if (name.isEmpty && _normalized(row['product_id']).isEmpty) continue;
+      flattened.add(<String, dynamic>{
+        ...row,
+        'product_name': name,
+        'quantity': row['quantity'] ?? row['qty'] ?? 1,
+        'qty': row['qty'] ?? row['quantity'] ?? 1,
+      });
+    }
+
+    if (!hasNestedSnapshot) return flattened;
+    final matchedNested = <int>{};
+    for (final flat in flattened) {
+      var matchIndex = -1;
+      for (var i = 0; i < nested.length; i++) {
+        if (matchedNested.contains(i)) continue;
+        if (_sameSalesLine(nested[i], flat)) {
+          matchIndex = i;
+          break;
+        }
+      }
+      if (matchIndex < 0) {
+        nested.add(flat);
+      } else {
+        matchedNested.add(matchIndex);
+        nested[matchIndex] = _mergeMissing(nested[matchIndex], flat);
+      }
+    }
+    return nested;
+  }
+
+  static List<Map<String, dynamic>> _mergeSalesLines(
+    List<Map<String, dynamic>> local,
+    List<Map<String, dynamic>> remote,
+  ) {
+    final result = local.map((line) => Map<String, dynamic>.from(line)).toList();
+    final matchedLocal = <int>{};
+    for (final incoming in remote) {
+      var matchIndex = -1;
+      for (var i = 0; i < result.length; i++) {
+        if (matchedLocal.contains(i)) continue;
+        if (_sameSalesLine(result[i], incoming)) {
+          matchIndex = i;
+          break;
+        }
+      }
+      if (matchIndex < 0) {
+        result.add(Map<String, dynamic>.from(incoming));
+      } else {
+        matchedLocal.add(matchIndex);
+        result[matchIndex] = _mergeMissing(result[matchIndex], incoming);
+      }
+    }
+    return result;
+  }
+
+  static Map<String, dynamic> _mergeSalesGroup(
+    List<Map<String, dynamic>> localRows,
+    List<Map<String, dynamic>> remoteRows,
+  ) {
+    Map<String, dynamic>? merged;
+    for (final row in localRows) {
+      merged = merged == null
+          ? Map<String, dynamic>.from(row)
+          : mergeRecord(merged, row, dataset: 'sales');
+    }
+    for (final row in remoteRows) {
+      merged = merged == null
+          ? Map<String, dynamic>.from(row)
+          : mergeRecord(merged, row, dataset: 'sales');
+    }
+
+    final lines = _mergeSalesLines(
+      _salesLinesForRows(localRows),
+      _salesLinesForRows(remoteRows),
+    );
+    final result = merged ?? <String, dynamic>{};
+    if (lines.isNotEmpty) {
+      result['items'] = lines;
+      result['line_items'] = lines;
+    }
+
+    // Explicit invoice totals have priority. A flat /sales feed may instead
+    // have a line total in the generic total field; sum all line rows then.
+    const totalFields = [
+      'invoice_total',
+      'total_amount',
+      'grand_total',
+      'final_amount',
+      'totalAmount',
+    ];
+    final allRows = [...localRows, ...remoteRows];
+    Map<String, dynamic>? newestTotalRow;
+    DateTime? newestTotalAt;
+    var largestExplicitTotal = 0.0;
+    for (final row in allRows) {
+      var explicitTotal = 0.0;
+      for (final field in totalFields) {
+        final value = _salesNumber(row[field]);
+        if (value > 0) {
+          explicitTotal = value;
+          break;
+        }
+      }
+      if (explicitTotal <= 0) continue;
+      if (explicitTotal > largestExplicitTotal) {
+        largestExplicitTotal = explicitTotal;
+      }
+      final timestamp = updatedAt(row);
+      if (timestamp != null &&
+          (newestTotalAt == null || timestamp.isAfter(newestTotalAt))) {
+        newestTotalAt = timestamp;
+        newestTotalRow = row;
+      }
+    }
+    if (newestTotalRow != null) {
+      for (final field in totalFields) {
+        final value = _salesNumber(newestTotalRow[field]);
+        if (value > 0) {
+          result['total_amount'] = value;
+          result['total'] = value;
+          break;
+        }
+      }
+    } else if (largestExplicitTotal > 0) {
+      result['total_amount'] = largestExplicitTotal;
+      result['total'] = largestExplicitTotal;
+    } else if (allRows.any((row) {
+      final nested = row['line_items'] ?? row['items'];
+      return nested is! List || nested.isEmpty;
+    }) && lines.isNotEmpty) {
+      final derivedTotal = lines.fold<double>(0.0, (sum, line) {
+        final lineTotal = _salesNumber(
+          line['line_total'] ?? line['total_with_tax'] ?? line['total'],
+        );
+        if (lineTotal > 0) return sum + lineTotal;
+        return sum +
+            _salesNumber(line['unit_price'] ?? line['price']) *
+                _salesNumber(line['quantity'] ?? line['qty'], 1);
+      });
+      if (derivedTotal > 0) {
+        result['total_amount'] = derivedTotal;
+        result['total'] = derivedTotal;
+      }
+    }
+
+    var highestPaid = 0.0;
+    for (final row in allRows) {
+      for (final field in const [
+        'paid_amount',
+        'amount_paid',
+        'paid',
+        'received_amount',
+      ]) {
+        final value = _salesNumber(row[field]);
+        if (value > highestPaid) highestPaid = value;
+      }
+    }
+    if (highestPaid > 0) {
+      final total = _salesNumber(result['total_amount'] ?? result['total']);
+      result['paid_amount'] =
+          total > 0 ? highestPaid.clamp(0.0, total).toDouble() : highestPaid;
+    }
+
+    if (remoteRows.isNotEmpty && !isPending(result)) {
+      result['sync_status'] = 'synced';
+      result['is_synced'] = true;
+    }
+    return result;
+  }
+
   static List<Map<String, dynamic>> mergeLists(
     List<dynamic> local,
     List<dynamic> remote, {
@@ -434,6 +718,10 @@ class CacheConsistencyService {
           .where((i) => remoteFlags[i])
           .map((i) => records[i])
           .toList();
+      if (dataset.toLowerCase() == 'sales') {
+        result.add(_mergeSalesGroup(localRows, remoteRows));
+        continue;
+      }
       Map<String, dynamic>? merged;
       for (final row in localRows) {
         merged = merged == null
