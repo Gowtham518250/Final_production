@@ -373,11 +373,20 @@ class CacheConsistencyService {
               ? 'local_pending'
               : 'remote_pending';
     } else {
-      final remoteWins = remoteUpdated != null &&
-          (localUpdated == null || !remoteUpdated.isBefore(localUpdated));
+      final localAcknowledged =
+          local['sync_status']?.toString().trim().toLowerCase() == 'synced' ||
+              local['is_synced'] == true;
+      // A timestamped remote row wins when it is at least as new. When the
+      // server omits timestamps, a successful remote row may replace an
+      // unversioned cache row, or an acknowledged local row. A timestamped,
+      // non-pending local edit remains protected from an undated server row.
+      final remoteWins = remoteUpdated != null
+          ? localUpdated == null || !remoteUpdated.isBefore(localUpdated)
+          : localUpdated == null || localAcknowledged;
       winner = remoteWins ? remote : local;
       fallback = remoteWins ? local : remote;
-      conflictState = remoteWins ? 'remote_wins' : 'local_wins_conservative';
+      conflictState =
+          remoteWins ? 'remote_wins' : 'local_wins_conservative';
     }
 
     final merged = _mergeMissing(winner, fallback);
