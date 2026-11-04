@@ -4302,19 +4302,7 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        (event) {
-          try {
-            _handleNotification(event);
-          } finally {
-            // Keep the native queue until payment classification and emission
-            // routing has synchronously completed, even across engine restarts.
-            unawaited(
-              NotificationListenerService.acknowledgeNotification(
-                event.eventKey,
-              ),
-            );
-          }
-        },
+        _processNotificationWithRetry,
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
@@ -4540,6 +4528,40 @@ class PaymentDetectionService {
 
   bool _firstNotificationTraced = false;
 
+  /// Route durable native events before acknowledging them. A synchronous
+  /// parsing/routing exception gets a few bounded retries; after that the
+  /// native queue retains the event for the next stream re-attachment.
+  void _processNotificationWithRetry(
+    ServiceNotificationEvent event, {
+    int attempt = 1,
+  }) {
+    final handled = _handleNotification(event);
+    final key = event.eventKey?.trim();
+    if (handled) {
+      if (key != null && key.isNotEmpty) {
+        unawaited(NotificationListenerService.acknowledgeNotification(key));
+      }
+      return;
+    }
+
+    if (key == null || key.isEmpty) {
+      PdsLogger.w('L1', 'Notification route failed without a durable event key');
+      return;
+    }
+    if (attempt >= 3) {
+      PdsLogger.w(
+        'L1',
+        'Notification route failed after $attempt attempts; '
+            'event retained in native durable queue',
+      );
+      return;
+    }
+    Future<void>.delayed(
+      Duration(milliseconds: 300 * attempt),
+      () => _processNotificationWithRetry(event, attempt: attempt + 1),
+    );
+  }
+
   // Late source times are tracked separately so echo matching still compares
   // current detection timestamps, not hours-old timestamps from queued events.
   DateTime? _sourcePostedAt;
@@ -4573,7 +4595,7 @@ class PaymentDetectionService {
     return postedAt.isAfter(now) ? now : postedAt;
   }
 
-  void _handleNotification(ServiceNotificationEvent event) {
+  bool _handleNotification(ServiceNotificationEvent event) {
     _sourceEventKey = _safe(
       () => (event as dynamic).eventKey as String?,
     )?.trim();
@@ -4581,6 +4603,10 @@ class PaymentDetectionService {
     _sourceNativeAnnouncementHandled = event.nativeAnnouncementHandled == true;
     try {
       _handleNotificationCore(event);
+      return true;
+    } catch (error, stackTrace) {
+      PdsLogger.e('L1', 'Notification route failed', error, stackTrace);
+      return false;
     } finally {
       _sourcePostedAt = null;
       _sourceEventKey = null;
@@ -4831,6 +4857,7 @@ class PaymentDetectionService {
       );
     } catch (e, st) {
       PdsLogger.e('L1', 'Handler error', e, st);
+      rethrow;
     }
   }
 
