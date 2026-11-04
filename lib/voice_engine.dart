@@ -548,7 +548,7 @@ class VoiceEngine {
             _log.w('TTS speak timed out after 8s: "$text"');
             _setSpeaking(false);
             _stopAmpTimer();
-            return 0;
+            throw TimeoutException('TTS playback did not complete within 8 seconds.');
           },
         );
         return;
