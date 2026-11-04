@@ -6439,7 +6439,11 @@ class PaymentDetectionService {
       _nativeHistoryEventIds[nativeEventKey] = finalEvent.id;
       _nativeHistoryDedupFingerprints[nativeEventKey] = finalEvent.fingerprint;
       final reference = finalEvent.normalizedReferenceId;
-      if (reference != null && reference.isNotEmpty) {
+      if (!finalEvent.hasReferenceConflict &&
+          reference != null &&
+          reference.isNotEmpty) {
+        // Do not roll back an older valid UTR amount when this event is already
+        // marked as a reference conflict.
         _nativeHistoryReferences[nativeEventKey] = reference;
       }
     }
