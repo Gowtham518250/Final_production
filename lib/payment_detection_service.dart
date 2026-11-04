@@ -4862,10 +4862,9 @@ class PaymentDetectionService {
     } finally {
       if (key != null && key.isNotEmpty) {
         _notificationEmissionFutures.remove(key);
-        if (emissions.isEmpty &&
-            !_nativeNotificationHistoryPending.contains(key)) {
-          // No payment event was emitted, so there is no history write to
-          // wait for and no provisional transport identity to retain.
+        if (!_nativeNotificationHistoryPending.contains(key)) {
+          // No durable payment-history write was started, so there is no
+          // provisional transport identity to retain after classification.
           _nativeHistoryTransportFingerprints.remove(key);
           _nativeHistoryPayloadFingerprints.remove(key);
         }
