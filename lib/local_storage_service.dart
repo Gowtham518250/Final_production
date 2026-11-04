@@ -2051,7 +2051,7 @@ class LocalStorageService {
       if (backupData.containsKey('invoices')) {
         // Normal invoice reads use manual_invoices. Migrate any legacy rows
         // from all_invoices and write through the canonical storage method.
-        final invoiceBox = await _getBox(_invoicesBoxBase, encrypted: true);
+        final invoiceBox = await _getBox(_invoicesBoxBase);
         final legacy = invoiceBox.get('all_invoices', defaultValue: const []);
         final legacyRows = legacy is List
             ? legacy.whereType<Map>().map(
