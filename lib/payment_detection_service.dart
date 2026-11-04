@@ -4664,7 +4664,15 @@ class PaymentDetectionService {
 
     _nativeNotificationHistoryWaiters.remove(key);
     try {
-      await NotificationListenerService.acknowledgeNotification(key);
+      final acknowledged =
+          await NotificationListenerService.acknowledgeNotification(key);
+      if (!acknowledged) {
+        PdsLogger.w(
+          'L1',
+          'Android did not confirm removal of the classified notification; '
+              'it remains queued for replay',
+        );
+      }
     } catch (error, stackTrace) {
       PdsLogger.e('L1', 'Could not acknowledge routed notification', error, stackTrace);
     }
