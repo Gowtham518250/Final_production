@@ -1985,9 +1985,7 @@ class _InventoryPageState extends State<InventoryPage>
                                           Icons.volume_up_rounded,
                                           size: 16,
                                         ),
-                                        label: const LiveTranslatedText(
-                                          'Hear photo steps',
-                                        ),
+                                        label: const LiveTranslatedText('Hear photo steps'),
                                       ),
                                       OutlinedButton.icon(
                                         onPressed: _imageLookupLoading
