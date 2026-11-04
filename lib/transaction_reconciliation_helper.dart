@@ -16,55 +16,90 @@ class TransactionReconciliationHelper {
   static List<Map<String, dynamic>> dedupe(
     List<Map<String, dynamic>> transactions,
   ) {
-    final result = <Map<String, dynamic>>[];
+    if (transactions.length < 2) {
+      return transactions.map((row) => Map<String, dynamic>.from(row)).toList();
+    }
 
     Map<String, dynamic> identityRow(Map<String, dynamic> transaction) {
       final raw = transaction['raw'];
       if (raw is Map) return Map<String, dynamic>.from(raw);
-      return transaction;
+      return <String, dynamic>{};
     }
 
-    for (final incoming in transactions) {
-      final incomingRaw = identityRow(incoming);
-      var matchIndex = -1;
+    final parents = List<int>.generate(transactions.length, (index) => index);
+    int root(int index) {
+      var current = index;
+      while (parents[current] != current) {
+        parents[current] = parents[parents[current]];
+        current = parents[current];
+      }
+      return current;
+    }
+    void union(int left, int right) {
+      final a = root(left);
+      final b = root(right);
+      if (a != b) parents[b] = a;
+    }
 
-      for (var index = 0; index < result.length; index++) {
-        final existing = result[index];
-        final existingRaw = identityRow(existing);
-        final existingId = existing['id']?.toString().trim() ?? '';
-        final incomingId = incoming['id']?.toString().trim() ?? '';
-        final sameDisplayId = existingId.isNotEmpty && existingId == incomingId;
-        if (sameDisplayId ||
-            InvoiceDedupHelper.sameInvoice(existingRaw, incomingRaw)) {
-          matchIndex = index;
-          break;
+    final tokenOwner = <String, int>{};
+    for (var index = 0; index < transactions.length; index++) {
+      for (final token in InvoiceDedupHelper.identityTokens(
+        identityRow(transactions[index]),
+      )) {
+        final previous = tokenOwner[token];
+        if (previous == null) {
+          tokenOwner[token] = index;
+        } else {
+          union(index, previous);
         }
       }
+    }
 
-      if (matchIndex < 0) {
-        result.add(Map<String, dynamic>.from(incoming));
+    final groups = <int, List<int>>{};
+    for (var index = 0; index < transactions.length; index++) {
+      groups.putIfAbsent(root(index), () => <int>[]).add(index);
+    }
+
+    final output = <Map<String, dynamic>>[];
+    for (final indexes in groups.values) {
+      if (indexes.length == 1) {
+        output.add(Map<String, dynamic>.from(transactions[indexes.first]));
         continue;
       }
 
-      final existing = result[matchIndex];
-      final mergedRaw = Map<String, dynamic>.from(identityRow(existing));
-      for (final entry in incomingRaw.entries) {
-        final value = entry.value;
-        if (value == null) continue;
-        if (value is String && value.trim().isEmpty) continue;
-        mergedRaw[entry.key] = value;
+      final rawRows = indexes
+          .map((index) => identityRow(transactions[index]))
+          .toList();
+      final canonicalRows = InvoiceDedupHelper.canonicalizeInvoices(rawRows);
+      final canonicalRaw = canonicalRows.isEmpty
+          ? <String, dynamic>{}
+          : canonicalRows.first;
+
+      // Invoice wrappers arrive after local sale wrappers in this page; retain
+      // category ordering while replacing raw data with the canonical snapshot.
+      var mergedWrapper = <String, dynamic>{};
+      for (final index in indexes) {
+        mergedWrapper = <String, dynamic>{
+          ...mergedWrapper,
+          ...transactions[index],
+        };
       }
 
-      // Incoming records are loaded in category order with invoices last.
-      // Prefer the invoice wrapper when a local sale and server invoice mirror
-      // match, while preserving aliases from both sides in mergedRaw.
-      result[matchIndex] = <String, dynamic>{
-        ...existing,
-        ...incoming,
-        'raw': mergedRaw,
-      };
-    }
+      final rawTotal = canonicalRaw['total_amount'] ??
+          canonicalRaw['totalAmount'] ??
+          canonicalRaw['invoice_total'] ??
+          canonicalRaw['grand_total'] ??
+          canonicalRaw['total'];
+      if (rawTotal is num) {
+        mergedWrapper['amount'] = rawTotal.toDouble();
+      } else if (rawTotal != null) {
+        final parsed = double.tryParse(rawTotal.toString());
+        if (parsed != null) mergedWrapper['amount'] = parsed;
+      }
 
-    return result;
+      mergedWrapper['raw'] = canonicalRaw;
+      output.add(mergedWrapper);
+    }
+    return output;
   }
 }

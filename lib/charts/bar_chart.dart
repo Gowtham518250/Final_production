@@ -209,8 +209,8 @@ class RevenueBarChart extends StatelessWidget {
                                   ),
                                   const TextSpan(text: '\n'),
                                   TextSpan(
-                                    text: engine.totalSales > 0 
-                                      ? '${((topItems[groupIndex].value / engine.totalSales) * 100).toStringAsFixed(1)}%'
+                                    text: engine.filteredTotalSales > 0 
+                                      ? '${((topItems[groupIndex].value / engine.filteredTotalSales) * 100).toStringAsFixed(1)}%'
                                       : '0%',
                                     style: TextStyle(
                                       color: Colors.grey[500],

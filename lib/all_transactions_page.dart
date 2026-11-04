@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import 'secure_token_storage.dart';
 import 'api_client.dart';
+import 'analytics_engine.dart';
 import 'local_storage_service.dart';
 import 'sales_dedup_helper.dart';
 import 'transaction_reconciliation_helper.dart';
@@ -125,13 +126,14 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       _rawSales = sales.whereType<Map<String, dynamic>>().toList();
       // Load cash transactions (manual entry)
       _cashTransactions = [];
-      // Load online transactions (manual entry or detected)
       _onlineTransactions = [];
+      _khataTransactions = []; // Reset once before local and cloud Khata rows are added.
       
       // Process local sales and separate by payment method
       for (final rawSale in sales) {
         if (rawSale is! Map) continue;
         final sale = Map<String, dynamic>.from(rawSale);
+        if (AnalyticsEngine.isVoidedSale(sale)) continue;
 
         final paymentMethod = _normalisedPaymentMethod(sale['payment_method']);
         final amount = double.tryParse((sale['total_amount'] ?? sale['total'] ?? '0').toString()) ?? 0;
@@ -184,8 +186,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         }
       }
 
-      // Load khata ledger transactions
-      _khataTransactions = [];
+      // Add cloud Khata ledger rows without clearing locally loaded Khata sales.
       try {
         if (token.isNotEmpty && userId > 0) {
           final khataResp = await ApiClient.getJson(
@@ -230,6 +231,12 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                 : (data is Map && data['invoices'] is List ? data['invoices'] : const []);
             if (invoiceRows is List) {
               for (var invoice in invoiceRows) {
+                if (invoice is Map &&
+                    AnalyticsEngine.isVoidedSale(
+                      Map<String, dynamic>.from(invoice),
+                    )) {
+                  continue;
+                }
                 final invoiceDate = invoice['created_at'] ??
                     invoice['sale_timestamp'] ??
                     invoice['business_date'] ??
@@ -433,9 +440,19 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
   }
 
   Widget _buildSummaryHeader() {
+    // Khata ledger payment/adjustment events are money movements, not new
+    // sales. Include only sale and invoice transaction categories.
+    const saleTypes = {
+      'Cash Sale',
+      'Online Payment (Manual)',
+      'Khata Sale',
+      'Invoice',
+    };
     final totalAmount = _allTransactions.fold<double>(
       0,
-      (sum, txn) => sum + (txn['amount'] as double? ?? 0),
+      (sum, txn) => saleTypes.contains(txn['type'])
+          ? sum + ((txn['amount'] as num?)?.toDouble() ?? 0)
+          : sum,
     );
 
     return Container(
