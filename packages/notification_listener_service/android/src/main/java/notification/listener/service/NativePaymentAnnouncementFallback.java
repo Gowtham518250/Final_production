@@ -539,9 +539,9 @@ final class NativePaymentAnnouncementFallback {
                 claim.put("accountSuffix", extractAccount(request.announcement.rawText));
                 claim.put("rawText", request.announcement.rawText);
                 if (AtomicPaymentAnnouncementCoordinator.shouldSuppress(request.context, claim)) {
-                    // Another Flutter/native worker already owns this announcement.
-                    NotificationRelayReceiver.markNativeAnnouncementHandled(
-                            request.context, request.eventKey, true);
+                    // Another worker owns this event. It may be Flutter TTS,
+                    // not native TTS, so do not claim native playback completed.
+                    // The owning worker will commit its own completion marker.
                     SCHEDULED.remove(request.eventKey);
                     continue;
                 }
