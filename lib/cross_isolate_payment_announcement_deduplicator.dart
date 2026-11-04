@@ -250,6 +250,38 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     return false;
   }
 
+  /// Roll back a notification claim when the payment-history write fails.
+  /// This makes the durable native event eligible for replay; it does not
+  /// delete payment history or alter the financial ledger.
+  static Future<void> releaseSourceFingerprint(String? fingerprint) {
+    final value = fingerprint?.trim();
+    if (value == null || value.isEmpty) return Future<void>.value();
+
+    final completer = Completer<void>();
+    _tail = _tail.then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.reload();
+        final stored = _readEntries(prefs.getString(_storageKey));
+        stored.removeWhere(
+          (entry) =>
+              (entry['sourceEventFingerprint'] ?? '').toString() == value,
+        );
+        await prefs.setString(_storageKey, jsonEncode(stored));
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not release failed payment announcement claim',
+          name: 'PAYMENT_DEDUP',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      } finally {
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    return completer.future;
+  }
+
   static List<Map<String, dynamic>> _readEntries(String? raw) {
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
     try {
