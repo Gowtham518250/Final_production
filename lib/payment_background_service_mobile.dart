@@ -85,46 +85,78 @@ void _listenForBackgroundPayments(FlutterBackgroundService service) {
 }
 
 
+Future<PaymentEvent?> _persistPaymentHistory(
+  PaymentEvent event,
+  PaymentDetectionService pds,
+) async {
+  var handledEvent = event;
+  Object? lastError;
+
+  // Retry local writes before leaving the native notification unacknowledged.
+  // This is deliberately not a blind success path: only a completed local
+  // history write or a duplicate/conflict already represented by history
+  // returns a non-null event.
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    try {
+      handledEvent =
+          await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
+
+      if (!handledEvent.isDuplicate && !handledEvent.hasReferenceConflict) {
+        await OnlinePaymentHistoryService.recordIncomingPayment(handledEvent);
+      }
+
+      try {
+        final savedHistory = await OnlinePaymentHistoryService.load();
+        await pds.syncDedupWindowsFromPaymentHistory(savedHistory);
+      } catch (syncError) {
+        // Dedup-window refresh is secondary; the durable receipt write above
+        // is the acknowledgement gate.
+        debugPrint('Could not refresh payment review cooldowns: $syncError');
+      }
+      return handledEvent;
+    } catch (error, stackTrace) {
+      lastError = error;
+      debugPrint(
+        'Payment history write attempt $attempt/3 failed: $error\\n$stackTrace',
+      );
+      if (attempt < 3) {
+        await Future<void>.delayed(
+          Duration(milliseconds: 250 * attempt),
+        );
+      }
+    }
+  }
+
+  debugPrint(
+    'Payment history could not be made durable. Native event remains queued. '
+    'Last error: $lastError',
+  );
+  return null;
+}
+
 Future<void> _persistPaymentHistoryThenForward(
   ServiceInstance service,
   PaymentEvent event,
   PaymentDetectionService pds,
 ) async {
-  var forwardedEvent = event;
-  var historyHandled = false;
-  try {
-    forwardedEvent =
-        await OnlinePaymentHistoryService.annotateKnownReferenceState(event);
+  final persistedEvent = await _persistPaymentHistory(event, pds);
+  final historyHandled = persistedEvent != null;
 
-    // An exact reference duplicate stays attached to the original history
-    // row. A conflicting reference is already moved to CONFLICT_REVIEW by
-    // annotateKnownReferenceState. Don't overwrite either state with the
-    // second notification's pending status.
-    if (!forwardedEvent.isDuplicate &&
-        !forwardedEvent.hasReferenceConflict) {
-      await OnlinePaymentHistoryService.recordIncomingPayment(forwardedEvent);
-    }
-    // Reconcile the replay cache against durable payment status. Pending
-    // references get a six-hour review cooldown; confirmed/rejected references
-    // keep the longer suppression window, including across service restarts.
-    try {
-      final savedHistory = await OnlinePaymentHistoryService.load();
-      await PaymentDetectionService()
-          .syncDedupWindowsFromPaymentHistory(savedHistory);
-    } catch (syncError) {
-      debugPrint('⚠️ Could not refresh payment review cooldowns: $syncError');
-    }
+  // Acknowledge only after the history writer confirms that the event is
+  // durable (or already represented by a matching persistent reference row).
+  await pds.completeNativeNotificationHistory(
+    event.sourceEventKey,
+    persisted: historyHandled,
+  );
 
-    // Even when this exact reference is already present or conflicted, this
-    // isolate has checked persistent history; don't repeat the same I/O in UI.
-    historyHandled = true;
-  } catch (error, stackTrace) {
-    debugPrint('⚠️ Could not save background payment receipt: $error');
-    debugPrint(stackTrace.toString());
+  if (!historyHandled) {
+    // Do not forward a transient-only event as if it had been saved. The
+    // native listener retains it and will replay when notification routing is
+    // reattached after recovery.
+    return;
   }
 
-  // Carry durable reference state across isolates. This prevents a late
-  // Truecaller/PhonePe/SMS replay from reopening confirmation after restart.
+  var forwardedEvent = persistedEvent;
   if (forwardedEvent.hasReferenceConflict) {
     forwardedEvent = forwardedEvent.copyWith(
       hasReferenceConflict: true,
@@ -139,14 +171,30 @@ Future<void> _persistPaymentHistoryThenForward(
       verificationStatus: PaymentVerificationStatus.unverified,
     );
   }
-  // Persist the alert after history has classified this event, so a replay
-  // marked duplicate by durable history never creates a fresh background alert.
+
   if (!forwardedEvent.nativeAnnouncementHandled) {
     await _postBackgroundPaymentAlert(pds, forwardedEvent);
   }
   final payload = forwardedEvent.toJson();
-  payload['history_handled'] = historyHandled;
+  payload['history_handled'] = true;
   service.invoke('payment_detected', payload);
+}
+
+Future<void> _persistPaymentHistoryFallback(
+  PaymentEvent event,
+  PaymentDetectionService pds,
+) async {
+  final persistedEvent = await _persistPaymentHistory(event, pds);
+  final historyHandled = persistedEvent != null;
+  await pds.completeNativeNotificationHistory(
+    event.sourceEventKey,
+    persisted: historyHandled,
+  );
+  if (!historyHandled || persistedEvent == null) return;
+
+  if (!persistedEvent.nativeAnnouncementHandled) {
+    await _postBackgroundPaymentAlert(pds, persistedEvent);
+  }
 }
 
 // ───────────────────────── Background alert + outage tracking ───────────────
@@ -743,6 +791,11 @@ Future<void> _initializeFallback() async {
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
     _wirePaymentSpeech(pds);
+
+    await _paymentForwardSubscription?.cancel();
+    _paymentForwardSubscription = pds.onPaymentDetected.listen((event) {
+      unawaited(_persistPaymentHistoryFallback(event, pds));
+    });
 
     List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
     try {
