@@ -63,6 +63,84 @@ void main() {
       expect(result.single['paid_amount'], 25.0);
     });
 
+    test('flattened API sale rows retain every product line', () {
+      final remote = <Map<String, dynamic>>[
+        {
+          'sale_id': 'SALE_MULTI_1',
+          'invoice_number': 'BILL-MULTI-1',
+          'product_name': 'Monitor',
+          'quantity': 1,
+          'price': 100,
+          'total': 100,
+          'total_amount': 200,
+        },
+        {
+          'sale_id': 'SALE_MULTI_1',
+          'invoice_number': 'BILL-MULTI-1',
+          'product_name': 'Keyboard',
+          'quantity': 2,
+          'price': 50,
+          'total': 100,
+          'total_amount': 200,
+        },
+      ];
+
+      final result = CacheConsistencyService.mergeLists(
+        const [],
+        remote,
+        dataset: 'sales',
+      );
+
+      expect(result, hasLength(1));
+      expect(result.single['total_amount'], 200);
+      final lines = List<Map<String, dynamic>>.from(
+        result.single['line_items'] as List,
+      );
+      expect(lines, hasLength(2));
+      expect(
+        lines.map((line) => line['product_name']).toSet(),
+        containsAll(['Monitor', 'Keyboard']),
+      );
+    });
+
+    test('two identical lines in one invoice stay two lines after mirror merge', () {
+      final local = <String, dynamic>{
+        'sale_id': 'SALE_REPEAT_1',
+        'invoice_number': 'BILL-REPEAT-1',
+        'total_amount': 200,
+        'items': [
+          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+        ],
+        'updated_at': '2026-11-01T10:00:00Z',
+        'sync_status': 'synced',
+      };
+      final remote = <String, dynamic>{
+        'invoice_number': 'BILL-REPEAT-1',
+        'invoice_id': 501,
+        'total_amount': 200,
+        'line_items': [
+          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+        ],
+        'updated_at': '2026-11-01T09:00:00Z',
+        'sync_status': 'synced',
+      };
+
+      final result = CacheConsistencyService.mergeLists(
+        [local],
+        [remote],
+        dataset: 'sales',
+      );
+
+      expect(result, hasLength(1));
+      expect(
+        (result.single['items'] as List),
+        hasLength(2),
+      );
+      expect(result.single['invoice_id'], 501);
+    });
+
     test('anonymous equal-content sales remain separate', () {
       final row = <String, dynamic>{
         'customer_name': 'Cash Customer',
