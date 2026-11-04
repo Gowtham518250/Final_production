@@ -102,6 +102,61 @@ void main() {
   );
 
   test(
+    'failed history persistence releases the cross-isolate announcement claim',
+    () async {
+      final now = DateTime.now();
+      final postedAt = now.millisecondsSinceEpoch;
+      final first = _event(
+        id: 'history-failed-first',
+        timestamp: now,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹725',
+        amount: 725,
+        sourceEventKey: 'com.phonepe.app|725|$postedAt|first-hash',
+      );
+      final replay = _event(
+        id: 'history-failed-replay',
+        timestamp: now.add(const Duration(seconds: 1)),
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹725',
+        amount: 725,
+        sourceEventKey: 'com.phonepe.app|725|$postedAt|replayed-hash',
+      );
+
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          first,
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          replay,
+          now: now.add(const Duration(seconds: 1)),
+        ),
+        isTrue,
+      );
+
+      await CrossIsolatePaymentAnnouncementDeduplicator.releaseSourceFingerprint(
+        first.sourceEventFingerprint,
+      );
+
+      // The same native source is eligible again after its failed history
+      // write released the provisional cross-isolate announcement claim.
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          replay,
+          now: now.add(const Duration(seconds: 2)),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'repeated accessibility text is coalesced but another payment remains eligible',
     () async {
       final now = DateTime.now();
