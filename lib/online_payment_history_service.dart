@@ -502,11 +502,9 @@ class OnlinePaymentHistoryService {
     final incomingFingerprint = sha256
         .convert(utf8.encode(event.fingerprint))
         .toString();
-    final keys = <String>{
-      '$prefix$incomingFingerprint',
-      if (_sourceIdentityKey(prefix, event) case final sourceKey?)
-        sourceKey,
-    };
+    final keys = <String>{'$prefix$incomingFingerprint'};
+    final sourceIdentityKey = _sourceIdentityKey(prefix, event);
+    if (sourceIdentityKey != null) keys.add(sourceIdentityKey);
 
     // Reference aliases may resolve to an existing canonical row whose key
     // was created from another source's fingerprint.
