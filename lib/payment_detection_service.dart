@@ -3182,6 +3182,10 @@ class PaymentDetectionService {
   final Map<String, String> _nativeHistoryDedupFingerprints =
       <String, String>{};
   final Map<String, String> _nativeHistoryReferences = <String, String>{};
+  final Map<String, String> _nativeHistoryTransportFingerprints =
+      <String, String>{};
+  final Map<String, String> _nativeHistoryPayloadFingerprints =
+      <String, String>{};
   final Map<String, int> _nativeHistoryReplayAttempts = <String, int>{};
 
   /// Event id -> channels that already echoed it (one echo per channel).
@@ -4652,6 +4656,19 @@ class PaymentDetectionService {
 
     var acknowledged = persisted;
     if (persisted) {
+      // A persisted payment record is the source of truth. Only now commit the
+      // native transport replay key, so a failed history write cannot leave a
+      // durable dedup marker that blocks recovery after process restart.
+      final transportFingerprint =
+          _nativeHistoryTransportFingerprints[key];
+      if (transportFingerprint != null &&
+          transportFingerprint.isNotEmpty) {
+        _dedupStore[transportFingerprint] = DateTime.now().add(
+          PdsConfig.dedupNativeNotificationTtl,
+        );
+        _dedupDirty = true;
+        await PdsStateStore.saveDedup(_dedupStore);
+      }
       try {
         await NotificationListenerService.acknowledgeNotification(key);
       } catch (error, stackTrace) {
@@ -4672,6 +4689,8 @@ class PaymentDetectionService {
       final eventId = _nativeHistoryEventIds[key];
       final dedupFingerprint = _nativeHistoryDedupFingerprints[key];
       final reference = _nativeHistoryReferences[key];
+      final transportFingerprint = _nativeHistoryTransportFingerprints[key];
+      final payloadFingerprint = _nativeHistoryPayloadFingerprints[key];
 
       try {
         await CrossIsolatePaymentAnnouncementDeduplicator
@@ -4712,6 +4731,15 @@ class PaymentDetectionService {
         _dedupStore.remove(dedupFingerprint);
         _activeFingerprints.remove(dedupFingerprint);
       }
+      if (transportFingerprint != null &&
+          transportFingerprint.isNotEmpty) {
+        _dedupStore.remove(transportFingerprint);
+        _dedupDirty = true;
+        await PdsStateStore.saveDedup(_dedupStore);
+      }
+      if (payloadFingerprint != null && payloadFingerprint.isNotEmpty) {
+        _recentNotificationPayloads.remove(payloadFingerprint);
+      }
       if (reference != null && reference.isNotEmpty) {
         _dedupReferenceAmounts.remove(reference);
       }
@@ -4726,6 +4754,8 @@ class PaymentDetectionService {
     _nativeHistoryEventIds.remove(key);
     _nativeHistoryDedupFingerprints.remove(key);
     _nativeHistoryReferences.remove(key);
+    _nativeHistoryTransportFingerprints.remove(key);
+    _nativeHistoryPayloadFingerprints.remove(key);
 
     final waiter = _nativeNotificationHistoryWaiters.remove(key);
     if (waiter != null && !waiter.isCompleted) {
@@ -4886,12 +4916,13 @@ class PaymentDetectionService {
           PdsLogger.d('L1', 'Durable native notification replay suppressed');
           return;
         }
-        _dedupStore[nativeFingerprint] = now.add(
-          PdsConfig.dedupNativeNotificationTtl,
-        );
-        _dedupDirty = true;
-        // Save immediately; the debounced save timer is a fallback only.
-        unawaited(PdsStateStore.saveDedup(_dedupStore));
+        // Persist the transport replay key only after the receipt/history
+        // writer confirms a durable local record. If history fails, the native
+        // event must remain eligible for replay.
+        if (_notificationEmissionFutures.containsKey(nativeEventKey)) {
+          _nativeHistoryTransportFingerprints[nativeEventKey] =
+              nativeFingerprint;
+        }
       }
 
       _recentNotificationPayloads.removeWhere(
@@ -4908,6 +4939,12 @@ class PaymentDetectionService {
             ),
           )
           .toString();
+      if (nativeEventKey != null &&
+          nativeEventKey.isNotEmpty &&
+          _notificationEmissionFutures.containsKey(nativeEventKey)) {
+        _nativeHistoryPayloadFingerprints[nativeEventKey] =
+            notificationFingerprint;
+      }
       final duplicateExpiry =
           _recentNotificationPayloads[notificationFingerprint];
       if (duplicateExpiry != null && duplicateExpiry.isAfter(now)) {
