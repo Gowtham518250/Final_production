@@ -45,6 +45,65 @@ void main() {
       expect(result.single['sale_id'], 'SALE_100');
     });
 
+    test('same sale mirrors merge unique line items instead of replacing the list', () {
+      final local = {
+        ...sale('SALE_MULTI_MIRROR'),
+        'invoice_number': 'BILL-MULTI-MIRROR',
+        'items': [
+          {
+            'product_name': 'Monitor',
+            'quantity': 1,
+            'price': 200,
+          },
+        ],
+      };
+      final cloud = {
+        ...sale('SALE_MULTI_MIRROR'),
+        'invoice_number': 'BILL-MULTI-MIRROR',
+        'is_synced': true,
+        'items': [
+          {
+            'product_name': 'Keyboard',
+            'quantity': 1,
+            'price': 100,
+          },
+        ],
+      };
+
+      final result = SalesDedupHelper.dedupeBills([local, cloud]);
+
+      expect(result, hasLength(1));
+      final lines = List<Map<String, dynamic>>.from(result.single['items'] as List);
+      expect(lines, hasLength(2));
+      expect(
+        lines.map((line) => line['product_name']).toSet(),
+        containsAll(['Monitor', 'Keyboard']),
+      );
+    });
+
+    test('repeated identical items in a single sale remain repeated', () {
+      final repeated = {
+        ...sale('SALE_REPEAT_LINES'),
+        'items': [
+          {
+            'product_name': 'Rice',
+            'quantity': 1,
+            'price': 50,
+          },
+          {
+            'product_name': 'Rice',
+            'quantity': 1,
+            'price': 50,
+          },
+        ],
+      };
+
+      final result = SalesDedupHelper.dedupeBills([repeated]);
+
+      expect(result, hasLength(1));
+      expect(result.single['items'], hasLength(2));
+    });
+
     test('content-identical rapid sales are not treated as duplicates', () {
       final a = sale('SALE_100');
       final b = sale('SALE_101');
