@@ -173,11 +173,19 @@ class InvoiceDedupHelper {
       if (!sameProduct) return false;
       final leftQty = _number(left['quantity'] ?? left['qty'], 1);
       final rightQty = _number(right['quantity'] ?? right['qty'], 1);
-      final leftPrice = _number(left['unit_price'] ?? left['price']);
-      final rightPrice = _number(right['unit_price'] ?? right['price']);
-      if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3) ||
-          leftPrice.toStringAsFixed(2) != rightPrice.toStringAsFixed(2)) {
+      if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3)) {
         return false;
+      }
+      final leftPriceRaw = left['unit_price'] ?? left['price'];
+      final rightPriceRaw = right['unit_price'] ?? right['price'];
+      // A partial mirror may omit price. Compare only when both sides include
+      // a price, rather than turning missing data into a false mismatch.
+      if (leftPriceRaw != null && rightPriceRaw != null) {
+        final leftPrice = _number(leftPriceRaw);
+        final rightPrice = _number(rightPriceRaw);
+        if (leftPrice.toStringAsFixed(2) != rightPrice.toStringAsFixed(2)) {
+          return false;
+        }
       }
       for (final field in const [
         'discount',
