@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'format_helper.dart';
 import 'financial_math.dart';
+import 'cache_consistency_service.dart';
 
 class AnalyticsEngine {
   static const Set<String> _voidedSaleStatuses = {
@@ -599,40 +600,52 @@ class AnalyticsEngine {
   /// Build one canonical transaction per business sale/invoice.
   /// Analytics must never count a local sale and its cloud invoice twice.
   List<Map<String, dynamic>> _canonicalizeTransactions(List<dynamic> rawSales) {
+    // Capture cancellations before merging, then apply them to every alias in
+    // the connected transaction group. A voided mirror must void its aliases.
+    final cancelledAliases = <String>{};
     final cancelledOnlineReferences = <String>{};
-    final cancelledTransactionKeys = <String>{};
     for (final raw in rawSales) {
       if (raw is! Map) continue;
       final record = Map<String, dynamic>.from(raw);
-      if (isVoidedSale(record)) {
-        cancelledTransactionKeys.add(_canonicalTransactionKey(record));
-        if (_isOnlineSale(record)) {
-          cancelledOnlineReferences.addAll(_onlineOrderReferences(record));
-        }
+      if (!isVoidedSale(record)) continue;
+      cancelledAliases.addAll(
+        CacheConsistencyService.identityTokens(
+          record,
+          dataset: 'sales',
+        ),
+      );
+      if (_isOnlineSale(record)) {
+        cancelledOnlineReferences.addAll(_onlineOrderReferences(record));
       }
     }
 
-    final Map<String, Map<String, dynamic>> byKey = {};
-    for (final raw in rawSales) {
-      if (raw is! Map) continue;
-      final record = Map<String, dynamic>.from(raw);
+    final merged = CacheConsistencyService.mergeLists(
+      const <dynamic>[],
+      rawSales,
+      dataset: 'sales',
+    );
+
+    final result = <Map<String, dynamic>>[];
+    var anonymousIndex = 0;
+    for (final record in merged) {
       if (isVoidedSale(record)) continue;
-      final key = _canonicalTransactionKey(record);
-      if (cancelledTransactionKeys.contains(key)) continue;
+      final aliases = CacheConsistencyService.identityTokens(
+        record,
+        dataset: 'sales',
+      );
+      if (aliases.intersection(cancelledAliases).isNotEmpty) continue;
       if (_isOnlineSale(record) &&
-          _onlineOrderReferences(
-            record,
-          ).any(cancelledOnlineReferences.contains)) {
+          _onlineOrderReferences(record).any(cancelledOnlineReferences.contains)) {
         continue;
       }
-      if (!byKey.containsKey(key)) {
-        record['transaction_key'] = key;
-        byKey[key] = record;
-      } else {
-        byKey[key] = _mergeCanonicalTransaction(byKey[key]!, record);
-      }
+
+      // Anonymous transactions must not be grouped on amount/date/content.
+      record['transaction_key'] = aliases.isEmpty
+          ? 'anonymous_${anonymousIndex++}'
+          : _canonicalTransactionKey(record);
+      result.add(record);
     }
-    return byKey.values.where((record) => !isVoidedSale(record)).toList();
+    return result;
   }
 
   /// 🚀 Production analytics: one canonical transaction pass.
@@ -685,22 +698,6 @@ class AnalyticsEngine {
     salesByYearCache = {};
     monthlyProductSales = {};
 
-    String lineKey(Map<String, dynamic> item) {
-      final id = (item['product_id'] ?? item['id'] ?? '').toString().trim();
-      final name =
-          (item['product_name'] ??
-                  item['product'] ??
-                  item['item'] ??
-                  item['description'] ??
-                  '')
-              .toString()
-              .trim()
-              .toLowerCase();
-      final qty = _toDouble(item['quantity'] ?? item['qty']);
-      final price = _toDouble(item['unit_price'] ?? item['price']);
-      return '$id|$name|${qty.toStringAsFixed(3)}|${price.toStringAsFixed(2)}';
-    }
-
     final transactionsWithDates = <Map<String, dynamic>>[];
     for (final transaction in canonicalTransactions) {
       final dt = _tryGetBusinessDate(transaction);
@@ -739,13 +736,15 @@ class AnalyticsEngine {
                 ? 'PARTIAL'
                 : 'UNPAID')
           : status;
-      transaction['transaction_key'] = _canonicalTransactionKey(transaction);
+      transaction['transaction_key'] =
+          transaction['transaction_key']?.toString() ??
+              _canonicalTransactionKey(transaction);
       transactionsWithDates.add(transaction);
 
       final key = transaction['transaction_key'].toString();
-      if (dt.year == now.year) {
-        final mon =
-            '${_months[dt.month - 1]} ${dt.year.toString().substring(2)}';
+      final mon =
+          '${_months[dt.month - 1]} ${dt.year.toString().substring(2)}';
+      if (salesByMonthCache.containsKey(mon)) {
         salesByMonthCache[mon] = (salesByMonthCache[mon] ?? 0.0) + gross;
       }
       salesByYearCache['${dt.year}'] =
@@ -785,12 +784,9 @@ class AnalyticsEngine {
 
       final lines = transaction['items'] ?? transaction['line_items'];
       if (lines is List) {
-        final seenLines = <String>{};
         for (final rawLine in lines) {
           if (rawLine is! Map) continue;
           final item = Map<String, dynamic>.from(rawLine);
-          final lk = lineKey(item);
-          if (!seenLines.add(lk)) continue;
           final productName = formatProductName(
             (item['product_name'] ??
                     item['product'] ??
@@ -899,12 +895,9 @@ class AnalyticsEngine {
 
       // Normal path: invoice contains line items.
       if (lines is List) {
-        final seenLines = <String>{};
         for (final rawLine in lines) {
           if (rawLine is! Map) continue;
           final item = Map<String, dynamic>.from(rawLine);
-          final lk = lineKey(item);
-          if (!seenLines.add(lk)) continue;
           final id = (item['product_id'] ?? item['id'] ?? item['barcode'] ?? '')
               .toString()
               .trim();
