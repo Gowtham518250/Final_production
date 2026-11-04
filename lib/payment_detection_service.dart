@@ -2851,6 +2851,12 @@ class PendingPaymentBuffer {
       }
     }
   }
+
+  /// Remove only an event whose durable history write failed. Its native
+  /// notification remains queued and will be reclassified on stream replay.
+  void remove(String id) {
+    _buffer.removeWhere((entry) => entry.event.id == id);
+  }
 }
 
 // =============================================================================
@@ -3172,6 +3178,11 @@ class PaymentDetectionService {
       <String, String>{};
   final Map<String, String> _nativeHistorySourceFingerprints =
       <String, String>{};
+  final Map<String, String> _nativeHistoryEventIds = <String, String>{};
+  final Map<String, String> _nativeHistoryDedupFingerprints =
+      <String, String>{};
+  final Map<String, String> _nativeHistoryReferences = <String, String>{};
+  final Map<String, int> _nativeHistoryReplayAttempts = <String, int>{};
 
   /// Event id -> channels that already echoed it (one echo per channel).
   final Map<String, Set<String>> _echoClaims = {};
@@ -4596,6 +4607,23 @@ class PaymentDetectionService {
           'L1',
           'Payment history is not durable yet; native event remains queued',
         );
+        final replayAttempt =
+            (_nativeHistoryReplayAttempts[key] ?? 0) + 1;
+        _nativeHistoryReplayAttempts[key] = replayAttempt;
+        if (replayAttempt <= 2) {
+          // Reattach to the plugin stream. Its onListen callback replays
+          // unacknowledged events from native SharedPreferences.
+          Future<void>.delayed(
+            Duration(seconds: replayAttempt * 2),
+            _startNotificationListener,
+          );
+        } else {
+          PdsLogger.w(
+            'L1',
+            'Automatic same-session replay limit reached; native event remains '
+                'queued for the next listener/app restart',
+          );
+        }
       }
       return;
     }
@@ -4637,13 +4665,17 @@ class PaymentDetectionService {
       }
     } else {
       // The dedup claim is provisional until history is durable. Release both
-      // isolate-local SharedPreferences and Android SQLite claims so the
-      // still-queued notification can be classified and written on replay.
-      final fingerprint = _nativeHistorySourceFingerprints[key];
+      // isolate-local SharedPreferences and Android SQLite claims, plus only
+      // this event's in-memory dedup state, so a stream replay can retry it.
+      final sourceFingerprint = _nativeHistorySourceFingerprints[key];
       final sourceIdentity = _nativeHistorySourceIdentities[key];
+      final eventId = _nativeHistoryEventIds[key];
+      final dedupFingerprint = _nativeHistoryDedupFingerprints[key];
+      final reference = _nativeHistoryReferences[key];
+
       try {
         await CrossIsolatePaymentAnnouncementDeduplicator
-            .releaseSourceFingerprint(fingerprint);
+            .releaseSourceFingerprint(sourceFingerprint);
       } catch (error, stackTrace) {
         PdsLogger.e(
           'L1',
@@ -4663,13 +4695,38 @@ class PaymentDetectionService {
           stackTrace,
         );
       }
+
+      if (eventId != null && eventId.isNotEmpty) {
+        _recentEmittedPayments.removeWhere(
+          (event) =>
+              event.id == eventId ||
+              (sourceIdentity != null &&
+                  event.sourceEventIdentity == sourceIdentity),
+        );
+        _echoClaims.remove(eventId);
+        _possibleRepeatEventIds.remove(eventId);
+        _historyHandledEventIds.remove(eventId);
+        _pendingBuffer.remove(eventId);
+      }
+      if (dedupFingerprint != null && dedupFingerprint.isNotEmpty) {
+        _dedupStore.remove(dedupFingerprint);
+        _activeFingerprints.remove(dedupFingerprint);
+      }
+      if (reference != null && reference.isNotEmpty) {
+        _dedupReferenceAmounts.remove(reference);
+      }
     }
 
     if (acknowledged) {
       _nativeNotificationHistoryPending.remove(key);
-      _nativeHistorySourceIdentities.remove(key);
-      _nativeHistorySourceFingerprints.remove(key);
+      _nativeHistoryReplayAttempts.remove(key);
     }
+    _nativeHistorySourceIdentities.remove(key);
+    _nativeHistorySourceFingerprints.remove(key);
+    _nativeHistoryEventIds.remove(key);
+    _nativeHistoryDedupFingerprints.remove(key);
+    _nativeHistoryReferences.remove(key);
+
     final waiter = _nativeNotificationHistoryWaiters.remove(key);
     if (waiter != null && !waiter.isCompleted) {
       waiter.complete(acknowledged);
@@ -6378,6 +6435,12 @@ class PaymentDetectionService {
       }
       if (sourceFingerprint != null && sourceFingerprint.isNotEmpty) {
         _nativeHistorySourceFingerprints[nativeEventKey] = sourceFingerprint;
+      }
+      _nativeHistoryEventIds[nativeEventKey] = finalEvent.id;
+      _nativeHistoryDedupFingerprints[nativeEventKey] = finalEvent.fingerprint;
+      final reference = finalEvent.normalizedReferenceId;
+      if (reference != null && reference.isNotEmpty) {
+        _nativeHistoryReferences[nativeEventKey] = reference;
       }
     }
 
