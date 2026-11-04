@@ -141,6 +141,23 @@ void main() {
       expect(result.single['invoice_id'], 501);
     });
 
+    test('numeric sales-row IDs do not bridge different invoice aliases', () {
+      final rows = <Map<String, dynamic>>[
+        {'id': 12, 'sale_id': 'SALE_A', 'invoice_number': 'BILL-A'},
+        {'id': 12, 'sale_id': 'SALE_B', 'invoice_number': 'BILL-B'},
+      ];
+
+      final result = CacheConsistencyService.mergeLists(
+        rows,
+        const [],
+        dataset: 'sales',
+      );
+
+      expect(result, hasLength(2));
+      expect(result.map((row) => row['invoice_number']).toSet(),
+          containsAll(['BILL-A', 'BILL-B']));
+    });
+
     test('anonymous equal-content sales remain separate', () {
       final row = <String, dynamic>{
         'customer_name': 'Cash Customer',
