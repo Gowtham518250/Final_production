@@ -77,6 +77,28 @@ class NotificationListenerService {
     }
   }
 
+  /// Release a SQLite announcement claim when the local payment-history
+  /// write failed. The native notification itself remains in the durable queue.
+  static Future<void> releasePaymentAnnouncementIdentity(
+    String? sourceIdentity,
+  ) async {
+    if (!Platform.isAndroid ||
+        sourceIdentity == null ||
+        sourceIdentity.trim().isEmpty) {
+      return;
+    }
+    try {
+      await methodeChannel.invokeMethod<bool>(
+        'releasePaymentAnnouncementIdentity',
+        {'sourceIdentity': sourceIdentity},
+      );
+    } on PlatformException catch (error) {
+      log('Payment announcement claim release failed: $error');
+    } on MissingPluginException catch (error) {
+      log('Payment announcement claim release unavailable: $error');
+    }
+  }
+
   /// Acknowledge a durable native notification after the detector processed it.
   static Future<void> acknowledgeNotification(String? eventKey) async {
     if (!Platform.isAndroid || eventKey == null || eventKey.trim().isEmpty) {
