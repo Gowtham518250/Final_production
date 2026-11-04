@@ -1925,12 +1925,16 @@ class _VI implements Comparable<_VI> {
   final String? payerName;
   final PaymentDirection direction;
   final DateTime at;
+  final String? fingerprint;
+  final PaymentEvent? event;
   _VI(
     this.text,
     this.priority, {
     this.amount,
     this.payerName,
     this.direction = PaymentDirection.unknown,
+    this.fingerprint,
+    this.event,
   }) : at = DateTime.now();
   @override
   int compareTo(_VI o) {
@@ -1965,7 +1969,15 @@ class PriorityVoiceQueue {
   DateTime? _lastAt;
   Timer? _timer;
 
+  /// Legacy fire-and-forget callback; new callers should set [speaker].
   void Function(String)? onSpeak;
+
+  /// Returns true only when the TTS provider confirms completion.
+  Future<bool> Function(String text, String? dedupeKey)? speaker;
+
+  /// Called when a payment was not spoken and needs an audible OS fallback.
+  void Function(String text, PaymentEvent? event)? onSpeakFailed;
+
   // FIX-3: language supplied by the caller instead of reading global state
   VoiceLanguage Function()? getLanguage;
 
@@ -2236,10 +2248,56 @@ class PriorityVoiceQueue {
   static const Duration _spokenMemory = Duration(hours: 6);
   static const String _kSpokenPrefs = 'pds_spoken_v1';
 
-  void _markSpoken(String fp) {
+  /// Claim the fingerprint while the item is queued so concurrent echoes do
+  /// not enqueue a second speech. Do not persist it until TTS succeeds.
+  void _claimSpoken(String fp) {
+    _spokenFps[fp] = DateTime.now().add(_spokenMemory);
+    _spokenFps.removeWhere((_, exp) => DateTime.now().isAfter(exp));
+  }
+
+  void _commitSpoken(String fp) {
     _spokenFps[fp] = DateTime.now().add(_spokenMemory);
     _spokenFps.removeWhere((_, exp) => DateTime.now().isAfter(exp));
     unawaited(_persistSpoken());
+  }
+
+  void _releaseSpoken(String fp, {PaymentEvent? event}) {
+    _spokenFps.remove(fp);
+    if (event != null) {
+      _recentPayments.removeWhere((entry) => entry.event.id == event.id);
+      _echoClaims.remove(event.id);
+    }
+    unawaited(_persistSpoken());
+  }
+
+  void _settleSpeech(String text, List<_VI> items, bool spoken) {
+    if (spoken) {
+      for (final item in items) {
+        final fingerprint = item.fingerprint;
+        if (fingerprint != null) _commitSpoken(fingerprint);
+      }
+      return;
+    }
+
+    PdsLogger.w('VOICE', 'TTS did not complete; requesting audible fallback');
+    PdsLogger.t('DROP', 'reason=voice_not_spoken');
+    final failedItems = items.where((item) => item.event != null).toList();
+    for (final item in items) {
+      final fingerprint = item.fingerprint;
+      if (fingerprint != null) {
+        _releaseSpoken(fingerprint, event: item.event);
+      }
+    }
+
+    final fallback = onSpeakFailed;
+    if (fallback == null) return;
+    try {
+      for (final item in failedItems) {
+        fallback(item.text, item.event);
+      }
+    } catch (error) {
+      PdsLogger.w('VOICE', 'Audible fallback callback failed: $error');
+    }
   }
 
   Future<void> restoreSpoken() async {
@@ -2337,14 +2395,20 @@ class PriorityVoiceQueue {
       // another later transaction with the same amount.
       return;
     }
-    _markSpoken(fingerprint);
-    _rememberPayment(e);
-
     final text = ui.voiceText(_lang);
-    if (text.isEmpty) {
+    if (text.trim().isEmpty) {
       PdsLogger.t('DROP', 'reason=voice_text_empty');
+      // Do not leave an unspoken payment in the spoken set.
+      try {
+        onSpeakFailed?.call('', e);
+      } catch (error) {
+        PdsLogger.w('VOICE', 'Empty voice fallback callback failed: $error');
+      }
       return;
     }
+
+    _claimSpoken(fingerprint);
+    _rememberPayment(e);
     final priority = e.isFailed
         ? _VP.high
         : e.decision == PaymentDecision.likely
@@ -2356,6 +2420,8 @@ class PriorityVoiceQueue {
       _VI(
         text,
         priority,
+        fingerprint: fingerprint,
+        event: e,
         amount: e.amount,
         payerName: e.payerName,
         direction: ui.direction == PaymentTransactionDirection.incomingCredit
@@ -2377,9 +2443,19 @@ class PriorityVoiceQueue {
           ? fingerprint
           : 'voice_$fingerprint';
       if (_isAlreadySpoken(voiceFingerprint)) return;
-      _markSpoken(voiceFingerprint);
+      _claimSpoken(voiceFingerprint);
     }
-    _queue.add(_VI(text, priority));
+    _queue.add(
+      _VI(
+        text,
+        priority,
+        fingerprint: fingerprint == null
+            ? null
+            : (fingerprint.startsWith('voice_')
+                  ? fingerprint
+                  : 'voice_$fingerprint'),
+      ),
+    );
     _schedule();
   }
 
@@ -2416,7 +2492,7 @@ class PriorityVoiceQueue {
           .map((i) => (i.amount!, i.payerName))
           .toList();
       final text = VoiceBuilder.burst(payments, _lang);
-      _speak(text);
+      _speak(text, normals);
       if (_queue.isNotEmpty) {
         _timer?.cancel();
         _timer = Timer(PdsConfig.voiceMinGap, _drain);
@@ -2426,18 +2502,48 @@ class PriorityVoiceQueue {
 
     final item = _queue.first;
     _queue.remove(item);
-    _speak(item.text);
+    _speak(item.text, [item]);
     if (_queue.isNotEmpty) {
       _timer?.cancel();
       _timer = Timer(PdsConfig.voiceMinGap, _drain);
     }
   }
 
-  void _speak(String t) {
+  void _speak(String text, List<_VI> items) {
     _lastAt = DateTime.now();
-    PdsLogger.i('VOICE', 'SPEAK "$t"');
-    PdsLogger.t('SPEAK', 'handler=${onSpeak != null}');
-    onSpeak?.call(t);
+    PdsLogger.i('VOICE', 'SPEAK "$text"');
+
+    final asyncSpeaker = speaker;
+    if (asyncSpeaker != null) {
+      unawaited(() async {
+        var spoken = false;
+        try {
+          final dedupeKey = items.length == 1 ? items.single.fingerprint : null;
+          spoken = await asyncSpeaker(text, dedupeKey);
+        } catch (error) {
+          PdsLogger.w('VOICE', 'TTS provider failed: $error');
+        }
+        _settleSpeech(text, items, spoken);
+      }());
+      return;
+    }
+
+    // Preserve compatibility for any older consumer still using onSpeak.
+    // It cannot report asynchronous TTS failure, so only synchronous success
+    // can be treated as success here. The background service uses [speaker].
+    final legacySpeaker = onSpeak;
+    if (legacySpeaker != null) {
+      try {
+        legacySpeaker(text);
+        _settleSpeech(text, items, true);
+      } catch (error) {
+        PdsLogger.w('VOICE', 'Legacy speaker failed: $error');
+        _settleSpeech(text, items, false);
+      }
+      return;
+    }
+
+    _settleSpeech(text, items, false);
   }
 
   void _cleanTs() {
