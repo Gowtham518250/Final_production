@@ -23,6 +23,7 @@ import 'owner_orders_page.dart';
 import 'shop_browser_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'local_storage_service.dart';
+import 'cache_consistency_service.dart';
 import 'api_client.dart';
 import 'models.dart';
 import 'register_page.dart';
@@ -1358,8 +1359,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         try {
           final data = json.decode(response.body);
           if (data is List && data.every((item) => item is Map)) {
-            await LocalStorageService.saveLocalCustomers(data);
-            if (kDebugMode) debugPrint('✅ Synced ${data.length} customers');
+            final existingCustomers =
+                await LocalStorageService.loadLocalCustomers();
+            final reconciledCustomers = CacheConsistencyService.mergeLists(
+              existingCustomers,
+              data,
+              dataset: 'customers',
+            );
+            await LocalStorageService.saveLocalCustomers(reconciledCustomers);
+            if (kDebugMode) {
+              debugPrint(
+                '✅ Customer cache reconciled local=${existingCustomers.length}, '
+                'remote=${data.length}, kept=${reconciledCustomers.length}',
+              );
+            }
           } else {
             if (kDebugMode)
               debugPrint('❌ Invalid customer data format from server');
