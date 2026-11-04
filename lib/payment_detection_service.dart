@@ -4847,7 +4847,7 @@ class PaymentDetectionService {
   }) => _notificationPayloadFingerprint(
     packageName: packageName,
     sender: sender,
-    normalizedPayload: payload.toLowerCase().replaceAll(RegExp(r'\\s+'), ' ').trim(),
+    normalizedPayload: payload.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim(),
     eventKey: eventKey,
   );
 
