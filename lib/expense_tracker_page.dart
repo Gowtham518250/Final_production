@@ -700,7 +700,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                         serverConfirmed = serverId != null && serverId!.isNotEmpty;
                       } else {
                         debugPrint(
-                          'Expense HTTP \${response.statusCode}; local copy retained.',
+                          'Expense HTTP ${response.statusCode}; local copy retained.',
                         );
                       }
                     } catch (error) {
