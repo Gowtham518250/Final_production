@@ -4700,7 +4700,15 @@ class PaymentDetectionService {
         await PdsStateStore.saveDedup(_dedupStore);
       }
       try {
-        await NotificationListenerService.acknowledgeNotification(key);
+        acknowledged =
+            await NotificationListenerService.acknowledgeNotification(key);
+        if (!acknowledged) {
+          PdsLogger.w(
+            'L1',
+            'History saved, but Android did not confirm notification removal; '
+                'event remains pending for safe retry',
+          );
+        }
       } catch (error, stackTrace) {
         PdsLogger.e(
           'L1',
