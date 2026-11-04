@@ -534,6 +534,32 @@ class CacheConsistencyService {
     final flattened = <Map<String, dynamic>>[];
     var hasNestedSnapshot = false;
 
+    void mergeNestedSnapshot(List<Map<String, dynamic>> incoming) {
+      if (incoming.isEmpty) return;
+      if (!hasNestedSnapshot) {
+        nested.addAll(incoming);
+        hasNestedSnapshot = true;
+        return;
+      }
+      final matched = <int>{};
+      for (final line in incoming) {
+        var matchIndex = -1;
+        for (var i = 0; i < nested.length; i++) {
+          if (matched.contains(i)) continue;
+          if (_sameSalesLine(nested[i], line)) {
+            matchIndex = i;
+            break;
+          }
+        }
+        if (matchIndex < 0) {
+          nested.add(line);
+        } else {
+          matched.add(matchIndex);
+          nested[matchIndex] = _mergeMissing(nested[matchIndex], line);
+        }
+      }
+    }
+
     for (final row in rows) {
       final lineItems = row['line_items'];
       final items = row['items'];
@@ -547,27 +573,20 @@ class CacheConsistencyService {
             .whereType<Map>()
             .map((line) => Map<String, dynamic>.from(line))
             .toList();
-        if (!hasNestedSnapshot) {
-          nested.addAll(incoming);
-          hasNestedSnapshot = true;
-        } else {
-          final matched = <int>{};
-          for (final line in incoming) {
-            var matchIndex = -1;
-            for (var i = 0; i < nested.length; i++) {
-              if (matched.contains(i)) continue;
-              if (_sameSalesLine(nested[i], line)) {
-                matchIndex = i;
-                break;
-              }
-            }
-            if (matchIndex < 0) {
-              nested.add(line);
-            } else {
-              matched.add(matchIndex);
-              nested[matchIndex] = _mergeMissing(nested[matchIndex], line);
-            }
-          }
+        mergeNestedSnapshot(incoming);
+
+        // Some clients serialize partial line collections independently under
+        // both fields. Merge the alternate array too when they are not the
+        // exact same list object; mirrored duplicates pair one-to-one.
+        if (lineItems is List &&
+            items is List &&
+            !identical(lineItems, items)) {
+          final alternate = identical(raw, lineItems) ? items : lineItems;
+          final alternateLines = alternate
+              .whereType<Map>()
+              .map((line) => Map<String, dynamic>.from(line))
+              .toList();
+          mergeNestedSnapshot(alternateLines);
         }
         continue;
       }
