@@ -156,6 +156,37 @@ const String _kOutageNotice = 'pds_service_outage_notice';
 const Duration _heartbeatEvery = Duration(minutes: 5);
 const Duration _outageThreshold = Duration(minutes: 20);
 
+/// Prevent concurrent failed-TTS callbacks from posting duplicate sounding alerts.
+final Set<String> _audibleFallbackEventIds = <String>{};
+
+void _wirePaymentSpeech(PaymentDetectionService pds) {
+  pds.speaker = (text, dedupeKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final language = prefs.getString('payment_sound_lang') ?? 'en-US';
+      return await PaymentAnnouncementService().speakSimple(
+        text,
+        language,
+        dedupeKey: dedupeKey,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Payment TTS failed: $error\\n$stackTrace');
+      return false;
+    }
+  };
+
+  pds.onSpeakFailed = (text, event) {
+    if (event == null) return;
+    unawaited(
+      _postBackgroundPaymentAlert(
+        pds,
+        event,
+        forceAudible: true,
+      ),
+    );
+  };
+}
+
 Future<void> _ensureAlertPlugin() async {
   if (_alertPluginReady) return;
   await _backgroundAlertPlugin.initialize(
@@ -177,10 +208,20 @@ String _clock(DateTime time) {
 /// TTS when it is enabled and use a sounding notification when voice is off.
 Future<void> _postBackgroundPaymentAlert(
   PaymentDetectionService pds,
-  PaymentEvent event,
-) async {
+  PaymentEvent event, {
+  bool forceAudible = false,
+}) async {
   if (!Platform.isAndroid || event.isDuplicate || event.isFailed) return;
-  if (_backgroundAlertDeduplicator.shouldSuppress(event)) return;
+
+  if (forceAudible) {
+    if (!_audibleFallbackEventIds.add(event.id)) return;
+    while (_audibleFallbackEventIds.length > 200) {
+      _audibleFallbackEventIds.remove(_audibleFallbackEventIds.first);
+    }
+  } else {
+    if (_audibleFallbackEventIds.contains(event.id)) return;
+    if (_backgroundAlertDeduplicator.shouldSuppress(event)) return;
+  }
 
   try {
     final lateAt = pds.originalTimeIfLate(event.id);
@@ -233,11 +274,12 @@ Future<void> _postBackgroundPaymentAlert(
     // Unverified incoming credits need an audible fallback: a background TTS
     // engine may be unavailable even though voice is enabled in preferences.
     // The alert remains deduplicated per payment by _backgroundAlertDeduplicator.
-    final audible = shouldUseAudiblePaymentAlert(
-      isLate: lateAt != null,
-      voiceEnabled: PdsConfig.isVoiceEnabled,
-      hasConflict: conflict,
-    );
+    final audible = forceAudible ||
+        shouldUseAudiblePaymentAlert(
+          isLate: lateAt != null,
+          voiceEnabled: PdsConfig.isVoiceEnabled,
+          hasConflict: conflict,
+        );
     final channelId = audible
         ? 'payment_detection_alerts_audible'
         : 'payment_detection_alerts_silent';
@@ -259,8 +301,16 @@ Future<void> _postBackgroundPaymentAlert(
         showBadge: false,
       ),
     );
+    final normalNotificationId = event.id.hashCode & 0x7fffffff;
+    if (forceAudible) {
+      // Replace an earlier silent heads-up with a separate sounding alert.
+      await _backgroundAlertPlugin.cancel(normalNotificationId);
+    }
+    final notificationId = forceAudible
+        ? (normalNotificationId ^ 0x40000000)
+        : normalNotificationId;
     await _backgroundAlertPlugin.show(
-      event.id.hashCode & 0x7fffffff,
+      notificationId,
       title,
       body,
       NotificationDetails(
@@ -283,7 +333,8 @@ Future<void> _postBackgroundPaymentAlert(
       '🔔 Background payment alert posted (late=${lateAt != null}, audible=$audible)',
     );
   } catch (error, stackTrace) {
-    debugPrint('⚠️ Background payment alert failed: $error\n$stackTrace');
+    if (forceAudible) _audibleFallbackEventIds.remove(event.id);
+    debugPrint('⚠️ Background payment alert failed: $error\\n$stackTrace');
   }
 }
 
@@ -409,11 +460,7 @@ Future<bool> onStart(ServiceInstance service) async {
     PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
-    pds.onSpeak = (text) async {
-      final prefs = await SharedPreferences.getInstance();
-      final lang = prefs.getString('payment_sound_lang') ?? 'en-US';
-      PaymentAnnouncementService().speakSimple(text, lang);
-    };
+    _wirePaymentSpeech(pds);
 
     await _paymentForwardSubscription?.cancel();
     _paymentForwardSubscription = pds.onPaymentDetected.listen((event) {
@@ -695,11 +742,7 @@ Future<void> _initializeFallback() async {
     PdsConfig.isVoiceEnabled = prefs.getBool('payment_sound_enabled') ?? true;
     pds.setLanguage(PaymentDetectionService.mapLanguage(langCode));
 
-    pds.onSpeak = (text) async {
-      final prefs = await SharedPreferences.getInstance();
-      final lang = prefs.getString('payment_sound_lang') ?? 'en-US';
-      PaymentAnnouncementService().speakSimple(text, lang);
-    };
+    _wirePaymentSpeech(pds);
 
     List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
     try {
