@@ -453,9 +453,11 @@ final class NativePaymentAnnouncementFallback {
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(new Notification.BigTextStyle().bigText(body))
-                    .setCategory(Notification.CATEGORY_MESSAGE)
                     .setPriority(Notification.PRIORITY_HIGH)
                     .setAutoCancel(true);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                builder.setCategory(Notification.CATEGORY_MESSAGE);
+            }
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                 builder.setDefaults(Notification.DEFAULT_ALL)
                         .setSound(RingtoneManager.getDefaultUri(
