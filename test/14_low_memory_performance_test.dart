@@ -7,6 +7,7 @@ void main() {
 
   test('decoded image cache is bounded for low-memory devices', () {
     LowMemoryPerformance.configure();
+    LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
 
     final cache = PaintingBinding.instance.imageCache;
     expect(cache.maximumSize, LowMemoryPerformance.lowMemoryMaximumCachedImages);
@@ -18,6 +19,7 @@ void main() {
 
   test('configuration is idempotent', () {
     LowMemoryPerformance.configure();
+    LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
     final cache = PaintingBinding.instance.imageCache;
 
     expect(cache.maximumSize, 16);
