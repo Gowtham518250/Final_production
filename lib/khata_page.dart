@@ -28,7 +28,6 @@ class KhataPage extends StatefulWidget {
   static _KhataPageState? _state;
   static void refreshKhata() {
     _state?._loadKhata();
-    _state?._loadInvoiceAnalytics();
   }
 
   @override
@@ -82,15 +81,19 @@ class _KhataPageState extends State<KhataPage>
   List<Map<String, dynamic>> _topOutstandingCustomers = [];
   StreamSubscription<List<Map<String, dynamic>>>? _durableEventsSubscription;
 
+  bool _khataLoadInProgress = false;
+  bool _khataReloadQueued = false;
+  bool _khataBackgroundReconciliationInProgress = false;
+
   @override
   void initState() {
     super.initState();
     KhataPage._state = this;
     _tabController = TabController(length: 2, vsync: this);
 
-    // Load local data immediately
-    _loadKhata();
-    _loadInvoiceAnalytics();
+    // Render the local ledger first. Invoice analytics is loaded after this
+    // first pass, and the slower cloud reconciliation runs independently.
+    unawaited(_loadKhata());
     _connectRealtime();
     _durableEventsSubscription = SyncService.durableEventsStream.listen((
       events,
@@ -102,15 +105,6 @@ class _KhataPageState extends State<KhataPage>
         return;
       }
       unawaited(_loadKhata());
-      unawaited(_loadInvoiceAnalytics());
-    });
-
-    // Sync with backend after a short delay
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        _loadKhata();
-        _loadInvoiceAnalytics();
-      }
     });
   }
 
@@ -134,7 +128,6 @@ class _KhataPageState extends State<KhataPage>
       case 'invoice.created':
       case 'order.status_changed':
         await _loadKhata();
-        await _loadInvoiceAnalytics();
         break;
       default:
         break;
@@ -514,53 +507,110 @@ class _KhataPageState extends State<KhataPage>
 
   Future<void> _loadKhata() async {
     if (!mounted) return;
-    setState(() => _loading = true);
-
-    // Local ledger is the UI source of truth. This makes Khata work with no
-    // network and keeps it consistent with local invoice analytics.
-    try {
-      await _loadKhataLocalFallback();
-    } catch (e) {
-      if (kDebugMode) debugPrint('Error loading local khata: $e');
+    if (_khataLoadInProgress) {
+      _khataReloadQueued = true;
+      return;
     }
 
-    _applyFilter();
-    if (mounted) setState(() => _loading = false);
-
-    // Reconcile in the background. Never replace the local view merely because
-    // a remote endpoint is temporarily empty or unavailable.
+    _khataLoadInProgress = true;
     try {
-      // Do not rely solely on the shared sync coordinator here: it can already
-      // be busy with dashboard startup and coalesce this request. The restore
-      // service itself coalesces concurrent calls and guarantees one complete
-      // per-owner invoice/sales snapshot for Khata and Invoice Analytics.
+      // Keep existing cards interactive during refreshes. The full-page
+      // loader is used only for the first load (when _loading is still true).
+      do {
+        _khataReloadQueued = false;
+        try {
+          await _loadKhataLocalFallback();
+        } catch (e) {
+          if (kDebugMode) debugPrint('Error loading local khata: $e');
+        }
+
+        _applyFilter();
+        if (mounted) setState(() => _loading = false);
+      } while (_khataReloadQueued && mounted);
+    } finally {
+      _khataLoadInProgress = false;
+    }
+
+    if (!mounted) return;
+    unawaited(_loadInvoiceAnalytics());
+    _startKhataBackgroundReconciliation();
+  }
+
+  void _startKhataBackgroundReconciliation() {
+    if (!mounted || _khataBackgroundReconciliationInProgress) return;
+    _khataBackgroundReconciliationInProgress = true;
+    unawaited(_reconcileKhataInBackground());
+  }
+
+  Future<void> _reconcileKhataInBackground() async {
+    try {
+      // The local Khata screen is already visible and interactive. Restore and
+      // sync cloud data without holding the page open or replacing it with a
+      // full-screen loading state.
       await SalesRestoreService.ensureFullHistoryRestored();
       await SyncService.downloadUserDataSafe();
-      await _loadKhataLocalFallback();
-      _applyFilter();
-      if (mounted) setState(() {});
-      // Cloud restore persists canonical invoices separately. Reload invoice
-      // analytics after the restore so a fresh install/data-clear immediately
-      // repopulates Udhar/Invoice Analytics without requiring relogin.
-      await _loadInvoiceAnalytics();
+      if (!mounted) return;
+
+      // Refresh from the newly reconciled local ledger. The load guard queues
+      // this pass if a user refresh or payment action is already rebuilding it.
+      await _loadKhata();
     } catch (e) {
       if (kDebugMode) debugPrint('Khata background reconciliation skipped: $e');
+    } finally {
+      _khataBackgroundReconciliationInProgress = false;
     }
   }
 
+  String _deadlineKeyForCustomer(Map<String, dynamic> customer) {
+    final rawId = (customer['customer_id'] ?? customer['customerId'] ?? '')
+        .toString()
+        .trim();
+    if (rawId.isNotEmpty && rawId != '0' && rawId.toLowerCase() != 'null') {
+      return rawId;
+    }
+
+    final phone = (customer['customer_phone'] ??
+            customer['phone'] ??
+            customer['mobile'] ??
+            '')
+        .toString()
+        .trim();
+    if (phone.isNotEmpty && phone.toLowerCase() != 'null') return phone;
+
+    return (customer['customer_name'] ?? customer['name'] ?? '')
+        .toString()
+        .trim();
+  }
+
   Future<void> _loadKhataLocalFallback() async {
-    var unified = await LocalStorageService.loadUnifiedCustomersLedger();
+    final unified = await LocalStorageService.loadUnifiedCustomersLedger();
+
+    // One box open for all customer deadlines, rather than one asynchronous
+    // authenticated storage lookup per customer during every Khata refresh.
+    final deadlineKeys = unified
+        .map(_deadlineKeyForCustomer)
+        .where((key) => key.isNotEmpty)
+        .toSet();
+    final deadlines = await LocalStorageService.loadKhataDeadlines(deadlineKeys);
+
     _customers = [];
     _totalOutstanding = 0.0;
     _totalOverdue = 0.0;
     _pendingCount = 0;
     _overdueCount = 0;
 
-    if (kDebugMode)
+    if (kDebugMode) {
       debugPrint('📦 Loading ${unified.length} customers from local storage');
+    }
 
     final today = DateTime.now();
-    for (var c in unified) {
+    for (var index = 0; index < unified.length; index++) {
+      if (index > 0 && index % 64 == 0) {
+        // Yield between customer batches so scroll/input frames can be served.
+        await Future<void>.delayed(Duration.zero);
+        if (!mounted) return;
+      }
+      final c = unified[index];
       // Show an outstanding invoice for a named customer even without a phone.
       // Phone-based calling/WhatsApp actions remain unavailable without a valid mobile.
       final customerPhone = (c['phone'] ?? c['customer_phone'] ?? '')
@@ -599,12 +649,8 @@ class _KhataPageState extends State<KhataPage>
           (c['balance'] as num?)?.toDouble() ??
           0.0;
       if (bal > 0.01) {
-        final deadlineKey = (c['customer_id'] ?? c['phone'] ?? c['name'] ?? '')
-            .toString()
-            .trim();
-        final storedDueDate = deadlineKey.isNotEmpty
-            ? await LocalStorageService.loadKhataDeadline(deadlineKey)
-            : null;
+        final deadlineKey = _deadlineKeyForCustomer(c);
+        final storedDueDate = deadlines[deadlineKey];
         final dueDateRaw = (storedDueDate ?? c['due_date']?.toString())?.trim();
         DateTime? dueDate;
         if (dueDateRaw != null && dueDateRaw.isNotEmpty) {
@@ -1227,8 +1273,13 @@ class _KhataPageState extends State<KhataPage>
           (customer['customer_phone'] ?? customer['phone'] ?? '')
               .toString()
               .trim();
-      final customerId = (customer['customer_id'] ?? '').toString().trim();
-      final scopeKey = customerId.isNotEmpty ? customerId : customerPhone;
+      final rawCustomerId = (customer['customer_id'] ?? '').toString().trim();
+      final customerId = rawCustomerId.isNotEmpty &&
+              rawCustomerId != '0' &&
+              rawCustomerId.toLowerCase() != 'null'
+          ? rawCustomerId
+          : '';
+      final scopeKey = _deadlineKeyForCustomer(customer);
 
       if (scopeKey.isEmpty) {
         _showToast('Could not identify this customer');
@@ -1343,48 +1394,49 @@ class _KhataPageState extends State<KhataPage>
   }
 
   Widget _buildKhataTab() {
-    return _loading
-        ? const Center(child: CircularProgressIndicator(color: _primary))
-        : RefreshIndicator(
-            onRefresh: _loadKhata,
-            color: _primary,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: _primary));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadKhata,
+      color: _primary,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. ANALYTICS HEADER CARDS
                   _buildAnalyticsHeader(),
-
                   const SizedBox(height: 16),
-
-                  // 2. BATCH ACTION & SEARCH BAR
                   _buildSearchBarAndActions(),
-
                   const SizedBox(height: 12),
-
-                  // 3. FILTER CHIPS
                   _buildFilterChips(),
-
                   const SizedBox(height: 16),
-
-                  // 4. CUSTOMER PENDING LIST
-                  if (_filteredCustomers.isEmpty)
-                    _buildEmptyState()
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _filteredCustomers.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (ctx, idx) =>
-                          _buildCustomerCard(_filteredCustomers[idx]),
-                    ),
+                  if (_filteredCustomers.isEmpty) _buildEmptyState(),
                 ],
               ),
             ),
-          );
+          ),
+          if (_filteredCustomers.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (ctx, idx) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildCustomerCard(_filteredCustomers[idx]),
+                  ),
+                  childCount: _filteredCustomers.length,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAnalyticsHeader() {
@@ -1619,6 +1671,7 @@ class _KhataPageState extends State<KhataPage>
     final balance = (c['total_balance'] as num?)?.toDouble() ?? 0.0;
     final isOverdue = c['is_overdue'] == true;
     final daysOverdue = (c['days_overdue'] as num?)?.toInt() ?? 0;
+    final deadline = (c['earliest_due_date'] ?? '').toString().trim();
     final invoices = List<Map<String, dynamic>>.from(c['invoices'] ?? []);
 
     return Container(
@@ -1677,6 +1730,18 @@ class _KhataPageState extends State<KhataPage>
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      if (deadline.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: LiveTranslatedText(
+                            'Due: $deadline',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isOverdue ? _danger : _warning,
+                            ),
                           ),
                         ),
                       if (isOverdue)
@@ -1828,13 +1893,17 @@ class _KhataPageState extends State<KhataPage>
       return const Center(child: CircularProgressIndicator(color: _primary));
     }
 
+    final invoices = _filteredInvoices;
     return RefreshIndicator(
       onRefresh: _loadInvoiceAnalytics,
       color: _primary,
-      child: SingleChildScrollView(
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            sliver: SliverToBoxAdapter(
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildInvoiceAnalyticsHero(),
@@ -1921,19 +1990,25 @@ class _KhataPageState extends State<KhataPage>
             const SizedBox(height: 10),
             _buildInvoiceStatusChips(),
             const SizedBox(height: 12),
-            if (_filteredInvoices.isEmpty)
-              _buildInvoiceEmptyState()
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _filteredInvoices.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (ctx, idx) =>
-                    _buildInvoiceTile(_filteredInvoices[idx]),
-              ),
+            if (invoices.isEmpty) _buildInvoiceEmptyState(),
           ],
-        ),
+              ),
+            ),
+          ),
+          if (invoices.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (ctx, idx) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildInvoiceTile(invoices[idx]),
+                  ),
+                  childCount: invoices.length,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
