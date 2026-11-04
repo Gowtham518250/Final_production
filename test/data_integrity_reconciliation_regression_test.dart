@@ -141,6 +141,36 @@ void main() {
       expect(result.single['invoice_id'], 501);
     });
 
+    test('both items and line_items contribute unique partial lines', () {
+      final row = <String, dynamic>{
+        'sale_id': 'SALE_ALIAS_ARRAYS',
+        'invoice_number': 'BILL-ALIAS-ARRAYS',
+        'total_amount': 300,
+        'line_items': [
+          {'product_name': 'Monitor', 'quantity': 1, 'unit_price': 200},
+        ],
+        'items': [
+          {'product_name': 'Keyboard', 'quantity': 1, 'unit_price': 100},
+        ],
+      };
+
+      final result = CacheConsistencyService.mergeLists(
+        [row],
+        const [],
+        dataset: 'sales',
+      );
+
+      expect(result, hasLength(1));
+      final lines = List<Map<String, dynamic>>.from(
+        result.single['items'] as List,
+      );
+      expect(lines, hasLength(2));
+      expect(
+        lines.map((line) => line['product_name']).toSet(),
+        containsAll(['Monitor', 'Keyboard']),
+      );
+    });
+
     test('numeric sales-row IDs do not bridge different invoice aliases', () {
       final rows = <Map<String, dynamic>>[
         {'id': 12, 'sale_id': 'SALE_A', 'invoice_number': 'BILL-A'},
