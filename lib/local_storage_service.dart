@@ -1235,11 +1235,35 @@ class LocalStorageService {
       return '__anonymous_invoice_$index';
     }
 
+    // Invoice rows are from the invoice table, so their generic primary key
+    // is safe to expose as an explicit backend invoice alias before merging
+    // them with sales from a different table.
+    final invoiceRowsForIdentity = invoices.whereType<Map>().map((raw) {
+      final row = Map<String, dynamic>.from(raw);
+      final explicitBackendId = (row['invoice_id'] ??
+              row['backend_id'] ??
+              row['invoiceId'] ??
+              row['server_id'] ??
+              '')
+          .toString()
+          .trim();
+      final tablePrimaryKey = (row['id'] ?? '').toString().trim();
+      if ((explicitBackendId.isEmpty ||
+              explicitBackendId == '0' ||
+              explicitBackendId.toLowerCase() == 'null') &&
+          tablePrimaryKey.isNotEmpty &&
+          tablePrimaryKey != '0' &&
+          tablePrimaryKey.toLowerCase() != 'null') {
+        row['backend_id'] = tablePrimaryKey;
+      }
+      return row;
+    }).toList();
+
     final invoiceOnlyCanonical = InvoiceDedupHelper.canonicalizeInvoices(
-      invoices,
+      invoiceRowsForIdentity,
     );
     final combinedRows = InvoiceDedupHelper.canonicalizeInvoices(<dynamic>[
-      ...invoices,
+      ...invoiceRowsForIdentity,
       ...sales,
     ]);
     final canonical = <String, Map<String, dynamic>>{};
@@ -1248,12 +1272,8 @@ class LocalStorageService {
     // row. Keep original invoice tokens here because a canonical merge can
     // legitimately prefer one alias over another.
     final invoiceTokens = <String>{};
-    for (final raw in invoices) {
-      if (raw is Map) {
-        invoiceTokens.addAll(
-          InvoiceDedupHelper.identityTokens(Map<String, dynamic>.from(raw)),
-        );
-      }
+    for (final invoice in invoiceRowsForIdentity) {
+      invoiceTokens.addAll(InvoiceDedupHelper.identityTokens(invoice));
     }
 
     // Preserve the old "first matching invoice wins" behaviour while making

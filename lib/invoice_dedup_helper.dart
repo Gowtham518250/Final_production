@@ -11,11 +11,15 @@ class InvoiceDedupHelper {
     'offline_id',
   ];
 
+  // Generic table IDs are not cross-table aliases. Explicit invoice IDs
+  // remain namespaced separately from customer-facing invoice numbers.
   static const List<String> _backendIdFields = <String>[
     'invoice_id',
     'backend_id',
     'invoiceId',
-    'id',
+    'server_id',
+    'backend_invoice_id',
+    'canonical_invoice_id',
   ];
 
   static double _number(dynamic value, [double fallback = 0]) {
@@ -86,70 +90,18 @@ class InvoiceDedupHelper {
     );
   }
 
-  static double _rowTotal(Map<String, dynamic> row) {
-    for (final field in const <String>[
-      'total_amount',
-      'totalAmount',
-      'total',
-      'invoice_total',
-      'grand_total',
-      'final_amount',
-      'amount',
-    ]) {
-      final value = _number(row[field], -1);
-      if (value > 0) return value;
-    }
-    return 0;
-  }
-
-  static double _rowPaid(Map<String, dynamic> row, double total) {
-    var paid = 0.0;
-    for (final field in const <String>[
-      'paid_amount',
-      'amount_paid',
-      'paid',
-      'received_amount',
-    ]) {
-      final value = row[field];
-      if (value != null) {
-        final parsed = _number(value, -1);
-        if (parsed > paid) paid = parsed;
-      }
-    }
-
-    final paymentStatus = (row['payment_status'] ?? '')
-        .toString()
-        .split('.')
-        .last
-        .trim()
-        .toUpperCase();
-    final invoiceStatus = (row['status'] ?? '')
-        .toString()
-        .split('.')
-        .last
-        .trim()
-        .toUpperCase();
-
-    if (total > 0 &&
-        paid <= 0 &&
-        (paymentStatus == 'PAID' || invoiceStatus == 'PAID')) {
-      // Some legacy rows say PAID but did not persist paid_amount.
-      paid = total;
-    }
-    return paid.clamp(0.0, total).toDouble();
-  }
-
   static Map<String, dynamic> _mergeGroup(
     List<Map<String, dynamic>> group,
   ) {
-    final ordered = List<Map<String, dynamic>>.from(group)
-      ..sort((a, b) => _rowTimestamp(a).compareTo(_rowTimestamp(b)));
-
+    final indexed = group.asMap().entries.toList()
+      ..sort((a, b) {
+        final byTime = _rowTimestamp(a.value).compareTo(_rowTimestamp(b.value));
+        return byTime != 0 ? byTime : a.key.compareTo(b.key);
+      });
+    final ordered = indexed.map((entry) => entry.value).toList();
     final merged = <String, dynamic>{};
     final mergedLines = <Map<String, dynamic>>[];
-    var highestPaid = 0.0;
-    var newestTotal = 0.0;
-    var anyPaymentState = false;
+    final reconciliationConflicts = <String>[];
 
     String lineName(Map<String, dynamic> line) =>
         (line['product_name'] ??
@@ -163,49 +115,82 @@ class InvoiceDedupHelper {
             .toLowerCase();
 
     bool sameLine(Map<String, dynamic> left, Map<String, dynamic> right) {
-      final leftId = (left['product_id'] ?? '').toString().trim();
-      final rightId = (right['product_id'] ?? '').toString().trim();
+      final leftLineId = _normalized(
+        left['line_id'] ?? left['invoice_item_id'] ?? left['item_id'],
+      );
+      final rightLineId = _normalized(
+        right['line_id'] ?? right['invoice_item_id'] ?? right['item_id'],
+      );
+      if (leftLineId.isNotEmpty && rightLineId.isNotEmpty) {
+        return leftLineId == rightLineId;
+      }
+
+      final leftId = _normalized(left['product_id']);
+      final rightId = _normalized(right['product_id']);
       final leftName = lineName(left);
       final rightName = lineName(right);
       final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
           ? leftId == rightId
           : leftName.isNotEmpty && leftName == rightName;
       if (!sameProduct) return false;
+
       final leftQty = _number(left['quantity'] ?? left['qty'], 1);
       final rightQty = _number(right['quantity'] ?? right['qty'], 1);
       final leftPrice = _number(left['unit_price'] ?? left['price']);
       final rightPrice = _number(right['unit_price'] ?? right['price']);
-      return leftQty.toStringAsFixed(3) == rightQty.toStringAsFixed(3) &&
-          leftPrice.toStringAsFixed(2) == rightPrice.toStringAsFixed(2);
-    }
-
-    void addLine(Map<String, dynamic> line) {
-      final index = mergedLines.indexWhere((existing) => sameLine(existing, line));
-      if (index < 0) {
-        mergedLines.add(line);
-      } else {
-        mergedLines[index] = <String, dynamic>{
-          ...mergedLines[index],
-          ...line,
-        }..removeWhere((key, value) => value == null);
+      if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3) ||
+          leftPrice.toStringAsFixed(2) != rightPrice.toStringAsFixed(2)) {
+        return false;
       }
-    }
-
-    void addRowLines(Map<String, dynamic> row) {
-      var foundNestedLine = false;
-      for (final field in const ['items', 'line_items']) {
-        final raw = row[field];
-        if (raw is! List) continue;
-        for (final value in raw) {
-          if (value is! Map) continue;
-          foundNestedLine = true;
-          addLine(Map<String, dynamic>.from(value));
+      for (final field in const [
+        'line_total',
+        'total_with_tax',
+        'discount',
+        'discount_amount',
+        'gst_rate',
+        'tax_rate',
+      ]) {
+        if (left[field] == null || right[field] == null) continue;
+        final leftValue = _number(left[field], double.nan);
+        final rightValue = _number(right[field], double.nan);
+        if (leftValue.isFinite &&
+            rightValue.isFinite &&
+            (leftValue - rightValue).abs() > 0.009) {
+          return false;
         }
       }
+      return true;
+    }
 
-      if (foundNestedLine) return;
+    List<Map<String, dynamic>> rowLines(Map<String, dynamic> row) {
+      // items and line_items are commonly aliases; use one populated list.
+      var hasExplicitLineList = false;
+      for (final field in const ['items', 'line_items']) {
+        final raw = row[field];
+        if (raw is List) {
+          hasExplicitLineList = true;
+          if (raw.isNotEmpty) {
+            return raw
+                .whereType<Map>()
+                .map((value) => Map<String, dynamic>.from(value))
+                .toList();
+          }
+        }
+      }
+      final hasFlatProduct = (row['product_name'] ??
+              row['product'] ??
+              row['item'] ??
+              row['name'] ??
+              row['description'] ??
+              '')
+          .toString()
+          .trim()
+          .isNotEmpty;
+      if (hasExplicitLineList && !hasFlatProduct) {
+        return <Map<String, dynamic>>[];
+      }
 
-      // Legacy history feeds can expose one invoice line as top-level fields.
+      // Legacy sales endpoints expose one product at the top level per row.
       final name = (row['product_name'] ??
               row['product'] ??
               row['item'] ??
@@ -218,7 +203,7 @@ class InvoiceDedupHelper {
           name.toLowerCase() == 'unknown' ||
           name.toLowerCase() == 'unknown product' ||
           name.toLowerCase() == 'unknown item') {
-        return;
+        return <Map<String, dynamic>>[];
       }
 
       final quantity = _number(row['quantity'] ?? row['qty'], 1);
@@ -229,51 +214,151 @@ class InvoiceDedupHelper {
             row['total'] ??
             row['totalAmount'],
       );
-      if (quantity <= 0 || (unitPrice <= 0 && lineTotal <= 0)) return;
-
-      addLine(<String, dynamic>{
-        'product_id': row['product_id'],
-        'product_name': name,
-        'description': name,
-        'quantity': quantity,
-        'qty': quantity,
-        'unit_price': unitPrice,
-        'price': unitPrice,
-        'line_total': lineTotal > 0
-            ? lineTotal
-            : unitPrice * quantity,
-        'total': lineTotal > 0
-            ? lineTotal
-            : unitPrice * quantity,
-      });
-    }
-
-    for (final row in ordered) {
-      addRowLines(row);
-    }
-
-    for (final row in ordered) {
-      final total = _rowTotal(row);
-      if (total > 0) newestTotal = total;
-
-      final paid = _rowPaid(row, total);
-      if (paid > highestPaid) highestPaid = paid;
-
-      final payStatus = (row['payment_status'] ?? row['status'] ?? '')
-          .toString()
-          .split('.')
-          .last
-          .trim()
-          .toUpperCase();
-      if (payStatus == 'PAID' ||
-          payStatus == 'PARTIAL' ||
-          payStatus == 'UNPAID') {
-        anyPaymentState = true;
+      if (quantity <= 0 || (unitPrice <= 0 && lineTotal <= 0)) {
+        return <Map<String, dynamic>>[];
       }
 
-      // Later records win, but blank/null values cannot erase useful aliases
-      // or line items that only exist in an older local representation.
+      return <Map<String, dynamic>>[
+        <String, dynamic>{
+          'line_id': row['_item_idx'] != null
+              ? 'dashboard-index:${row['_item_idx']}'
+              : (row['line_id'] ?? row['invoice_item_id'] ?? row['id']),
+          'product_id': row['product_id'],
+          'product_name': name,
+          'description': name,
+          'quantity': quantity,
+          'qty': quantity,
+          'unit_price': unitPrice,
+          'price': unitPrice,
+          'line_total': lineTotal > 0 ? lineTotal : unitPrice * quantity,
+          'total': lineTotal > 0 ? lineTotal : unitPrice * quantity,
+        },
+      ];
+    }
+
+    var latestNestedSnapshot = -1;
+    var oldestNestedTimestamp = 0;
+    var newestNestedTimestamp = 0;
+    for (var index = 0; index < ordered.length; index++) {
+      final row = ordered[index];
+      final hasLineList = row['items'] is List || row['line_items'] is List;
+      final flatName = (row['product_name'] ??
+              row['product'] ??
+              row['item'] ??
+              row['name'] ??
+              row['description'] ??
+              '')
+          .toString()
+          .trim();
+      final hasNestedSnapshot = hasLineList &&
+          ((row['items'] is List && (row['items'] as List).isNotEmpty) ||
+              (row['line_items'] is List && (row['line_items'] as List).isNotEmpty) ||
+              flatName.isEmpty);
+      if (hasNestedSnapshot) {
+        final timestamp = _rowTimestamp(row);
+        if (latestNestedSnapshot < 0) {
+          oldestNestedTimestamp = timestamp;
+          newestNestedTimestamp = timestamp;
+        } else {
+          if (timestamp < oldestNestedTimestamp) {
+            oldestNestedTimestamp = timestamp;
+          }
+          if (timestamp > newestNestedTimestamp) {
+            newestNestedTimestamp = timestamp;
+          }
+        }
+        latestNestedSnapshot = index;
+      }
+    }
+
+    final hasNewerDatedSnapshot = latestNestedSnapshot >= 0 &&
+        oldestNestedTimestamp > 0 &&
+        newestNestedTimestamp > oldestNestedTimestamp;
+
+    if (hasNewerDatedSnapshot) {
+      final authoritativeLines = rowLines(ordered[latestNestedSnapshot]);
+      mergedLines.addAll(authoritativeLines);
+
+      // Enrich surviving latest lines from older mirrors one-to-one. Older
+      // lines absent from the newer complete snapshot are not resurrected.
+      for (var rowIndex = 0; rowIndex < latestNestedSnapshot; rowIndex++) {
+        final olderLines = rowLines(ordered[rowIndex]);
+        final matchedLatestIndexes = <int>{};
+        for (final olderLine in olderLines) {
+          for (var lineIndex = 0; lineIndex < mergedLines.length; lineIndex++) {
+            if (matchedLatestIndexes.contains(lineIndex)) continue;
+            if (sameLine(mergedLines[lineIndex], olderLine)) {
+              matchedLatestIndexes.add(lineIndex);
+              mergedLines[lineIndex] = <String, dynamic>{
+                ...olderLine,
+                ...mergedLines[lineIndex],
+              }..removeWhere((key, value) => value == null);
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      // Without a trustworthy ordering, mirror arrays may be complementary.
+      // Merge them one-to-one: preserve repeated lines in each invoice while
+      // avoiding multiplication of the same repeated lines across mirror copies.
+      for (final row in ordered) {
+        final incomingLines = rowLines(row);
+        final matchedExistingIndexes = <int>{};
+        final hasNestedLines =
+            (row['items'] is List && (row['items'] as List).isNotEmpty) ||
+            (row['line_items'] is List && (row['line_items'] as List).isNotEmpty);
+
+        for (final incomingLine in incomingLines) {
+          var matchIndex = -1;
+
+          // For flat one-row-per-item feeds, content equality is ambiguous:
+          // two genuine identical lines may be separate rows. Only a stable
+          // line ID is safe for matching flat rows across mirrors.
+          final incomingLineId = _normalized(
+            incomingLine['line_id'] ??
+                incomingLine['invoice_item_id'] ??
+                incomingLine['item_id'],
+          );
+          for (var lineIndex = 0; lineIndex < mergedLines.length; lineIndex++) {
+            if (matchedExistingIndexes.contains(lineIndex)) continue;
+            if (!hasNestedLines) {
+              if (incomingLineId.isNotEmpty &&
+                  incomingLineId ==
+                      _normalized(
+                        mergedLines[lineIndex]['line_id'] ??
+                            mergedLines[lineIndex]['invoice_item_id'] ??
+                            mergedLines[lineIndex]['item_id'],
+                      )) {
+                matchIndex = lineIndex;
+                break;
+              }
+            } else if (sameLine(mergedLines[lineIndex], incomingLine)) {
+              matchIndex = lineIndex;
+              break;
+            }
+          }
+
+          if (matchIndex < 0) {
+            mergedLines.add(incomingLine);
+            // A second identical line in this same invoice must not match the
+            // line just added for the first occurrence.
+            matchedExistingIndexes.add(mergedLines.length - 1);
+          } else {
+            matchedExistingIndexes.add(matchIndex);
+            mergedLines[matchIndex] = <String, dynamic>{
+              ...mergedLines[matchIndex],
+              ...incomingLine,
+            }..removeWhere((key, value) => value == null);
+          }
+        }
+      }
+    }
+
+    // Ordinary fields follow the newest non-empty row.
+    for (final row in ordered) {
       for (final entry in row.entries) {
+        if (entry.key == 'items' || entry.key == 'line_items') continue;
         final value = entry.value;
         if (value == null) continue;
         if (value is String && value.trim().isEmpty) continue;
@@ -281,33 +366,116 @@ class InvoiceDedupHelper {
       }
     }
 
-    if (newestTotal > 0) {
-      final total = newestTotal;
-      final paid = highestPaid.clamp(0.0, total).toDouble();
-      final status = paid >= total - 0.01
-          ? 'PAID'
-          : (paid > 0 ? 'PARTIAL' : 'UNPAID');
-
-      merged['total_amount'] = total;
-      merged['paid_amount'] = double.parse(paid.toStringAsFixed(2));
-      merged['pending_amount'] =
-          (total - paid).clamp(0.0, double.infinity).toDouble();
-
-      if (anyPaymentState || paid > 0) {
-        merged['payment_status'] = status;
+    MapEntry<String, double>? numericField(
+      Map<String, dynamic> row,
+      List<String> fields,
+    ) {
+      for (final field in fields) {
+        if (!row.containsKey(field) || row[field] == null) continue;
+        final parsed = _number(row[field], double.nan);
+        if (parsed.isFinite) return MapEntry(field, parsed);
       }
-      if (status == 'PAID' || status == 'PARTIAL') {
-        merged['status'] = status;
-      } else {
-        final oldStatus = (merged['status'] ?? '')
+      return null;
+    }
+
+    const totalFields = <String>[
+      'invoice_total',
+      'total_amount',
+      'grand_total',
+      'final_amount',
+      'totalAmount',
+      'total',
+      'amount',
+    ];
+    const paidFields = <String>[
+      'paid_amount',
+      'amount_paid',
+      'paid',
+      'received_amount',
+    ];
+
+    var hasTotal = false;
+    var selectedTotal = 0.0;
+    var totalTimestamp = -1;
+    var hasPaid = false;
+    var selectedPaid = 0.0;
+    var paidTimestamp = -1;
+
+    for (final row in ordered) {
+      final timestamp = _rowTimestamp(row);
+      final totalEntry = numericField(row, totalFields);
+      if (totalEntry != null) {
+        if (!hasTotal || timestamp >= totalTimestamp) {
+          if (hasTotal &&
+              timestamp == totalTimestamp &&
+              (totalEntry.value - selectedTotal).abs() > 0.009) {
+            reconciliationConflicts.add(
+              'Conflicting invoice totals at the same or unknown update time; latest input row selected',
+            );
+          }
+          hasTotal = true;
+          selectedTotal = totalEntry.value;
+          totalTimestamp = timestamp;
+        }
+      }
+
+      final paidEntry = numericField(row, paidFields);
+      if (paidEntry != null) {
+        if (!hasPaid || timestamp >= paidTimestamp) {
+          if (hasPaid &&
+              timestamp == paidTimestamp &&
+              (paidEntry.value - selectedPaid).abs() > 0.009) {
+            reconciliationConflicts.add(
+              'Conflicting paid amounts at the same or unknown update time; latest input row selected',
+            );
+          }
+          hasPaid = true;
+          selectedPaid = paidEntry.value;
+          paidTimestamp = timestamp;
+        }
+      }
+    }
+
+    if (hasTotal) {
+      merged['total_amount'] = double.parse(selectedTotal.toStringAsFixed(2));
+      if (!hasPaid) {
+        // Legacy PAID rows may omit paid_amount. Infer only when no persisted
+        // payment amount exists; an explicit paid_amount: 0 remains zero.
+        final status = (merged['payment_status'] ?? merged['status'] ?? '')
             .toString()
             .split('.')
             .last
             .trim()
             .toUpperCase();
-        if (oldStatus == 'PAID' || oldStatus == 'PARTIAL') {
-          merged['status'] = 'UNPAID';
-        }
+        selectedPaid = status == 'PAID' ? selectedTotal : 0.0;
+      }
+
+      final paid = selectedPaid.clamp(0.0, selectedTotal).toDouble();
+      merged['paid_amount'] = double.parse(paid.toStringAsFixed(2));
+      merged['pending_amount'] =
+          (selectedTotal - paid).clamp(0.0, double.infinity).toDouble();
+
+      final derivedPaymentStatus = paid >= selectedTotal - 0.01
+          ? 'PAID'
+          : (paid > 0 ? 'PARTIAL' : 'UNPAID');
+      final paymentStatus = (merged['payment_status'] ?? '')
+          .toString()
+          .split('.')
+          .last
+          .trim()
+          .toUpperCase();
+      if (paymentStatus.isEmpty ||
+          const {'PAID', 'PARTIAL', 'UNPAID'}.contains(paymentStatus)) {
+        merged['payment_status'] = derivedPaymentStatus;
+      }
+      final invoiceStatus = (merged['status'] ?? '')
+          .toString()
+          .split('.')
+          .last
+          .trim()
+          .toUpperCase();
+      if (const {'PAID', 'PARTIAL', 'UNPAID'}.contains(invoiceStatus)) {
+        merged['status'] = derivedPaymentStatus;
       }
     }
 
@@ -315,7 +483,10 @@ class InvoiceDedupHelper {
       merged['items'] = mergedLines;
       merged['line_items'] = mergedLines;
     }
-
+    if (reconciliationConflicts.isNotEmpty) {
+      merged['reconciliation_conflicts'] =
+          reconciliationConflicts.toSet().toList();
+    }
     return merged;
   }
 
@@ -337,7 +508,20 @@ class InvoiceDedupHelper {
   ) {
     final invoiceRows = invoices
         .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
+        .map((row) {
+          final invoice = Map<String, dynamic>.from(row);
+          final explicitBackendId = _normalized(
+            invoice['invoice_id'] ??
+                invoice['backend_id'] ??
+                invoice['invoiceId'] ??
+                invoice['server_id'],
+          );
+          final tablePrimaryKey = _normalized(invoice['id']);
+          if (explicitBackendId.isEmpty && tablePrimaryKey.isNotEmpty) {
+            invoice['backend_id'] = tablePrimaryKey;
+          }
+          return invoice;
+        })
         .toList();
 
     final saleRows = sales
@@ -403,6 +587,33 @@ class InvoiceDedupHelper {
         .whereType<Map>()
         .map((row) => Map<String, dynamic>.from(row))
         .toList();
+
+    if (rows.length >= 2) {
+      final explicitlyReferencedBackendIds = <String>{};
+      for (final row in rows) {
+        for (final field in _backendIdFields) {
+          final value = _normalized(row[field]);
+          if (value.isNotEmpty) {
+            explicitlyReferencedBackendIds.add(value);
+          }
+        }
+      }
+      for (final row in rows) {
+        final invoiceNumber = _normalized(
+          row['invoice_number'] ??
+              row['invoice_no'] ??
+              row['bill_number'] ??
+              row['bill_no'],
+        );
+        final genericId = _normalized(row['id']);
+        if (invoiceNumber.isNotEmpty &&
+            genericId.isNotEmpty &&
+            explicitlyReferencedBackendIds.contains(genericId) &&
+            _normalized(row['backend_id']).isEmpty) {
+          row['backend_id'] = genericId;
+        }
+      }
+    }
 
     if (rows.length < 2) {
       return rows.map((row) => _mergeGroup(<Map<String, dynamic>>[row])).toList();

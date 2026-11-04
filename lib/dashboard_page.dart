@@ -183,6 +183,7 @@ class _DashboardPageState extends State<DashboardPage>
   int _selectedChartIndex = 0;
   bool loading = false;
   bool _salesLoadInProgress = false;
+  bool _salesLoadQueued = false;
   bool _salesLoadedOnce = false;
   bool _salesHistoryHydrating = false;
   bool insightLoading = false;
@@ -477,14 +478,14 @@ class _DashboardPageState extends State<DashboardPage>
     if (dateStr.isEmpty) return DateTime(1970);
 
     try {
-      if (RegExp(r'^\d{4}-\d{2}-\d{2}\$').hasMatch(dateStr)) {
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dateStr)) {
         return DateTime.parse(dateStr);
       }
 
       final parsed = DateTime.parse(dateStr);
       final hasExplicitZone =
           dateStr.endsWith('Z') ||
-          RegExp(r'[+-]\d{2}:?\d{2}\$').hasMatch(dateStr);
+          RegExp(r'[+-]\d{2}:?\d{2};
       return hasExplicitZone
           ? parsed.toLocal()
           : DateTime(
@@ -502,25 +503,25 @@ class _DashboardPageState extends State<DashboardPage>
       return DateTime(1970);
     }
   }
-
-  Future<void> _prefetchOwnerFeatureAccess() async {
-    try {
-      final isStaff =
-          await ScopedSharedPreferences.getBool('is_staff_mode') ?? false;
-      if (!isStaff) {
-        await RetailMindBillingService.prefetchCommonFeatureAccess();
-      }
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('Owner feature access prefetch skipped: $error');
-      }
+).hasMatch(dateStr);
+      return hasExplicitZone
+          ? parsed.toLocal()
+          : DateTime(
+              parsed.year,
+              parsed.month,
+              parsed.day,
+              parsed.hour,
+              parsed.minute,
+              parsed.second,
+              parsed.millisecond,
+              parsed.microsecond,
+            );
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Invalid sale date format: $dateStr');
+      return DateTime(1970);
     }
   }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
+etsBinding.instance.addObserver(this);
     // Initialize connectivity instance
     _connectivity = Connectivity();
     _animationController = AnimationController(
@@ -4546,7 +4547,9 @@ class _DashboardPageState extends State<DashboardPage>
         await Future<void>.delayed(Duration.zero);
         if (!mounted) return flattened;
       }
-      final List<dynamic> items = tx['items'] ?? [];
+      final List<dynamic> items = tx['items'] is List
+          ? (tx['items'] as List).where((e) => e is Map).toList()
+          : <dynamic>[];
       final date =
           tx['business_date'] ??
           tx['sale_date'] ??
@@ -4619,6 +4622,11 @@ class _DashboardPageState extends State<DashboardPage>
             1;
         final double t =
             double.tryParse(tx['total']?.toString() ?? '0') ?? (p * q);
+        final invoiceTotalValue = tx['invoice_total'] ?? tx['total_amount'] ??
+            tx['grand_total'] ?? tx['final_amount'] ?? tx['totalAmount'] ?? t;
+        final double invoiceTotal =
+            double.tryParse(invoiceTotalValue.toString()) ?? t;
+        final rowLineId = (tx['line_id'] ?? tx['invoice_item_id'] ?? tx['item_id'] ?? '').toString().trim();
 
         final String prodName =
             (tx['product_name'] ??
@@ -4636,11 +4644,12 @@ class _DashboardPageState extends State<DashboardPage>
           continue; // Skip synthetic invalid records
         }
 
-        // 🔧 FIX: Use invoice_number as primary key (not date+product)
-        final String fingerprint =
-            '${invoiceNumber}_0'; // Single item = index 0
-        if (seenFingerprints.contains(fingerprint)) continue;
-        seenFingerprints.add(fingerprint);
+        // Preserve independent source rows unless a stable line ID proves
+        // that they are mirror copies; matching product text is not identity.
+        final fingerprint = rowLineId.isNotEmpty
+            ? invoiceNumber + '|line|' + rowLineId
+            : invoiceNumber + '|record|' + processedTransactions.toString();
+        if (!seenFingerprints.add(fingerprint)) continue;
 
         if (kDebugMode)
           debugPrint(
@@ -4650,19 +4659,29 @@ class _DashboardPageState extends State<DashboardPage>
         flattened.add({
           ...transactionMetadata,
           'product': prodName,
+          'product_name': prodName,
           'quantity': q,
           'price': p,
+          'unit_price': p,
           'total': t,
+          'invoice_total': invoiceTotal,
+          'total_amount': invoiceTotal,
+          'paid_amount': tx['paid_amount'] ?? 0,
+          'payment_status': tx['payment_status'],
+          'line_id': rowLineId.isNotEmpty ? rowLineId : 'dashboard-row-' + processedTransactions.toString(),
           'business_date': date,
           'sale_id': invoiceNumber,
           'invoice_number': invoiceNumber,
+          '_bill_id': invoiceNumber,
           'is_local': true,
         });
         continue;
       }
-      final String? dueDate = tx['due_date'];
-      final String? status = tx['payment_status'];
-      final double total = double.tryParse(tx['total']?.toString() ?? '0') ?? 0;
+      final String? dueDate = tx['due_date']?.toString();
+      final String? status = tx['payment_status']?.toString();
+      final invoiceTotalValue = tx['invoice_total'] ?? tx['total_amount'] ??
+          tx['grand_total'] ?? tx['final_amount'] ?? tx['totalAmount'] ?? tx['total'] ?? 0;
+      final double total = double.tryParse(invoiceTotalValue.toString()) ?? 0;
       final double paid =
           double.tryParse(tx['paid_amount']?.toString() ?? '0') ?? 0;
 
@@ -4689,10 +4708,8 @@ class _DashboardPageState extends State<DashboardPage>
         });
       }
 
-      // Limit per-invoice items to prevent OOM
-      final List<dynamic> constrainedItems = items.length > 500
-          ? items.sublist(0, 500)
-          : items;
+      // Keep every line; the existing loop yields periodically for large bills.
+      final List<dynamic> constrainedItems = items;
 
       for (int idx = 0; idx < constrainedItems.length; idx++) {
         if (idx > 0 && idx % 100 == 0) {
@@ -4765,10 +4782,13 @@ class _DashboardPageState extends State<DashboardPage>
         final double parsedPrice = price;
         final double parsedQty = qty;
 
-        // 🔧 FIX: Use invoice_number + item_index as primary key (not date+product)
-        final String fingerprint = '${invoiceNumber}_${idx}';
-        if (seenFingerprints.contains(fingerprint)) continue;
-        seenFingerprints.add(fingerprint);
+        final itemLineId = (item['line_id'] ?? item['invoice_item_id'] ?? item['item_id'] ?? '').toString().trim();
+        final fingerprint = itemLineId.isNotEmpty
+            ? invoiceNumber + '|line|' + itemLineId
+            : invoiceNumber + '|index|' + idx.toString() + '|' + bCode + '|' +
+                  displayProd.toLowerCase() + '|' + parsedQty.toStringAsFixed(3) + '|' +
+                  parsedPrice.toStringAsFixed(2) + '|' + lineTotal.toStringAsFixed(2);
+        if (!seenFingerprints.add(fingerprint)) continue;
 
         if (kDebugMode)
           debugPrint(
@@ -4839,7 +4859,11 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _loadSales() async {
-    if (!mounted || _salesLoadInProgress) return;
+    if (!mounted) return;
+    if (_salesLoadInProgress) {
+      _salesLoadQueued = true;
+      return;
+    }
     _salesLoadInProgress = true;
 
     // Keep the first-load indicator, but do not flash the dashboard back into
@@ -4898,7 +4922,9 @@ class _DashboardPageState extends State<DashboardPage>
           }
 
           // --- SMART VIEW: If Today is empty but we have past data, show an indication ---
-          if (engine.filteredTotalSales == 0 && engine.totalSales > 0) {
+          if (!_salesLoadedOnce &&
+              engine.filteredTotalSales == 0 &&
+              engine.totalSales > 0) {
             if (kDebugMode)
               debugPrint(
                 'dY\' Pro Tip: Today is empty, but history exists (₹${engine.totalSales}). Switching to Month view.',
@@ -5027,9 +5053,11 @@ class _DashboardPageState extends State<DashboardPage>
       }
     } finally {
       _salesLoadInProgress = false;
-      if (mounted) {
-        unawaited(_afterSalesLoadGrowthHooks());
+      if (_salesLoadQueued) {
+        _salesLoadQueued = false;
+        if (mounted) unawaited(_loadSales());
       }
+      if (mounted) unawaited(_afterSalesLoadGrowthHooks());
     }
   }
 
@@ -7828,8 +7856,9 @@ class _DashboardPageState extends State<DashboardPage>
 
   // MONTH-WISE SALES CHART
   Widget _buildMonthWiseSalesChart() {
-    if (filteredSales.isEmpty)
+    if (_salesByMonth.values.every((value) => value == 0)) {
       return _buildEmptyChart('No sales data available');
+    }
 
     final monthData = _salesByMonth;
     final entries = monthData.entries.toList();
@@ -8472,8 +8501,7 @@ class _DashboardPageState extends State<DashboardPage>
   // Example: a shop can have 500 historical bills and zero bills today.
   // Pie/Radar/Monthly charts should still visualize that existing history.
   List<Map<String, dynamic>> _chartSalesSource() {
-    if (filteredSales.isNotEmpty) return filteredSales;
-    return sales;
+    return filteredSales;
   }
 
   double _chartNumber(dynamic value) {
@@ -13111,56 +13139,10 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  double _calculateTotalSales() {
-    final Map<String, double> invoiceTotals = {};
+  // Keep dashboard headline values on the same canonical transaction ledger.
+  double _calculateTotalSales() => engine.lifetimeRevenue;
 
-    for (final sale in sales) {
-      try {
-        final invoiceKey =
-            sale['invoice_number']?.toString() ??
-            sale['sale_id']?.toString() ??
-            sale['_bill_id']?.toString() ??
-            sale['id']?.toString() ??
-            sale['created_at']?.toString() ??
-            '';
-        if (invoiceKey.isEmpty) continue;
-
-        if (!invoiceTotals.containsKey(invoiceKey)) {
-          final raw =
-              sale['invoice_total'] ??
-              sale['total'] ??
-              sale['grand_total'] ??
-              sale['final_amount'] ??
-              sale['totalAmount'] ??
-              0;
-          invoiceTotals[invoiceKey] = raw is num
-              ? raw.toDouble()
-              : double.tryParse(raw.toString()) ?? 0.0;
-        }
-      } catch (_) {}
-    }
-
-    return invoiceTotals.values.fold(0.0, (sum, v) => sum + v);
-  }
-
-  int _calculateTotalOrders() {
-    final Set<String> invoiceKeys = {};
-
-    for (final sale in sales) {
-      try {
-        final invoiceKey =
-            sale['invoice_number']?.toString() ??
-            sale['sale_id']?.toString() ??
-            sale['_bill_id']?.toString() ??
-            sale['id']?.toString() ??
-            sale['created_at']?.toString() ??
-            '';
-        if (invoiceKey.isNotEmpty) invoiceKeys.add(invoiceKey);
-      } catch (_) {}
-    }
-
-    return invoiceKeys.length;
-  }
+  int _calculateTotalOrders() => engine.lifetimeTransactions;
 
   int _calculateTotalOnlineOrders() {
     return OnlineOrderService.countDistinctOnlineOrdersFromSales(sales);

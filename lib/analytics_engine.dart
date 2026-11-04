@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'format_helper.dart';
 import 'financial_math.dart';
+import 'invoice_dedup_helper.dart';
 
 class AnalyticsEngine {
   static const Set<String> _voidedSaleStatuses = {
@@ -71,11 +72,16 @@ class AnalyticsEngine {
         'online_order_id',
         'order_id',
         'source_order_id',
-        'invoice_number',
-        'sale_id',
-        'id',
+        'external_order_id',
+        'store_order_id',
+        'order_reference',
+        'customer_order_id',
+        'checkout_order_id',
       ])
-        if (sale[field] != null && sale[field].toString().trim().isNotEmpty)
+        if (sale[field] != null &&
+            sale[field].toString().trim().isNotEmpty &&
+            sale[field].toString().trim() != '0' &&
+            sale[field].toString().trim().toLowerCase() != 'null')
           sale[field].toString().trim().toLowerCase(),
     };
   }
@@ -372,261 +378,88 @@ class AnalyticsEngine {
   /// Canonical transaction key. Prefer the offline/business identity so a
   /// locally-created sale and its cloud invoice collapse into one transaction.
   String _canonicalTransactionKey(Map<String, dynamic> sale) {
-    const fields = [
+    for (final field in const [
       'offline_id',
       'sale_id',
+      'local_sale_id',
+      'source_sale_id',
       'invoice_number',
+      'invoice_no',
+      'bill_number',
+      'bill_no',
+      'number',
+    ]) {
+      final value = sale[field]?.toString().trim().toLowerCase() ?? '';
+      if (value.isNotEmpty && value != 'null' && value != '0') {
+        return 'transaction:$value';
+      }
+    }
+
+    for (final field in const [
       'invoice_id',
       'backend_id',
-      'id',
-    ];
-    for (final field in fields) {
+      'invoiceId',
+      'server_id',
+      'backend_invoice_id',
+      'canonical_invoice_id',
+    ]) {
       final value = sale[field]?.toString().trim().toLowerCase() ?? '';
-      if (value.isNotEmpty && value != 'null' && value != '0') return value;
+      if (value.isNotEmpty && value != 'null' && value != '0') {
+        return 'backend:$value';
+      }
     }
 
-    final date =
-        (sale['business_date'] ??
-                sale['invoice_date'] ??
-                sale['sale_date'] ??
-                '')
-            .toString();
-    final created = (sale['created_at'] ?? sale['timestamp'] ?? '').toString();
-    final phone = (sale['customer_phone'] ?? sale['phone'] ?? '')
-        .toString()
-        .trim();
-    final total = _toDouble(sale['total_amount'] ?? sale['total']);
-    final items = sale['items'] ?? sale['line_items'];
-    final itemParts = <String>[];
-    if (items is List) {
-      for (final raw in items) {
-        if (raw is! Map) continue;
-        final name =
-            (raw['product_id'] ??
-                    raw['product_name'] ??
-                    raw['product'] ??
-                    raw['item'] ??
-                    '')
-                .toString()
-                .trim()
-                .toLowerCase();
-        final qty = _toDouble(raw['quantity'] ?? raw['qty']).toStringAsFixed(3);
-        final price = _toDouble(
-          raw['unit_price'] ?? raw['price'],
-        ).toStringAsFixed(2);
-        itemParts.add('$name:$qty:$price');
-      }
-      itemParts.sort();
-    }
-    return 'fallback|$date|$created|$phone|${total.toStringAsFixed(2)}|${itemParts.join(';')}';
+    // Each anonymous source row remains an independent sale. Never collapse
+    // unrelated purchases by comparing amount, product, customer, or date.
+    return (sale['_analytics_fallback_key'] ?? 'anonymous:unkeyed').toString();
   }
 
-  Map<String, dynamic> _mergeCanonicalTransaction(
-    Map<String, dynamic> current,
-    Map<String, dynamic> incoming,
-  ) {
-    final currentUpdated = DateTime.tryParse(
-      current['updated_at']?.toString() ?? '',
-    );
-    final incomingUpdated = DateTime.tryParse(
-      incoming['updated_at']?.toString() ?? '',
-    );
-    final incomingIsNewer =
-        incomingUpdated != null &&
-        (currentUpdated == null || incomingUpdated.isAfter(currentUpdated));
-
-    Map<String, dynamic> merged = {
-      ...current,
-      if (incomingIsNewer) ...incoming,
-    };
-
-    // Prefer real customer data over generic placeholders.
-    final currentName = (current['customer_name'] ?? '').toString().trim();
-    final incomingName = (incoming['customer_name'] ?? '').toString().trim();
-    if ((currentName.isEmpty ||
-            currentName == 'Guest Customer' ||
-            currentName == 'Cash Customer') &&
-        incomingName.isNotEmpty &&
-        incomingName != 'Guest Customer' &&
-        incomingName != 'Cash Customer') {
-      merged['customer_name'] = incomingName;
-    }
-    final currentPhone = (current['customer_phone'] ?? '').toString().trim();
-    final incomingPhone = (incoming['customer_phone'] ?? '').toString().trim();
-    if (currentPhone.isEmpty && incomingPhone.isNotEmpty) {
-      merged['customer_phone'] = incomingPhone;
-    }
-
-    // Merge nested item arrays and also convert legacy /sales feed rows
-    // (one top-level product per invoice row) into line items. Without this
-    // fallback, multiple rows sharing a sale_id collapse to the first product.
-    final lines = <Map<String, dynamic>>[];
-
-    String lineName(Map<String, dynamic> line) =>
-        (line['product_name'] ??
-                line['product'] ??
-                line['item'] ??
-                line['description'] ??
-                '')
-            .toString()
-            .trim()
-            .toLowerCase();
-
-    bool sameLine(Map<String, dynamic> left, Map<String, dynamic> right) {
-      final leftId = (left['product_id'] ?? '').toString().trim();
-      final rightId = (right['product_id'] ?? '').toString().trim();
-      final leftName = lineName(left);
-      final rightName = lineName(right);
-      final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
-          ? leftId == rightId
-          : leftName.isNotEmpty && leftName == rightName;
-      if (!sameProduct) return false;
-      final leftQty = _toDouble(left['quantity'] ?? left['qty']);
-      final rightQty = _toDouble(right['quantity'] ?? right['qty']);
-      final leftPrice = _toDouble(left['unit_price'] ?? left['price']);
-      final rightPrice = _toDouble(right['unit_price'] ?? right['price']);
-      return leftQty.toStringAsFixed(3) == rightQty.toStringAsFixed(3) &&
-          leftPrice.toStringAsFixed(2) == rightPrice.toStringAsFixed(2);
-    }
-
-    void addLine(Map<String, dynamic> line) {
-      final existingIndex = lines.indexWhere((existing) => sameLine(existing, line));
-      if (existingIndex < 0) {
-        lines.add(line);
-      } else {
-        // Keep the richer fields from either the local or cloud mirror.
-        lines[existingIndex] = <String, dynamic>{
-          ...lines[existingIndex],
-          ...line,
-        }..removeWhere((key, value) => value == null);
-      }
-    }
-
-    void addRecordLines(Map<String, dynamic> record) {
-      var foundNestedLine = false;
-      for (final field in const ['items', 'line_items']) {
-        final raw = record[field];
-        if (raw is! List) continue;
-        for (final value in raw) {
-          if (value is! Map) continue;
-          foundNestedLine = true;
-          addLine(Map<String, dynamic>.from(value));
-        }
-      }
-
-      if (foundNestedLine) return;
-
-      // Legacy GET /sales returns one flat row per invoice line. These records
-      // share sale_id/invoice_number but do not contain items/line_items.
-      final name = (record['product_name'] ??
-              record['product'] ??
-              record['item'] ??
-              record['name'] ??
-              record['description'] ??
-              '')
-          .toString()
-          .trim();
-      if (name.isEmpty ||
-          AnalyticsEngine.isPlaceholderProductName(name) ||
-          name.toLowerCase() == 'unknown product') {
-        return;
-      }
-
-      final quantity = _toDouble(record['quantity'] ?? record['qty'] ?? 1);
-      final unitPrice = _toDouble(record['unit_price'] ?? record['price']);
-      final lineTotal = _toDouble(
-        record['line_total'] ??
-            record['final_amount'] ??
-            record['total'] ??
-            record['totalAmount'],
-      );
-      if (quantity <= 0 || (unitPrice <= 0 && lineTotal <= 0)) return;
-
-      addLine(<String, dynamic>{
-        'product_id': record['product_id'],
-        'product_name': name,
-        'quantity': quantity,
-        'qty': quantity,
-        'unit_price': unitPrice,
-        'price': unitPrice,
-        'line_total': lineTotal > 0
-            ? lineTotal
-            : CurrencyManager.multiply(unitPrice, quantity),
-        'total': lineTotal > 0
-            ? lineTotal
-            : CurrencyManager.multiply(unitPrice, quantity),
-      });
-    }
-
-    addRecordLines(current);
-    addRecordLines(incoming);
-    if (lines.isNotEmpty) {
-      merged['items'] = lines;
-      merged['line_items'] = lines;
-    }
-
-    // Keep the strongest monetary values. Paid amount is monotonic for normal
-    // retail payments and therefore using the larger value prevents a cloud
-    // copy with stale paid_amount=0 from erasing a locally recorded payment.
-    final currentTotal = _toDouble(current['total_amount'] ?? current['total']);
-    final incomingTotal = _toDouble(
-      incoming['total_amount'] ?? incoming['total'],
-    );
-    if (incomingTotal > 0 || currentTotal == 0)
-      merged['total_amount'] = incomingTotal > 0 ? incomingTotal : currentTotal;
-    final currentPaid = _toDouble(current['paid_amount']);
-    final incomingPaid = _toDouble(incoming['paid_amount']);
-    merged['paid_amount'] = currentPaid > incomingPaid
-        ? currentPaid
-        : incomingPaid;
-
-    if (current['sync_status']?.toString().toLowerCase() == 'synced' ||
-        incoming['sync_status']?.toString().toLowerCase() == 'synced' ||
-        incoming['is_synced'] == true) {
-      merged['sync_status'] = 'synced';
-      merged['is_synced'] = true;
-    }
-    merged['transaction_key'] = _canonicalTransactionKey(merged);
-    return merged;
-  }
-
-  /// Build one canonical transaction per business sale/invoice.
-  /// Analytics must never count a local sale and its cloud invoice twice.
+  /// Reconcile local/cloud transaction mirrors by connected stable aliases.
+  /// No content-only matching; cancellations are scoped to order references.
   List<Map<String, dynamic>> _canonicalizeTransactions(List<dynamic> rawSales) {
+    final cancelledIdentityTokens = <String>{};
     final cancelledOnlineReferences = <String>{};
-    final cancelledTransactionKeys = <String>{};
-    for (final raw in rawSales) {
+    final activeRows = <Map<String, dynamic>>[];
+
+    for (var index = 0; index < rawSales.length; index++) {
+      final raw = rawSales[index];
       if (raw is! Map) continue;
       final record = Map<String, dynamic>.from(raw);
+
       if (isVoidedSale(record)) {
-        cancelledTransactionKeys.add(_canonicalTransactionKey(record));
+        cancelledIdentityTokens.addAll(
+          InvoiceDedupHelper.identityTokens(record),
+        );
         if (_isOnlineSale(record)) {
           cancelledOnlineReferences.addAll(_onlineOrderReferences(record));
         }
-      }
-    }
-
-    final Map<String, Map<String, dynamic>> byKey = {};
-    for (final raw in rawSales) {
-      if (raw is! Map) continue;
-      final record = Map<String, dynamic>.from(raw);
-      if (isVoidedSale(record)) continue;
-      final key = _canonicalTransactionKey(record);
-      if (cancelledTransactionKeys.contains(key)) continue;
-      if (_isOnlineSale(record) &&
-          _onlineOrderReferences(
-            record,
-          ).any(cancelledOnlineReferences.contains)) {
         continue;
       }
-      if (!byKey.containsKey(key)) {
-        record['transaction_key'] = key;
-        byKey[key] = record;
-      } else {
-        byKey[key] = _mergeCanonicalTransaction(byKey[key]!, record);
-      }
+
+      record['_analytics_fallback_key'] = 'anonymous:$index';
+      activeRows.add(record);
     }
-    return byKey.values.where((record) => !isVoidedSale(record)).toList();
+
+    final eligibleRows = activeRows.where((record) {
+      final aliases = InvoiceDedupHelper.identityTokens(record);
+      if (aliases.any(cancelledIdentityTokens.contains)) return false;
+
+      if (_isOnlineSale(record)) {
+        final orderReferences = _onlineOrderReferences(record);
+        if (orderReferences.any(cancelledOnlineReferences.contains)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    final canonical = InvoiceDedupHelper.canonicalizeInvoices(eligibleRows);
+    return canonical.map((record) {
+      final output = Map<String, dynamic>.from(record);
+      output['transaction_key'] = _canonicalTransactionKey(output);
+      output.remove('_analytics_fallback_key');
+      return output;
+    }).toList();
   }
 
   /// 🚀 Production analytics: one canonical transaction pass.
@@ -660,6 +493,16 @@ class AnalyticsEngine {
     uniqueProducts = 0;
     filteredUniqueProducts = 0;
     analyticsIntegrityErrors.clear();
+    for (final transaction in canonicalTransactions) {
+      final conflicts = transaction['reconciliation_conflicts'];
+      if (conflicts is List) {
+        for (final conflict in conflicts) {
+          analyticsIntegrityErrors.add(
+            '${transaction['transaction_key']}: $conflict',
+          );
+        }
+      }
+    }
 
     final todayProductRevenue = <String, double>{};
     final yesterdayProductRevenue = <String, double>{};
@@ -678,22 +521,6 @@ class AnalyticsEngine {
     salesByWeekCache = {for (int i = 1; i <= 8; i++) 'w$i': 0.0};
     salesByYearCache = {};
     monthlyProductSales = {};
-
-    String lineKey(Map<String, dynamic> item) {
-      final id = (item['product_id'] ?? item['id'] ?? '').toString().trim();
-      final name =
-          (item['product_name'] ??
-                  item['product'] ??
-                  item['item'] ??
-                  item['description'] ??
-                  '')
-              .toString()
-              .trim()
-              .toLowerCase();
-      final qty = _toDouble(item['quantity'] ?? item['qty']);
-      final price = _toDouble(item['unit_price'] ?? item['price']);
-      return '$id|$name|${qty.toStringAsFixed(3)}|${price.toStringAsFixed(2)}';
-    }
 
     final transactionsWithDates = <Map<String, dynamic>>[];
     for (final transaction in canonicalTransactions) {
@@ -737,10 +564,10 @@ class AnalyticsEngine {
       transactionsWithDates.add(transaction);
 
       final key = transaction['transaction_key'].toString();
-      if (dt.year == now.year) {
-        final mon =
-            '${_months[dt.month - 1]} ${dt.year.toString().substring(2)}';
-        salesByMonthCache[mon] = (salesByMonthCache[mon] ?? 0.0) + gross;
+      final mon =
+          '${_months[dt.month - 1]} ${dt.year.toString().substring(2)}';
+      if (salesByMonthCache.containsKey(mon)) {
+        salesByMonthCache[mon] = salesByMonthCache[mon]! + gross;
       }
       salesByYearCache['${dt.year}'] =
           (salesByYearCache['${dt.year}'] ?? 0.0) + gross;
@@ -779,12 +606,9 @@ class AnalyticsEngine {
 
       final lines = transaction['items'] ?? transaction['line_items'];
       if (lines is List) {
-        final seenLines = <String>{};
         for (final rawLine in lines) {
           if (rawLine is! Map) continue;
           final item = Map<String, dynamic>.from(rawLine);
-          final lk = lineKey(item);
-          if (!seenLines.add(lk)) continue;
           final productName = formatProductName(
             (item['product_name'] ??
                     item['product'] ??
@@ -893,12 +717,9 @@ class AnalyticsEngine {
 
       // Normal path: invoice contains line items.
       if (lines is List) {
-        final seenLines = <String>{};
         for (final rawLine in lines) {
           if (rawLine is! Map) continue;
           final item = Map<String, dynamic>.from(rawLine);
-          final lk = lineKey(item);
-          if (!seenLines.add(lk)) continue;
           final id = (item['product_id'] ?? item['id'] ?? item['barcode'] ?? '')
               .toString()
               .trim();
