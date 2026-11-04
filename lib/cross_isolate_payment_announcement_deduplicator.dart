@@ -197,7 +197,9 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     if (resolution.isEcho) {
       final claimChannel = resolution.claimChannel;
       final index = stored.indexWhere((e) => e['id'] == resolution.matchedId);
-      if (index >= 0 && resolution.reason == 'same_notification_update') {
+      if (index >= 0 &&
+          (resolution.reason == 'same_notification_update' ||
+              resolution.reason == 'same_notification_stream_amount')) {
         stored[index]['seenAt'] = now.toIso8601String();
         stored[index]['notificationAt'] =
             event.sourceTimestamp?.toIso8601String();
