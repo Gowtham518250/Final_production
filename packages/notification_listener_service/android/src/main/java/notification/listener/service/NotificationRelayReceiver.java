@@ -26,9 +26,10 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
     private static final String TAG = "NotificationRelay";
     private static final String PREFS = "retailmind_notification_relay";
     private static final String PENDING = "pending_notification_events";
-    private static final int MAX_PENDING_EVENTS = 300;
+    // Pending events are never evicted before a successful Dart acknowledgement.
     private static final String ACKED = "acked_event_keys";
-    private static final int MAX_ACKED_KEYS = 300;
+    // Replay tombstones for still-active Android notifications; keep a wide window.
+    private static final int MAX_ACKED_KEYS = 10000;
     private static final Object LOCK = new Object();
 
     @Override
@@ -116,14 +117,17 @@ public final class NotificationRelayReceiver extends BroadcastReceiver {
                     }
                 }
 
-                JSONArray next = new JSONArray();
-                int start = Math.max(0, current.length() - MAX_PENDING_EVENTS + 1);
-                for (int i = start; i < current.length(); i++) {
-                    JSONObject old = current.optJSONObject(i);
-                    if (old != null) next.put(old);
+                // Do not truncate the pending queue. These notifications
+                // have not yet completed classification/history persistence;
+                // dropping an old entry here could silently lose a payment.
+                current.put(item);
+                boolean saved = preferences.edit()
+                        .putString(PENDING, current.toString())
+                        .commit();
+                if (!saved) {
+                    Log.e(TAG, "Pending queue commit failed; event is not acknowledged");
                 }
-                next.put(item);
-                return preferences.edit().putString(PENDING, next.toString()).commit();
+                return saved;
             } catch (JSONException | RuntimeException error) {
                 Log.e(TAG, "Unable to persist notification event", error);
                 return false;
