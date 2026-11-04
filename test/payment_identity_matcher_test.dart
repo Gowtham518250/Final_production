@@ -127,8 +127,14 @@ void main() {
       expect(d.reason, 'one_sided_reference_not_fuzzy_matched');
     });
 
-    test('weak pair expires after 60 seconds', () {
-      final d = PaymentIdentityMatcher.compare(sms('s', sec: 61), sig('n'));
+    test('weak pair still matches a delayed bank SMS inside three minutes', () {
+      final d = PaymentIdentityMatcher.compare(sms('s', sec: 150), sig('n'));
+      expect(d.verdict, IdentityVerdict.candidateEcho);
+      expect(d.reason, 'weak_modality_pair');
+    });
+
+    test('weak pair expires after three minutes', () {
+      final d = PaymentIdentityMatcher.compare(sms('s', sec: 181), sig('n'));
       expect(d.verdict, IdentityVerdict.distinct);
       expect(d.reason, 'no_shared_evidence');
     });
@@ -285,8 +291,8 @@ void main() {
           'later',
           source: 'post-b',
           notificationStream: 'package|tag|id',
-          notificationAt: _t0.add(const Duration(seconds: 31)),
-          sec: 31,
+          notificationAt: _t0.add(const Duration(seconds: 61)),
+          sec: 61,
         ),
       );
 
@@ -294,7 +300,7 @@ void main() {
     });
 
     test(
-      'same notification slot without payer/account evidence stays distinct',
+      'same notification slot and amount without payer/account is one payment',
       () {
         final d = PaymentIdentityMatcher.compare(
           sig(
@@ -304,7 +310,7 @@ void main() {
             notificationAt: _t0,
           ),
           sig(
-            'second-payment',
+            'repost',
             source: 'post-b',
             notificationStream: 'package|tag|id',
             notificationAt: _t0.add(const Duration(seconds: 2)),
@@ -312,7 +318,8 @@ void main() {
           ),
         );
 
-        expect(d.verdict, IdentityVerdict.distinct);
+        expect(d.verdict, IdentityVerdict.sameTransfer);
+        expect(d.reason, 'same_notification_stream_amount');
       },
     );
 
