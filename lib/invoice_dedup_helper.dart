@@ -313,10 +313,6 @@ class InvoiceDedupHelper {
     }
 
     for (final row in ordered) {
-      addRowLines(row);
-    }
-
-    for (final row in ordered) {
       final total = _rowTotal(row);
       if (total > 0) newestTotal = total;
 
