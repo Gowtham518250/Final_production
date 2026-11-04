@@ -3169,6 +3169,8 @@ class PaymentDetectionService {
   /// to acknowledge.
   final Map<String, List<Future<void>>> _notificationEmissionFutures =
       <String, List<Future<void>>>{};
+  final Map<String, Future<void>> _notificationRouteInFlight =
+      <String, Future<void>>{};
 
   /// Payment events whose durable local history write has not yet completed.
   final Set<String> _nativeNotificationHistoryPending = <String>{};
@@ -4332,7 +4334,7 @@ class PaymentDetectionService {
 
       await _notifSub?.cancel();
       _notifSub = NotificationListenerService.notificationsStream.listen(
-        (event) => unawaited(_processNotificationWithRetry(event)),
+        (event) => unawaited(_processNotificationOnce(event)),
         onError: (Object e, StackTrace st) {
           PdsLogger.e('L1', 'Stream error', e, st);
           _emitStatus(ChannelType.notification, ChannelStatus.error);
@@ -4561,6 +4563,34 @@ class PaymentDetectionService {
   /// Route durable native events before acknowledging them. A synchronous
   /// parsing/routing exception gets a few bounded retries; after that the
   /// native queue retains the event for the next stream re-attachment.
+  /// Prevent concurrent routing of the same durable notification key.
+  /// Android can surface the same event through a live relay and stream replay
+  /// while its first asynchronous history write is still running.
+  Future<void> _processNotificationOnce(ServiceNotificationEvent event) async {
+    final key = _safe(
+      () => (event as dynamic).eventKey as String?,
+    )?.trim();
+    if (key == null || key.isEmpty) {
+      await _processNotificationWithRetry(event);
+      return;
+    }
+
+    final existing = _notificationRouteInFlight[key];
+    if (existing != null) {
+      await existing;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _notificationRouteInFlight[key] = completer.future;
+    try {
+      await _processNotificationWithRetry(event);
+    } finally {
+      _notificationRouteInFlight.remove(key);
+      if (!completer.isCompleted) completer.complete();
+    }
+  }
+
   Future<void> _processNotificationWithRetry(
     ServiceNotificationEvent event, {
     int attempt = 1,
@@ -4832,6 +4862,13 @@ class PaymentDetectionService {
     } finally {
       if (key != null && key.isNotEmpty) {
         _notificationEmissionFutures.remove(key);
+        if (emissions.isEmpty &&
+            !_nativeNotificationHistoryPending.contains(key)) {
+          // No payment event was emitted, so there is no history write to
+          // wait for and no provisional transport identity to retain.
+          _nativeHistoryTransportFingerprints.remove(key);
+          _nativeHistoryPayloadFingerprints.remove(key);
+        }
       }
     }
     return handled;
