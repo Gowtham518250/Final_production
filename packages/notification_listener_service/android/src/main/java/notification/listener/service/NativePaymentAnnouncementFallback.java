@@ -1,8 +1,12 @@
 package notification.listener.service;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.RingtoneManager;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.Handler;
@@ -388,15 +392,92 @@ final class NativePaymentAnnouncementFallback {
         SCHEDULED.remove(request.eventKey);
         releaseWakeLockIfIdle();
 
-        // Retry once. If native TTS remains unavailable, leave the event
-        // pending and unclaimed so Flutter can process it on the next attach.
-        if (RETRIED.add(request.eventKey)) {
+        final boolean stillPending = NotificationRelayReceiver.isPendingEvent(
+                request.context, request.eventKey);
+        if (stillPending && RETRIED.add(request.eventKey)) {
             Log.w(TAG, "Native TTS failed (" + reason + "); scheduling one retry.");
             MAIN.postDelayed(
                     () -> schedule(request.context, request.eventKey),
                     1000L);
+            return;
+        }
+
+        // If Flutter already acknowledged the event, its durable queue is no
+        // longer available for replay. Post a separate sounding OS alert so a
+        // TTS callback failure cannot make a payment notification disappear.
+        if (postAudibleFallback(request, reason)) {
+            Log.w(TAG, "Posted audible OS fallback after native TTS failure.");
         } else {
-            Log.w(TAG, "Native TTS retry also failed; event remains durable.");
+            Log.w(TAG, "Native TTS fallback failed; durable event remains unacknowledged.");
+        }
+    }
+
+    private static boolean postAudibleFallback(SpeakRequest request, String reason) {
+        try {
+            Context context = request.context;
+            NotificationManager manager = (NotificationManager)
+                    context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager == null) return false;
+
+            final String channelId = "retailmind_native_payment_fallback";
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel channel = new NotificationChannel(
+                        channelId,
+                        "Payment alerts",
+                        NotificationManager.IMPORTANCE_HIGH);
+                channel.setDescription(
+                        "Audible fallback when payment announcement speech is unavailable.");
+                channel.enableVibration(true);
+                channel.setVibrationPattern(new long[]{0L, 250L, 150L, 250L});
+                channel.setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                        new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build());
+                manager.createNotificationChannel(channel);
+            }
+
+            String amount = BigDecimal.valueOf(request.announcement.amountValue)
+                    .stripTrailingZeros().toPlainString();
+            boolean debit = "debit".equalsIgnoreCase(request.announcement.direction);
+            String title = debit ? "Debit detected" : "Payment detected";
+            String body = debit
+                    ? "₹" + amount + " debited. Verify in your bank or UPI app."
+                    : "₹" + amount + " credit reported. Verify in your bank or UPI app.";
+
+            Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    ? new Notification.Builder(context, channelId)
+                    : new Notification.Builder(context);
+            builder.setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(new Notification.BigTextStyle().bigText(body))
+                    .setCategory(Notification.CATEGORY_MESSAGE)
+                    .setPriority(Notification.PRIORITY_HIGH)
+                    .setAutoCancel(true);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                builder.setDefaults(Notification.DEFAULT_ALL)
+                        .setSound(RingtoneManager.getDefaultUri(
+                                RingtoneManager.TYPE_NOTIFICATION))
+                        .setVibrate(new long[]{0L, 250L, 150L, 250L});
+            }
+
+            int notificationId = request.eventKey.hashCode() & 0x7fffffff;
+            manager.notify(notificationId, builder.build());
+
+            // If the native event is still queued, this marker prevents Flutter
+            // from producing a second speech/alert while it still writes history.
+            NotificationRelayReceiver.markNativeAnnouncementHandled(
+                    context, request.eventKey, true);
+            RETRIED.remove(request.eventKey);
+            return true;
+        } catch (SecurityException error) {
+            Log.w(TAG, "Notification permission denied for audible fallback", error);
+            return false;
+        } catch (RuntimeException error) {
+            Log.e(TAG, "Unable to post audible payment fallback (" + reason + ")", error);
+            return false;
         }
     }
 
