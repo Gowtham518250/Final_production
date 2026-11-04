@@ -84,6 +84,7 @@ class _KhataPageState extends State<KhataPage>
   bool _khataLoadInProgress = false;
   bool _khataReloadQueued = false;
   bool _khataBackgroundReconciliationInProgress = false;
+  bool _khataBackgroundReconciliationStarted = false;
 
   @override
   void initState() {
@@ -505,7 +506,9 @@ class _KhataPageState extends State<KhataPage>
     return list;
   }
 
-  Future<void> _loadKhata() async {
+  Future<void> _loadKhata({
+    bool refreshInvoiceAnalytics = true,
+  }) async {
     if (!mounted) return;
     if (_khataLoadInProgress) {
       _khataReloadQueued = true;
@@ -532,21 +535,28 @@ class _KhataPageState extends State<KhataPage>
     }
 
     if (!mounted) return;
-    unawaited(_loadInvoiceAnalytics());
+    if (refreshInvoiceAnalytics) {
+      unawaited(_loadInvoiceAnalytics());
+    }
     _startKhataBackgroundReconciliation();
   }
 
   void _startKhataBackgroundReconciliation() {
-    if (!mounted || _khataBackgroundReconciliationInProgress) return;
+    if (!mounted ||
+        _khataBackgroundReconciliationStarted ||
+        _khataBackgroundReconciliationInProgress) {
+      return;
+    }
+    _khataBackgroundReconciliationStarted = true;
     _khataBackgroundReconciliationInProgress = true;
     unawaited(_reconcileKhataInBackground());
   }
 
   Future<void> _reconcileKhataInBackground() async {
+    var completed = false;
     try {
-      // The local Khata screen is already visible and interactive. Restore and
-      // sync cloud data without holding the page open or replacing it with a
-      // full-screen loading state.
+      // Restore and download once after opening Khata. Routine refreshes and
+      // button actions thereafter use the already-local ledger.
       await SalesRestoreService.ensureFullHistoryRestored();
       await SyncService.downloadUserDataSafe();
       if (!mounted) return;
@@ -554,10 +564,13 @@ class _KhataPageState extends State<KhataPage>
       // Refresh from the newly reconciled local ledger. The load guard queues
       // this pass if a user refresh or payment action is already rebuilding it.
       await _loadKhata();
+      completed = true;
     } catch (e) {
       if (kDebugMode) debugPrint('Khata background reconciliation skipped: $e');
     } finally {
       _khataBackgroundReconciliationInProgress = false;
+      // Permit a later manual refresh to retry after a network/restore failure.
+      if (!completed) _khataBackgroundReconciliationStarted = false;
     }
   }
 
@@ -1301,7 +1314,7 @@ class _KhataPageState extends State<KhataPage>
         });
 
         _showToast('⏰ Payment deadline set to $dateStr');
-        await _loadKhata();
+        await _loadKhata(refreshInvoiceAnalytics: false);
         unawaited(SyncService.processQueueSafe());
       } catch (e) {
         _showToast('Error setting deadline: $e');
@@ -1975,7 +1988,7 @@ class _KhataPageState extends State<KhataPage>
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: LiveTranslatedText(
-                    '${_filteredInvoices.length} shown',
+                    '${invoices.length} shown',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
