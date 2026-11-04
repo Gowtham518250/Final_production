@@ -127,14 +127,14 @@ void main() {
       expect(d.reason, 'one_sided_reference_not_fuzzy_matched');
     });
 
-    test('weak pair still matches a delayed bank SMS inside three minutes', () {
-      final d = PaymentIdentityMatcher.compare(sms('s', sec: 150), sig('n'));
+    test('weak pair matches within 60 seconds', () {
+      final d = PaymentIdentityMatcher.compare(sms('s', sec: 59), sig('n'));
       expect(d.verdict, IdentityVerdict.candidateEcho);
       expect(d.reason, 'weak_modality_pair');
     });
 
-    test('weak pair expires after three minutes', () {
-      final d = PaymentIdentityMatcher.compare(sms('s', sec: 181), sig('n'));
+    test('weak amount-only pair expires after 60 seconds', () {
+      final d = PaymentIdentityMatcher.compare(sms('s', sec: 61), sig('n'));
       expect(d.verdict, IdentityVerdict.distinct);
       expect(d.reason, 'no_shared_evidence');
     });
