@@ -4814,6 +4814,43 @@ class PaymentDetectionService {
   }
 
   /// Native notification keys use package|notificationId|postTimeMillis|hash.
+  static String _notificationPayloadFingerprint({
+    required String packageName,
+    required String? sender,
+    required String normalizedPayload,
+    String? eventKey,
+  }) {
+    final key = eventKey?.trim();
+    String sourceIdentity;
+    if (key != null && key.isNotEmpty) {
+      final parts = key.split('|');
+      final hasStableNativeSlot = parts.length >= 4 &&
+          int.tryParse(parts[parts.length - 2]) != null;
+      sourceIdentity = hasStableNativeSlot
+          ? parts.take(parts.length - 1).join('|')
+          : key;
+    } else {
+      sourceIdentity =
+          'fallback|${packageName.toLowerCase()}|${sender?.toLowerCase() ?? ''}';
+    }
+    return sha256
+        .convert(utf8.encode('$sourceIdentity|$normalizedPayload'))
+        .toString();
+  }
+
+  @visibleForTesting
+  static String debugNotificationPayloadFingerprint({
+    required String packageName,
+    required String? sender,
+    required String payload,
+    String? eventKey,
+  }) => _notificationPayloadFingerprint(
+    packageName: packageName,
+    sender: sender,
+    normalizedPayload: payload.toLowerCase().replaceAll(RegExp(r'\\s+'), ' ').trim(),
+    eventKey: eventKey,
+  );
+
   @visibleForTesting
   static DateTime? postedAtFromEventKey(String? eventKey) {
     if (eventKey == null) return null;
@@ -4968,13 +5005,12 @@ class PaymentDetectionService {
           .toLowerCase()
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
-      final notificationFingerprint = sha256
-          .convert(
-            utf8.encode(
-              '${pkg.toLowerCase()}|${notificationSender?.toLowerCase() ?? ''}|$normalizedPayload',
-            ),
-          )
-          .toString();
+      final notificationFingerprint = _notificationPayloadFingerprint(
+        packageName: pkg,
+        sender: notificationSender,
+        normalizedPayload: normalizedPayload,
+        eventKey: nativeEventKey,
+      );
       if (nativeEventKey != null &&
           nativeEventKey.isNotEmpty &&
           _notificationEmissionFutures.containsKey(nativeEventKey)) {
