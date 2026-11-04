@@ -96,12 +96,86 @@ class CacheConsistencyService {
     return _parse((await metadata(dataset))['last_remote_refresh_at']);
   }
 
+  /// Only sync metadata is inspected; business status PENDING is not a
+  /// durable local-write marker.
   static bool isPending(Map<String, dynamic> record) {
-    final sync = (record['sync_status'] ?? record['syncState'] ?? record['status'])?.toString().trim().toLowerCase();
-    return sync == 'pending' || sync == 'pending_sync' || sync == 'retry_wait' || sync == 'failed' || sync == 'dirty' || record['is_offline'] == true;
+    final raw = record['sync_status'] ??
+        record['syncState'] ??
+        record['sync_state'] ??
+        record['queue_status'];
+    final state = raw?.toString().trim().toLowerCase() ?? '';
+    const pendingStates = {
+      'pending',
+      'pending_sync',
+      'retry_wait',
+      'failed',
+      'dirty',
+      'queued',
+      'offline_pending',
+      'pending_confirmation',
+      'syncing',
+    };
+    return pendingStates.contains(state) ||
+        record['is_offline'] == true ||
+        record['is_synced'] == false ||
+        record['synced'] == false ||
+        record['pending_sync'] == true;
   }
 
-  static String identity(Map<String, dynamic> record, [List<String> fields = const ['operation_id','local_order_id','server_order_id','order_id','product_id','id','invoice_id','sale_id','invoice_number','sku','barcode']]) {
+  static String _normalized(Object? value) {
+    final text = value?.toString().trim().toLowerCase() ?? '';
+    if (text.isEmpty || text == 'null' || text == '0') return '';
+    return text;
+  }
+
+  /// Collect every stable business identity alias, with ID namespaces kept
+  /// separate so unrelated numeric table IDs cannot collide.
+  static Set<String> identityTokens(
+    Map<String, dynamic> record, {
+    String dataset = 'generic',
+  }) {
+    final tokens = <String>{};
+    void add(String prefix, Iterable<String> fields) {
+      for (final field in fields) {
+        final value = _normalized(record[field]);
+        if (value.isNotEmpty) tokens.add('$prefix:$value');
+      }
+    }
+
+    switch (dataset.toLowerCase()) {
+      case 'sales':
+      case 'invoices':
+      case 'invoice':
+        add('transaction', const [
+          'invoice_number',
+          'invoice_no',
+          'bill_number',
+          'bill_no',
+          'number',
+          'sale_id',
+          'offline_id',
+          'local_sale_id',
+          'source_sale_id',
+          'original_sale_id',
+        ]);
+        add('invoice_backend', const [
+          'invoice_id',
+          'invoiceId',
+          'backend_invoice_id',
+          'backend_id',
+          'server_invoice_id',
+        ]);
+        final id = _normalized(record['id']);
+        final invoiceShaped = const [
+          'invoice_number',
+          'invoice_no',
+          'invoice_id',
+          'invoiceId',
+          'backend_id',
+          'server_invoice_id',
+          'number',
+        ].any((field) => _normalized(record[field]).isNotEmpty);
+        if (id.isNotEmpty && !RegExp(r'^\\d+Map<String, dynamic> record, [List<String> fields = const ['operation_id','local_order_id','server_order_id','order_id','product_id','id','invoice_id','sale_id','invoice_number','sku','barcode']]) {
     for (final field in fields) {
       final value = record[field]?.toString().trim();
       if (value != null && value.isNotEmpty && value != 'null' && value != '0') return value.toLowerCase();
@@ -119,38 +193,78 @@ class CacheConsistencyService {
 
   /// Unsynced local mutations stay visible until their ACK arrives.
   /// Otherwise the newer server representation wins.
-  static Map<String, dynamic> mergeRecord(Map<String, dynamic> local, Map<String, dynamic> remote, {String? dataset}) {
-    final key = identity(remote).isNotEmpty ? identity(remote) : identity(local);
+  static bool _isEmptyValue(Object? value) =>
+      value == null || (value is String && value.trim().isEmpty);
+
+  static Map<String, dynamic> _mergeMissing(
+    Map<String, dynamic> winner,
+    Map<String, dynamic> fallback,
+  ) {
+    final result = <String, dynamic>{...winner};
+    for (final entry in fallback.entries) {
+      if (!result.containsKey(entry.key) || _isEmptyValue(result[entry.key])) {
+        result[entry.key] = entry.value;
+      }
+    }
+    return result;
+  }
+
+  /// Pending local edits win until ACK. If neither row is pending, an explicit
+  /// remote timestamp is required before remote data replaces local values.
+  static Map<String, dynamic> mergeRecord(
+    Map<String, dynamic> local,
+    Map<String, dynamic> remote, {
+    String? dataset,
+  }) {
     final localPending = isPending(local);
+    final remotePending = isPending(remote);
     final localUpdated = updatedAt(local);
     final remoteUpdated = updatedAt(remote);
+    final key = identity(remote).isNotEmpty
+        ? identity(remote)
+        : identity(local);
 
-    if (localPending) {
-      final merged = <String, dynamic>{...remote, ...local, 'conflict_state': 'local_pending'};
-      if (remoteUpdated != null && localUpdated != null && remoteUpdated.isAfter(localUpdated)) {
-        merged['server_snapshot_updated_at'] = remoteUpdated.toIso8601String();
-        merged['conflict_state'] = 'local_pending_remote_newer';
-      }
-      if (dataset != null) {
-        Future.microtask(() => markConflict(dataset, identity: key, reason: merged['conflict_state']?.toString()));
-      }
-      return merged;
+    late final Map<String, dynamic> winner;
+    late final Map<String, dynamic> fallback;
+    late final String conflictState;
+
+    if (localPending || remotePending) {
+      final remoteWins = remotePending && !localPending;
+      winner = remoteWins ? remote : local;
+      fallback = remoteWins ? local : remote;
+      conflictState = localPending && remotePending
+          ? 'both_pending_local_preferred'
+          : localPending
+              ? 'local_pending'
+              : 'remote_pending';
+    } else {
+      final remoteWins = remoteUpdated != null &&
+          (localUpdated == null || !remoteUpdated.isBefore(localUpdated));
+      winner = remoteWins ? remote : local;
+      fallback = remoteWins ? local : remote;
+      conflictState = remoteWins ? 'remote_wins' : 'local_wins_conservative';
     }
 
-    final localTime = localUpdated ?? DateTime.fromMillisecondsSinceEpoch(0);
-    final remoteTime = remoteUpdated ?? DateTime.fromMillisecondsSinceEpoch(0);
-    final remoteWins = remoteUpdated == null
-        ? true
-        : !remoteTime.isBefore(localTime);
-    return remoteWins ? <String, dynamic>{...local, ...remote, 'conflict_state': 'remote_wins'} : <String, dynamic>{...remote, ...local, 'conflict_state': 'local_newer'};
+    final merged = _mergeMissing(winner, fallback);
+    merged['conflict_state'] = conflictState;
+    if (dataset != null &&
+        (localPending || remotePending) &&
+        localUpdated != remoteUpdated) {
+      Future<void>.microtask(
+        () => markConflict(dataset, identity: key, reason: conflictState),
+      );
+    }
+    return merged;
   }
+
 
   /// Remove stale server-owned online-order invoices after a successful
   /// canonical snapshot. Pending/offline local writes remain until their ACK.
   static List<Map<String, dynamic>> reconcileOnlineOrderSales(
     List<dynamic> local,
-    List<dynamic> remote,
-  ) {
+    List<dynamic> remote, {
+    bool authoritativeSnapshot = false,
+  }) {
     String invoiceNumber(Map<String, dynamic> record) {
       for (final field in const [
         'invoice_number',
@@ -172,6 +286,12 @@ class CacheConsistencyService {
           .firstMatch(invoiceNumber.trim());
       return match?.group(1)?.toUpperCase() ?? '';
     }
+
+    final localRows = local
+        .whereType<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
+        .toList();
+    if (!authoritativeSnapshot) return localRows;
 
     bool isOnlineOrder(Map<String, dynamic> record, String number) {
       if (orderKey(number).isNotEmpty) return true;
@@ -245,24 +365,108 @@ class CacheConsistencyService {
     return output;
   }
 
-  static List<Map<String, dynamic>> mergeLists(List<dynamic> local, List<dynamic> remote, {required String dataset}) {
-    final merged = <String, Map<String, dynamic>>{};
-    final anonymous = <Map<String, dynamic>>[];
-    for (final raw in local) {
-      if (raw is! Map) continue;
-      final record = Map<String, dynamic>.from(raw);
-      final key = identity(record);
-      if (key.isEmpty) anonymous.add(record); else merged[key] = record;
+  static List<Map<String, dynamic>> mergeLists(
+    List<dynamic> local,
+    List<dynamic> remote, {
+    required String dataset,
+  }) {
+    final records = <Map<String, dynamic>>[];
+    final remoteFlags = <bool>[];
+    for (final row in local) {
+      if (row is Map) {
+        records.add(Map<String, dynamic>.from(row));
+        remoteFlags.add(false);
+      }
     }
-    for (final raw in remote) {
-      if (raw is! Map) continue;
-      final record = Map<String, dynamic>.from(raw);
-      final key = identity(record);
-      if (key.isEmpty) { anonymous.add(record); continue; }
-      final existing = merged[key];
-      merged[key] = existing == null ? {...record, 'sync_status': 'synced'} : mergeRecord(existing, record, dataset: dataset);
+    for (final row in remote) {
+      if (row is Map) {
+        records.add(Map<String, dynamic>.from(row));
+        remoteFlags.add(true);
+      }
     }
-    if (kDebugMode) debugPrint('🧭 [CacheConsistency] $dataset merged local=${local.length} remote=${remote.length} result=${merged.length + anonymous.length}');
-    return [...merged.values, ...anonymous];
+    final parents = List<int>.generate(records.length, (index) => index);
+    int root(int index) {
+      var current = index;
+      while (parents[current] != current) {
+        parents[current] = parents[parents[current]];
+        current = parents[current];
+      }
+      return current;
+    }
+    void union(int a, int b) {
+      final left = root(a);
+      final right = root(b);
+      if (left != right) parents[right] = left;
+    }
+
+    final tokenOwners = <String, int>{};
+    final tokensByIndex = <int, Set<String>>{};
+    for (var i = 0; i < records.length; i++) {
+      final tokens = identityTokens(records[i], dataset: dataset);
+      tokensByIndex[i] = tokens;
+      for (final token in tokens) {
+        final previous = tokenOwners[token];
+        if (previous == null) {
+          tokenOwners[token] = i;
+        } else {
+          union(i, previous);
+        }
+      }
+    }
+
+    final groups = <int, List<int>>{};
+    final anonymous = <int>[];
+    for (var i = 0; i < records.length; i++) {
+      if (tokensByIndex[i]!.isEmpty) {
+        anonymous.add(i);
+      } else {
+        groups.putIfAbsent(root(i), () => <int>[]).add(i);
+      }
+    }
+
+    final result = <Map<String, dynamic>>[];
+    for (final group in groups.values) {
+      final localRows = group
+          .where((i) => !remoteFlags[i])
+          .map((i) => records[i])
+          .toList();
+      final remoteRows = group
+          .where((i) => remoteFlags[i])
+          .map((i) => records[i])
+          .toList();
+      Map<String, dynamic>? merged;
+      for (final row in localRows) {
+        merged = merged == null
+            ? Map<String, dynamic>.from(row)
+            : mergeRecord(merged, row, dataset: dataset);
+      }
+      for (final row in remoteRows) {
+        merged = merged == null
+            ? Map<String, dynamic>.from(row)
+            : mergeRecord(merged, row, dataset: dataset);
+      }
+      if (merged != null) {
+        if (remoteRows.isNotEmpty && !isPending(merged)) {
+          merged.putIfAbsent('sync_status', () => 'synced');
+        }
+        result.add(merged);
+      }
+    }
+
+    // No stable identity means no safe dedupe operation.
+    for (final i in anonymous) {
+      result.add(records[i]);
+    }
+    if (kDebugMode) {
+      debugPrint(
+        '[CacheConsistency] $dataset merged local=' +
+            local.length.toString() +
+            ', remote=' +
+            remote.length.toString() +
+            ', result=' +
+            result.length.toString(),
+      );
+    }
+    return result;
   }
 }
