@@ -144,9 +144,9 @@ class EchoResolution {
 class PaymentIdentityMatcher {
   PaymentIdentityMatcher._();
 
-  /// App notification + bank SMS may be delayed by a few minutes and share no
-  /// payer, account or UTR. Pair one-to-one only.
-  static const Duration weakModalityWindow = Duration(minutes: 3);
+  /// Amount/direction alone is weak evidence. Keep the cross-channel window
+  /// short so a genuine second same-value payment is not swallowed.
+  static const Duration weakModalityWindow = Duration(seconds: 60);
 
   /// Same notification slot, amount and direction can be an update/repost even
   /// without payer/account/reference fields. Conflicts still block this match.
