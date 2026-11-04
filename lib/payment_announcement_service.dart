@@ -264,48 +264,58 @@ class PaymentAnnouncementService {
     );
   }
 
-  // Last line of defence against one payment being spoken twice by two code
-  // paths in the same isolate: identical text within a few seconds is one
-  // announcement. Genuinely separate payments are normally further apart, and
-  // earlier layers already tell distinct payments apart.
-  static const Duration _identicalSpeechWindow = Duration(seconds: 4);
-  String? _lastSimpleMessage;
-  DateTime? _lastSimpleAt;
+  // Same-isolate guard is keyed by payment identity, never by speech text:
+  // two genuine payments can produce identical spoken wording.
+  static const Duration _sameKeyWindow = Duration(seconds: 4);
+  static const Duration _maxQueueWait = Duration(minutes: 2);
+  final Map<String, DateTime> _recentSpeechKeys = <String, DateTime>{};
 
-  void speakSimple(String message, String language) {
-    if (_config.volume <= 0) return;
-    final spokenKey = '$language|' + message.trim();
-    final spokenAt = DateTime.now();
-    if (_lastSimpleMessage == spokenKey &&
-        _lastSimpleAt != null &&
-        spokenAt.difference(_lastSimpleAt!) < _identicalSpeechWindow) {
-      return;
+  /// Completes true only after TTS completes. A false result means nothing was
+  /// heard (muted, failed, timed out, expired, or cleared) and needs fallback.
+  Future<bool> speakSimple(
+    String message,
+    String language, {
+    String? dedupeKey,
+  }) {
+    if (_config.volume <= 0) return Future<bool>.value(false);
+    final now = DateTime.now();
+    _recentSpeechKeys.removeWhere(
+      (_, at) => now.difference(at) > _sameKeyWindow,
+    );
+    if (dedupeKey != null && dedupeKey.isNotEmpty) {
+      if (_recentSpeechKeys.containsKey(dedupeKey)) {
+        // The first invocation owns the speech for this payment.
+        return Future<bool>.value(true);
+      }
+      _recentSpeechKeys[dedupeKey] = now;
     }
-    _lastSimpleMessage = spokenKey;
-    _lastSimpleAt = spokenAt;
+
     final lang = _lang.resolve(language);
     final calculatedTimeout =
         _voice.calculateTimeout(message, _config.budgetDeviceTimeoutMultiplier);
-    // Payment messages are short. Bound background TTS wait so a locked-screen
-    // callback cannot leave hours of announcements queued until the user opens
-    // Retail Mind. The audible Android notification is the immediate fallback.
     final timeout = calculatedTimeout.clamp(6, 12).toInt();
+    final completer = Completer<bool>();
     _queue.enqueue(QueueItem(
       priority: AnnouncementPriority.low,
       ttsText: message,
       timeoutSec: timeout,
+      expiresAt: now.add(_maxQueueWait),
+      onResult: (success) {
+        if (!success && dedupeKey != null) {
+          _recentSpeechKeys.remove(dedupeKey);
+        }
+        if (!completer.isCompleted) completer.complete(success);
+      },
       onTimeout: () async {
-        // Stop any native TTS call that was waiting on a completion callback
-        // and discard old low-priority payment speech. Do not replay a backlog
-        // of stale payments after the phone unlocks.
-        // Do not let a broken platform stop callback block timeout recovery.
+        // Stop only this stalled TTS operation. Other fresh payment items keep
+        // their queue positions and their own expiry/timeout.
         await _voice
             .stop()
             .timeout(const Duration(seconds: 2), onTimeout: () {});
-        _queue.clearLowPriority();
       },
       task: () => _voice.speakRaw(message, lang.locale),
     ));
+    return completer.future;
   }
 
   void queryDailyTotal(String language) {
