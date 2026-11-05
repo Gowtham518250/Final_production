@@ -576,12 +576,12 @@ class _DashboardPageState extends State<DashboardPage>
       (_) => _loadSales(),
     );
 
-    // Durable change-feed events refresh relevant owner widgets within the sync pulse.
-    // Keep a low-frequency full reconciliation for older clients, uninstrumented
-    // writes, or a temporarily unavailable change feed.
+    // Durable change-feed events and app-resume refreshes handle normal updates.
+    // Keep a 15-minute safety reconciliation for missed/legacy events; do not
+    // download inventory and invoice snapshots every few minutes on idle devices.
     _onlineBusinessRefreshTimer?.cancel();
     _onlineBusinessRefreshTimer = Timer.periodic(
-      const Duration(minutes: 5),
+      const Duration(minutes: 15),
       (_) => _refreshOnlineBusinessData(),
     );
     // Inventory-only changes must not reload and re-flatten the entire sales
