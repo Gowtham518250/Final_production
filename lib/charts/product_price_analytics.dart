@@ -72,19 +72,26 @@ class ProductPriceAnalytics {
           : 'name:$normalizedName';
 
       final quantity = _number(line['quantity'] ?? line['qty']);
-      final revenue = _firstPositive([
-        line['line_total'],
-        line['total_with_tax'],
-        line['total'],
-        line['amount'],
-      ]);
       var unitPrice = _firstPositive([
         line['unit_price'],
         line['price'],
         line['selling_price'],
       ]);
+      var revenue = _firstPositive([
+        line['line_total'],
+        line['total_with_tax'],
+        line['total'],
+        line['amount'],
+        line['grand_total'],
+        line['total_amount'],
+        line['gross_revenue'],
+        line['revenue'],
+      ]);
       if (unitPrice <= 0 && quantity > 0 && revenue > 0) {
         unitPrice = revenue / quantity;
+      }
+      if (revenue <= 0 && unitPrice > 0 && quantity > 0) {
+        revenue = unitPrice * quantity;
       }
 
       final hasUnitPrice = unitPrice > 0 && unitPrice.isFinite;
