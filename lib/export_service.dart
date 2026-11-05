@@ -164,9 +164,12 @@ class ExportService {
     for (final record in [primary, if (fallback != null) fallback]) {
       for (final field in const [
         'product_name',
+        'productName',
         'display_name',
+        'displayName',
         'product',
         'item',
+        'itemName',
         'description',
         'name',
         'title',
@@ -238,7 +241,16 @@ class ExportService {
       for (final rawLine in rawLines) {
         if (rawLine is! Map) continue;
         final line = Map<String, dynamic>.from(rawLine);
-        final row = <String, dynamic>{...sale, ...line};
+        // Line values enrich the parent invoice, but null/blank aliases must
+        // not erase the parent timestamp, payment method, customer or invoice ID.
+        final row = Map<String, dynamic>.from(sale);
+        for (final entry in line.entries) {
+          final value = entry.value;
+          if (value == null || (value is String && value.trim().isEmpty)) {
+            continue;
+          }
+          row[entry.key] = value;
+        }
         final name = _firstExportText(line, sale);
         final quantity = _exportNumber(
           line['quantity'] ?? line['qty'],
