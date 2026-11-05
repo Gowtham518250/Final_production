@@ -159,8 +159,9 @@ class InvoiceDedupHelper {
                 line['name'] ??
                 '')
             .toString()
-            .trim()
-            .toLowerCase();
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
 
     bool sameLine(Map<String, dynamic> left, Map<String, dynamic> right) {
       final leftId = (left['product_id'] ?? '').toString().trim();
