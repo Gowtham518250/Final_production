@@ -2226,81 +2226,52 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _toggleOnlineStore(bool enable) async {
-    setState(() {
-      _onlineStoreLoading = true;
-    });
+    if (_onlineStoreLoading) return;
+    final previous = _isOnlineStoreActive;
+    setState(() => _onlineStoreLoading = true);
     try {
-      final result = await OnlineStoreService.setShopOnlineStatus(enable);
-      final prefs = await SharedPreferences.getInstance();
-      if (result['success'] == true) {
-        setState(() {
-          _isOnlineStoreActive = enable;
-          _onlineStoreLoading = false;
-          if (enable) {
-            _onlineStorePulseController.stop();
-            _onlineStorePulseController.value = 1.0;
-          } else if (!_onlineStorePulseController.isAnimating) {
-            // Re-emphasize the CTA once when the shop is taken offline.
-            _onlineStorePulseController.forward(from: 0);
-          }
-        });
-        // 🔒 SECURITY: Persist with scoped SharedPreferences
-        await ScopedSharedPreferences.setBool('online_store_active', enable);
-        await ScopedSharedPreferences.setBool('shop_published_online', enable);
-
-        if (enable) {
-          _loadOnlineStoreStats();
-        } else {
-          setState(() {
-            _onlinePendingOrders = 0;
-            _onlineTodayOrders = 0;
-            _onlineTodayRevenue = 0.0;
-            _onlinePaidCount = 0;
-            _onlineTotalOrders = 0;
-            _onlineTotalRevenue = 0.0;
-            _onlineTotalPaidCount = 0;
-          });
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: LiveTranslatedText(
-                enable
-                    ? '✅ Online Store enabled! Customers can find you nearby.'
-                    : '✅ Online Store disabled.',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        setState(() {
-          _onlineStoreLoading = false;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: LiveTranslatedText(
-                'Failed to update status: ${result['error'] ?? "Unknown error"}',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      final result = await OnlineStoreService.setShopOnlineStatus(enable)
+          .timeout(const Duration(seconds: 20));
+      if (result['success'] != true) {
+        throw StateError(result['error']?.toString() ?? 'The server could not update the store status.');
       }
-    } catch (e) {
+      await ScopedSharedPreferences.setBool('online_store_active', enable);
+      await ScopedSharedPreferences.setBool('shop_published_online', enable);
+      if (!mounted) return;
       setState(() {
+        _isOnlineStoreActive = enable;
         _onlineStoreLoading = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: LiveTranslatedText('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      if (enable) {
+        unawaited(_loadOnlineStoreStats());
+      } else {
+        setState(() {
+          _onlinePendingOrders = 0;
+          _onlineTodayOrders = 0;
+          _onlineTodayRevenue = 0.0;
+          _onlinePaidCount = 0;
+          _onlineTotalOrders = 0;
+          _onlineTotalRevenue = 0.0;
+          _onlineTotalPaidCount = 0;
+        });
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: LiveTranslatedText(enable
+              ? 'Online Shopping enabled. Your shop is visible to customers.'
+              : 'Online Shopping disabled.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isOnlineStoreActive = previous;
+        _onlineStoreLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: LiveTranslatedText('Could not update Online Shopping: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -2490,19 +2461,17 @@ class _DashboardPageState extends State<DashboardPage>
                 ],
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_onlineStoreLoading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    Switch.adaptive(
-                      value: _isOnlineStoreActive,
-                      activeColor: Colors.green,
-                      onChanged: (val) => _toggleOnlineStore(val),
-                    ),
+                  Switch.adaptive(
+                    value: _isOnlineStoreActive,
+                    activeColor: Colors.green,
+                    onChanged: _onlineStoreLoading ? null : (val) => _toggleOnlineStore(val),
+                  ),
+                  if (_onlineStoreLoading) ...[
+                    const SizedBox(width: 6),
+                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  ],
                 ],
               ),
             ],
@@ -2739,18 +2708,15 @@ class _DashboardPageState extends State<DashboardPage>
                     ],
                   ),
                 ),
-                if (_onlineStoreLoading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Switch.adaptive(
-                    value: _isOnlineStoreActive,
-                    activeColor: Colors.green,
-                    onChanged: (val) => _toggleOnlineStore(val),
-                  ),
+                Switch.adaptive(
+                  value: _isOnlineStoreActive,
+                  activeColor: Colors.green,
+                  onChanged: _onlineStoreLoading ? null : (val) => _toggleOnlineStore(val),
+                ),
+                if (_onlineStoreLoading) ...[
+                  const SizedBox(width: 6),
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                ],
               ],
             ),
             const SizedBox(height: 14),
@@ -10709,6 +10675,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   // ENHANCED RECENT TRANSACTIONS
   Widget _buildEnhancedRecentTransactions() {
+    final newestFirst = List<Map<String, dynamic>>.from(recentSales)
+      ..sort((a, b) => engine.getLocalDate(b).compareTo(engine.getLocalDate(a)));
     return AnimatedBuilder(
       animation: _fadeAnimation,
       builder: (context, child) {
@@ -10806,7 +10774,7 @@ class _DashboardPageState extends State<DashboardPage>
                   else if (filteredSales.isEmpty)
                     _buildEmptyState()
                   else
-                    ...recentSales.take(10).map((s) {
+                    ...newestFirst.take(10).map((s) {
                       final dynamic rawTotal = s['total_amount'] ?? s['total'];
                       final totalVal = rawTotal is num
                           ? rawTotal.toDouble()
@@ -10879,8 +10847,6 @@ class _DashboardPageState extends State<DashboardPage>
                                     children: [
                                       Builder(
                                         builder: (context) {
-                                          final productName =
-                                              _dashboardProductDisplayName(s);
                                           final invoice =
                                               (s['invoice_number'] ??
                                                       s['sale_id'] ??
@@ -10888,12 +10854,14 @@ class _DashboardPageState extends State<DashboardPage>
                                                       '')
                                                   .toString()
                                                   .trim();
-                                          final title = productName.isNotEmpty
-                                              ? productName
-                                              : ((s['customer_name'] ??
-                                                        s['customer_phone'] ??
-                                                        'Walk-in Customer')
-                                                    .toString());
+                                          final title = (s['customer_name'] ??
+                                                  s['customer_phone'] ??
+                                                  'Walk-in Customer')
+                                              .toString();
+                                          final rawItems = s['items'] ?? s['products'] ?? s['line_items'];
+                                          final itemCount = rawItems is List
+                                              ? rawItems.length
+                                              : (int.tryParse((s['item_count'] ?? s['items_count'] ?? s['total_items'] ?? 0).toString()) ?? 0);
                                           return Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
@@ -10935,7 +10903,7 @@ class _DashboardPageState extends State<DashboardPage>
                                           ),
                                           const SizedBox(width: 3),
                                           LiveTranslatedText(
-                                            'Status: ${s['payment_status'] ?? 'N/A'}',
+                                            'Items: $itemCount  •  ${(s['payment_status'] ?? s['status'] ?? 'N/A').toString().toUpperCase()}',
                                             style: const TextStyle(
                                               color: Color(0xFF64748B),
                                               fontSize: 11,
