@@ -10675,6 +10675,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   // ENHANCED RECENT TRANSACTIONS
   Widget _buildEnhancedRecentTransactions() {
+    final newestFirst = List<Map<String, dynamic>>.from(recentSales)
+      ..sort((a, b) => engine.getLocalDate(b).compareTo(engine.getLocalDate(a)));
     return AnimatedBuilder(
       animation: _fadeAnimation,
       builder: (context, child) {
@@ -10772,7 +10774,7 @@ class _DashboardPageState extends State<DashboardPage>
                   else if (filteredSales.isEmpty)
                     _buildEmptyState()
                   else
-                    ...recentSales.take(10).map((s) {
+                    ...newestFirst.take(10).map((s) {
                       final dynamic rawTotal = s['total_amount'] ?? s['total'];
                       final totalVal = rawTotal is num
                           ? rawTotal.toDouble()
@@ -10845,8 +10847,6 @@ class _DashboardPageState extends State<DashboardPage>
                                     children: [
                                       Builder(
                                         builder: (context) {
-                                          final productName =
-                                              _dashboardProductDisplayName(s);
                                           final invoice =
                                               (s['invoice_number'] ??
                                                       s['sale_id'] ??
@@ -10854,12 +10854,14 @@ class _DashboardPageState extends State<DashboardPage>
                                                       '')
                                                   .toString()
                                                   .trim();
-                                          final title = productName.isNotEmpty
-                                              ? productName
-                                              : ((s['customer_name'] ??
-                                                        s['customer_phone'] ??
-                                                        'Walk-in Customer')
-                                                    .toString());
+                                          final title = (s['customer_name'] ??
+                                                  s['customer_phone'] ??
+                                                  'Walk-in Customer')
+                                              .toString();
+                                          final rawItems = s['items'] ?? s['products'] ?? s['line_items'];
+                                          final itemCount = rawItems is List
+                                              ? rawItems.length
+                                              : (int.tryParse((s['item_count'] ?? s['items_count'] ?? s['total_items'] ?? 0).toString()) ?? 0);
                                           return Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
@@ -10901,7 +10903,7 @@ class _DashboardPageState extends State<DashboardPage>
                                           ),
                                           const SizedBox(width: 3),
                                           LiveTranslatedText(
-                                            'Status: ${s['payment_status'] ?? 'N/A'}',
+                                            'Items: $itemCount  •  ${(s['payment_status'] ?? s['status'] ?? 'N/A').toString().toUpperCase()}',
                                             style: const TextStyle(
                                               color: Color(0xFF64748B),
                                               fontSize: 11,
