@@ -50,8 +50,11 @@ class SyncService {
   static Timer? _pulseTimer;
   static bool _initialized = false;
   static StreamSubscription<ConnectivityResult>? _connectivitySub;
+  // Full snapshot reconciliation is a recovery fallback, not the live
+  // sync mechanism. Durable change-feed polling and the outbox remain active
+  // every 30 seconds; use a 15-minute safety refresh for missed/legacy writes.
   static const Duration _automaticUserDataRefreshInterval = Duration(
-    minutes: 5,
+    minutes: 15,
   );
   static DateTime? _lastUserDataDownloadAt;
   static bool _userDataDownloadInProgress = false;
@@ -109,7 +112,7 @@ class SyncService {
 
   /// Keep queued writes responsive without repeatedly downloading the full
   /// invoice dataset. Queue flushing is lightweight when empty; cloud data pulls
-  /// are throttled to one automatic refresh every five minutes.
+  /// are throttled to one automatic refresh every fifteen minutes.
   static void _startPulseTimer() {
     _pulseTimer?.cancel();
     _pulseTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
