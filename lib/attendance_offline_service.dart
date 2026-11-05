@@ -13,13 +13,8 @@ class OfflineAttendanceService {
   static Future<int?> _userId() async { final p=await SharedPreferences.getInstance(); return p.getInt('user_id') ?? p.getInt('userId'); }
   static String _date(DateTime v) => '${v.year.toString().padLeft(4,'0')}-${v.month.toString().padLeft(2,'0')}-${v.day.toString().padLeft(2,'0')}';
   static String _identity(Map<String,dynamic> r,int uid){final w=r['worker_id']?.toString().trim()??'';final e=r['employee_id']?.toString().trim()??'';if(w.isNotEmpty)return 'worker:$w';if(e.isNotEmpty)return 'employee:$e';return 'user:$uid';}
-  static int _sessionIndexOf(Map<String,dynamic> r) {
-    final raw = int.tryParse((r['session_index'] ?? '').toString());
-    if (raw == 0 || raw == 1) return raw!;
-    // Older clients allowed more than two sessions/day. Re-map those legacy
-    // rows to the fixed slot identified by their recorded check-in timestamp.
-    return AttendanceShiftPolicy.indexForRecord(r);
-  }
+  static int _sessionIndexOf(Map<String,dynamic> r) =>
+      AttendanceShiftPolicy.indexForRecord(r);
   // NOTE: the key now includes a session index so multiple check-in/out
   // pairs on the same date are stored as separate records instead of
   // overwriting each other.
