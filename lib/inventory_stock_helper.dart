@@ -328,8 +328,17 @@ class InventoryStockHelper {
       }
 
       final existing = result[duplicateIndex];
-      final existingPending = _isPendingLocalMutation(existing);
-      final incomingPending = _isPendingLocalMutation(incoming);
+      // is_offline is a display-origin marker assigned while rendering
+      // local rows. It is not proof that the product has an unacknowledged
+      // write; only sync metadata and explicit pending flags should win.
+      final existingPending = _isPendingLocalMutation({
+        ...existing,
+        'is_offline': false,
+      });
+      final incomingPending = _isPendingLocalMutation({
+        ...incoming,
+        'is_offline': false,
+      });
       final existingOffline = existing['is_offline'] == true;
       final incomingOffline = incoming['is_offline'] == true;
       final existingServerId = existingOffline
