@@ -268,7 +268,7 @@ void main() {
     test('keeps pending local edits over an older backend cache row', () {
       final result = InventoryStockHelper.deduplicateProductsForDisplay([
         {
-          'id': 17,
+          'id': 'SOAP-1',
           'product_name': 'Soap',
           'sku': 'SOAP-1',
           'unit_price': 20,
@@ -285,6 +285,7 @@ void main() {
       ]);
 
       expect(result, hasLength(1));
+      expect(result.single['id'], 17);
       expect(result.single['unit_price'], 20);
       expect(result.single['sync_status'], 'pending');
     });

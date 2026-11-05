@@ -332,6 +332,18 @@ class InventoryStockHelper {
       final incomingPending = _isPendingLocalMutation(incoming);
       final existingOffline = existing['is_offline'] == true;
       final incomingOffline = incoming['is_offline'] == true;
+      final existingServerId = existingOffline
+          ? null
+          : existing['id'] ??
+              existing['product_id'] ??
+              existing['backend_id'] ??
+              existing['server_id'];
+      final incomingServerId = incomingOffline
+          ? null
+          : incoming['id'] ??
+              incoming['product_id'] ??
+              incoming['backend_id'] ??
+              incoming['server_id'];
 
       final preferIncoming = existingPending != incomingPending
           ? incomingPending
@@ -341,6 +353,14 @@ class InventoryStockHelper {
       final merged = preferIncoming
           ? <String, dynamic>{...existing, ...incoming}
           : <String, dynamic>{...incoming, ...existing};
+
+      // Retain the canonical server ID even when pending local fields win.
+      final canonicalServerId = incomingServerId ?? existingServerId;
+      if (canonicalServerId != null &&
+          canonicalServerId.toString().trim().isNotEmpty) {
+        merged['id'] = canonicalServerId;
+        merged['product_id'] ??= canonicalServerId;
+      }
 
       // Do not retain an offline-only marker once a backend copy is present.
       if (!existingOffline || !incomingOffline) {
