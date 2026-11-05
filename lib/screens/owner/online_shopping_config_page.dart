@@ -20,6 +20,7 @@ class OnlineShoppingConfigPage extends StatefulWidget {
 class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
   bool _isOnline = false;
   bool _isLoading = true;
+  bool _isUpdatingOnlineStatus = false;
   String _shopId = '';
   List<Map<String, dynamic>> _inventory = [];
 
@@ -74,18 +75,19 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
   }
 
   Future<void> _toggleOnlineStatus(bool value) async {
+    if (_isUpdatingOnlineStatus) return;
     final previous = _isOnline;
-    setState(() => _isOnline = value);
-
+    setState(() {
+      _isOnline = value;
+      _isUpdatingOnlineStatus = true;
+    });
     try {
       double? latitude;
       double? longitude;
-
       if (value) {
-        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) throw Exception('Location services disabled.');
-
-        LocationPermission permission = await Geolocator.checkPermission();
+        var permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
           permission = await Geolocator.requestPermission();
         }
@@ -93,13 +95,15 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
             permission == LocationPermission.deniedForever) {
           throw Exception('Location permission is required to publish the shop.');
         }
-
-        final pos = await Geolocator.getCurrentPosition();
-        latitude = pos.latitude;
-        longitude = pos.longitude;
+        final position = await Geolocator.getCurrentPosition()
+            .timeout(const Duration(seconds: 15));
+        latitude = position.latitude;
+        longitude = position.longitude;
       }
-
       final current = await OnlineStoreService.getOnlineSettings();
+      if (current['success'] != true) {
+        throw Exception(current['error'] ?? 'Could not read current store settings.');
+      }
       final result = await OnlineStoreService.setOnlineSettings({
         'is_online_store_enabled': value,
         'online_setup_fee': current['online_setup_fee'] ?? 0,
@@ -111,30 +115,27 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
         'accept_online': current['accept_online'] ?? false,
         if (latitude != null) 'latitude': latitude,
         if (longitude != null) 'longitude': longitude,
-      });
-
+      }).timeout(const Duration(seconds: 20));
       if (result['success'] != true) {
         throw Exception(result['error'] ?? 'Failed to update online-store status.');
       }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: LiveTranslatedText(
-              value
-                  ? 'Shop is now Live & Visible to Customers!'
-                  : 'Shop is now offline.',
-            ),
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: LiveTranslatedText(value
+              ? 'Shop is now live and visible to customers.'
+              : 'Shop is now offline.'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      if (mounted) setState(() => _isOnline = previous);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Failed to update online store: $e')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _isOnline = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: LiveTranslatedText('Failed to update online store: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingOnlineStatus = false);
     }
   }
 
@@ -307,9 +308,13 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
                       ),
                       Switch(
                         value: _isOnline,
-                        onChanged: _toggleOnlineStatus,
+                        onChanged: _isUpdatingOnlineStatus ? null : _toggleOnlineStatus,
                         activeColor: AppColors.primary,
                       ),
+                      if (_isUpdatingOnlineStatus) ...[
+                        const SizedBox(width: 8),
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      ],
                     ],
                   ),
                 ),
