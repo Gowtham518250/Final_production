@@ -178,7 +178,7 @@ class SyncService {
 
       if (response.statusCode == 404) {
         // During a staged deployment, avoid probing the older backend every
-        // 30 seconds. Existing five-minute full refresh remains the fallback.
+        // 30 seconds. The 15-minute full refresh remains the fallback.
         await prefs.setInt(
           unsupportedProbeKey,
           DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch,
@@ -346,7 +346,7 @@ class SyncService {
       await prefs.setInt(cursorKey, nextCursor);
     } catch (e) {
       // Leave the previous cursor in place on transport/parse failure. The next
-      // pulse retries the same page; the five-minute full pull remains fallback.
+      // pulse retries the same page; the 15-minute full pull remains the fallback.
       if (kDebugMode) debugPrint('Durable sync recovery deferred: $e');
       await ErrorLogHelper.logException(
         e,
