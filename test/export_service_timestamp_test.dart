@@ -51,9 +51,11 @@ void main() {
             },
             {
               'product_id': 13,
-              'product_name': 'Pencil',
+              'productName': 'Pencil',
               'quantity': 2,
               'unit_price': 5,
+              'created_at': null,
+              'payment_method': ' ',
             },
           ],
         },
@@ -70,6 +72,11 @@ void main() {
         DateTime.utc(2026, 11, 5, 14, 30),
       );
       expect(rows.first['payment_method'], 'CASH');
+      expect(rows.last['payment_method'], 'CASH');
+      expect(
+        ExportService.resolveSalesEventTime(rows.last)!.toUtc(),
+        DateTime.utc(2026, 11, 5, 14, 30),
+      );
     });
 
     test('flat legacy sales rows retain product aliases without a fake invoice amount', () {
