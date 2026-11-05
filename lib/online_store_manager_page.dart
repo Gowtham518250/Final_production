@@ -212,10 +212,13 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                 subtitle: LiveTranslatedText('Make this shop discoverable in the customer marketplace on app and web.'),
                 value: _isStoreActive,
                 activeColor: Colors.green,
-                onChanged: (val) {
+                onChanged: _isSaving ? null : (val) {
                   setState(() => _isStoreActive = val);
                   HapticFeedback.lightImpact();
                 },
+                secondary: _isSaving
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.storefront_rounded),
               ),
             ),
             const SizedBox(height: 24),
