@@ -233,12 +233,10 @@ class CacheConsistencyService {
 
       case 'customers':
       case 'customer':
+        // Only a durable ID can prove two customer rows are the same person.
+        // Phone numbers are shared by families and businesses, so records
+        // without stable IDs remain separate rather than being merged.
         add('customer', const ['customer_id', 'id', 'backend_id', 'server_id']);
-        // A phone number may be shared by family members. Only use it when
-        // neither record contains a durable customer identifier.
-        if (tokens.isEmpty) {
-          add('customer_phone', const ['phone', 'customer_phone', 'mobile']);
-        }
         break;
 
       case 'inventory':
