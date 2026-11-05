@@ -1265,7 +1265,15 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
     final query = _searchController.text.trim();
     String helperText;
     if (query.isEmpty) {
-      helperText = 'Search by customer name, phone number, or order ID';
+      final loadedCount = _allLoadedOrders().length;
+      final totalCount = _serverTotalOrderCount ?? loadedCount;
+      helperText = totalCount > loadedCount
+          ? 'Showing the latest ' +
+                loadedCount.toString() +
+                ' of ' +
+                totalCount.toString() +
+                ' orders. Search to find older orders.'
+          : 'Search by customer name, phone number, or order ID';
     } else if (_isSearchingHistory) {
       helperText = 'Searching all order statuses…';
     } else if (_searchError.isNotEmpty) {
