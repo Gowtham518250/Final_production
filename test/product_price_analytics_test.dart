@@ -141,6 +141,22 @@ void main() {
       expect(rows.single.revenue, 150.0);
     });
 
+
+    test('derives selling price from legacy flattened invoice totals', () {
+      final rows = ProductPriceAnalytics.aggregateSales([
+        {
+          'product_name': 'Rice',
+          'quantity': 3,
+          'total_amount': 150,
+        },
+      ]);
+
+      expect(rows, hasLength(1));
+      expect(rows.single.unitPrice, 50.0);
+      expect(rows.single.revenue, 150.0);
+      expect(rows.single.label, 'Rice · ₹50.00');
+    });
+
     test('monthly chart availability is independent of zero-only months', () {
       expect(
         ProductPriceAnalytics.hasPositiveMonthlyRevenue({
