@@ -11,6 +11,7 @@ import 'cache_consistency_service.dart';
 import 'invoice_dedup_helper.dart';
 import 'stored_sale.dart';
 import 'payment_idempotency_ledger.dart';
+import 'invoice_payment_status.dart';
 import 'package:synchronized/synchronized.dart';
 
 /// SENIOR ENGINEER REFACTOR: Enterprise Local Storage Service
@@ -1571,9 +1572,7 @@ class LocalStorageService {
   }
 
   static String _deriveInvoiceStatus(double total, double paid) {
-    if (paid >= total - 0.01) return 'PAID';
-    if (paid > 0) return 'PARTIAL';
-    return 'UNPAID';
+    return invoicePaymentStatusFor(total, paid);
   }
 
   static Future<void> recordUnifiedPayment(
