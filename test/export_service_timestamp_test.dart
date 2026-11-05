@@ -46,7 +46,7 @@ void main() {
               'product_name': 'Tea Powder',
               'quantity': 1,
               'unit_price': 10,
-              'line_total': 10,
+              'line_total': 9.26,
               'total_with_tax': 10,
             },
             {
