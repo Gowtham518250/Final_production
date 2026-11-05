@@ -297,6 +297,44 @@ void main() {
       expect(result.single['total_amount'], 10.0);
     });
 
+    test('same product and quantity with different final amounts stays separate', () {
+      final result = InvoiceDedupHelper.canonicalizeInvoices([
+        {
+          'invoice_number': 'BILL-DISCOUNT-LINES',
+          'total_amount': 19.0,
+          'items': [
+            {
+              'product_id': 12,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+          ],
+        },
+        {
+          'invoice_number': 'BILL-DISCOUNT-LINES',
+          'total_amount': 19.0,
+          'line_items': [
+            {
+              'product_id': 9012,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 9,
+            },
+          ],
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      final lines = List<Map<String, dynamic>>.from(
+        result.single['line_items'] as List,
+      );
+      expect(lines, hasLength(2));
+      expect(lines.map((line) => line['line_total']).toSet(), {9, 10});
+    });
+
     test('one-to-one mirror matching preserves intentional repeated identical lines', () {
       final result = InvoiceDedupHelper.canonicalizeInvoices([
         {
