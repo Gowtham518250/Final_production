@@ -55,6 +55,7 @@ import 'sale_payment_policy.dart';
 import 'analytics_engine.dart';
 import 'format_helper.dart';
 import 'local_storage_service.dart';
+import 'inventory_stock_helper.dart';
 import 'scheme_engine.dart';
 import 'offline_payment_queue.dart';
 import 'package:vibration/vibration.dart';
@@ -2363,6 +2364,24 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // Load local products
     try {
       final localMap = await LocalStorageService.loadLocalProducts();
+      final legacyPriceLearningKeys = localMap.entries
+          .where((entry) =>
+              entry.value is Map &&
+              InventoryStockHelper.isLegacySalesPriceLearningProduct(
+                Map<String, dynamic>.from(entry.value as Map),
+              ))
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      for (final key in legacyPriceLearningKeys) {
+        await SyncQueueManager.removeByBusinessIdentifier(
+          'create_local_product',
+          {'operation_id': 'PRODUCT_CREATE_$key'},
+        );
+        localMap.remove(key);
+      }
+      if (legacyPriceLearningKeys.isNotEmpty) {
+        await LocalStorageService.saveLocalProducts(localMap);
+      }
 
       // Merge local cache on top of the backend catalog instead of replacing
       // it. Replacing here used to erase backend barcode entries that were
@@ -2440,10 +2459,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     if (mounted) setState(() => _knownProducts = known);
   }
 
-  Future<void> _saveLocalProducts() async {
-    await LocalStorageService.saveLocalProducts(_localProducts);
-  }
-
   Future<void> _loadLocalCustomers() async {
     final List<Map<String, dynamic>> known = [];
 
@@ -2466,29 +2481,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   }
 
   // â”€â”€ Smart Price Learning (USER IDEA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  void _updatePriceKnowledge(
-    String barcode,
-    String name,
-    String price,
-    String gst,
-  ) async {
-    // Only learn if the price is a valid relatable number > 0
-    double? p = double.tryParse(price);
-    if (p == null || p <= 0) return;
-
-    _localProducts[barcode] = {
-      'name': name,
-      'price': price,
-      'gst': gst,
-      'barcode': barcode,
-      'source': 'Self-Learned (Direct Entry)',
-      'region': 'Local Shop',
-    };
-    await _saveLocalProducts();
-    if (kDebugMode)
-      debugPrint('Engine Learned: $name is now ₹$price (GST $gst%)');
-  }
-
   String _getDefaultGst(String name) {
     if (name.isEmpty) return '18';
     final n = name.toLowerCase();
@@ -7177,7 +7169,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 onDelete: () => removeEntry(index),
                 onChanged: _isVoiceProcessing ? () {} : calculateTotal,
                 onScan: _scanProductCode,
-                onPriceLearned: _updatePriceKnowledge,
                 isHighlighted: _lastAddedRowIndex == index,
               ),
             ),
@@ -8252,7 +8243,6 @@ class _ProductEntryCard extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback onChanged;
   final VoidCallback onScan;
-  final Function(String, String, String, String)? onPriceLearned;
   final bool isHighlighted;
 
   const _ProductEntryCard({
@@ -8263,7 +8253,6 @@ class _ProductEntryCard extends StatefulWidget {
     required this.onDelete,
     required this.onChanged,
     required this.onScan,
-    this.onPriceLearned,
     this.isHighlighted = false,
   });
 
@@ -8292,8 +8281,6 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
   VoidCallback get onDelete => widget.onDelete;
   VoidCallback get onChanged => widget.onChanged;
   VoidCallback get onScan => widget.onScan;
-  Function(String, String, String, String)? get onPriceLearned =>
-      widget.onPriceLearned;
   bool get isHighlighted => widget.isHighlighted;
 
   @override
@@ -8355,17 +8342,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
           return 'Invalid';
         }
       },
-      onChanged: (newPrice) {
-        onChanged();
-        if (entry['barcode'] != null &&
-            entry['barcode']!.text.isNotEmpty &&
-            newPrice.isNotEmpty) {
-          final code = entry['barcode']!.text;
-          final name = entry['item']!.text;
-          final gst = entry['gst']?.text ?? '18';
-          onPriceLearned?.call(code, name, newPrice, gst);
-        }
-      },
+      onChanged: (_) => onChanged(),
     );
 
     Widget discountField() => _SalesField(
@@ -8573,23 +8550,7 @@ class _ProductEntryCardState extends State<_ProductEntryCard> {
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'Please enter product name'
                     : null,
-                onChanged: (newName) {
-                  onChanged();
-                  if (entry['barcode'] != null &&
-                      entry['barcode']!.text.isNotEmpty &&
-                      newName.isNotEmpty) {
-                    final price = entry['price']!.text;
-                    if (price.isNotEmpty) {
-                      final gst = entry['gst']?.text ?? '18';
-                      onPriceLearned?.call(
-                        entry['barcode']!.text,
-                        newName,
-                        price,
-                        gst,
-                      );
-                    }
-                  }
-                },
+                onChanged: (_) => onChanged(),
               );
             },
             optionsViewBuilder: (ctx, onSelect, options) {

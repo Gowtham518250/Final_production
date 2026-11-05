@@ -222,6 +222,141 @@ class InventoryStockHelper {
         product['pending_sync'] == true;
   }
 
+  static String _normalizeInventoryIdentity(Object? value) {
+    return (value?.toString() ?? '')
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s-]+'), '');
+  }
+
+  static Set<String> _productCodeValues(Map<String, dynamic> product) {
+    final values = <String>{};
+    for (final key in [
+      'sku',
+      'barcode',
+      'bar_code',
+      'barcode_number',
+      'product_code',
+    ]) {
+      final value = _normalizeInventoryIdentity(product[key]);
+      if (value.isNotEmpty) values.add(value);
+    }
+    return values;
+  }
+
+  static Set<String> _productIdentityKeys(Map<String, dynamic> product) {
+    final keys = <String>{};
+    final id = _normalizeInventoryIdentity(
+      product['id'] ??
+          product['product_id'] ??
+          product['backend_id'] ??
+          product['server_id'],
+    );
+    if (id.isNotEmpty) keys.add('id:$id');
+    for (final code in _productCodeValues(product)) {
+      keys.add('code:$code');
+    }
+    return keys;
+  }
+
+  /// Marks records written by the old Sales Entry price-learning callback.
+  /// These are price hints, not inventory products.
+  static bool isLegacySalesPriceLearningProduct(
+    Map<String, dynamic> product,
+  ) {
+    return product['source']?.toString().trim().toLowerCase() ==
+        'self-learned (direct entry)';
+  }
+
+  /// Remove the local copy after a successful create, supporting old records
+  /// that stored a barcode but did not have a sku field.
+  static Map<String, dynamic> removeLocalProductAfterCreate(
+    Map<String, dynamic> localProducts,
+    Map<dynamic, dynamic> payload,
+  ) {
+    final payloadCodes = _productCodeValues(
+      Map<String, dynamic>.from(payload),
+    );
+    if (payloadCodes.isEmpty) {
+      return Map<String, dynamic>.from(localProducts);
+    }
+
+    final remaining = Map<String, dynamic>.from(localProducts);
+    remaining.removeWhere((key, value) {
+      if (payloadCodes.contains(_normalizeInventoryIdentity(key))) {
+        return true;
+      }
+      if (value is! Map) return false;
+      final product = Map<String, dynamic>.from(value);
+      return _productCodeValues(product).any(payloadCodes.contains);
+    });
+    return remaining;
+  }
+
+  /// Reconcile rows shown in Inventory. Backend rows are preferred over
+  /// non-pending offline copies; pending local edits remain visible. A product
+  /// code (SKU/barcode) takes precedence over its display name so two genuine
+  /// variants with different barcodes are never collapsed just because their
+  /// names happen to match.
+  static List<Map<String, dynamic>> deduplicateProductsForDisplay(
+    Iterable<dynamic> products,
+  ) {
+    final result = <Map<String, dynamic>>[];
+    final indexByIdentity = <String, int>{};
+
+    for (final raw in products) {
+      if (raw is! Map) continue;
+      final incoming = normalizeProduct(Map<String, dynamic>.from(raw));
+      final keys = _productIdentityKeys(incoming);
+
+      int? duplicateIndex;
+      for (final key in keys) {
+        final found = indexByIdentity[key];
+        if (found != null) {
+          duplicateIndex = found;
+          break;
+        }
+      }
+
+      if (duplicateIndex == null) {
+        final newIndex = result.length;
+        result.add(incoming);
+        for (final key in keys) {
+          indexByIdentity[key] = newIndex;
+        }
+        continue;
+      }
+
+      final existing = result[duplicateIndex];
+      final existingPending = _isPendingLocalMutation(existing);
+      final incomingPending = _isPendingLocalMutation(incoming);
+      final existingOffline = existing['is_offline'] == true;
+      final incomingOffline = incoming['is_offline'] == true;
+
+      final preferIncoming = existingPending != incomingPending
+          ? incomingPending
+          : existingOffline != incomingOffline
+              ? !incomingOffline
+              : true;
+      final merged = preferIncoming
+          ? <String, dynamic>{...existing, ...incoming}
+          : <String, dynamic>{...incoming, ...existing};
+
+      // Do not retain an offline-only marker once a backend copy is present.
+      if (!existingOffline || !incomingOffline) {
+        merged.remove('is_offline');
+      }
+      final normalizedMerged = normalizeProduct(merged);
+      result[duplicateIndex] = normalizedMerged;
+
+      for (final key in _productIdentityKeys(normalizedMerged)) {
+        indexByIdentity[key] = duplicateIndex;
+      }
+    }
+
+    return result;
+  }
+
   /// Merge the authoritative API catalogue with cached records.
   ///
   /// Duplicate API product IDs collapse to one row. Unacknowledged local
@@ -319,6 +454,6 @@ class InventoryStockHelper {
       if (_isPendingLocalMutation(entry.value)) merged.add(entry.value);
     }
 
-    return merged;
+    return deduplicateProductsForDisplay(merged);
   }
 }

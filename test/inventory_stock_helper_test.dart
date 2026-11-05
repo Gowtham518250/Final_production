@@ -178,6 +178,118 @@ void main() {
     });
   });
 
+  group('Sales Entry legacy price-learning inventory cleanup', () {
+    test('recognizes old self-learned records as non-inventory data', () {
+      expect(
+        InventoryStockHelper.isLegacySalesPriceLearningProduct({
+          'name': 'Soap',
+          'price': '25',
+          'barcode': '8901234567890',
+          'source': 'Self-Learned (Direct Entry)',
+        }),
+        isTrue,
+      );
+      expect(
+        InventoryStockHelper.isLegacySalesPriceLearningProduct({
+          'product_name': 'Soap',
+          'sku': '8901234567890',
+          'source': 'Inventory',
+        }),
+        isFalse,
+      );
+    });
+
+    test('removes an acknowledged legacy record using barcode when SKU is absent', () {
+      final remaining = InventoryStockHelper.removeLocalProductAfterCreate(
+        {
+          '8901234567890': {
+            'name': 'Soap',
+            'price': '25',
+            'barcode': '8901234567890',
+            'source': 'Self-Learned (Direct Entry)',
+          },
+          '8901111111111': {
+            'name': 'Rice',
+            'barcode': '8901111111111',
+          },
+        },
+        {'barcode': '8901234567890'},
+      );
+
+      expect(remaining.keys, ['8901111111111']);
+    });
+  });
+
+  group('Inventory visible product deduplication', () {
+    test('collapses a barcode-keyed offline copy into the backend SKU row', () {
+      final result = InventoryStockHelper.deduplicateProductsForDisplay([
+        {
+          'id': '8901234567890',
+          'name': 'Soap',
+          'price': '25',
+          'barcode': '8901234567890',
+          'is_offline': true,
+          'source': 'Self-Learned (Direct Entry)',
+        },
+        {
+          'id': 17,
+          'product_id': 17,
+          'product_name': 'Soap',
+          'sku': '8901234567890',
+          'unit_price': 25,
+          'current_stock': 8,
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      expect(result.single['id'], 17);
+      expect(result.single['sku'], '8901234567890');
+      expect(result.single['current_stock'], 8);
+      expect(result.single.containsKey('is_offline'), isFalse);
+    });
+
+    test('preserves same-name products when their barcodes differ', () {
+      final result = InventoryStockHelper.deduplicateProductsForDisplay([
+        {
+          'id': 1,
+          'product_name': 'Water Bottle',
+          'sku': 'BOTTLE-500',
+        },
+        {
+          'id': 2,
+          'product_name': 'Water Bottle',
+          'sku': 'BOTTLE-1000',
+        },
+      ]);
+
+      expect(result, hasLength(2));
+    });
+
+    test('keeps pending local edits over an older backend cache row', () {
+      final result = InventoryStockHelper.deduplicateProductsForDisplay([
+        {
+          'id': 17,
+          'product_name': 'Soap',
+          'sku': 'SOAP-1',
+          'unit_price': 20,
+          'sync_status': 'pending',
+          'local_updated_at': '2026-11-05T09:00:00.000Z',
+          'is_offline': true,
+        },
+        {
+          'id': 17,
+          'product_name': 'Soap',
+          'sku': 'SOAP-1',
+          'unit_price': 18,
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      expect(result.single['unit_price'], 20);
+      expect(result.single['sync_status'], 'pending');
+    });
+  });
+
   test(
     'deduplicates API products and does not resurrect acknowledged stale cache rows',
     () {

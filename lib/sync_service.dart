@@ -8,6 +8,7 @@ import 'package:synchronized/synchronized.dart';
 import 'api_client.dart';
 import 'models.dart';
 import 'local_storage_service.dart';
+import 'inventory_stock_helper.dart';
 import 'secure_token_storage.dart';
 import 'sync_queue_manager.dart';
 import 'sync_payload_recovery.dart';
@@ -2265,10 +2266,16 @@ class SyncService {
         // Mirror into the backend-products cache so it shows as synced
         // without waiting for the next full inventory fetch.
         try {
-          final saved = jsonDecode(res.body);
+          final savedProducts = InventoryStockHelper.parseProductsResponse(
+            jsonDecode(res.body),
+          );
           final cached = await LocalStorageService.loadBackendProducts();
-          cached.add(saved);
-          await LocalStorageService.saveBackendProducts(cached);
+          await LocalStorageService.saveBackendProducts(
+            InventoryStockHelper.deduplicateProductsForDisplay([
+              ...cached,
+              ...savedProducts,
+            ]),
+          );
         } catch (_) {}
         return true;
       }
@@ -2670,10 +2677,14 @@ class SyncService {
       final local = await LocalStorageService.loadLocalProducts();
       if (action == 'create_local_product') {
         final payload = data['payload'];
-        final sku = payload is Map ? payload['sku']?.toString() : null;
-        if (sku != null && sku.isNotEmpty) {
-          local.remove(sku);
-          await LocalStorageService.saveLocalProducts(local);
+        if (payload is Map) {
+          final remaining = InventoryStockHelper.removeLocalProductAfterCreate(
+            local,
+            Map<dynamic, dynamic>.from(payload),
+          );
+          if (remaining.length != local.length) {
+            await LocalStorageService.saveLocalProducts(remaining);
+          }
         }
       } else if (action == 'update_local_product') {
         final id = data['id']?.toString() ?? '';
