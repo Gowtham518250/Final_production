@@ -19,6 +19,7 @@ import 'visual_widgets.dart';
 import 'paid_invoices_page.dart';
 import 'invoice_dedup_helper.dart';
 import 'invoice_analytics_snapshot.dart';
+import 'invoice_payment_status.dart';
 import 'sales_restore_service.dart';
 
 class KhataPage extends StatefulWidget {
@@ -195,7 +196,7 @@ class _KhataPageState extends State<KhataPage>
     String? invoiceId,
     String? invoiceNumber,
   }) async {
-    if (!_isValidCustomerPhone(customerPhone) || amount <= 0) return;
+    if (!_isValidCustomerPhone(customerPhone) || !amount.isFinite || amount <= 0) return;
 
     try {
       final invoices = (await LocalStorageService.loadLocalInvoices())
@@ -244,6 +245,7 @@ class _KhataPageState extends State<KhataPage>
                   .toString(),
             ) ??
             0.0;
+        if (!total.isFinite || total <= 0) continue;
 
         final oldPaid =
             double.tryParse(
@@ -257,21 +259,15 @@ class _KhataPageState extends State<KhataPage>
 
         // Idempotent mirror: if recordUnifiedPayment() already persisted the
         // invoice amount, keep that value instead of applying the payment twice.
-        final targetPaid = expectedPaidAmount > oldPaid
+        final targetPaid = expectedPaidAmount.isFinite && expectedPaidAmount > oldPaid
             ? expectedPaidAmount
             : oldPaid;
         final newPaid = targetPaid.clamp(0.0, total).toDouble();
 
         invoice['paid_amount'] = double.parse(newPaid.toStringAsFixed(2));
-
-        if (newPaid >= total - 0.01) {
-          invoice['paid_amount'] = double.parse(total.toStringAsFixed(2));
-          invoice['payment_status'] = 'PAID';
-          invoice['status'] = 'PAID';
-        } else {
-          invoice['payment_status'] = 'PARTIAL';
-          invoice['status'] = 'PARTIAL';
-        }
+        final paymentStatus = invoicePaymentStatusFor(total, newPaid);
+        invoice['payment_status'] = paymentStatus;
+        invoice['status'] = paymentStatus;
 
         invoice['customer_phone'] = invPhone;
         invoice['updated_at'] = DateTime.now().toUtc().toIso8601String();
@@ -425,9 +421,7 @@ class _KhataPageState extends State<KhataPage>
   }
 
   String _deriveStatus(double total, double paid) {
-    if (total > 0 && paid >= total - 0.01) return 'PAID';
-    if (paid > 0) return 'PARTIAL';
-    return 'UNPAID';
+    return invoicePaymentStatusFor(total, paid);
   }
 
   List<Map<String, dynamic>> get _filteredInvoices {
@@ -811,9 +805,10 @@ class _KhataPageState extends State<KhataPage>
   }
 
   void _showPaymentModal(Map<String, dynamic> customer) {
-    final TextEditingController amountController = TextEditingController(
-      text: (customer['total_balance'] as num?)?.toStringAsFixed(2) ?? '0.00',
-    );
+    final rawBalance = customer['total_balance'];
+    final currentBalance = rawBalance is num ? rawBalance.toDouble() :
+        double.tryParse(rawBalance?.toString() ?? '') ?? 0.0;
+    final TextEditingController amountController = TextEditingController();
     final TextEditingController notesController = TextEditingController();
     String selectedMethod = 'CASH';
     bool isSubmitting = false;
@@ -889,7 +884,7 @@ class _KhataPageState extends State<KhataPage>
                           ),
                         ),
                         LiveTranslatedText(
-                          '₹${((customer['total_balance'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
+                          '₹${currentBalance.toStringAsFixed(2)}',
                           style: GoogleFonts.inter(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -902,16 +897,36 @@ class _KhataPageState extends State<KhataPage>
                   const SizedBox(height: 16),
                   TextField(
                     controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
                       label: LiveTranslatedText('Payment Received (₹)'),
+                      hintText: '0.00',
                       prefixIcon: const Icon(Icons.currency_rupee),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: LiveTranslatedText(
+                          'Enter only the amount actually received.',
+                          maxLines: 2,
+                          style: TextStyle(fontSize: 11, color: Color(0xFF667085)),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: currentBalance > 0
+                            ? () {
+                                amountController.text = currentBalance.toStringAsFixed(2);
+                                amountController.selection = TextSelection.collapsed(offset: amountController.text.length);
+                              }
+                            : null,
+                        icon: const Icon(Icons.account_balance_wallet_outlined, size: 15),
+                        label: const LiveTranslatedText('Use full balance'),
+                        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   LiveTranslatedText(
@@ -985,10 +1000,15 @@ class _KhataPageState extends State<KhataPage>
                                     amountController.text.trim(),
                                   ) ??
                                   0.0;
-                              if (amt <= 0) {
+                              if (!amt.isFinite || amt <= 0) {
                                 _showToast(
                                   'Please enter a valid payment amount',
                                 );
+                                return;
+                              }
+
+                              if (amt > currentBalance + 0.01) {
+                                _showToast('Payment cannot exceed the current pending balance.');
                                 return;
                               }
 
