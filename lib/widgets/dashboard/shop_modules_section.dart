@@ -282,83 +282,84 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F4F7),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Icon(Icons.widgets_outlined, color: Color(0xFF475467), size: 19),
                     ),
-                    child: const Icon(Icons.widgets_rounded, color: Color(0xFF8B5CF6), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  LiveTranslatedText(
-                    'Shop Modules',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1F2937),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: LiveTranslatedText(
+                        'Shop Modules',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1D2939)),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 4),
               TextButton(
                 onPressed: () => _showShopModulesSheet(context),
                 style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF4F46E5),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  foregroundColor: const Color(0xFF3156A6),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: Row(
-                  children: [
-                    LiveTranslatedText('View All', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward_ios_rounded, size: 12),
-                  ],
+                child: const LiveTranslatedText(
+                  'View All',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildOwnerQuickTile(
-                  color: const Color(0xFF4F46E5),
-                  icon: Icons.inventory_2,
-                  label: 'Inventory',
-                    subtitle:
-                      '$_inventoryCount ${AppLocalizations.of(context).translate('Items')}',
-                  onTap: () => Navigator.pushNamed(context, '/inventory').then((_) => widget.onModuleClosed()),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildOwnerQuickTile(
-                  color: const Color(0xFF10B981),
-                  icon: Icons.receipt,
-                  label: 'Invoices',
-                    subtitle:
-                      '$_invoicesCount ${AppLocalizations.of(context).translate('Pending')}',
-                  onTap: () => Navigator.pushNamed(context, '/invoices').then((_) => widget.onModuleClosed()),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildOwnerQuickTile(
-                  color: const Color(0xFFF59E0B),
-                  icon: Icons.how_to_reg,
-                  label: 'Attendance',
-                    subtitle:
-                      '$_attendanceCount ${AppLocalizations.of(context).translate('Staff')}',
-                  onTap: () => Navigator.pushNamed(context, '/attendance').then((_) => widget.onModuleClosed()),
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth < 370 ? 2 : 3;
+              return GridView.count(
+                crossAxisCount: columns,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: columns == 2 ? 1.28 : 0.92,
+                children: [
+                  _buildOwnerQuickTile(
+                    color: const Color(0xFF475467),
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Inventory',
+                    subtitle: '$_inventoryCount ${AppLocalizations.of(context).translate('Items')}',
+                    onTap: () => Navigator.pushNamed(context, '/inventory').then((_) => widget.onModuleClosed()),
+                  ),
+                  _buildOwnerQuickTile(
+                    color: const Color(0xFF16836B),
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Invoices',
+                    subtitle: '$_invoicesCount ${AppLocalizations.of(context).translate('Pending')}',
+                    onTap: () => Navigator.pushNamed(context, '/invoices').then((_) => widget.onModuleClosed()),
+                  ),
+                  _buildOwnerQuickTile(
+                    color: const Color(0xFF9A6700),
+                    icon: Icons.how_to_reg_outlined,
+                    label: 'Attendance',
+                    subtitle: '$_attendanceCount ${AppLocalizations.of(context).translate('Staff')}',
+                    onTap: () => Navigator.pushNamed(context, '/attendance').then((_) => widget.onModuleClosed()),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -375,18 +376,12 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
     return BouncingWidget(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.2), // Dynamic glow
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          // Flat cards keep the dashboard clear and readable.
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -416,10 +411,10 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.poppins(
-                fontSize: 9,
+                fontSize: 10,
                 fontWeight: FontWeight.w500,
                 color: const Color(0xFF6B7280),
               ),
