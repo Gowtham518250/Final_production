@@ -39,6 +39,40 @@ void main() {
       expect(rows.single.label, 'Rice · ₹50.00');
     });
 
+    test('merges the same chart-visible product and price across different catalog IDs', () {
+      final rows = ProductPriceAnalytics.aggregateSales([
+        {
+          'sale_id': 'local-bill',
+          'items': [
+            {
+              'product_id': 12,
+              'product_name': 'Rice',
+              'quantity': 1,
+              'unit_price': 50,
+              'line_total': 50,
+            },
+          ],
+        },
+        {
+          'sale_id': 'cloud-bill',
+          'items': [
+            {
+              'product_id': 9012,
+              'product_name': '  rice  ',
+              'quantity': 2,
+              'unit_price': 50,
+              'line_total': 100,
+            },
+          ],
+        },
+      ]);
+
+      expect(rows, hasLength(1));
+      expect(rows.single.label, 'Rice · ₹50.00');
+      expect(rows.single.quantity, 3.0);
+      expect(rows.single.revenue, 150.0);
+    });
+
     test('shows the same product as separate entries at different prices', () {
       final rows = ProductPriceAnalytics.aggregateSales([
         {
