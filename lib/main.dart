@@ -155,7 +155,17 @@ void main() async {
   // actual hardware in parallel; until detection completes, low-memory mode is
   // assumed so translation/list workloads do not spike on 2GB-class phones.
   LowMemoryPerformance.configure();
-  unawaited(DeviceCapabilityService.instance.initialize());
+  unawaited(() async {
+    try {
+      await DeviceCapabilityService.instance.initialize();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Device capability detection failed; keeping conservative memory limits: $error');
+      }
+    } finally {
+      LowMemoryPerformance.applyDeviceProfile();
+    }
+  }());
 
   // Paint immediately while Firebase, Hive and local stores initialize. The
   // application/providers are mounted only after required bootstrap work has
@@ -1717,9 +1727,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   return MaterialApp(
                     navigatorKey: globalNavigatorKey,
                     navigatorObservers: [GuidedVoiceRouteObserver()],
-                    builder: (context, child) => GuidedDictationOverlay(
-                      child: child ?? const SizedBox.shrink(),
-                    ),
+                    builder: (context, child) {
+                      final media = MediaQuery.of(context);
+                      final reduceMotion = LowMemoryPerformance.useReducedMotion;
+                      return MediaQuery(
+                        data: media.copyWith(
+                          disableAnimations: media.disableAnimations || reduceMotion,
+                        ),
+                        child: GuidedDictationOverlay(
+                          child: child ?? const SizedBox.shrink(),
+                        ),
+                      );
+                    },
                     key: ValueKey<String>(
                       booting ? 'boot' : '${authed}_${resolvedRoute}',
                     ),
@@ -1877,7 +1896,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       visualDensity: VisualDensity.adaptivePlatformDensity,
                     ),
                     themeMode: themeController.themeMode,
-                    themeAnimationDuration: const Duration(milliseconds: 420),
+                    themeAnimationDuration: LowMemoryPerformance.useReducedMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 420),
                     themeAnimationCurve: Curves.easeInOutCubic,
 
                     onUnknownRoute: (settings) {

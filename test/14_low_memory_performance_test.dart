@@ -7,21 +7,42 @@ void main() {
 
   test('decoded image cache is bounded for low-memory devices', () {
     LowMemoryPerformance.configure();
+    LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
 
     final cache = PaintingBinding.instance.imageCache;
-    expect(cache.maximumSize, LowMemoryPerformance.maximumCachedImages);
+    expect(cache.maximumSize, LowMemoryPerformance.lowMemoryMaximumCachedImages);
     expect(
       cache.maximumSizeBytes,
-      LowMemoryPerformance.maximumDecodedImageCacheBytes,
+      LowMemoryPerformance.lowMemoryMaximumDecodedImageCacheBytes,
     );
   });
 
   test('configuration is idempotent', () {
     LowMemoryPerformance.configure();
+    LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
     final cache = PaintingBinding.instance.imageCache;
 
-    expect(cache.maximumSize, 48);
-    expect(cache.maximumSizeBytes, 24 * 1024 * 1024);
+    expect(cache.maximumSize, 16);
+    expect(cache.maximumSizeBytes, 8 * 1024 * 1024);
+  });
+
+  test('detected device profile can safely restore standard cache limits', () {
+    LowMemoryPerformance.configure();
+    LowMemoryPerformance.applyDeviceProfile(lowMemory: false);
+    final cache = PaintingBinding.instance.imageCache;
+
+    expect(cache.maximumSize, LowMemoryPerformance.maximumCachedImages);
+    expect(
+      cache.maximumSizeBytes,
+      LowMemoryPerformance.maximumDecodedImageCacheBytes,
+    );
+
+    LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
+    expect(cache.maximumSize, LowMemoryPerformance.lowMemoryMaximumCachedImages);
+    expect(
+      cache.maximumSizeBytes,
+      LowMemoryPerformance.lowMemoryMaximumDecodedImageCacheBytes,
+    );
   });
 
   test('decode dimensions respect display scale and memory bounds', () {

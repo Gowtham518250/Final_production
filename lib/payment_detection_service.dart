@@ -2409,13 +2409,10 @@ class PriorityVoiceQueue {
 
     _claimSpoken(fingerprint);
     _rememberPayment(e);
-    final priority = e.isFailed
-        ? _VP.high
-        : e.decision == PaymentDecision.likely
-        ? _VP.soft
-        : e.amount >= 1000
-        ? _VP.high
-        : _VP.normal;
+    // Payment events are operationally important, including low-value and
+    // unverified candidates. Keep them ahead of routine voice prompts; the
+    // wording still asks the owner to verify likely events.
+    final priority = e.isFailed ? _VP.critical : _VP.high;
     _queue.add(
       _VI(
         text,
