@@ -410,6 +410,49 @@ class OnlineOrderService {
     }
   }
 
+  @visibleForTesting
+  static Map<String, dynamic>? normalizeOwnerOrderAnalytics(dynamic decoded) {
+    if (decoded is! Map) return null;
+
+    int? integer(dynamic value) {
+      if (value is num && value.isFinite) return value.toInt();
+      return int.tryParse(value?.toString() ?? '');
+    }
+
+    double number(dynamic value) {
+      if (value is num && value.isFinite) return value.toDouble();
+      final parsed = double.tryParse(value?.toString() ?? '');
+      return parsed != null && parsed.isFinite ? parsed : 0.0;
+    }
+
+    // This is a database COUNT(*) across every status. Do not replace it with
+    // the number of returned rows, pending count or accepted count.
+    final totalCount = integer(
+      decoded['totalCount'] ?? decoded['total_count'] ?? decoded['total'],
+    );
+    if (totalCount == null || totalCount < 0) return null;
+
+    final pending = integer(decoded['pending']) ?? 0;
+    final todayCount = integer(decoded['todayCount']) ?? 0;
+    final paidCount =
+        integer(decoded['paidCount'] ?? decoded['todayPaidCount']) ?? 0;
+    final todayPaidCount = integer(decoded['todayPaidCount']) ?? paidCount;
+
+    return {
+      'pending': pending,
+      'todayCount': todayCount,
+      'todayRevenue': number(decoded['todayRevenue']),
+      'paidCount': paidCount,
+      'todayPaidCount': todayPaidCount,
+      'totalCount': totalCount,
+      'totalRevenue': number(decoded['totalRevenue']),
+      'totalPaidCount': integer(decoded['totalPaidCount']) ?? 0,
+      'rejectedCount': integer(decoded['rejectedCount']) ?? 0,
+      'cancelledCount': integer(decoded['cancelledCount']) ?? 0,
+      'available': true,
+    };
+  }
+
   /// Canonical online-store analytics from the same owner-order dataset
   /// used by the Online Orders page.
   static Future<Map<String, dynamic>> getAnalytics(String shopId) async {
@@ -434,7 +477,28 @@ class OnlineOrderService {
     if (token.isEmpty) return Map<String, dynamic>.from(empty);
     final headers = {'Authorization': 'Bearer $token'};
 
-    // Fetch the lifetime total independently of the paged Online Orders screen.
+    // Prefer the server-side aggregate query: it uses COUNT(*) scoped to this
+    // owner and includes every lifecycle status without downloading order
+    // details page by page. If the endpoint is unavailable/feature-gated, keep
+    // the legacy fallback below so the lifetime count remains available.
+    try {
+      final aggregateResponse = await ApiClient.getJson(
+        '/store/owner/orders/analytics',
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
+      if (aggregateResponse.statusCode == 200) {
+        final normalized = normalizeOwnerOrderAnalytics(
+          jsonDecode(aggregateResponse.body),
+        );
+        if (normalized != null) return normalized;
+      }
+    } catch (aggregateError) {
+      if (kDebugMode) {
+        debugPrint('Owner order aggregate endpoint unavailable: $aggregateError');
+      }
+    }
+
+    // Fallback: fetch the lifetime total independently of the paged screen.
     // That screen may be feature-gated or have a narrower visibility policy;
     // the dashboard count must include every lifecycle status.
     int? lifetimeOrderCount;

@@ -50,8 +50,11 @@ class SyncService {
   static Timer? _pulseTimer;
   static bool _initialized = false;
   static StreamSubscription<ConnectivityResult>? _connectivitySub;
+  // Full snapshot reconciliation is a recovery fallback, not the live
+  // sync mechanism. Durable change-feed polling and the outbox remain active
+  // every 30 seconds; use a 15-minute safety refresh for missed/legacy writes.
   static const Duration _automaticUserDataRefreshInterval = Duration(
-    minutes: 5,
+    minutes: 15,
   );
   static DateTime? _lastUserDataDownloadAt;
   static bool _userDataDownloadInProgress = false;
@@ -109,7 +112,7 @@ class SyncService {
 
   /// Keep queued writes responsive without repeatedly downloading the full
   /// invoice dataset. Queue flushing is lightweight when empty; cloud data pulls
-  /// are throttled to one automatic refresh every five minutes.
+  /// are throttled to one automatic refresh every fifteen minutes.
   static void _startPulseTimer() {
     _pulseTimer?.cancel();
     _pulseTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
@@ -175,7 +178,7 @@ class SyncService {
 
       if (response.statusCode == 404) {
         // During a staged deployment, avoid probing the older backend every
-        // 30 seconds. Existing five-minute full refresh remains the fallback.
+        // 30 seconds. The 15-minute full refresh remains the fallback.
         await prefs.setInt(
           unsupportedProbeKey,
           DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch,
@@ -343,7 +346,7 @@ class SyncService {
       await prefs.setInt(cursorKey, nextCursor);
     } catch (e) {
       // Leave the previous cursor in place on transport/parse failure. The next
-      // pulse retries the same page; the five-minute full pull remains fallback.
+      // pulse retries the same page; the 15-minute full pull remains the fallback.
       if (kDebugMode) debugPrint('Durable sync recovery deferred: $e');
       await ErrorLogHelper.logException(
         e,

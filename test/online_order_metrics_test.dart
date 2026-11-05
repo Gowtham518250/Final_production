@@ -2,6 +2,49 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/online_order_service.dart';
 
 void main() {
+  group('OnlineOrderService owner order analytics normalization', () {
+    test('keeps lifetime total separate from pending and accepted counts', () {
+      final metrics = OnlineOrderService.normalizeOwnerOrderAnalytics({
+        'totalCount': 42,
+        'pending': 3,
+        'acceptedCount': 18,
+        'todayCount': 2,
+        'todayRevenue': 125.5,
+        'totalRevenue': 4200,
+        'totalPaidCount': 24,
+      });
+
+      expect(metrics, isNotNull);
+      expect(metrics!['totalCount'], 42);
+      expect(metrics['pending'], 3);
+      expect(metrics['todayCount'], 2);
+      expect(metrics['available'], isTrue);
+    });
+
+    test('accepts numeric string count but rejects an invalid total', () {
+      expect(
+        OnlineOrderService.normalizeOwnerOrderAnalytics({
+          'totalCount': '107',
+          'pending': '8',
+        })!['totalCount'],
+        107,
+      );
+      expect(
+        OnlineOrderService.normalizeOwnerOrderAnalytics({
+          'pending': 8,
+          'acceptedCount': 99,
+        }),
+        isNull,
+      );
+      expect(
+        OnlineOrderService.normalizeOwnerOrderAnalytics({
+          'totalCount': -1,
+        }),
+        isNull,
+      );
+    });
+  });
+
   group('OnlineOrderService.countDistinctOnlineOrdersFromSales', () {
     test('matches an invoice to its exact cancelled online order', () {
       expect(

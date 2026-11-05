@@ -32,6 +32,70 @@ void main() {
       expect(ExportService.formatSalesTime(null), 'Not recorded');
     });
 
+    test('flattens invoice item rows and inherits parent recorded time', () {
+      final rows = ExportService.flattenSalesForExport([
+        {
+          'invoice_number': 'BILL-EXPORT-1',
+          'total_amount': 100.0,
+          'business_date': '2026-11-05',
+          'created_at': '2026-11-05T14:30:00Z',
+          'payment_method': 'CASH',
+          'items': [
+            {
+              'product_id': 12,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 9.26,
+              'total_with_tax': 10,
+            },
+            {
+              'product_id': 13,
+              'productName': 'Pencil',
+              'quantity': 2,
+              'unit_price': 5,
+              'created_at': null,
+              'payment_method': ' ',
+            },
+          ],
+        },
+      ]);
+
+      expect(rows, hasLength(2));
+      expect(rows.map((row) => row['product_name']),
+          containsAll(['Tea Powder', 'Pencil']));
+      expect(rows.first['export_total'], 10.0);
+      expect(rows.last['export_total'], 10.0);
+      expect(rows.first['total_amount'], 100.0);
+      expect(
+        ExportService.resolveSalesEventTime(rows.first)!.toUtc(),
+        DateTime.utc(2026, 11, 5, 14, 30),
+      );
+      expect(rows.first['payment_method'], 'CASH');
+      expect(rows.last['payment_method'], 'CASH');
+      expect(
+        ExportService.resolveSalesEventTime(rows.last)!.toUtc(),
+        DateTime.utc(2026, 11, 5, 14, 30),
+      );
+    });
+
+    test('flat legacy sales rows retain product aliases without a fake invoice amount', () {
+      final rows = ExportService.flattenSalesForExport([
+        {
+          'sale_id': 'SALE-FLAT-1',
+          'product_name': 'Rice',
+          'quantity': 3,
+          'price': 20,
+          'total': 60,
+          'created_at': '2026-11-05T14:30:00Z',
+        },
+      ]);
+
+      expect(rows, hasLength(1));
+      expect(rows.single['product'], 'Rice');
+      expect(rows.single['export_total'], 60.0);
+    });
+
     test('resolves nested raw sale timestamps used by transaction history', () {
       final sale = <String, dynamic>{
         'date': '2026-11-02',

@@ -148,11 +148,139 @@ class ExportService {
       ? 'Not recorded'
       : DateFormat('hh:mm:ss a').format(value.toLocal());
 
+  static double _exportNumber(dynamic value, [double fallback = 0]) {
+    if (value is num) {
+      final parsed = value.toDouble();
+      return parsed.isFinite ? parsed : fallback;
+    }
+    final parsed = double.tryParse(value?.toString() ?? '');
+    return parsed != null && parsed.isFinite ? parsed : fallback;
+  }
+
+  static String _firstExportText(
+    Map<String, dynamic> primary,
+    Map<String, dynamic>? fallback,
+  ) {
+    for (final record in [primary, if (fallback != null) fallback]) {
+      for (final field in const [
+        'product_name',
+        'productName',
+        'display_name',
+        'displayName',
+        'product',
+        'item',
+        'itemName',
+        'description',
+        'name',
+        'title',
+      ]) {
+        final value = record[field]?.toString().trim() ?? '';
+        if (value.isNotEmpty &&
+            value.toLowerCase() != 'null' &&
+            value.toLowerCase() != 'n/a' &&
+            value.toLowerCase() != 'unknown') {
+          return value;
+        }
+      }
+    }
+    return 'Unspecified item';
+  }
+
+  static double _lineExportTotal(Map<String, dynamic> line) {
+    for (final field in const [
+      'total_with_tax',
+      'line_total',
+      'total',
+      'amount',
+    ]) {
+      final raw = line[field];
+      if (raw == null || raw.toString().trim().isEmpty) continue;
+      final parsed = double.tryParse(raw.toString());
+      if (parsed != null && parsed.isFinite) return parsed;
+    }
+    final quantity = _exportNumber(line['quantity'] ?? line['qty'], 1);
+    final price = _exportNumber(line['unit_price'] ?? line['price']);
+    return CurrencyManager.multiply(price, quantity);
+  }
+
+  /// Converts invoice snapshots into export rows without using invoice totals
+  /// as if they were product-line totals. Parent timestamps/payment metadata
+  /// are inherited; product, quantity, price and amount come from each line.
+  /// The source records are never mutated.
+  @visibleForTesting
+  static List<Map<String, dynamic>> flattenSalesForExport(
+    List<Map<String, dynamic>> sales,
+  ) {
+    final rows = <Map<String, dynamic>>[];
+    for (final sale in sales) {
+      final lineItems = sale['line_items'];
+      final items = sale['items'];
+      final rawLines = lineItems is List && lineItems.isNotEmpty
+          ? lineItems
+          : items is List
+              ? items
+              : const <dynamic>[];
+
+      if (rawLines.isEmpty) {
+        final row = Map<String, dynamic>.from(sale);
+        final name = _firstExportText(row, null);
+        final quantity = _exportNumber(row['quantity'] ?? row['qty'], 1);
+        final price = _exportNumber(row['unit_price'] ?? row['price']);
+        row['product_name'] = name;
+        row['product'] = name;
+        row['item'] = name;
+        row['quantity'] = quantity;
+        row['qty'] = quantity;
+        row['price'] = price;
+        row['unit_price'] = price;
+        row['export_total'] = _lineExportTotal(row);
+        rows.add(row);
+        continue;
+      }
+
+      for (final rawLine in rawLines) {
+        if (rawLine is! Map) continue;
+        final line = Map<String, dynamic>.from(rawLine);
+        // Line values enrich the parent invoice, but null/blank aliases must
+        // not erase the parent timestamp, payment method, customer or invoice ID.
+        final row = Map<String, dynamic>.from(sale);
+        for (final entry in line.entries) {
+          final value = entry.value;
+          if (value == null || (value is String && value.trim().isEmpty)) {
+            continue;
+          }
+          row[entry.key] = value;
+        }
+        final name = _firstExportText(line, sale);
+        final quantity = _exportNumber(
+          line['quantity'] ?? line['qty'],
+          1,
+        );
+        final price = _exportNumber(
+          line['unit_price'] ?? line['price'] ?? line['selling_price'],
+        );
+        row['product_name'] = name;
+        row['product'] = name;
+        row['item'] = name;
+        row['quantity'] = quantity;
+        row['qty'] = quantity;
+        row['price'] = price;
+        row['unit_price'] = price;
+        // Crucial: do not let the parent invoice's total leak into a line
+        // when the nested item omits its own amount.
+        row['export_total'] = _lineExportTotal(line);
+        rows.add(row);
+      }
+    }
+    return rows;
+  }
+
   /// Generate CSV from sales data
   static Future<String> generateCSV(List<Map<String, dynamic>> sales) async {
     try {
-      // Sort sales by date ascending
-      final sortedSales = List<Map<String, dynamic>>.from(sales);
+      // Invoice history is stored as one row with nested line_items/items.
+      // Export one row per actual product line, not one fake N/A product per bill.
+      final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
         final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
         final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -164,14 +292,14 @@ class ExportService {
       ];
 
       for (var sale in sortedSales) {
-        final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
-        final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
-        final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
-        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
+        final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
+        final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
+        final double total = _exportNumber(sale['export_total']);
+        final saleDate = resolveSalesDate(sale);
 
         csvData.add([
-          _formatDate(saleDate),
-          sale['product'] ?? sale['item'] ?? 'N/A',
+          saleDate == null ? formatSalesDate(null) : _formatDate(saleDate),
+          sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item',
           qty,
           'Rs.${price.toStringAsFixed(2)}',
           'Rs.${total.toStringAsFixed(2)}',
@@ -247,19 +375,20 @@ class ExportService {
         ['Date', 'Voucher Type', 'Voucher Number', 'Party Name', 'Sales Ledger', 'Item Name', 'Billed Qty', 'Rate', 'Amount']
       ];
 
-      for (var sale in sales) {
-        final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
-        final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
-        final double total = CurrencyManager.multiply(price, qty);
-        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
+      final exportRows = flattenSalesForExport(sales);
+      for (var sale in exportRows) {
+        final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
+        final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
+        final double total = _exportNumber(sale['export_total']);
+        final saleDate = resolveSalesDate(sale);
 
         csvData.add([
-          _formatDate(saleDate),
+          saleDate == null ? formatSalesDate(null) : _formatDate(saleDate),
           'Sales',
-          sale['invoiceId'] ?? 'N/A',
-          sale['customerName'] ?? 'Walk-in',
+          sale['invoice_number'] ?? sale['invoiceId'] ?? sale['sale_id'] ?? 'N/A',
+          sale['customer_name'] ?? sale['customerName'] ?? 'Walk-in',
           'Local Sales',
-          sale['product'] ?? sale['item'] ?? 'General Item',
+          sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item',
           qty.toString(),
           price.toStringAsFixed(2),
           total.toStringAsFixed(2)
@@ -276,8 +405,7 @@ class ExportService {
   /// Generate Excel from sales data
   static Future<List<int>> generateExcel(List<Map<String, dynamic>> sales) async {
     try {
-      // Sort sales by date ascending
-      final sortedSales = List<Map<String, dynamic>>.from(sales);
+      final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
         final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
         final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -294,14 +422,14 @@ class ExportService {
 
       // Data rows
       for (var sale in sortedSales) {
-        final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
-        final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
-        final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
-        final saleDate = resolveSalesDate(sale) ?? DateTime.now();
+        final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
+        final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
+        final double total = _exportNumber(sale['export_total']);
+        final saleDate = resolveSalesDate(sale);
 
         sheetObject.appendRow([
-          TextCellValue(_formatDate(saleDate)),
-          TextCellValue(sale['product'] ?? sale['item'] ?? 'N/A'),
+          TextCellValue(saleDate == null ? formatSalesDate(null) : _formatDate(saleDate)),
+          TextCellValue(sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item'),
           DoubleCellValue(qty),
           TextCellValue('Rs.${price.toStringAsFixed(2)}'),
           TextCellValue('Rs.${total.toStringAsFixed(2)}'),
@@ -389,15 +517,14 @@ class ExportService {
     String? dateRange,
   }) async {
     try {
-      // Sort sales by date ascending
-      final sortedSales = List<Map<String, dynamic>>.from(sales);
+      final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
         final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
         final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
-      debugPrint('📄 Generating PDF for ${sortedSales.length} items...');
+      debugPrint('📄 Generating PDF for ${sortedSales.length} line items...');
       final pdf = pw.Document();
 
       pdf.addPage(
@@ -458,7 +585,7 @@ class ExportService {
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Total Transactions: ${sortedSales.length}'),
+                      pw.Text('Total Transactions: ${sales.length}'),
                       pw.Text('Total Revenue: ${totalRevenue ?? 'Rs.0.00'}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
@@ -478,10 +605,10 @@ class ExportService {
             pw.TableHelper.fromTextArray(
               headers: ['Sale Date', 'Recorded Time', 'Product', 'Qty', 'Price', 'Total', 'Method'],
               data: sortedSales.map((sale) {
-                final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
-                final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
-                final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
-                final String name = (sale['product'] ?? sale['item'] ?? 'N/A').toString();
+                final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
+                final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
+                final double total = _exportNumber(sale['export_total']);
+                final String name = (sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item').toString();
                 final String dateStr = formatSalesDate(resolveSalesDate(sale));
                 final String timeStr = formatSalesTime(resolveSalesEventTime(sale));
 
@@ -535,8 +662,7 @@ class ExportService {
     String? dateRange,
   }) async {
     try {
-      // Sort sales by date ascending
-      final sortedSales = List<Map<String, dynamic>>.from(sales);
+      final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
         final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
         final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -594,7 +720,7 @@ class ExportService {
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Total Transactions: ${sortedSales.length}'),
+                      pw.Text('Total Transactions: ${sales.length}'),
                       pw.Text('Total Revenue: ${totalRevenue ?? 'Rs.0.00'}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
@@ -613,10 +739,10 @@ class ExportService {
             pw.TableHelper.fromTextArray(
               headers: ['Sale Date', 'Recorded Time', 'Product', 'Qty', 'Price', 'Total', 'Method'],
               data: sortedSales.map((sale) {
-                 final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
-                 final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
-                 final double total = double.tryParse(sale['total']?.toString() ?? sale['total_with_tax']?.toString() ?? CurrencyManager.multiply(price, qty).toString()) ?? CurrencyManager.multiply(price, qty);
-                 final String name = (sale['product'] ?? sale['item'] ?? 'N/A').toString();
+                 final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
+                 final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
+                 final double total = _exportNumber(sale['export_total']);
+                 final String name = (sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item').toString();
                  final String dateStr = formatSalesDate(resolveSalesDate(sale));
                  final String timeStr = formatSalesTime(resolveSalesEventTime(sale));
 
