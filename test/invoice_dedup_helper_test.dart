@@ -255,6 +255,106 @@ void main() {
       );
     });
 
+    test('same line from local and cloud mirrors merges when product IDs differ', () {
+      final result = InvoiceDedupHelper.canonicalizeInvoices([
+        {
+          'invoice_number': 'BILL-ID-ALIAS',
+          'total_amount': 10.0,
+          'paid_amount': 10.0,
+          'items': [
+            {
+              'product_id': 12,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+          ],
+        },
+        {
+          'invoice_number': 'BILL-ID-ALIAS',
+          'total_amount': 10.0,
+          'paid_amount': 10.0,
+          'line_items': [
+            {
+              'product_id': 9012,
+              'product_name': ' tea   powder ',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+          ],
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      final lines = List<Map<String, dynamic>>.from(
+        result.single['line_items'] as List,
+      );
+      expect(lines, hasLength(1));
+      expect(lines.single['product_id'], 9012);
+      expect(lines.single['line_total'], 10);
+      expect(result.single['total_amount'], 10.0);
+    });
+
+    test('one-to-one mirror matching preserves intentional repeated identical lines', () {
+      final result = InvoiceDedupHelper.canonicalizeInvoices([
+        {
+          'invoice_number': 'BILL-REPEATED-LINES',
+          'total_amount': 20.0,
+          'items': [
+            {
+              'product_id': 12,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+            {
+              'product_id': 13,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+          ],
+        },
+        {
+          'invoice_number': 'BILL-REPEATED-LINES',
+          'total_amount': 20.0,
+          'line_items': [
+            {
+              'product_id': 9012,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+            {
+              'product_id': 9013,
+              'product_name': 'Tea Powder',
+              'quantity': 1,
+              'unit_price': 10,
+              'line_total': 10,
+            },
+          ],
+        },
+      ]);
+
+      expect(result, hasLength(1));
+      final lines = List<Map<String, dynamic>>.from(
+        result.single['line_items'] as List,
+      );
+      expect(lines, hasLength(2));
+      expect(
+        lines.fold<double>(
+          0,
+          (sum, item) => sum + (item['line_total'] as num).toDouble(),
+        ),
+        20.0,
+      );
+    });
+
     test('a sale mirror is merged when it matches a real invoice', () {
       final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
         [
