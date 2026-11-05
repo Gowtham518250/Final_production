@@ -8765,7 +8765,7 @@ class _DashboardPageState extends State<DashboardPage>
                             padding: const EdgeInsets.only(top: 8),
                             child: LiveTranslatedText(
                               monthNames[idx - 1],
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: compactMonthLabels ? 9 : 11,
                                 color: Color(0xFF6B7280),
                               ),
