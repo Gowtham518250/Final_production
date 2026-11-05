@@ -159,18 +159,24 @@ class InvoiceDedupHelper {
                 line['name'] ??
                 '')
             .toString()
-            .trim()
-            .toLowerCase();
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
 
     bool sameLine(Map<String, dynamic> left, Map<String, dynamic> right) {
       final leftId = (left['product_id'] ?? '').toString().trim();
       final rightId = (right['product_id'] ?? '').toString().trim();
       final leftName = lineName(left);
       final rightName = lineName(right);
-      final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
-          ? leftId == rightId
-          : leftName.isNotEmpty && leftName == rightName;
-      if (!sameProduct) return false;
+      // Local and cloud catalog IDs can differ for the same visible item.
+      // Match by stable ID OR normalized name, then require the same quantity,
+      // price and financial modifiers below. Snapshot matching remains
+      // one-to-one, so two intentional identical lines in one bill are kept.
+      final sameProductById =
+          leftId.isNotEmpty && rightId.isNotEmpty && leftId == rightId;
+      final sameProductByName =
+          leftName.isNotEmpty && leftName == rightName;
+      if (!sameProductById && !sameProductByName) return false;
       final leftQty = _number(left['quantity'] ?? left['qty'], 1);
       final rightQty = _number(right['quantity'] ?? right['qty'], 1);
       if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3)) {
@@ -184,6 +190,22 @@ class InvoiceDedupHelper {
         final leftPrice = _number(leftPriceRaw);
         final rightPrice = _number(rightPriceRaw);
         if (leftPrice.toStringAsFixed(2) != rightPrice.toStringAsFixed(2)) {
+          return false;
+        }
+      }
+      // A same-name line with a different final amount is not a mirror of the
+      // same sale line (for example, a distinct discount/tax calculation).
+      for (final field in const [
+        'line_total',
+        'total_with_tax',
+        'total',
+        'amount',
+      ]) {
+        final leftAmount = left[field];
+        final rightAmount = right[field];
+        if (leftAmount == null || rightAmount == null) continue;
+        if (_number(leftAmount).toStringAsFixed(2) !=
+            _number(rightAmount).toStringAsFixed(2)) {
           return false;
         }
       }
