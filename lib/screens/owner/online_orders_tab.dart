@@ -1974,21 +1974,21 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                         }),
                         const Divider(color: Colors.black12, height: 24),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const LiveTranslatedText(
-                              'Total Value',
-                              style: TextStyle(
-                                color: Colors.black54,
-                                fontSize: 16,
+                            const Expanded(
+                              child: LiveTranslatedText(
+                                'Total Value',
+                                style: TextStyle(color: Color(0xFF667085), fontSize: 13),
                               ),
                             ),
-                            LiveTranslatedText(
-                              'Rs ${order['total_amount']}',
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: LiveTranslatedText(
+                                'Rs ${order['total_amount']}',
+                                textAlign: TextAlign.end,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Color(0xFF16836B), fontSize: 17, fontWeight: FontWeight.w700),
                               ),
                             ),
                           ],
