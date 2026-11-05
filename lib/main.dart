@@ -871,7 +871,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _hasSeenOnboarding = false;
   DateTime? _lastBackgroundTime;
   DateTime? _lastFullCloudRefreshAt;
-  static const Duration _fullCloudRefreshCooldown = Duration(minutes: 5);
+  static const Duration _fullCloudRefreshCooldown = Duration(minutes: 15);
   CancelToken? _syncCancelToken; // Add cancellation token for sync operations
 
   @override
