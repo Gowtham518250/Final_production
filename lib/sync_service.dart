@@ -18,6 +18,7 @@ import 'sales_dedup_helper.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'agent_debug_log.dart';
 import 'attendance_offline_service.dart';
+import 'attendance_shift_policy.dart';
 import 'services/order_history_service.dart';
 import 'online_order_service.dart';
 import 'sales_restore_service.dart';
@@ -626,15 +627,12 @@ class SyncService {
               ? body['session']?.toString().toLowerCase()
               : null;
           final sessionIndex = rawSession == 'morning'
-              ? 0
-              : (rawSession == 'evening'
-                    ? 1
-                    : (int.tryParse(
-                            body is Map
-                                ? body['session_index']?.toString() ?? ''
-                                : '',
-                          ) ??
-                          0));
+              ? AttendanceShiftPolicy.morningIndex
+              : ((rawSession == 'afternoon' || rawSession == 'evening')
+                  ? AttendanceShiftPolicy.afternoonIndex
+                  : AttendanceShiftPolicy.indexForRecord(
+                      body is Map ? body : <String, dynamic>{},
+                    ));
 
           await OfflineAttendanceService.markSynced(
             employeeId: int.parse(workerId),
@@ -709,11 +707,13 @@ class SyncService {
               .toString()
               .split('T')
               .first;
-      final sessionIndex =
-          int.tryParse(
-            (data['session_index'] ?? data['sessionIndex'] ?? '0').toString(),
-          ) ??
-          0;
+      final rawSessionIndex = int.tryParse(
+        (data['session_index'] ?? data['sessionIndex'] ?? '').toString(),
+      );
+      final sessionIndex = rawSessionIndex == AttendanceShiftPolicy.morningIndex ||
+              rawSessionIndex == AttendanceShiftPolicy.afternoonIndex
+          ? rawSessionIndex!
+          : AttendanceShiftPolicy.indexForRecord(data);
 
       final localRecords = await OfflineAttendanceService.loadLocalRecords();
       Map<String, dynamic>? localSession;
@@ -740,6 +740,15 @@ class SyncService {
           data['check_out_time'] ?? localSession?['check_out_time'];
       final workingHours =
           data['working_hours'] ?? localSession?['working_hours'];
+      if (sessionIndex != AttendanceShiftPolicy.morningIndex &&
+          sessionIndex != AttendanceShiftPolicy.afternoonIndex) {
+        await ErrorLogHelper.logMessage(
+          'Queued attendance session could not be mapped to Morning or Afternoon',
+          level: 'ERROR',
+          attributes: {'workerId': workerId, 'date': date},
+        );
+        return false;
+      }
       if (checkInTime == null) {
         await ErrorLogHelper.logMessage(
           'Queued attendance session lacks its original check-in timestamp',
