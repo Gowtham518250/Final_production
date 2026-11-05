@@ -334,7 +334,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                 mainAxisSpacing: 8,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: columns == 2 ? 1.28 : 0.92,
+                childAspectRatio: columns == 2 ? 1.15 : 0.92,
                 children: [
                   _buildOwnerQuickTile(
                     color: const Color(0xFF475467),
@@ -398,10 +398,10 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
             LiveTranslatedText(
               label,
               textAlign: TextAlign.center,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.poppins(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: const Color(0xFF1F2937),
                 height: 1.1,
