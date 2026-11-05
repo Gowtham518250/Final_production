@@ -1215,86 +1215,46 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
 
   Widget _buildOrdersHero() {
     final all = _allLoadedOrders();
-    final count = _searchController.text.trim().isNotEmpty
-        ? _searchTotal
-        : all.length;
+    final count = _searchController.text.trim().isNotEmpty ? _searchTotal : all.length;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF312E81), Color(0xFF635BFF), Color(0xFF8B5CF6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF635BFF).withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE4E7EC))),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const LiveTranslatedText(
-                  'ORDER CONTROL CENTRE',
-                  style: TextStyle(
-                    color: Color(0xFFDAD7FF),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const LiveTranslatedText(
-                  'Every order, in control.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 21,
-                    height: 1.2,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
+                const LiveTranslatedText('Orders overview', style: TextStyle(color: Color(0xFF1D2939), fontSize: 17, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
                 LiveTranslatedText(
-                  _searchController.text.trim().isEmpty
-                      ? 'Track orders from acceptance to delivery.'
-                      : 'Searching the full order history.',
-                  style: const TextStyle(
-                    color: Color(0xFFE7E5FF),
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+                  _searchController.text.trim().isEmpty ? 'Review incoming orders and manage fulfilment.' : 'Matching orders across your order history.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFF667085), fontSize: 12, height: 1.35),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
           Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-            ),
-            child: const Icon(
-              Icons.shopping_bag_rounded,
-              color: Colors.white,
-              size: 32,
+            constraints: const BoxConstraints(minWidth: 68),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(color: const Color(0xFFF2F4F7), borderRadius: BorderRadius.circular(10)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(count.toString(), style: const TextStyle(color: Color(0xFF1D2939), fontSize: 20, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 1),
+                const LiveTranslatedText('Orders', style: TextStyle(color: Color(0xFF667085), fontSize: 10, fontWeight: FontWeight.w500)),
+              ],
             ),
           ),
         ],
       ),
     );
   }
-
   Widget _buildOrderSearch() {
     final query = _searchController.text.trim();
     String helperText;
@@ -1632,17 +1592,13 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, Color(0xFF8B5CF6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFFF2F4F7),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.shopping_bag_outlined,
-                color: Colors.white,
-                size: 23,
+                color: AppColors.primary,
+                size: 22,
               ),
             ),
             const SizedBox(width: 11),
@@ -1906,39 +1862,37 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                     : paymentStatus == 'UNPAID'
                     ? 'PAYMENT DUE'
                     : '';
+                final paymentColor = paymentStatus == 'PAID'
+                    ? const Color(0xFF16836B)
+                    : paymentStatus == 'REFUND_REQUIRED' || paymentStatus == 'REVIEW_REQUIRED'
+                        ? const Color(0xFFB42318)
+                        : paymentStatus == 'PENDING' || paymentStatus == 'UNPAID'
+                            ? const Color(0xFFB54708)
+                            : const Color(0xFF475467);
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Container(
-                    padding: const EdgeInsets.all(17),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFE8EBF4)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFF1F2A5A,
-                          ).withValues(alpha: 0.035),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE4E7EC)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            LiveTranslatedText(
-                              'Order #$orderId',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                            Expanded(
+                              child: LiveTranslatedText(
+                                'Order #$orderId',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Color(0xFF3156A6), fontWeight: FontWeight.w700, fontSize: 15),
                               ),
                             ),
+                            const SizedBox(width: 8),
                             _buildOrderStatusBadge(
                               status: orderStatus,
                               syncing: syncing,
@@ -1951,10 +1905,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                         // always rendered "Customer: null".
                         LiveTranslatedText(
                           'Customer: ${order['customer_name'] ?? 'Guest'}',
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 16,
-                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFF1D2939), fontSize: 15, fontWeight: FontWeight.w600),
                         ),
                         if ((order['customer_phone'] ?? '')
                             .toString()
@@ -1963,10 +1916,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                             padding: const EdgeInsets.only(top: 2),
                             child: LiveTranslatedText(
                               order['customer_phone'].toString(),
-                              style: const TextStyle(
-                                color: Colors.black54,
-                                fontSize: 13,
-                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
                             ),
                           ),
                         if ((order['delivery_address'] ?? '')
@@ -1976,10 +1928,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                             padding: const EdgeInsets.only(top: 6),
                             child: LiveTranslatedText(
                               'Deliver to: ${order['delivery_address']}',
-                              style: const TextStyle(
-                                color: Colors.black54,
-                                fontSize: 13,
-                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
                             ),
                           ),
                         const SizedBox(height: 10),
@@ -2003,15 +1954,19 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 4.0),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                LiveTranslatedText(
-                                  '${qty}x ${item['product_name'] ?? 'Item'}',
-                                  style: const TextStyle(color: Colors.black87),
+                                Expanded(
+                                  child: LiveTranslatedText(
+                                    '${qty}x ${item['product_name'] ?? 'Item'}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Color(0xFF344054), fontSize: 12),
+                                  ),
                                 ),
+                                const SizedBox(width: 10),
                                 LiveTranslatedText(
                                   'Rs ${lineTotal.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Colors.black87),
+                                  style: const TextStyle(color: Color(0xFF344054), fontSize: 12, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -2019,41 +1974,51 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                         }),
                         const Divider(color: Colors.black12, height: 24),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const LiveTranslatedText(
-                              'Total Value',
-                              style: TextStyle(
-                                color: Colors.black54,
-                                fontSize: 16,
+                            const Expanded(
+                              child: LiveTranslatedText(
+                                'Total Value',
+                                style: TextStyle(color: Color(0xFF667085), fontSize: 13),
                               ),
                             ),
-                            LiveTranslatedText(
-                              'Rs ${order['total_amount']}',
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: LiveTranslatedText(
+                                'Rs ${order['total_amount']}',
+                                textAlign: TextAlign.end,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Color(0xFF16836B), fontSize: 17, fontWeight: FontWeight.w700),
                               ),
                             ),
                           ],
                         ),
                         if (paymentLabel.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: LiveTranslatedText(
-                              paymentLabel,
-                              style: TextStyle(
-                                color:
-                                    paymentStatus == 'REFUND_REQUIRED' ||
-                                        paymentStatus == 'REVIEW_REQUIRED'
-                                    ? Colors.redAccent
-                                    : paymentStatus == 'PAID'
-                                    ? Colors.green.shade700
-                                    : Colors.black54,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          Container(
+                            margin: const EdgeInsets.only(top: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: paymentColor.withValues(alpha: 0.07),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: paymentColor.withValues(alpha: 0.18)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  paymentStatus == 'PAID' ? Icons.verified_outlined :
+                                  paymentStatus == 'REFUND_REQUIRED' || paymentStatus == 'REVIEW_REQUIRED' ? Icons.warning_amber_rounded : Icons.payments_outlined,
+                                  color: paymentColor, size: 17,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: LiveTranslatedText(
+                                    paymentLabel,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: paymentColor, fontSize: 11, fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         if (effectiveAction == 'ACCEPT') ...[
