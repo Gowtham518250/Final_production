@@ -114,6 +114,33 @@ void main() {
       expect(rows.single.revenue, 150.0);
     });
 
+
+    test('preserves non-Latin product names when grouping by price', () {
+      final rows = ProductPriceAnalytics.aggregateSales([
+        {
+          'items': [
+            {
+              'product_name': 'బియ్యం',
+              'quantity': 1,
+              'price': 50,
+              'line_total': 50,
+            },
+            {
+              'product_name': ' బియ్యం ',
+              'quantity': 2,
+              'price': 50,
+              'line_total': 100,
+            },
+          ],
+        },
+      ]);
+
+      expect(rows, hasLength(1));
+      expect(rows.single.productName, 'బియ్యం');
+      expect(rows.single.quantity, 3.0);
+      expect(rows.single.revenue, 150.0);
+    });
+
     test('monthly chart availability is independent of zero-only months', () {
       expect(
         ProductPriceAnalytics.hasPositiveMonthlyRevenue({
