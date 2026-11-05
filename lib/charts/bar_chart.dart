@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../analytics_engine.dart';
+import 'product_price_analytics.dart';
 import '../app_localizations.dart';
 
 class RevenueBarChart extends StatelessWidget {
@@ -51,50 +52,22 @@ class RevenueBarChart extends StatelessWidget {
         return _buildEmptyChart(AppLocalizations.of(context).noSalesData);
       }
 
-      // Prefer AnalyticsEngine's canonical product aggregation. This avoids
-      // losing restored invoice lines when they use product_name instead of
-      // the legacy product alias.
-      final map = <String, double>{};
-      for (final entry in engine.productAnalyticsCache.entries) {
-        final data = entry.value;
-        final name = (data['display_name'] ?? data['name'] ?? entry.key)
-            .toString()
-            .trim();
-        final rawTotal = data['total'];
-        final total = rawTotal is num
-            ? rawTotal.toDouble()
-            : double.tryParse(rawTotal?.toString() ?? '') ?? 0.0;
-        if (name.isNotEmpty && total > 0) {
-          map[name] = (map[name] ?? 0.0) + total;
-        }
-      }
+      final productPriceRows = ProductPriceAnalytics.aggregateSales(
+        engine.filteredSalesCache,
+      ).where((row) => row.revenue > 0).toList();
 
-      // Fallback for legacy/nested records not represented in the cache.
-      if (map.isEmpty) {
-        for (final s in engine.filteredSalesCache) {
-          final rawProduct =
-              s['product_name'] ?? s['product'] ?? s['item'] ?? s['name'];
-          final name = rawProduct?.toString().trim();
-          if (name == null || name.isEmpty) continue;
-
-          final rawTotal = s['total'] ?? s['line_total'];
-          final total = rawTotal is num
-              ? rawTotal.toDouble()
-              : double.tryParse(rawTotal?.toString() ?? '') ?? 0.0;
-
-          if (total > 0) {
-            map[name] = (map[name] ?? 0.0) + total;
-          }
-        }
-      }
-
-      if (map.isEmpty) {
+      if (productPriceRows.isEmpty) {
         return _buildEmptyChart(AppLocalizations.of(context).noProductData);
       }
 
-    final items = map.entries.toList();
-    items.sort((a, b) => b.value.compareTo(a.value));
-    final topItems = items.take(6).toList();
+      final totalProductRevenue = productPriceRows.fold<double>(
+        0.0,
+        (sum, row) => sum + row.revenue,
+      );
+      final topItems = productPriceRows
+          .take(6)
+          .map((row) => MapEntry(row.label, row.revenue))
+          .toList();
 
     final List<Color> gradientColors = [
       filterColor,
@@ -161,7 +134,7 @@ class RevenueBarChart extends StatelessWidget {
                                 size: 14, color: Color(0xFF6366F1)),
                             const SizedBox(width: 6),
                             LiveTranslatedText(
-                              'Top ${topItems.length} ${AppLocalizations.of(context).products}',
+                              'Top ${topItems.length} product / price groups',
                               style: const TextStyle(
                                 color: Color(0xFF6366F1),
                                 fontSize: 12,
@@ -209,8 +182,8 @@ class RevenueBarChart extends StatelessWidget {
                                   ),
                                   const TextSpan(text: '\n'),
                                   TextSpan(
-                                    text: engine.totalSales > 0 
-                                      ? '${((topItems[groupIndex].value / engine.totalSales) * 100).toStringAsFixed(1)}%'
+                                    text: totalProductRevenue > 0 
+                                      ? '${((topItems[groupIndex].value / totalProductRevenue) * 100).toStringAsFixed(1)}%'
                                       : '0%',
                                     style: TextStyle(
                                       color: Colors.grey[500],
@@ -350,7 +323,7 @@ class RevenueBarChart extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       LiveTranslatedText(
-                        '${AppLocalizations.of(context).revenueLeaders} per product',
+                        '${AppLocalizations.of(context).revenueLeaders} per product and price',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
