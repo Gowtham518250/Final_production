@@ -134,6 +134,22 @@ class OfflineAttendanceService {
     }
   }
 
+  /// Reconcile expired shift check-outs into the local cache and durable outbox.
+  /// Called on attendance refresh so offline workers do not remain "checked in"
+  /// after the configured end of their shift.
+  static Future<void> reconcileExpiredSessionsToday({
+    required int employeeId,
+    int? workerId,
+  }) async {
+    final now = DateTime.now();
+    await _closeExpiredOpenSessions(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: _date(now),
+      now: now,
+    );
+  }
+
   /// Starts the Morning or Afternoon shift once. Duplicate check-ins are rejected.
   static Future<bool> checkIn({required int employeeId,int? workerId}) async {
     final now = DateTime.now();
