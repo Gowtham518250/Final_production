@@ -193,6 +193,22 @@ class InvoiceDedupHelper {
           return false;
         }
       }
+      // A same-name line with a different final amount is not a mirror of the
+      // same sale line (for example, a distinct discount/tax calculation).
+      for (final field in const [
+        'line_total',
+        'total_with_tax',
+        'total',
+        'amount',
+      ]) {
+        final leftAmount = left[field];
+        final rightAmount = right[field];
+        if (leftAmount == null || rightAmount == null) continue;
+        if (_number(leftAmount).toStringAsFixed(2) !=
+            _number(rightAmount).toStringAsFixed(2)) {
+          return false;
+        }
+      }
       for (final field in const [
         'discount',
         'discount_amount',
