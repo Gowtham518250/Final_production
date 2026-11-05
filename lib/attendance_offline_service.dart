@@ -3,20 +3,23 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'sync_queue_manager.dart';
+import 'attendance_shift_policy.dart';
 
-/// Durable local-first attendance operations.
-///
-/// A worker can have MULTIPLE attendance sessions on the same business day
-/// (e.g. check in for a morning shift, check out for lunch, check in again
-/// after lunch, and so on). Each session is stored under its own
-/// `session_index` (0, 1, 2, ...) so that closing one session never blocks
-/// starting a new one on the same date.
+/// Durable local-first attendance operations for exactly two daily shifts.
+/// Session index 0 is Morning (09:00–14:00) and index 1 is Afternoon
+/// (14:00–23:00). A worker can check in only once in each shift.
 class OfflineAttendanceService {
   static const String _prefix = 'attendance_local_v2_';
   static Future<int?> _userId() async { final p=await SharedPreferences.getInstance(); return p.getInt('user_id') ?? p.getInt('userId'); }
   static String _date(DateTime v) => '${v.year.toString().padLeft(4,'0')}-${v.month.toString().padLeft(2,'0')}-${v.day.toString().padLeft(2,'0')}';
   static String _identity(Map<String,dynamic> r,int uid){final w=r['worker_id']?.toString().trim()??'';final e=r['employee_id']?.toString().trim()??'';if(w.isNotEmpty)return 'worker:$w';if(e.isNotEmpty)return 'employee:$e';return 'user:$uid';}
-  static int _sessionIndexOf(Map<String,dynamic> r){final raw=r['session_index'];if(raw is int)return raw;if(raw!=null)return int.tryParse(raw.toString())??0;return 0;}
+  static int _sessionIndexOf(Map<String,dynamic> r) {
+    final raw = int.tryParse((r['session_index'] ?? '').toString());
+    if (raw == 0 || raw == 1) return raw!;
+    // Older clients allowed more than two sessions/day. Re-map those legacy
+    // rows to the fixed slot identified by their recorded check-in timestamp.
+    return AttendanceShiftPolicy.indexForRecord(r);
+  }
   // NOTE: the key now includes a session index so multiple check-in/out
   // pairs on the same date are stored as separate records instead of
   // overwriting each other.
@@ -68,121 +71,208 @@ class OfflineAttendanceService {
     await _saveRecords(records);
   }
 
-  /// Starts a new attendance session. If a session is already open (checked
-  /// in but not checked out), this is treated as the toggle's check-out
-  /// action instead of silently failing — so a stale double-tap never gets
-  /// stuck. Otherwise a brand-new session is opened, so a worker can check
-  /// in again after an earlier check-out on the same day (e.g. after lunch).
+  /// Close an earlier shift at its scheduled boundary when the device was
+  /// offline at that time. Persist the same timestamped snapshot to the outbox.
+  static Future<void> _closeExpiredOpenSessions({
+    required int employeeId,
+    int? workerId,
+    required String date,
+    required DateTime now,
+  }) async {
+    final businessDate = DateTime.parse(date);
+    final sessions = await _findTodaySessions(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+    );
+    for (final session in sessions) {
+      if (session['check_in_time'] == null || session['check_out_time'] != null) {
+        continue;
+      }
+      final index = _sessionIndexOf(session);
+      if (index != AttendanceShiftPolicy.morningIndex &&
+          index != AttendanceShiftPolicy.afternoonIndex) {
+        continue;
+      }
+      final shiftEnd = AttendanceShiftPolicy.shiftEnd(businessDate, index);
+      if (now.isBefore(shiftEnd)) continue;
+
+      final checkIn = DateTime.tryParse(session['check_in_time'].toString())?.toLocal();
+      if (checkIn == null) continue;
+      final checkoutAt = shiftEnd.isBefore(checkIn) ? checkIn : shiftEnd;
+      final hours = checkoutAt.difference(checkIn).inSeconds / 3600.0;
+      final operationId = 'ATT_OUT_${workerId ?? employeeId}_${date}_s$index';
+
+      await _upsertSession(
+        employeeId: employeeId,
+        workerId: workerId,
+        date: date,
+        sessionIndex: index,
+        checkOut: checkoutAt,
+        workingHours: hours,
+        status: 'PRESENT',
+      );
+      final queued = await SyncQueueManager.enqueue(
+        'attendance_check_out',
+        {
+          'operation_id': operationId,
+          'idempotency_key': operationId,
+          'employee_id': employeeId,
+          'worker_id': workerId,
+          'attendance_date': date,
+          'session_index': index,
+          'check_in_time': session['check_in_time'],
+          'check_out_time': checkoutAt.toUtc().toIso8601String(),
+          'working_hours': hours,
+          'status': 'PRESENT',
+          'checkout_reason': 'SHIFT_EXPIRED',
+        },
+      );
+      if (!queued) {
+        throw StateError('Unable to queue automatic attendance checkout');
+      }
+    }
+  }
+
+  /// Starts the Morning or Afternoon shift once. Duplicate check-ins are rejected.
   static Future<bool> checkIn({required int employeeId,int? workerId}) async {
-    final now=DateTime.now();
-    final date=_date(now);
-    final open=await _findOpenSession(
-      employeeId:employeeId,
-      workerId:workerId,
-      date:date,
+    final now = DateTime.now();
+    final date = _date(now);
+    await _closeExpiredOpenSessions(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+      now: now,
     );
-    if(open!=null)return checkOut(employeeId:employeeId,workerId:workerId);
 
-    final sessions=await _findTodaySessions(
-      employeeId:employeeId,
-      workerId:workerId,
-      date:date,
+    final sessionIndex = AttendanceShiftPolicy.indexForTime(now);
+    if (sessionIndex == null) {
+      throw StateError(
+        'Check-in is available only during Morning (9 AM–2 PM) or Afternoon (2 PM–11 PM).',
+      );
+    }
+
+    final open = await _findOpenSession(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
     );
-    final nextIndex=sessions.isEmpty
-        ? 0
-        : (sessions.map(_sessionIndexOf).reduce((a,b)=>a>b?a:b)+1);
-    final operationId='ATT_IN_${workerId??employeeId}_${date}_s$nextIndex';
+    if (open != null) {
+      throw StateError(
+        'The ${AttendanceShiftPolicy.labelForIndex(_sessionIndexOf(open))} shift is still open. Check out before starting another shift.',
+      );
+    }
 
+    final sessions = await _findTodaySessions(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+    );
+    final alreadyMarked = sessions.any(
+      (session) =>
+          _sessionIndexOf(session) == sessionIndex &&
+          session['check_in_time'] != null,
+    );
+    if (alreadyMarked) {
+      throw StateError(
+        '${AttendanceShiftPolicy.labelForIndex(sessionIndex)} attendance is already marked for today.',
+      );
+    }
+
+    final operationId = 'ATT_IN_${workerId ?? employeeId}_${date}_s$sessionIndex';
     await _upsertSession(
-      employeeId:employeeId,
-      workerId:workerId,
-      date:date,
-      sessionIndex:nextIndex,
-      checkIn:now,
-      status:'PRESENT',
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+      sessionIndex: sessionIndex,
+      checkIn: now,
+      status: 'PRESENT',
     );
 
-    final queued=await SyncQueueManager.enqueue(
+    final queued = await SyncQueueManager.enqueue(
       'attendance_check_in',
       {
-        'operation_id':operationId,
-        'idempotency_key':operationId,
-        'employee_id':employeeId,
-        'worker_id':workerId,
-        'attendance_date':date,
-        'session_index':nextIndex,
-        // Include the original local timestamp so offline sync does not
-        // create attendance at the time the request eventually reaches server.
-        'check_in_time':now.toUtc().toIso8601String(),
-        'check_out_time':null,
-        'status':'PRESENT',
+        'operation_id': operationId,
+        'idempotency_key': operationId,
+        'employee_id': employeeId,
+        'worker_id': workerId,
+        'attendance_date': date,
+        'session_index': sessionIndex,
+        'check_in_time': now.toUtc().toIso8601String(),
+        'check_out_time': null,
+        'status': 'PRESENT',
       },
     );
-    if(!queued){
-      throw StateError(
-        'Unable to persist attendance check-in to durable outbox',
-      );
+    if (!queued) {
+      throw StateError('Unable to persist attendance check-in to durable outbox');
     }
     return true;
   }
+
   /// Closes the currently open session for today. No-op (returns true) if
   /// everything is already checked out, so repeated taps stay safe.
   static Future<bool> checkOut({required int employeeId,int? workerId}) async {
-    final now=DateTime.now();
-    final date=_date(now);
-    final open=await _findOpenSession(
-      employeeId:employeeId,
-      workerId:workerId,
-      date:date,
+    final now = DateTime.now();
+    final date = _date(now);
+    final open = await _findOpenSession(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
     );
-    if(open==null)return true;
+    if (open == null) return true;
 
-    final sessionIndex=_sessionIndexOf(open);
-    DateTime? checkIn;
-    final raw=open['check_in_time'];
-    if(raw!=null)checkIn=DateTime.tryParse(raw.toString());
-    final hours=checkIn==null
+    final sessionIndex = _sessionIndexOf(open);
+    if (sessionIndex != 0 && sessionIndex != 1) {
+      throw StateError('Unsupported attendance session index.');
+    }
+    final rawCheckIn = open['check_in_time'];
+    final checkIn = rawCheckIn == null
         ? null
-        : now.difference(checkIn.toLocal()).inSeconds/3600.0;
-    final operationId='ATT_OUT_${workerId??employeeId}_${date}_s$sessionIndex';
-
-    // Local state is committed first. The durable outbox is the source of
-    // truth for delivery to the backend.
-    await _upsertSession(
-      employeeId:employeeId,
-      workerId:workerId,
-      date:date,
-      sessionIndex:sessionIndex,
-      checkOut:now,
-      workingHours:hours,
-      status:'PRESENT',
-    );
-
-    final queued=await SyncQueueManager.enqueue(
-      'attendance_check_out',
-      {
-        'operation_id':operationId,
-        'idempotency_key':operationId,
-        'employee_id':employeeId,
-        'worker_id':workerId,
-        'attendance_date':date,
-        'session_index':sessionIndex,
-        // Send a full session snapshot. Both queued IN/OUT operations can then
-        // safely sync the same final state even if the user was offline all day.
-        'check_in_time':open['check_in_time'],
-        'check_out_time':now.toUtc().toIso8601String(),
-        'working_hours':hours,
-        'status':'PRESENT',
-      },
-    );
-    if(!queued){
-      throw StateError(
-        'Unable to persist attendance check-out to durable outbox',
-      );
+        : DateTime.tryParse(rawCheckIn.toString())?.toLocal();
+    if (checkIn == null) {
+      throw StateError('Attendance check-in timestamp is missing or invalid.');
     }
 
+    final shiftEnd = AttendanceShiftPolicy.shiftEnd(DateTime.parse(date), sessionIndex);
+    final checkoutAt = now.isAfter(shiftEnd) ? shiftEnd : now;
+    if (checkoutAt.isBefore(checkIn)) {
+      throw StateError('Checkout time cannot be before check-in time.');
+    }
+    final hours = checkoutAt.difference(checkIn).inSeconds / 3600.0;
+    final operationId =
+        'ATT_OUT_${workerId ?? employeeId}_${date}_s$sessionIndex';
+
+    await _upsertSession(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+      sessionIndex: sessionIndex,
+      checkOut: checkoutAt,
+      workingHours: hours,
+      status: 'PRESENT',
+    );
+
+    final queued = await SyncQueueManager.enqueue(
+      'attendance_check_out',
+      {
+        'operation_id': operationId,
+        'idempotency_key': operationId,
+        'employee_id': employeeId,
+        'worker_id': workerId,
+        'attendance_date': date,
+        'session_index': sessionIndex,
+        'check_in_time': open['check_in_time'],
+        'check_out_time': checkoutAt.toUtc().toIso8601String(),
+        'working_hours': hours,
+        'status': 'PRESENT',
+      },
+    );
+    if (!queued) {
+      throw StateError('Unable to persist attendance check-out to durable outbox');
+    }
     return true;
   }
+
   /// The open session for today, if any — the single source of truth the UI
   /// should use to decide whether the next tap is a check-in or check-out.
   static Future<Map<String,dynamic>?> openSessionToday({required int employeeId,int? workerId}) => _findOpenSession(employeeId:employeeId,workerId:workerId,date:_date(DateTime.now()));
@@ -210,7 +300,13 @@ class OfflineAttendanceService {
       final cin=DateTime.tryParse((s['check_in_time']??'').toString());
       final cout=DateTime.tryParse((s['check_out_time']??'').toString());
       if(cin!=null&&cout!=null)total+=cout.toLocal().difference(cin.toLocal()).inSeconds/3600.0;
-      else if(cin!=null&&s['check_out_time']==null)total+=DateTime.now().difference(cin.toLocal()).inSeconds/3600.0;
+      else if(cin!=null&&s['check_out_time']==null) {
+        final index = _sessionIndexOf(s);
+        final end = AttendanceShiftPolicy.shiftEnd(DateTime.parse(date), index);
+        final now = DateTime.now();
+        final effectiveNow = now.isAfter(end) ? end : now;
+        total += effectiveNow.difference(cin.toLocal()).inSeconds/3600.0;
+      }
     }
     return total;
   }
@@ -218,36 +314,47 @@ class OfflineAttendanceService {
   /// Expand a backend attendance row into durable local records, one per
   /// server-provided session. This preserves history and payroll after the
   /// user clears app data.
-  static List<Map<String,dynamic>> _expandRemoteRecord(Map<String,dynamic> server){
-    final rawSessions=server['sessions'];
-    if(rawSessions is Map && rawSessions.isNotEmpty){
-      final expanded=<Map<String,dynamic>>[];
-      for(final entry in rawSessions.entries){
-        final value=entry.value;
-        if(value is! Map)continue;
-        final session=Map<String,dynamic>.from(value);
-        final key=entry.key.toString().toLowerCase();
-        final index=key=='morning'
-            ? 0
-            : (key=='evening' ? 1 : expanded.length);
+  static List<Map<String,dynamic>> _expandRemoteRecord(Map<String,dynamic> server) {
+    final rawSessions = server['sessions'];
+    if (rawSessions is Map && rawSessions.isNotEmpty) {
+      final expanded = <Map<String, dynamic>>[];
+      for (final entry in rawSessions.entries) {
+        final value = entry.value;
+        if (value is! Map) continue;
+        final key = entry.key.toString().toLowerCase();
+        final session = Map<String, dynamic>.from(value);
+        final canonicalKey = key == 'evening' ? 'afternoon' : key;
+        final index = canonicalKey == 'morning'
+            ? AttendanceShiftPolicy.morningIndex
+            : (canonicalKey == 'afternoon'
+                ? AttendanceShiftPolicy.afternoonIndex
+                : AttendanceShiftPolicy.indexForRecord({
+                    ...server,
+                    ...session,
+                    'session_key': canonicalKey,
+                  }));
+        if (index == null || (index != 0 && index != 1)) continue;
         expanded.add({
           ...server,
           ...session,
           'session_index': index,
-          'session_key': key == 'evening' ? 'afternoon' : key,
+          'session_key': AttendanceShiftPolicy.keyForIndex(index),
           'local_pending': false,
-          // The UI/payroll should treat each expanded session as its own row,
-          // not repeat the whole-day aggregate on every session card.
           if (session['working_hours'] is num)
             'total_working_hours': (session['working_hours'] as num).toDouble(),
         });
       }
-      if(expanded.isNotEmpty)return expanded;
+      if (expanded.isNotEmpty) return expanded;
     }
+
+    final index = AttendanceShiftPolicy.indexForRecord(server);
     return [{
       ...server,
-      'session_index':server['session_index']??0,
-      'local_pending':false,
+      'session_index': index,
+      'session_key': server['session_key'] == 'evening'
+          ? 'afternoon'
+          : AttendanceShiftPolicy.keyForIndex(index),
+      'local_pending': false,
     }];
   }
 
