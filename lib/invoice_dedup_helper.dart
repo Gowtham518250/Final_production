@@ -167,10 +167,15 @@ class InvoiceDedupHelper {
       final rightId = (right['product_id'] ?? '').toString().trim();
       final leftName = lineName(left);
       final rightName = lineName(right);
-      final sameProduct = leftId.isNotEmpty && rightId.isNotEmpty
-          ? leftId == rightId
-          : leftName.isNotEmpty && leftName == rightName;
-      if (!sameProduct) return false;
+      // Local and cloud catalog IDs can differ for the same visible item.
+      // Match by stable ID OR normalized name, then require the same quantity,
+      // price and financial modifiers below. Snapshot matching remains
+      // one-to-one, so two intentional identical lines in one bill are kept.
+      final sameProductById =
+          leftId.isNotEmpty && rightId.isNotEmpty && leftId == rightId;
+      final sameProductByName =
+          leftName.isNotEmpty && leftName == rightName;
+      if (!sameProductById && !sameProductByName) return false;
       final leftQty = _number(left['quantity'] ?? left['qty'], 1);
       final rightQty = _number(right['quantity'] ?? right['qty'], 1);
       if (leftQty.toStringAsFixed(3) != rightQty.toStringAsFixed(3)) {
