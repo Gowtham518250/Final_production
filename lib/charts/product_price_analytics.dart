@@ -1,6 +1,7 @@
-/// Aggregates invoice lines by catalog product identity AND unit selling price.
-/// Repeated sales of the same product at the same price form one chart bucket;
-/// a price change creates a distinct bucket.
+/// Aggregates invoice lines by normalized chart-visible product name AND
+/// unit selling price. Catalog IDs can differ between local/offline and cloud
+/// copies of the same product, so they must not create duplicate chart labels.
+/// A different product name or selling price remains a distinct chart bucket.
 class ProductPriceBucket {
   final String key;
   final String productName;
@@ -59,17 +60,9 @@ class ProductPriceAnalytics {
       final normalizedName = _normalizedName(name);
       if (normalizedName.isEmpty || normalizedName == 'unknown product') return;
 
-      String rawIdentity = '';
-      for (final field in const ['product_id', 'barcode', 'sku']) {
-        final candidate = (line[field] ?? '').toString().trim();
-        if (candidate.isNotEmpty && candidate != '0') {
-          rawIdentity = candidate;
-          break;
-        }
-      }
-      final productIdentity = rawIdentity.isNotEmpty
-          ? 'id:${rawIdentity.toLowerCase()}'
-          : 'name:$normalizedName';
+      // The chart shows only the normalized product name and unit price.
+      // Using product_id here can split one real-world product into two visual
+      // entries when local and cloud catalog IDs differ.
 
       final quantity = _number(line['quantity'] ?? line['qty']);
       var unitPrice = _firstPositive([
@@ -97,7 +90,7 @@ class ProductPriceAnalytics {
       final hasUnitPrice = unitPrice > 0 && unitPrice.isFinite;
       final priceIdentity =
           hasUnitPrice ? unitPrice.toStringAsFixed(2) : 'unknown-price';
-      final key = '$productIdentity|$priceIdentity';
+      final key = 'name:$normalizedName|$priceIdentity';
       final label = hasUnitPrice
           ? '$name · ₹${unitPrice.toStringAsFixed(2)}'
           : '$name · Price unavailable';
