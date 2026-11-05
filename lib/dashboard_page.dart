@@ -66,6 +66,7 @@ import 'charts/bar_chart.dart';
 import 'charts/line_chart.dart';
 import 'charts/pie_chart.dart';
 import 'charts/radar_chart.dart';
+import 'charts/product_price_analytics.dart';
 import 'analytics_engine.dart';
 import 'app_bottom_nav.dart';
 import 'payment_announcement_service.dart';
@@ -7828,10 +7829,12 @@ class _DashboardPageState extends State<DashboardPage>
 
   // MONTH-WISE SALES CHART
   Widget _buildMonthWiseSalesChart() {
-    if (filteredSales.isEmpty)
-      return _buildEmptyChart('No sales data available');
-
+    // This chart always represents the rolling 12-month window; it must not
+    // be hidden merely because today's or this week's filtered sales are empty.
     final monthData = _salesByMonth;
+    if (!ProductPriceAnalytics.hasPositiveMonthlyRevenue(monthData)) {
+      return _buildEmptyChart('No monthly sales data available');
+    }
     final entries = monthData.entries.toList();
 
     final spots = List.generate(
@@ -7901,6 +7904,43 @@ class _DashboardPageState extends State<DashboardPage>
                 height: 200,
                 child: LineChart(
                   LineChartData(
+                    lineTouchData: LineTouchData(
+                      enabled: true,
+                      touchTooltipData: LineTouchTooltipData(
+                        tooltipBgColor: Colors.white,
+                        tooltipPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        tooltipRoundedRadius: 10,
+                        getTooltipItems: (spots) {
+                          return spots.map((spot) {
+                            final index = spot.x.toInt();
+                            if (index < 0 || index >= entries.length) {
+                              return null;
+                            }
+                            return LineTooltipItem(
+                              '${entries[index].key}\n',
+                              const TextStyle(
+                                color: Color(0xFF374151),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: '₹${spot.y.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF6366F1),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList();
+                        },
+                      ),
+                    ),
                     lineBarsData: [
                       LineChartBarData(
                         spots: spots,

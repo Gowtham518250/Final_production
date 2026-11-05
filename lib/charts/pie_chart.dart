@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../analytics_engine.dart';
+import 'product_price_analytics.dart';
 
 
 class RevenuePieChart extends StatefulWidget {
@@ -66,107 +67,36 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
         ),
       );
 
-  double _asDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0.0;
-  }
-
-  String _productNameFromSale(Map<String, dynamic> sale) {
-    final raw = sale['display_name'] ??
-        sale['product_name'] ??
-        sale['product'] ??
-        sale['name'] ??
-        sale['item'] ??
-        'Unknown Product';
-    final name = raw.toString().trim();
-    return name.isEmpty ? 'Unknown Product' : name;
-  }
-
-  double _saleRevenue(Map<String, dynamic> sale) {
-    return _asDouble(
-      sale['total'] ??
-          sale['line_total'] ??
-          sale['grand_total'] ??
-          sale['total_amount'] ??
-          sale['amount'] ??
-          sale['revenue'],
-    );
-  }
-
-  Map<String, Map<String, dynamic>> _buildRevenueProductData() {
-    final direct = widget.engine.productAnalyticsCache;
-
-    // Prefer the existing engine cache when it contains real revenue values.
-    final directHasRevenue = direct.values.any(
-      (v) => _asDouble(v['total']) > 0,
-    );
-    if (direct.isNotEmpty && directHasRevenue) {
-      // The analytics engine keeps zero-revenue product keys for KPI/uniqueness
-      // calculations. They must not appear in a revenue distribution chart.
-      final soldOnly = <String, Map<String, dynamic>>{};
-      for (final entry in direct.entries) {
-        final revenue = _asDouble(entry.value['total']);
-        if (revenue <= 0) continue;
-
-        soldOnly[entry.key] = {
-          ...entry.value,
-          'display_name': entry.value['display_name'] ??
-              entry.value['name'] ??
-              entry.key,
-          'total': revenue,
-        };
-      }
-      return soldOnly;
-    }
-
-    // Fallback: derive directly from the engine's already-filtered sales.
-    // This does not alter sales/analytics calculations; it only makes the
-    // visualization tolerant of different sale field names/cache versions.
-    final derived = <String, Map<String, dynamic>>{};
-    for (final raw in widget.engine.filteredSalesCache) {
-      final sale = Map<String, dynamic>.from(raw);
-      final name = _productNameFromSale(sale);
-      final revenue = _saleRevenue(sale);
-
-      // A revenue distribution should contain only products that
-      // contributed positive revenue in the selected period.
-      if (revenue <= 0) continue;
-
-      final current = derived.putIfAbsent(name, () => {
-        'total': 0.0,
-        'count': 0,
-        'quantity': 0.0,
-        'display_name': name,
-      });
-
-      current['total'] = _asDouble(current['total']) + revenue;
-      current['count'] = (current['count'] as int) + 1;
-    }
-
-    return derived;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final productData = _buildRevenueProductData();
-    if (productData.isEmpty) return _empty();
+    final products = ProductPriceAnalytics.aggregateSales(
+      widget.engine.filteredSalesCache,
+    ).where((row) => row.revenue > 0).toList();
 
-    // Sort by revenue (total sale value)
-    final products = productData.entries
-        .where((entry) => _asDouble(entry.value['total']) > 0)
-        .toList()
-      ..sort((a, b) {
-        final bv = _asDouble(b.value['total']);
-        final av = _asDouble(a.value['total']);
-        return bv.compareTo(av);
-      });
+    if (products.isEmpty) return _empty();
 
-    // Show the actual sold products first; zero-sales catalog items are never
-    // eligible for the pie/legend.
-    final top = products.take(6).toList();
-    final grandTotal =
-        top.fold<double>(0, (s, e) => s + _asDouble(e.value['total']));
-    if (grandTotal <= 0) return _empty();
+    final grandTotal = products.fold<double>(
+      0.0,
+      (sum, row) => sum + row.revenue,
+    );
+    const maxVisibleNamedSlices = 5;
+    final visibleNamedCount =
+        products.length > 6 ? maxVisibleNamedSlices : 6;
+    final top = products
+        .take(visibleNamedCount)
+        .map((row) => MapEntry(row.label, row.revenue))
+        .toList();
+
+    // When there are more than six product/price combinations, retain the
+    // complete revenue denominator and expose the remainder as one slice.
+    if (products.length > visibleNamedCount) {
+      final otherRevenue = products
+          .skip(visibleNamedCount)
+          .fold<double>(0.0, (sum, row) => sum + row.revenue);
+      if (otherRevenue > 0) {
+        top.add(MapEntry('Other products', otherRevenue));
+      }
+    }
 
     return AnimatedBuilder(
       animation: widget.fadeAnimation,
@@ -217,7 +147,7 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                             ),
                           ),
                           LiveTranslatedText(
-                            'Top products by sale value',
+                            'Top product and selling-price groups',
                             style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[500]),
                           ),
                         ],
@@ -273,7 +203,7 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                   sections: top.asMap().entries.map((entry) {
                                     final i = entry.key;
                                     final p = entry.value;
-                                    final val = _asDouble(p.value['total']);
+                                    final val = p.value;
                                     final perc = grandTotal > 0 ? val / grandTotal * 100 : 0.0;
                                     final color = _color(i);
                                     final isTouched = i == _touchedIndex;
@@ -324,10 +254,10 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                               children: top.asMap().entries.map((entry) {
                                 final i = entry.key;
                                 final p = entry.value;
-                                final val = _asDouble(p.value['total']);
+                                final val = p.value;
                                 final perc = grandTotal > 0 ? val / grandTotal * 100 : 0.0;
                                 final color = _color(i);
-                                final name = (p.value['display_name'] ?? p.value['name'] ?? p.key).toString();
+                                final name = p.key;
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 11),
                                   child: Row(

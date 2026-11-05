@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../analytics_engine.dart';
+import 'product_price_analytics.dart';
 
 
 class RevenueRadarChart extends StatelessWidget {
@@ -48,77 +49,24 @@ class RevenueRadarChart extends StatelessWidget {
         ),
       );
 
-  double _asDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0.0;
-  }
-
-  String _productNameFromSale(Map<String, dynamic> sale) {
-    final raw = sale['display_name'] ??
-        sale['product_name'] ??
-        sale['product'] ??
-        sale['name'] ??
-        sale['item'] ??
-        'Unknown Product';
-    final name = raw.toString().trim();
-    return name.isEmpty ? 'Unknown Product' : name;
-  }
-
-  double _saleQuantity(Map<String, dynamic> sale) {
-    return _asDouble(sale['qty'] ?? sale['quantity'] ?? sale['units'] ?? sale['count']);
-  }
-
-  Map<String, Map<String, dynamic>> _buildQuantityProductData() {
-    final direct = engine.productAnalyticsCache;
-
-    final directHasQuantity = direct.values.any(
-      (v) => _asDouble(v['quantity']) > 0,
-    );
-    if (direct.isNotEmpty && directHasQuantity) {
-      return {
-        for (final entry in direct.entries)
-          entry.key: {
-            ...entry.value,
-            'display_name': entry.value['display_name'] ?? entry.value['name'] ?? entry.key,
-            'quantity': _asDouble(entry.value['quantity']),
-          },
-      };
-    }
-
-    // Fallback to filtered sales so the chart remains populated even when
-    // productAnalyticsCache comes from an older/newer schema.
-    final derived = <String, Map<String, dynamic>>{};
-    for (final raw in engine.filteredSalesCache) {
-      final sale = Map<String, dynamic>.from(raw);
-      final name = _productNameFromSale(sale);
-      final quantity = _saleQuantity(sale);
-
-      final current = derived.putIfAbsent(name, () => {
-        'quantity': 0.0,
-        'display_name': name,
-      });
-      current['quantity'] = _asDouble(current['quantity']) + quantity;
-    }
-
-    return derived;
-  }
-
   @override
   Widget build(BuildContext context) {
     try {
-      final productData = _buildQuantityProductData();
-      if (productData.isEmpty) return _empty();
+      final allItems = ProductPriceAnalytics.aggregateSales(
+        engine.filteredSalesCache,
+      ).where((row) => row.quantity > 0).toList()
+        ..sort((a, b) => b.quantity.compareTo(a.quantity));
 
-      // Build quantity list, sort descending
-      var items = productData.entries.map((e) {
-        final qtyD = _asDouble(e.value['quantity']);
-        final name = (e.value['display_name'] ?? e.value['name'] ?? e.key).toString();
-        return MapEntry(name, qtyD);
-      }).toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
+      if (allItems.isEmpty) return _empty();
 
-      items = items.take(6).toList();
-      final totalQty = items.fold<double>(0, (s, e) => s + e.value);
+      final items = allItems
+          .take(6)
+          .map((row) => MapEntry(row.label, row.quantity))
+          .toList();
+      final totalQty = allItems.fold<double>(
+        0.0,
+        (sum, row) => sum + row.quantity,
+      );
       final maxQty = items.isNotEmpty ? items.first.value : 1.0;
       if (totalQty <= 0) return _empty();
 
@@ -180,7 +128,7 @@ class RevenueRadarChart extends StatelessWidget {
                               ),
                             ),
                             LiveTranslatedText(
-                              'Most sold products by quantity',
+                              'Product / price groups by quantity',
                               style: GoogleFonts.poppins(fontSize: 11, color: Colors.white38),
                             ),
                           ],
@@ -232,7 +180,7 @@ class RevenueRadarChart extends StatelessWidget {
                               if (index < radarItems.length) {
                                 final name = radarItems[index].key;
                                 if (name == '—') return RadarChartTitle(text: '', angle: angle);
-                                final short = name.length > 7 ? '${name.substring(0, 6)}..' : name;
+                                final short = name.length > 10 ? '${name.substring(0, 9)}..' : name;
                                 return RadarChartTitle(
                                   text: short,
                                   angle: angle,
@@ -285,7 +233,7 @@ class RevenueRadarChart extends StatelessWidget {
                           child: Row(
                             children: [
                               SizedBox(
-                                width: 80,
+                                width: 112,
                                 child: LiveTranslatedText(
                                   item.key,
                                   style: GoogleFonts.poppins(

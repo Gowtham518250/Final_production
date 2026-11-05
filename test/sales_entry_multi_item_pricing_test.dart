@@ -16,6 +16,32 @@ void main() {
       provider.dispose();
     });
 
+    test('allows the same catalog product twice at the same unit price', () {
+      final provider = SalesEntryProvider();
+      provider.entries = [
+        const SalesItem(
+          id: 'rice-first-line',
+          itemName: 'Rice',
+          productId: 7,
+          quantity: 1,
+          price: 50,
+        ),
+        const SalesItem(
+          id: 'rice-second-line',
+          itemName: 'Rice',
+          productId: 7,
+          quantity: 2,
+          price: 50,
+        ),
+      ];
+
+      expect(provider.entries, hasLength(2));
+      expect(provider.entries.map((item) => item.id).toSet(), hasLength(2));
+      expect(provider.subtotalAmount, 150.00);
+      expect(provider.totalAmount, 150.00);
+      provider.dispose();
+    });
+
     test("keeps each item's own price, discount and GST rate in the total", () async {
       final provider = SalesEntryProvider();
       provider.entries = [
@@ -106,6 +132,63 @@ void main() {
       expect(invoiceTax, 18.66);
       expect(grandTotal, 226.66);
       expect(grandTotal - invoiceTax, lineSubtotal);
+    });
+
+    test('aggregates repeated product quantities before checking stock', () {
+      final requests = SaleService.aggregateStockRequests(
+        [
+          {
+            'product_id': 7,
+            'product_name': 'Rice',
+            'quantity': 3,
+            'price': 50,
+          },
+          {
+            'product_id': 7,
+            'product_name': 'Rice',
+            'quantity': 4,
+            'price': 55,
+          },
+        ],
+        [
+          {
+            'id': 7,
+            'product_name': 'Rice',
+            'current_stock': 5,
+          },
+        ],
+      );
+
+      expect(requests, hasLength(1));
+      expect(requests.single['requested_qty'], 7.0);
+      expect(requests.single['available_stock'], 5.0);
+      expect(requests.single['catalog_found'], isTrue);
+    });
+
+    test('keeps different catalog products separate in stock validation', () {
+      final requests = SaleService.aggregateStockRequests(
+        [
+          {'product_id': 7, 'product_name': 'Rice', 'qty': 2},
+          {'product_id': 8, 'product_name': 'Rice', 'qty': 3},
+          {
+            'product_id': 7,
+            'product_name': 'Rice',
+            'qty': 20,
+            'is_custom_item': true,
+            'stock_tracked': false,
+          },
+        ],
+        [
+          {'id': 7, 'product_name': 'Rice', 'current_stock': 5},
+          {'id': 8, 'product_name': 'Rice', 'current_stock': 10},
+        ],
+      );
+
+      expect(requests, hasLength(2));
+      expect(
+        requests.map((request) => request['requested_qty']).toSet(),
+        equals({2.0, 3.0}),
+      );
     });
 
     test('GST disabled does not add tax to any line', () {

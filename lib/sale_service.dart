@@ -520,59 +520,128 @@ try {
     } catch (_) {}
   }
 
+  /// Aggregate repeated bill lines into one stock request per catalog product.
+  /// Selling price is deliberately not part of stock identity: two price tiers
+  /// for the same physical product still consume the same inventory.
+  @visibleForTesting
+  static List<Map<String, dynamic>> aggregateStockRequests(
+    List<Map<String, dynamic>> items,
+    List<dynamic> productsList,
+  ) {
+    String normalizeName(String value) =>
+        value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    double number(Object? value, [double fallback = 0]) {
+      if (value is num) return value.toDouble();
+      return double.tryParse(value?.toString() ?? '') ?? fallback;
+    }
+
+    final catalog = productsList
+        .whereType<Map>()
+        .map((product) => Map<String, dynamic>.from(product))
+        .toList();
+    final grouped = <String, Map<String, dynamic>>{};
+
+    for (final item in items) {
+      if (item['stock_tracked'] == false || item['is_custom_item'] == true) {
+        continue;
+      }
+      final productId =
+          int.tryParse((item['product_id'] ?? item['id'] ?? '0').toString()) ??
+              0;
+      final itemName =
+          (item['product_name'] ?? item['itemName'] ?? item['name'] ?? '')
+              .toString()
+              .trim();
+      final normalizedItemName = normalizeName(itemName);
+      if (productId <= 0 && normalizedItemName.isEmpty) continue;
+
+      Map<String, dynamic>? found;
+      if (productId > 0) {
+        for (final product in catalog) {
+          final candidateId = int.tryParse(
+                (product['id'] ?? product['product_id'] ?? '').toString(),
+              ) ??
+              0;
+          if (candidateId == productId) {
+            found = product;
+            break;
+          }
+        }
+      }
+      if (found == null && normalizedItemName.isNotEmpty) {
+        for (final product in catalog) {
+          final candidateName = normalizeName(
+            (product['product_name'] ?? product['name'] ?? '').toString(),
+          );
+          if (candidateName == normalizedItemName) {
+            found = product;
+            break;
+          }
+        }
+      }
+
+      final foundId = int.tryParse(
+            (found?['id'] ?? found?['product_id'] ?? '').toString(),
+          ) ??
+          0;
+      final resolvedId = foundId > 0 ? foundId : productId;
+      final identity = resolvedId > 0
+          ? 'product:$resolvedId'
+          : 'name:$normalizedItemName';
+      final quantity = number(
+        item['qty'] ?? item['quantity'],
+        1,
+      );
+      final stockRaw = found?['current_stock'] ??
+          found?['stock'] ??
+          found?['quantity'];
+      final availableStock = stockRaw == null ? 0.0 : number(stockRaw);
+      final displayName =
+          (found?['product_name'] ?? found?['name'] ?? itemName)
+              .toString()
+              .trim();
+
+      final request = grouped.putIfAbsent(identity, () => {
+            'product_id': resolvedId,
+            'product_name': displayName,
+            'requested_qty': 0.0,
+            'available_stock': availableStock,
+            'catalog_found': found != null,
+          });
+      request['requested_qty'] =
+          number(request['requested_qty']) + quantity;
+      if (request['product_name'].toString().trim().isEmpty &&
+          displayName.isNotEmpty) {
+        request['product_name'] = displayName;
+      }
+    }
+    return grouped.values.toList();
+  }
+
   /// Local-only stock check. Missing stock fields default to 0 (not 9999).
   static Future<Map<String, dynamic>> _validateStockAvailabilityLocally(List<Map<String, dynamic>> items) async {
     try {
       final localProducts = await LocalStorageService.loadLocalProducts();
       final productsList = localProducts is List ? localProducts as List : localProducts.values.toList();
       final insufficientItems = <Map<String, dynamic>>[];
-      final bool catalogLoaded = productsList.isNotEmpty;
+      final requests = aggregateStockRequests(items, productsList);
 
-      for (var item in items) {
-        // A custom voice-billing line is a financial invoice row only. It must
-        // not reserve or deduct inventory by matching its name to a catalog row.
-        if (item['stock_tracked'] == false || item['is_custom_item'] == true) {
-          continue;
-        }
-        final productId = int.tryParse((item['product_id'] ?? item['id'] ?? '0').toString()) ?? 0;
-        final qty = (item['qty'] is num
-            ? (item['qty'] as num).toDouble()
-            : double.tryParse(item['qty']?.toString() ?? '1') ?? 1.0);
-        final itemName = (item['product_name'] ?? item['itemName'] ?? item['name'] ?? '').toString().toLowerCase();
+      for (final request in requests) {
+        // Unknown/local-unsynced products cannot be safely rejected solely
+        // because the local catalog is stale or unavailable. Backend
+        // invoice validation remains authoritative when connectivity exists.
+        if (request['catalog_found'] != true) continue;
 
-        if (productId > 0 || itemName.isNotEmpty) {
-          Map<String, dynamic>? found;
-          for (var p in productsList) {
-            final pIdRaw = (p['id'] ?? p['product_id'] ?? '').toString();
-            final pId = int.tryParse(pIdRaw) ?? 0;
-            final pName = (p['product_name'] ?? p['name'] ?? '').toString().toLowerCase();
-
-            if ((productId > 0 && pId == productId) || (itemName.isNotEmpty && pName == itemName)) {
-              found = Map<String, dynamic>.from(p as Map);
-              break;
-            }
-          }
-
-          if (found != null) {
-            final stockRaw = found['current_stock'] ?? found['stock'] ?? found['quantity'];
-            final currentStock = stockRaw == null
-                ? 0.0
-                : ((stockRaw is num) ? stockRaw.toDouble() : double.tryParse(stockRaw.toString()) ?? 0.0);
-            if (qty > currentStock) {
-              insufficientItems.add({
-                'product_id': productId,
-                'product_name': found['product_name'] ?? found['name'] ?? itemName,
-                'requested_qty': qty,
-                'available_stock': currentStock,
-              });
-            }
-          } else {
-            // Unknown/local-unsynced products cannot be safely rejected solely
-            // because the local catalog is stale or unavailable. Backend
-            // invoice validation remains authoritative when connectivity exists.
-            // Only reject when the product was actually found and confirmed
-            // to have insufficient stock locally.
-          }
+        final requestedQty = request['requested_qty'] as double;
+        final currentStock = request['available_stock'] as double;
+        if (requestedQty > currentStock) {
+          insufficientItems.add({
+            'product_id': request['product_id'],
+            'product_name': request['product_name'],
+            'requested_qty': requestedQty,
+            'available_stock': currentStock,
+          });
         }
       }
 
