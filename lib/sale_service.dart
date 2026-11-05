@@ -528,10 +528,8 @@ try {
     List<Map<String, dynamic>> items,
     List<dynamic> productsList,
   ) {
-    String normalizeName(String value) => value
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .trim();
+    String normalizeName(String value) =>
+        value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
     double number(Object? value, [double fallback = 0]) {
       if (value is num) return value.toDouble();
