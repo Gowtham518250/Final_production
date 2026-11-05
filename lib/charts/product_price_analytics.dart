@@ -25,8 +25,10 @@ class ProductPriceAnalytics {
   ProductPriceAnalytics._();
 
   static double _number(Object? value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+    final parsed = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '') ?? 0.0;
+    return parsed.isFinite ? parsed : 0.0;
   }
 
   static double _firstPositive(Iterable<Object?> values) {
@@ -57,13 +59,15 @@ class ProductPriceAnalytics {
       final normalizedName = _normalizedName(name);
       if (normalizedName.isEmpty || normalizedName == 'unknown product') return;
 
-      final rawIdentity = (line['product_id'] ??
-              line['barcode'] ??
-              line['sku'] ??
-              '')
-          .toString()
-          .trim();
-      final productIdentity = rawIdentity.isNotEmpty && rawIdentity != '0'
+      String rawIdentity = '';
+      for (final field in const ['product_id', 'barcode', 'sku']) {
+        final candidate = (line[field] ?? '').toString().trim();
+        if (candidate.isNotEmpty && candidate != '0') {
+          rawIdentity = candidate;
+          break;
+        }
+      }
+      final productIdentity = rawIdentity.isNotEmpty
           ? 'id:${rawIdentity.toLowerCase()}'
           : 'name:$normalizedName';
 
