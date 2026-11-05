@@ -211,6 +211,28 @@ class _AttendancePageState extends State<AttendancePage>
     if (!mounted) return;
     setState(() => _loading = true);
     try {
+      // Reconcile any shift whose scheduled checkout elapsed while the device
+      // was offline before reading the local-first attendance state.
+      final attendanceOwners = <({int employeeId, int? workerId})>[
+        if (_userId != null) (employeeId: _userId!, workerId: null),
+        ..._staff.map((worker) {
+          final id = int.tryParse(worker.id);
+          return (employeeId: id ?? 0, workerId: id);
+        }).where((entry) => entry.employeeId > 0),
+      ];
+      await Future.wait(attendanceOwners.map((owner) async {
+        try {
+          await OfflineAttendanceService.reconcileExpiredSessionsToday(
+            employeeId: owner.employeeId,
+            workerId: owner.workerId,
+          );
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('Attendance local auto-checkout deferred: $e');
+          }
+        }
+      }));
+
       // Local-first: render persisted attendance immediately, even offline.
       var localRecords = await OfflineAttendanceService.loadLocalRecords();
       if (mounted && localRecords.isNotEmpty) {
@@ -851,25 +873,59 @@ class _AttendancePageState extends State<AttendancePage>
           ]),
           const SizedBox(height: 16),
           Builder(builder: (context) {
-            final morningPresent = _staff.where((worker) => _workerSessionRecords(worker, 'morning').isNotEmpty).length;
-            final morningActive = _staff.where((worker) => _workerSessionRecords(worker, 'morning').any(_isOpenSession)).length;
+            // The active shift shows the full roster for check-in. A finished
+            // shift shows only workers who actually have a record in that slot.
+            final showAllMorning = _currentSessionKey() == 'morning';
+            final morningWorkers = _filteredStaff.where((worker) =>
+                showAllMorning ||
+                _workerSessionRecords(worker, 'morning').isNotEmpty
+            ).toList();
+            final morningPresent = morningWorkers.where(
+              (worker) => _workerSessionRecords(worker, 'morning').isNotEmpty,
+            ).length;
+            final morningActive = morningWorkers.where(
+              (worker) => _workerSessionRecords(worker, 'morning').any(_isOpenSession),
+            ).length;
             return Column(
               children: [
-                _sessionHeader('morning', morningPresent, morningActive, _staff.length),
-                ..._filteredStaff.map((worker) => _workerAttendanceTile(worker, sessionKey: 'morning')),
-                if (_filteredStaff.isEmpty) _noWorkerSearchResults(),
+                _sessionHeader(
+                  'morning',
+                  morningPresent,
+                  morningActive,
+                  morningWorkers.length,
+                ),
+                ...morningWorkers.map(
+                  (worker) => _workerAttendanceTile(worker, sessionKey: 'morning'),
+                ),
+                if (morningWorkers.isEmpty) _emptyShiftAttendance('morning'),
               ],
             );
           }),
           const SizedBox(height: 14),
           Builder(builder: (context) {
-            final afternoonPresent = _staff.where((worker) => _workerSessionRecords(worker, 'afternoon').isNotEmpty).length;
-            final afternoonActive = _staff.where((worker) => _workerSessionRecords(worker, 'afternoon').any(_isOpenSession)).length;
+            final showAllAfternoon = _currentSessionKey() == 'afternoon';
+            final afternoonWorkers = _filteredStaff.where((worker) =>
+                showAllAfternoon ||
+                _workerSessionRecords(worker, 'afternoon').isNotEmpty
+            ).toList();
+            final afternoonPresent = afternoonWorkers.where(
+              (worker) => _workerSessionRecords(worker, 'afternoon').isNotEmpty,
+            ).length;
+            final afternoonActive = afternoonWorkers.where(
+              (worker) => _workerSessionRecords(worker, 'afternoon').any(_isOpenSession),
+            ).length;
             return Column(
               children: [
-                _sessionHeader('afternoon', afternoonPresent, afternoonActive, _staff.length),
-                ..._filteredStaff.map((worker) => _workerAttendanceTile(worker, sessionKey: 'afternoon')),
-                if (_filteredStaff.isEmpty) _noWorkerSearchResults(),
+                _sessionHeader(
+                  'afternoon',
+                  afternoonPresent,
+                  afternoonActive,
+                  afternoonWorkers.length,
+                ),
+                ...afternoonWorkers.map(
+                  (worker) => _workerAttendanceTile(worker, sessionKey: 'afternoon'),
+                ),
+                if (afternoonWorkers.isEmpty) _emptyShiftAttendance('afternoon'),
               ],
             );
           }),
@@ -1030,6 +1086,26 @@ class _AttendancePageState extends State<AttendancePage>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _emptyShiftAttendance(String sessionKey) {
+    if (_workerSearchQuery.trim().isNotEmpty) return _noWorkerSearchResults();
+    final label = sessionKey == 'morning' ? 'Morning' : 'Afternoon';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: LiveTranslatedText(
+        'No $label shift attendance recorded.',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
       ),
     );
   }
@@ -1259,7 +1335,9 @@ class _AttendancePageState extends State<AttendancePage>
 
     // Currently in only when the newest check-in is newer than the newest
     // checkout. A completed latest session therefore renders CHECK IN.
-    final isIn = workerIsCurrentlyIn;
+    // Each shift card reflects that shift only. A worker open in Afternoon
+    // must not appear as checked out/in from the previous Morning card.
+    final isIn = sessionKey == null ? workerIsCurrentlyIn : sessionHasOpen;
     final workerRecord = latestRecord;
         // Calculate monthly hours from backend records
     final workerId = int.tryParse(worker.id) ?? 0;
@@ -1267,10 +1345,11 @@ class _AttendancePageState extends State<AttendancePage>
     final predictedSalary = _calculateWorkerEstimatedSalary(worker);
     final attendanceSyncPending = _workerAttendanceSyncPending(workerId);
     final isLateToday = workerRecord != null && _isLateCheckIn(workerRecord);
-    final isCurrentSession = sessionKey == null || sessionKey == currentSessionKey;
-    final canChange = sessionKey == null ||
-        (workerIsCurrentlyIn && sessionHasOpen) ||
-        (!workerIsCurrentlyIn && isCurrentSession && !sessionCompleted);
+    final isCurrentSession = sessionKey == null ||
+        (currentSessionKey != null && sessionKey == currentSessionKey);
+    final canChange = sessionKey == null
+        ? true
+        : isCurrentSession && (sessionHasOpen || !sessionCompleted);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1554,9 +1633,11 @@ class _AttendancePageState extends State<AttendancePage>
         final sessions = r['sessions'];
         final sessionKey = _sessionKeyForRecord(r);
         final label = (r['label'] ?? r['session_label'] ??
-                (sessionKey == 'morning' ? 'Morning Session' : 'Afternoon Session'))
+                '${sessionKey == 'morning' ? 'Morning' : 'Afternoon'} Shift')
             .toString();
-        final status = (r['status'] ?? 'PRESENT').toString().toUpperCase();
+        final status = (r['attendance_status'] ?? r['status'] ?? 'PRESENT')
+            .toString()
+            .toUpperCase();
         final isOpen = _isOpenSession(r);
         final color = isOpen
             ? Colors.orange
