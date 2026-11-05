@@ -29,6 +29,8 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
   String _searchError = '';
   int _searchTotal = 0;
   int _historySearchVersion = 0;
+  // The API returns the full shop-scoped count separately from its recent page.
+  int? _serverTotalOrderCount;
   List<Map<String, dynamic>> _pendingOrders = [];
   // 🚨 FIX: Accepted orders are now kept in their own list instead of just
   // vanishing once ACCEPT succeeds. Previously _fetchOrders() only ever asked
@@ -204,6 +206,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList()
           : <Map<String, dynamic>>[];
+      final serverTotal = decoded is Map
+          ? (int.tryParse(decoded['total']?.toString() ?? '') ?? allOrders.length)
+          : allOrders.length;
 
       final pending = <Map<String, dynamic>>[];
       final accepted = <Map<String, dynamic>>[];
@@ -263,6 +268,7 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
 
       if (!mounted) return;
       setState(() {
+        _serverTotalOrderCount = serverTotal;
         _pendingOrders = pending;
         _acceptedOrders = accepted;
         _dispatchedOrders = dispatched;
@@ -1456,7 +1462,7 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
   Widget _buildOrderTabs() {
     final allCount = _searchController.text.trim().isNotEmpty
         ? _searchTotal
-        : _allLoadedOrders().length;
+        : (_serverTotalOrderCount ?? _allLoadedOrders().length);
     final returnsCount = _returnRequests
         .where(
           (r) => (r['status'] ?? '').toString().toUpperCase() == 'REQUESTED',
