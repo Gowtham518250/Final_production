@@ -337,6 +337,27 @@ class _InventoryPageState extends State<InventoryPage>
       // 1. Load Local Offline Products
       final Map<String, dynamic> localMap =
           await LocalStorageService.loadLocalProducts();
+      final legacyPriceLearningKeys = localMap.entries
+          .where((entry) =>
+              entry.value is Map &&
+              InventoryStockHelper.isLegacySalesPriceLearningProduct(
+                Map<String, dynamic>.from(entry.value as Map),
+              ))
+          .map((entry) => entry.key)
+          .toList(growable: false);
+      for (final key in legacyPriceLearningKeys) {
+        // Cancel an old automatic create operation before removing the
+        // price-learning record from the inventory source of truth.
+        await SyncQueueManager.removeByBusinessIdentifier(
+          'create_local_product',
+          {'operation_id': 'PRODUCT_CREATE_$key'},
+        );
+        localMap.remove(key);
+      }
+      if (legacyPriceLearningKeys.isNotEmpty) {
+        await LocalStorageService.saveLocalProducts(localMap);
+      }
+
       final List<Map<String, dynamic>> localOfflineProducts = localMap.entries
           .map((e) {
             final Map<String, dynamic> data = Map<String, dynamic>.from(
@@ -357,7 +378,10 @@ class _InventoryPageState extends State<InventoryPage>
       if (cachedBackend.isNotEmpty || localOfflineProducts.isNotEmpty) {
         if (!mounted) return;
         setState(() {
-          _products = [...localOfflineProducts, ...cachedBackend];
+          _products = InventoryStockHelper.deduplicateProductsForDisplay([
+            ...localOfflineProducts,
+            ...cachedBackend,
+          ]);
           _loading = false;
         });
         if (kDebugMode)
@@ -444,7 +468,10 @@ class _InventoryPageState extends State<InventoryPage>
 
             if (!mounted) return;
             setState(() {
-              _products = [...localOfflineProducts, ...merged];
+              _products = InventoryStockHelper.deduplicateProductsForDisplay([
+                ...localOfflineProducts,
+                ...merged,
+              ]);
               _loading = false;
               _lastFetchFailed = false;
             });
