@@ -1946,7 +1946,15 @@ class _VI implements Comparable<_VI> {
 class _RecentVoicePayment {
   final PaymentEvent event;
   final DateTime recordedAt;
-  const _RecentVoicePayment(this.event, this.recordedAt);
+
+  /// True after speech for [event] failed and an audible OS alert was posted
+  /// instead. The same event id may speak again (retry/replay), but a
+  /// DIFFERENT event that echoes this payment (SMS after a notification, a
+  /// Truecaller update, ...) must still be recognised as an echo, because the
+  /// shopkeeper has already been alerted once.
+  bool retryable;
+
+  _RecentVoicePayment(this.event, this.recordedAt, {this.retryable = false});
 }
 
 class PriorityVoiceQueue {
@@ -2041,7 +2049,12 @@ class PriorityVoiceQueue {
     for (final previous in _recentPayments) {
       final old = previous.event;
       if (old.isMerchantConfirmed || old.hasReferenceConflict) continue;
-      if (event.id == old.id) return true;
+      if (event.id == old.id) {
+        // A failed-speech entry only exists to catch OTHER events that echo
+        // it; the same event is allowed to retry its speech.
+        if (previous.retryable) continue;
+        return true;
+      }
 
       final priorReference = old.normalizedReferenceId;
       if (currentReference != null && priorReference != null) {
@@ -2261,11 +2274,25 @@ class PriorityVoiceQueue {
     unawaited(_persistSpoken());
   }
 
-  void _releaseSpoken(String fp, {PaymentEvent? event}) {
+  void _releaseSpoken(
+    String fp, {
+    PaymentEvent? event,
+    bool alertedByFallback = false,
+  }) {
     _spokenFps.remove(fp);
     if (event != null) {
-      _recentPayments.removeWhere((entry) => entry.event.id == event.id);
-      _echoClaims.remove(event.id);
+      if (alertedByFallback) {
+        // Speech failed but an audible OS alert replaces it, so the owner has
+        // already been told about this payment. Dropping the echo memory here
+        // let the SMS / second notification for the SAME payment announce it
+        // again. Keep it, flagged so that only this event id may retry.
+        for (final entry in _recentPayments) {
+          if (entry.event.id == event.id) entry.retryable = true;
+        }
+      } else {
+        _recentPayments.removeWhere((entry) => entry.event.id == event.id);
+        _echoClaims.remove(event.id);
+      }
     }
     unawaited(_persistSpoken());
   }
@@ -2282,14 +2309,18 @@ class PriorityVoiceQueue {
     PdsLogger.w('VOICE', 'TTS did not complete; requesting audible fallback');
     PdsLogger.t('DROP', 'reason=voice_not_spoken');
     final failedItems = items.where((item) => item.event != null).toList();
+    final fallback = onSpeakFailed;
     for (final item in items) {
       final fingerprint = item.fingerprint;
       if (fingerprint != null) {
-        _releaseSpoken(fingerprint, event: item.event);
+        _releaseSpoken(
+          fingerprint,
+          event: item.event,
+          alertedByFallback: fallback != null,
+        );
       }
     }
 
-    final fallback = onSpeakFailed;
     if (fallback == null) return;
     try {
       for (final item in failedItems) {

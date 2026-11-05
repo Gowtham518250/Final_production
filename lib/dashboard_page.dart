@@ -114,6 +114,8 @@ import 'widgets/dashboard/operations_reports_section.dart';
 import 'widgets/dashboard/shop_modules_section.dart';
 import 'widgets/dashboard/compact_quick_actions.dart';
 import 'widgets/dashboard/printer_monetization_banner.dart';
+import 'widgets/dashboard/recent_bill_data.dart';
+import 'widgets/dashboard/recent_bill_details_dialog.dart';
 import 'printer_settings_page.dart';
 import 'daily_summary_notification_service.dart';
 import 'screens/owner/online_store_hub_page.dart';
@@ -185,6 +187,7 @@ class _DashboardPageState extends State<DashboardPage>
   bool loading = false;
   bool _salesLoadInProgress = false;
   bool _salesLoadedOnce = false;
+  bool _salesLoadFailed = false;
   bool _salesHistoryHydrating = false;
   bool insightLoading = false;
   bool showInsight = false;
@@ -249,6 +252,8 @@ class _DashboardPageState extends State<DashboardPage>
   List<Map<String, dynamic>> _lowStockProducts = [];
   bool _lowStockCheckInProgress = false;
   bool _lowStockCheckPending = false;
+  bool _lowStockLoaded = false;
+  bool _lowStockFailed = false;
   int _dailyHealthScore = 0;
   bool _dailyHealthScoreLoading = true;
 
@@ -280,6 +285,9 @@ class _DashboardPageState extends State<DashboardPage>
   // Online Store status tracking
   bool _isOnlineStoreActive = false;
   bool _onlineStoreLoading = true;
+  bool _onlineStatsLoading = false;
+  bool _onlineStatsLoaded = false;
+  bool _onlineStatsFailed = false;
   int _onlinePendingOrders = 0;
   int _onlineTodayOrders = 0;
   double _onlineTodayRevenue = 0.0;
@@ -424,8 +432,9 @@ class _DashboardPageState extends State<DashboardPage>
           final invoiceKey = billId.isNotEmpty
               ? billId
               : '${sale['product_name'] ?? sale['product'] ?? sale['item'] ?? ''}_${sale['date'] ?? sale['business_date'] ?? sale['sale_date'] ?? sale['created_at'] ?? ''}';
-          final processedBills =
-              isToday ? processedTodayBills : processedYesterdayBills;
+          final processedBills = isToday
+              ? processedTodayBills
+              : processedYesterdayBills;
           if (!processedBills.add(invoiceKey)) continue;
 
           final amount = _parseSaleAmount(sale);
@@ -684,8 +693,8 @@ class _DashboardPageState extends State<DashboardPage>
         // Notification/accessibility/SMS paths can report the same transfer
         // with different event IDs and app labels. Coalesce only the user-facing
         // alert (not accounting history) when a strong identity matches.
-        final suppressRepeatedPaymentAlert =
-            _paymentAlertDeduplicator.shouldSuppress(event);
+        final suppressRepeatedPaymentAlert = _paymentAlertDeduplicator
+            .shouldSuppress(event);
         if (!suppressRepeatedPaymentAlert) {
           _addToActivityFeed(activity);
         }
@@ -870,10 +879,8 @@ class _DashboardPageState extends State<DashboardPage>
           await OnlinePaymentHistoryService.recordIncomingPayment(
             event.copyWith(
               decision: PaymentDecision.confirmed,
-              verificationStatus:
-                  PaymentVerificationStatus.merchantConfirmed,
-              detectionSource:
-                  '${event.detectionSource}:merchant_confirmed',
+              verificationStatus: PaymentVerificationStatus.merchantConfirmed,
+              detectionSource: '${event.detectionSource}:merchant_confirmed',
             ),
           );
           await refreshPaymentDetectionDedupState();
@@ -894,7 +901,9 @@ class _DashboardPageState extends State<DashboardPage>
           await refreshPaymentDetectionDedupState();
         } catch (rejectError) {
           if (kDebugMode) {
-            debugPrint('Could not persist rejected payment review: $rejectError');
+            debugPrint(
+              'Could not persist rejected payment review: $rejectError',
+            );
           }
         }
       }
@@ -1140,7 +1149,8 @@ class _DashboardPageState extends State<DashboardPage>
         ),
         action: SnackBarAction(
           label: 'FIX',
-          onPressed: () => PaymentDetectionService.openBatteryOptimizationSettings(),
+          onPressed: () =>
+              PaymentDetectionService.openBatteryOptimizationSettings(),
         ),
       ),
     );
@@ -1206,7 +1216,9 @@ class _DashboardPageState extends State<DashboardPage>
         // Configure and start again if Android/OEM battery management stopped
         // the service (or if startup had not completed yet).
         await initializeBackgroundService();
-        debugPrint('🔁 Reconfigured/restarted stopped payment-detection service');
+        debugPrint(
+          '🔁 Reconfigured/restarted stopped payment-detection service',
+        );
       }
 
       // Only the background isolate owns the live listeners. Signal it after
@@ -1214,9 +1226,7 @@ class _DashboardPageState extends State<DashboardPage>
       // request if listener initialization is still in progress.
       backgroundService.invoke('restart_payment_detection');
       if (kDebugMode) {
-        debugPrint(
-          '🔁 Signaled background isolate to attach payment channels',
-        );
+        debugPrint('🔁 Signaled background isolate to attach payment channels');
       }
       backgroundService.invoke('setAsForeground');
     } catch (e) {
@@ -1623,10 +1633,7 @@ class _DashboardPageState extends State<DashboardPage>
   /// Stagger non-critical startup requests so the dashboard does not compete
   /// with several network calls and cache writes at once on entry-level phones.
   Future<void> _loadDeferredDashboardData() async {
-    Future<void> runSafely(
-      String label,
-      Future<void> Function() task,
-    ) async {
+    Future<void> runSafely(String label, Future<void> Function() task) async {
       if (!mounted) return;
       try {
         await task();
@@ -1692,15 +1699,14 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _refreshDashboardLowStock() async {
-    final hasPendingMutation = await SyncQueueManager.hasAnyPendingAction(
-      const [
+    final hasPendingMutation =
+        await SyncQueueManager.hasAnyPendingAction(const [
         'save_sale',
         'sync_sale',
         'create_local_product',
         'update_local_product',
         'decrease_stock',
-      ],
-    );
+        ]);
     if (hasPendingMutation) {
       if (kDebugMode) {
         debugPrint(
@@ -1711,8 +1717,9 @@ class _DashboardPageState extends State<DashboardPage>
     }
 
     try {
-      final remoteRows =
-          await LowStockAlertsService.fetchLowStockProductRows(limit: 100);
+      final remoteRows = await LowStockAlertsService.fetchLowStockProductRows(
+        limit: 100,
+      );
       if (!mounted) return;
 
       final lowStockById = <String, Map<String, dynamic>>{};
@@ -1746,8 +1753,8 @@ class _DashboardPageState extends State<DashboardPage>
             double.tryParse(product['min_stock']?.toString() ?? '10') ?? 10;
         if (stock >= minimum) continue;
 
-        final id =
-            (product['id'] ?? product['product_id'] ?? entry.key).toString();
+        final id = (product['id'] ?? product['product_id'] ?? entry.key)
+            .toString();
         lowStockById[id] = {
           'productName': product['product_name'] ?? 'Unknown',
           'currentStock': stock,
@@ -1756,18 +1763,170 @@ class _DashboardPageState extends State<DashboardPage>
         };
       }
 
+      if (!mounted) return;
       setState(() {
-        _lowStockProducts = [
-          ...lowStockById.values,
-          ...lowStockWithoutId,
-        ];
+        _lowStockProducts = [...lowStockById.values, ...lowStockWithoutId];
+        _lowStockLoaded = true;
+        _lowStockFailed = false;
       });
       _recomputeDailyHealthScore();
     } catch (e) {
+      if (mounted) {
+        setState(() => _lowStockFailed = true);
+      }
       if (kDebugMode) {
         debugPrint('⚠️ Dashboard low-stock refresh failed: $e');
       }
     }
+  }
+
+  Widget _buildDashboardNotice({
+    required IconData icon,
+    required String message,
+    Future<void> Function()? onRetry,
+    bool isLoading = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF64748B), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: LiveTranslatedText(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF475569),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (isLoading)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (onRetry != null)
+            IconButton(
+              tooltip: 'Retry',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => unawaited(onRetry()),
+              icon: const Icon(Icons.refresh_rounded, size: 19),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingOnlineOrdersNotice() {
+    if (!_onlineStatsLoaded) {
+      if (_onlineStatsFailed) {
+        return _buildDashboardNotice(
+          icon: Icons.cloud_off_rounded,
+          message: 'Could not load pending online orders.',
+          onRetry: _loadOnlineStoreStats,
+        );
+      }
+      if (_onlineStatsLoading) {
+        return _buildDashboardNotice(
+          icon: Icons.local_shipping_outlined,
+          message: 'Checking pending online orders…',
+          isLoading: true,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    if (_onlinePendingOrders == 0) {
+      if (_onlineStatsFailed) {
+        return _buildDashboardNotice(
+          icon: Icons.cloud_off_rounded,
+          message: 'Pending order count may be out of date.',
+          onRetry: _loadOnlineStoreStats,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_onlineStatsFailed)
+          _buildDashboardNotice(
+            icon: Icons.cloud_off_rounded,
+            message: 'Could not refresh online order count.',
+            onRetry: _loadOnlineStoreStats,
+          ),
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: const Color(0xFFFDE68A)),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(15),
+              onTap: () => Navigator.pushNamed(context, '/online-orders'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.local_shipping_outlined,
+                      color: Color(0xFFB45309),
+                      size: 21,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          LiveTranslatedText(
+                            '$_onlinePendingOrders online order${_onlinePendingOrders == 1 ? '' : 's'} need attention',
+                            style: const TextStyle(
+                              color: Color(0xFF92400E),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const LiveTranslatedText(
+                            'Review and update order status',
+                            style: TextStyle(
+                              color: Color(0xFFB45309),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFFB45309),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -2157,9 +2316,7 @@ class _DashboardPageState extends State<DashboardPage>
           _isOnlineStoreActive = cachedStatus;
           _onlineStoreLoading = false;
         });
-        if (cachedStatus) {
-          _loadOnlineStoreStats();
-        }
+        unawaited(_loadOnlineStoreStats());
       }
 
       // 🔄 BACKGROUND: Silently refresh from backend (doesn't block UI)
@@ -2173,9 +2330,6 @@ class _DashboardPageState extends State<DashboardPage>
             'online_store_active',
             isPublished,
           );
-          if (isPublished) {
-            _loadOnlineStoreStats();
-          }
         }
         if (kDebugMode)
           debugPrint(
@@ -2193,10 +2347,15 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _loadOnlineStoreStats() async {
+    if (_onlineStatsLoading) return;
+    _onlineStatsLoading = true;
+    if (mounted) {
+      setState(() => _onlineStatsFailed = false);
+    }
+
     // Online-order KPIs are business data, not a UI/store-publication flag.
     // Always reconcile them so existing orders cannot appear as zero merely
     // because the store toggle/cache is stale.
-
     try {
       final prefs = await SharedPreferences.getInstance();
       final shopId = (prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0)
@@ -2205,7 +2364,10 @@ class _DashboardPageState extends State<DashboardPage>
       if (!mounted) return;
       // Do not replace the last known counts with false zeros when the API is
       // unavailable. An empty successful result is different from a failed read.
-      if (metrics['available'] == false) return;
+      if (metrics['available'] == false) {
+        setState(() => _onlineStatsFailed = true);
+        return;
+      }
       setState(() {
         _onlinePendingOrders = (metrics['pending'] as num?)?.toInt() ?? 0;
         _onlineTodayOrders = (metrics['todayCount'] as num?)?.toInt() ?? 0;
@@ -2219,9 +2381,15 @@ class _DashboardPageState extends State<DashboardPage>
             (metrics['totalPaidCount'] as num?)?.toInt() ?? 0;
         _cachedTodayOnlineOrders = _onlineTodayOrders;
         _cachedTotalOnlineOrders = _onlineTotalOrders;
+        _onlineStatsLoaded = true;
+        _onlineStatsFailed = false;
       });
     } catch (e) {
+      if (mounted) setState(() => _onlineStatsFailed = true);
       if (kDebugMode) debugPrint('⚠️ Failed to load online stats: $e');
+    } finally {
+      _onlineStatsLoading = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -2241,6 +2409,12 @@ class _DashboardPageState extends State<DashboardPage>
       setState(() {
         _isOnlineStoreActive = enable;
         _onlineStoreLoading = false;
+        if (enable) {
+          _onlineStorePulseController.stop();
+          _onlineStorePulseController.value = 1.0;
+        } else if (!_onlineStorePulseController.isAnimating) {
+          _onlineStorePulseController.forward(from: 0);
+        }
       });
       if (enable) {
         unawaited(_loadOnlineStoreStats());
@@ -2432,6 +2606,29 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
+  Widget _buildOnlineStoreSwitch({required Color activeColor}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Switch.adaptive(
+          value: _isOnlineStoreActive,
+          activeColor: activeColor,
+          onChanged: _onlineStoreLoading
+              ? null
+              : (value) => _toggleOnlineStore(value),
+        ),
+        if (_onlineStoreLoading) ...[
+          const SizedBox(width: 4),
+          const SizedBox(
+            width: 15,
+            height: 15,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildOnlineStoreStatusCard() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -2442,38 +2639,34 @@ class _DashboardPageState extends State<DashboardPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.storefront_rounded,
-                    color: Color(0xFF16A34A),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  LiveTranslatedText(
-                    'Online Store is Live',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: isDark ? Colors.white : const Color(0xFF1F2937),
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.storefront_rounded,
+                      color: Color(0xFF16A34A),
+                      size: 22,
                     ),
-                  ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Switch.adaptive(
-                    value: _isOnlineStoreActive,
-                    activeColor: Colors.green,
-                    onChanged: _onlineStoreLoading ? null : (val) => _toggleOnlineStore(val),
-                  ),
-                  if (_onlineStoreLoading) ...[
-                    const SizedBox(width: 6),
-                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: LiveTranslatedText(
+                        'Online Store is Live',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1F2937),
+                        ),
+                      ),
+                    ),
                   ],
-                ],
+                ),
               ),
+              const SizedBox(width: 8),
+              _buildOnlineStoreSwitch(activeColor: Colors.green),
             ],
           ),
           const SizedBox(height: 12),
@@ -2589,9 +2782,9 @@ class _DashboardPageState extends State<DashboardPage>
                         ),
                       ),
                       IconButton(
-                        tooltip: AppLocalizations.of(context).translate(
-                          'Copy shop URL',
-                        ),
+                        tooltip: AppLocalizations.of(
+                          context,
+                        ).translate('Copy shop URL'),
                         onPressed: _copyOnlineStoreUrl,
                         icon: const Icon(Icons.copy_rounded, size: 19),
                         color: const Color(0xFF16A34A),
@@ -2708,15 +2901,7 @@ class _DashboardPageState extends State<DashboardPage>
                     ],
                   ),
                 ),
-                Switch.adaptive(
-                  value: _isOnlineStoreActive,
-                  activeColor: Colors.green,
-                  onChanged: _onlineStoreLoading ? null : (val) => _toggleOnlineStore(val),
-                ),
-                if (_onlineStoreLoading) ...[
-                  const SizedBox(width: 6),
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                ],
+                _buildOnlineStoreSwitch(activeColor: Colors.green),
               ],
             ),
             const SizedBox(height: 14),
@@ -4513,7 +4698,8 @@ class _DashboardPageState extends State<DashboardPage>
         await Future<void>.delayed(Duration.zero);
         if (!mounted) return flattened;
       }
-      final List<dynamic> items = tx['items'] ?? [];
+      final rawItems = tx['items'] ?? tx['line_items'] ?? const [];
+      final List<dynamic> items = rawItems is List ? rawItems : const [];
       final date =
           tx['business_date'] ??
           tx['sale_date'] ??
@@ -4623,6 +4809,7 @@ class _DashboardPageState extends State<DashboardPage>
           'business_date': date,
           'sale_id': invoiceNumber,
           'invoice_number': invoiceNumber,
+          '_bill_data': Map<String, dynamic>.from(tx),
           'is_local': true,
         });
         continue;
@@ -4760,6 +4947,7 @@ class _DashboardPageState extends State<DashboardPage>
               invoiceNumber, // ← CORE DEDUPLICATION ANCHOR (invoice_number)
           '_item_idx': idx, // ← CORE DEDUPLICATION OFFSET
           'invoice_number': invoiceNumber, // ← Explicit invoice_number field
+          if (idx == 0) '_bill_data': Map<String, dynamic>.from(tx),
         });
       }
     }
@@ -4811,7 +4999,10 @@ class _DashboardPageState extends State<DashboardPage>
 
     // Keep the first-load indicator, but do not flash the dashboard back into
     // a loading state during silent periodic/manual refreshes once it has data.
-    if (!_salesLoadedOnce) setState(() => loading = true);
+    setState(() {
+      _salesLoadFailed = false;
+      if (!_salesLoadedOnce) loading = true;
+    });
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -4820,8 +5011,7 @@ class _DashboardPageState extends State<DashboardPage>
       // Never block the dashboard on the network. A background reconciliation
       // runs after the local dashboard has rendered.
       final List<dynamic> history = await LocalStorageService.loadSales();
-      final historyComplete =
-          await SalesRestoreService.isFullHistoryRestored();
+      final historyComplete = await SalesRestoreService.isFullHistoryRestored();
       if (history.isEmpty && !historyComplete && mounted) {
         setState(() => _salesHistoryHydrating = true);
       }
@@ -4846,6 +5036,7 @@ class _DashboardPageState extends State<DashboardPage>
       }
 
       // Set initial state from data
+      var shouldCheckLowStock = false;
       if (mounted) {
         setState(() {
           sales = localSalesFlattened;
@@ -4876,14 +5067,16 @@ class _DashboardPageState extends State<DashboardPage>
           }
           // dYs" CHECK LOW STOCK (Local & Backend)
           _dailyHealthScoreLoading = true;
-          _checkLowStock();
+          shouldCheckLowStock = true;
 
           _salesLoadedOnce = true;
+          _salesLoadFailed = false;
           loading = false;
           if (_selectedChartIndex >= _chartLabels.length) {
             _selectedChartIndex = 0;
           }
         });
+        if (shouldCheckLowStock) unawaited(_checkLowStock());
         _recomputeDailyHealthScore();
 
         // Background-only cloud reconciliation. It must never block the cashier UI.
@@ -4900,7 +5093,8 @@ class _DashboardPageState extends State<DashboardPage>
                   !_emptySalesRestoreInProgress) {
                 _emptySalesRestoreInProgress = true;
                 try {
-                  changed = await SalesRestoreService.ensureFullHistoryRestored();
+                  changed =
+                      await SalesRestoreService.ensureFullHistoryRestored();
                 } finally {
                   _emptySalesRestoreInProgress = false;
                 }
@@ -4990,6 +5184,7 @@ class _DashboardPageState extends State<DashboardPage>
         setState(() {
           loading = false;
           _salesHistoryHydrating = false;
+          _salesLoadFailed = true;
         });
       }
     } finally {
@@ -5413,6 +5608,7 @@ class _DashboardPageState extends State<DashboardPage>
     }
 
     _lowStockCheckInProgress = true;
+    if (mounted) setState(() => _lowStockFailed = false);
     try {
       do {
         _lowStockCheckPending = false;
@@ -5422,15 +5618,21 @@ class _DashboardPageState extends State<DashboardPage>
             await InventoryManagementService.getAllLowStockProducts();
 
         if (!mounted) return;
-        setState(() => _lowStockProducts = lowStockItems);
+        setState(() {
+          _lowStockProducts = lowStockItems;
+          _lowStockLoaded = true;
+          _lowStockFailed = false;
+        });
         _recomputeDailyHealthScore();
       } while (_lowStockCheckPending && mounted);
     } catch (e) {
+      if (mounted) setState(() => _lowStockFailed = true);
       if (kDebugMode) {
         debugPrint('Error checking real-time low stock: $e');
       }
     } finally {
       _lowStockCheckInProgress = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -5594,7 +5796,33 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildLowStockBanner() {
-    if (_lowStockProducts.isEmpty) return const SizedBox.shrink();
+    if (!_lowStockLoaded) {
+      if (_lowStockFailed) {
+        return _buildDashboardNotice(
+          icon: Icons.warning_amber_rounded,
+          message: 'Could not load low-stock alerts.',
+          onRetry: _checkLowStock,
+        );
+      }
+      if (_lowStockCheckInProgress) {
+        return _buildDashboardNotice(
+          icon: Icons.inventory_2_outlined,
+          message: 'Checking stock levels…',
+          isLoading: true,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+    if (_lowStockProducts.isEmpty) {
+      if (_lowStockFailed) {
+        return _buildDashboardNotice(
+          icon: Icons.warning_amber_rounded,
+          message: 'Could not refresh low-stock alerts.',
+          onRetry: _checkLowStock,
+        );
+      }
+      return const SizedBox.shrink();
+    }
 
     // Get unique product names to avoid clutter
     final names = _lowStockProducts
@@ -5605,7 +5833,17 @@ class _DashboardPageState extends State<DashboardPage>
         names.take(2).join(', ') +
         (names.length > 2 ? ' +${names.length - 2} more' : '');
 
-    return Container(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_lowStockFailed)
+          _buildDashboardNotice(
+            icon: Icons.warning_amber_rounded,
+            message:
+                'Could not refresh low-stock alerts. Showing saved results.',
+            onRetry: _checkLowStock,
+          ),
+        Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -5673,6 +5911,8 @@ class _DashboardPageState extends State<DashboardPage>
           ],
         ),
       ),
+        ),
+      ],
     );
   }
 
@@ -5959,7 +6199,8 @@ class _DashboardPageState extends State<DashboardPage>
 
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-      final userEmailValue = [
+      final userEmailValue =
+          [
         prefs.getString('shop_email'),
         prefs.getString('user_email'),
         prefs.getString('email'),
@@ -8471,6 +8712,50 @@ class _DashboardPageState extends State<DashboardPage>
     return '';
   }
 
+  void _showRecentBillDetails(RecentBillData bill) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => RecentBillDetailsDialog(bill: bill),
+    );
+  }
+
+  Widget _buildRecentBillsEmptyState() {
+    if (sales.isEmpty) return _buildEmptyState();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.receipt_long_outlined,
+            color: Color(0xFF94A3B8),
+            size: 36,
+          ),
+          const SizedBox(height: 10),
+          const LiveTranslatedText(
+            'No bills in this period',
+            style: TextStyle(
+              color: Color(0xFF334155),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const LiveTranslatedText(
+            'Try a longer date range to see older bills.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+          ),
+          if (_selectedTimeFilter != 3)
+            TextButton(
+              onPressed: () => _onFilterChanged(3),
+              child: const LiveTranslatedText('View this year'),
+            ),
+        ],
+      ),
+    );
+  }
+
   // Analytics chart source:
   // Keep KPI/filter semantics unchanged, but never hide historical analytics
   // merely because the selected filter (e.g. Today) has no rows.
@@ -8725,7 +9010,8 @@ class _DashboardPageState extends State<DashboardPage>
                       interval: 1,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx >= 1 && idx <= 12 &&
+                        if (idx >= 1 &&
+                            idx <= 12 &&
                             (!compactMonthLabels || idx.isOdd)) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -8808,7 +9094,10 @@ class _DashboardPageState extends State<DashboardPage>
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
-                      width: math.min(MediaQuery.sizeOf(context).width * 0.42, 170.0),
+                      width: math.min(
+                        MediaQuery.sizeOf(context).width * 0.42,
+                        170.0,
+                      ),
                       child: LiveTranslatedText(
                         prod,
                         maxLines: 1,
@@ -10675,8 +10964,7 @@ class _DashboardPageState extends State<DashboardPage>
 
   // ENHANCED RECENT TRANSACTIONS
   Widget _buildEnhancedRecentTransactions() {
-    final newestFirst = List<Map<String, dynamic>>.from(recentSales)
-      ..sort((a, b) => engine.getLocalDate(b).compareTo(engine.getLocalDate(a)));
+    final recentBills = RecentBillData.fromSales(recentSales);
     return AnimatedBuilder(
       animation: _fadeAnimation,
       builder: (context, child) {
@@ -10745,7 +11033,13 @@ class _DashboardPageState extends State<DashboardPage>
                       ],
                     ),
                   ),
-                  if (loading)
+                  if (_salesLoadFailed && recentBills.isNotEmpty)
+                    _buildDashboardNotice(
+                      icon: Icons.cloud_off_rounded,
+                      message: 'Could not refresh bills. Showing saved data.',
+                      onRetry: _loadSales,
+                    ),
+                  if (loading || _salesHistoryHydrating)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Center(
@@ -10761,24 +11055,59 @@ class _DashboardPageState extends State<DashboardPage>
                             ),
                             const SizedBox(height: 16),
                             LiveTranslatedText(
-                              AppLocalizations.of(context).noSalesData,
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 14,
+                              _salesHistoryHydrating
+                                  ? 'Restoring your sales history…'
+                                  : 'Loading recent bills…',
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 13,
                               ),
                             ),
                           ],
                         ),
                       ),
                     )
-                  else if (filteredSales.isEmpty)
-                    _buildEmptyState()
+                  else if (_salesLoadFailed)
+                    _buildDashboardNotice(
+                      icon: Icons.cloud_off_rounded,
+                      message: 'Could not load bills.',
+                      onRetry: _loadSales,
+                    )
+                  else if (recentBills.isEmpty)
+                    _buildRecentBillsEmptyState()
                   else
-                    ...newestFirst.take(10).map((s) {
-                      final dynamic rawTotal = s['total_amount'] ?? s['total'];
-                      final totalVal = rawTotal is num
-                          ? rawTotal.toDouble()
-                          : double.tryParse(rawTotal?.toString() ?? '0') ?? 0.0;
+                    ...recentBills.take(10).map((bill) {
+                      final s = bill.data;
+                      final totalVal = bill.totalAmount;
+                      final paymentStatus =
+                          (s['payment_status_normalized'] ??
+                                  s['payment_status'] ??
+                                  s['invoice_status'] ??
+                                  s['status'] ??
+                                  '')
+                              .toString()
+                              .trim();
+                      final normalizedStatus = paymentStatus.toUpperCase();
+                      final isPaid = const {
+                        'PAID',
+                        'COMPLETED',
+                        'SETTLED',
+                      }.contains(normalizedStatus);
+                      final statusColor = isPaid
+                          ? const Color(0xFF15803D)
+                          : const {
+                              'PARTIAL',
+                              'PARTIALLY_PAID',
+                              'UNPAID',
+                              'PENDING',
+                              'DUE',
+                              'OVERDUE',
+                            }.contains(normalizedStatus)
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF64748B);
+                      final itemCountLabel = bill.items.length == 1
+                          ? '1 item'
+                          : '${bill.items.length} items';
                       final localDate = engine.getLocalDate(s);
                       final h = localDate.hour == 0
                           ? 12
@@ -10794,6 +11123,9 @@ class _DashboardPageState extends State<DashboardPage>
                           horizontal: 16,
                           vertical: 8,
                         ),
+                        child: InkWell(
+                          onTap: () => _showRecentBillDetails(bill),
+                          borderRadius: BorderRadius.circular(16),
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.1),
@@ -10804,12 +11136,13 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
-                            child: Row(
+                              child: Column(
+                                children: [
+                                  Row(
                               children: [
-                                // Icon
                                 Container(
-                                  width: 46,
-                                  height: 46,
+                                        width: 42,
+                                        height: 42,
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
                                       colors: [
@@ -10819,161 +11152,124 @@ class _DashboardPageState extends State<DashboardPage>
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                     ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(
-                                          0xFF6366F1,
-                                        ).withValues(alpha: 0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
                                       ),
-                                    ],
                                   ),
                                   child: const Icon(
-                                    Icons.shopping_bag,
-                                    semanticLabel: 'Shopping Bag',
+                                          Icons.receipt_long_rounded,
                                     color: Colors.white,
-                                    size: 22,
+                                          size: 21,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                // Title + subtitle
+                                      const SizedBox(width: 11),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Builder(
-                                        builder: (context) {
-                                          final invoice =
-                                              (s['invoice_number'] ??
-                                                      s['sale_id'] ??
-                                                      s['_bill_id'] ??
-                                                      '')
-                                                  .toString()
-                                                  .trim();
-                                          final title = (s['customer_name'] ??
-                                                  s['customer_phone'] ??
-                                                  'Walk-in Customer')
-                                              .toString();
-                                          final rawItems = s['items'] ?? s['products'] ?? s['line_items'];
-                                          final itemCount = rawItems is List
-                                              ? rawItems.length
-                                              : (int.tryParse((s['item_count'] ?? s['items_count'] ?? s['total_items'] ?? 0).toString()) ?? 0);
-                                          return Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
                                             children: [
                                               LiveTranslatedText(
-                                                title,
+                                              bill.customerName.isNotEmpty
+                                                  ? bill.customerName
+                                                  : 'Walk-in Customer',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14,
                                                   color: Color(0xFF1F2937),
                                                 ),
-                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                              if (invoice.isNotEmpty) ...[
-                                                const SizedBox(height: 2),
+                                            const SizedBox(height: 3),
                                                 LiveTranslatedText(
-                                                  'Invoice: $invoice',
+                                              '${bill.invoiceNumber.isEmpty ? 'Bill' : 'Invoice: ${bill.invoiceNumber}'} · $itemCountLabel',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                                   style: const TextStyle(
-                                                    color: Color(0xFF94A3B8),
+                                                color: Color(0xFF64748B),
                                                     fontSize: 10.5,
                                                   ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
                                                 ),
                                               ],
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.inventory,
-                                            semanticLabel: 'Inventory',
-                                            size: 12,
-                                            color: Color(0xFF94A3B8),
-                                          ),
-                                          const SizedBox(width: 3),
-                                          LiveTranslatedText(
-                                            'Items: $itemCount  •  ${(s['payment_status'] ?? s['status'] ?? 'N/A').toString().toUpperCase()}',
-                                            style: const TextStyle(
-                                              color: Color(0xFF64748B),
-                                              fontSize: 11,
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          const Icon(
-                                            Icons.calendar_today,
-                                            semanticLabel: 'Calendar Today',
-                                            size: 12,
-                                            color: Color(0xFF94A3B8),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 100,
                                           ),
-                                          const SizedBox(width: 3),
-                                          Flexible(
                                             child: LiveTranslatedText(
-                                              formattedDate,
-                                              style: const TextStyle(
-                                                color: Color(0xFF64748B),
-                                                fontSize: 11,
-                                              ),
+                                          '₹${_formatCompactNumber(totalVal)}',
+                                          maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                            color: Color(0xFF4F46E5),
                                             ),
                                           ),
-                                        ],
                                       ),
                                     ],
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                // Amount + badge
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  const SizedBox(height: 9),
+                                  Row(
                                   children: [
-                                    LiveTranslatedText(
-                                      '₹${_formatCompactNumber(totalVal)}',
+                                      const Icon(
+                                        Icons.schedule_rounded,
+                                        size: 13,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: LiveTranslatedText(
+                                          formattedDate,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                        color: Color(0xFF6366F1),
+                                            color: Color(0xFF64748B),
+                                            fontSize: 10.5,
+                                          ),
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
                                     Container(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 132,
+                                        ),
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
+                                          horizontal: 8,
+                                          vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF6366F1,
-                                        ).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(6),
+                                          color: statusColor.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
                                       ),
-                                      child: const Row(
+                                        ),
+                                        child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
-                                            Icons.check_circle,
-                                            semanticLabel: 'Check Circle',
-                                            size: 9,
-                                            color: Color(0xFF6366F1),
+                                              isPaid
+                                                  ? Icons.check_circle_rounded
+                                                  : Icons.payments_outlined,
+                                              size: 12,
+                                              color: statusColor,
                                           ),
-                                          SizedBox(width: 3),
-                                          LiveTranslatedText(
-                                            'Done',
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: LiveTranslatedText(
+                                                paymentStatus.isEmpty
+                                                    ? 'Status unavailable'
+                                                    : paymentStatus,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              color: Color(0xFF0097A7),
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
+                                                  color: statusColor,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
                                             ),
                                           ),
                                         ],
@@ -10985,9 +11281,10 @@ class _DashboardPageState extends State<DashboardPage>
                             ),
                           ),
                         ),
+                        ),
                       );
                     }),
-                  if (recentSales.length > 10)
+                  if (recentBills.length > 10)
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -11012,7 +11309,7 @@ class _DashboardPageState extends State<DashboardPage>
                             ),
                           ),
                           child: LiveTranslatedText(
-                            'View All ${recentSales.length} Bills →',
+                            'View All ${recentBills.length} Bills →',
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
@@ -11328,12 +11625,18 @@ class _DashboardPageState extends State<DashboardPage>
                         children: [
                           _buildModernStatItem(
                             l10n.sales,
-                            "₹${_formatCompactNumber(_todayRevenue)}",
-                            growth: _dailyGrowth,
+                            _salesHistoryHydrating
+                                ? '…'
+                                : "₹${_formatCompactNumber(_todayRevenue)}",
+                            growth: _salesHistoryHydrating
+                                ? null
+                                : _dailyGrowth,
                           ),
                           _buildModernStatItem(
                             l10n.transactions,
-                            _todayTransactions.toString(),
+                            _salesHistoryHydrating
+                                ? '…'
+                                : _todayTransactions.toString(),
                           ),
                         ],
                       ),
@@ -11631,7 +11934,9 @@ class _DashboardPageState extends State<DashboardPage>
                             children: [
                               Expanded(
                                 child: LiveTranslatedText(
-                                  AppLocalizations.of(context).translate('Enable Payment Detection'),
+                                  AppLocalizations.of(
+                                    context,
+                                  ).translate('Enable Payment Detection'),
                                   style: GoogleFonts.poppins(
                                     fontWeight: FontWeight.w800,
                                     color: const Color(0xFF991B1B),
@@ -11649,7 +11954,9 @@ class _DashboardPageState extends State<DashboardPage>
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: LiveTranslatedText(
-                                  AppLocalizations.of(context).translate('ACTION REQUIRED'),
+                                  AppLocalizations.of(
+                                    context,
+                                  ).translate('ACTION REQUIRED'),
                                   style: GoogleFonts.poppins(
                                     color: Colors.white,
                                     fontSize: 8.5,
@@ -11662,7 +11969,9 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                           const SizedBox(height: 5),
                           LiveTranslatedText(
-                            AppLocalizations.of(context).translate('Automatic payment detection is optional. You can still record sales manually when it is off.'),
+                            AppLocalizations.of(context).translate(
+                              'Automatic payment detection is optional. You can still record sales manually when it is off.',
+                            ),
                             style: GoogleFonts.poppins(
                               color: const Color(0xFFB91C1C),
                               fontSize: 12.5,
@@ -11679,7 +11988,9 @@ class _DashboardPageState extends State<DashboardPage>
                   children: [
                     Expanded(
                       child: _buildPaymentInlineStatus(
-                        AppLocalizations.of(context).translate('Notification Access'),
+                        AppLocalizations.of(
+                          context,
+                        ).translate('Notification Access'),
                         Icons.notifications_none_rounded,
                         NotificationListenerService.isPermissionGranted(),
                       ),
@@ -11696,7 +12007,9 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
                 const SizedBox(height: 14),
                 LiveTranslatedText(
-                  AppLocalizations.of(context).translate('This reminder will remain visible and highlighted until both required permissions are enabled.'),
+                  AppLocalizations.of(context).translate(
+                    'This reminder will remain visible and highlighted until both required permissions are enabled.',
+                  ),
                   style: GoogleFonts.poppins(
                     fontSize: 11.5,
                     color: const Color(0xFF7F1D1D),
@@ -11710,11 +12023,14 @@ class _DashboardPageState extends State<DashboardPage>
                   child: ElevatedButton.icon(
                     onPressed: () async {
                       final notificationAccess =
-                          await requestNotificationAccessWithDisclosure(context);
+                          await requestNotificationAccessWithDisclosure(
+                            context,
+                          );
                       if (notificationAccess !=
                               NotificationAccessDisclosureResult.enabled &&
                           notificationAccess !=
-                              NotificationAccessDisclosureResult.alreadyEnabled) {
+                              NotificationAccessDisclosureResult
+                                  .alreadyEnabled) {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -11750,7 +12066,9 @@ class _DashboardPageState extends State<DashboardPage>
                     },
                     icon: const Icon(Icons.lock_open_rounded, size: 20),
                     label: LiveTranslatedText(
-                      AppLocalizations.of(context).translate('ENABLE PAYMENT DETECTION'),
+                      AppLocalizations.of(
+                        context,
+                      ).translate('ENABLE PAYMENT DETECTION'),
                       style: GoogleFonts.poppins(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
@@ -11774,8 +12092,10 @@ class _DashboardPageState extends State<DashboardPage>
                 Center(
                   child: TextButton.icon(
                     onPressed: () {
-                      Navigator.pushNamed(context, '/sales-entry')
-                          .then((_) => _loadSales());
+                      Navigator.pushNamed(
+                        context,
+                        '/sales-entry',
+                      ).then((_) => _loadSales());
                     },
                     icon: const Icon(Icons.edit_note_rounded, size: 18),
                     label: LiveTranslatedText(
@@ -12943,12 +13263,16 @@ class _DashboardPageState extends State<DashboardPage>
     // being hydrated from the canonical cloud invoice snapshot.
     final salesMetricValue = _salesHistoryHydrating
         ? '…'
-        : '₹${_formatCompactNumber(totalSales)}';
-    final ordersMetricValue =
-        _salesHistoryHydrating ? '…' : totalOrders.toString();
-    final onlineOrdersMetricValue =
-        _salesHistoryHydrating ? '…' : totalOnlineOrders.toString();
-    final lowStockCount = _lowStockProducts.length;
+        : FormatHelper.formatIndianCurrency(totalSales);
+    final ordersMetricValue = _salesHistoryHydrating
+        ? '…'
+        : totalOrders.toString();
+    final onlineOrdersMetricValue = _salesHistoryHydrating
+        ? '…'
+        : totalOnlineOrders.toString();
+    final lowStockCount = !_lowStockLoaded
+        ? (_lowStockFailed ? '!' : '…')
+        : _lowStockProducts.length.toString();
 
     return Container(
       width: double.infinity,
@@ -13001,7 +13325,10 @@ class _DashboardPageState extends State<DashboardPage>
               IconButton(
                 tooltip: 'Subscription plans',
                 onPressed: () => Navigator.pushNamed(context, '/subscriptions'),
-                icon: const Icon(Icons.workspace_premium_rounded, color: Color(0xFF4F46E5)),
+                icon: const Icon(
+                  Icons.workspace_premium_rounded,
+                  color: Color(0xFF4F46E5),
+                ),
               ),
               _buildUserAvatar(),
             ],
@@ -13038,18 +13365,18 @@ class _DashboardPageState extends State<DashboardPage>
                     child: _buildMetricCard(
                       'Total Sales',
                       salesMetricValue,
-                      Icons.attach_money,
+                      Icons.currency_rupee_rounded,
                       const Color(0xFF10B981),
                     ), // 🔒 CHANGED: "Today's Revenue" to "Total Sales"
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _buildMetricCard(
-                      'Total Orders',
+                      'Total Bills',
                       ordersMetricValue,
                       Icons.shopping_cart,
                       const Color(0xFF3B82F6),
-                    ), // 🔒 CHANGED: "Today's Orders" to "Total Bills"
+                    ),
                   ),
                 ],
               ),
@@ -13068,10 +13395,11 @@ class _DashboardPageState extends State<DashboardPage>
                   Expanded(
                     child: _buildMetricCard(
                       'Low Stock',
-                      lowStockCount.toString(),
+                      lowStockCount,
                       Icons.warning,
                       const Color(0xFFF59E0B),
-                      isWarning: lowStockCount > 0,
+                      isWarning:
+                          _lowStockLoaded && _lowStockProducts.isNotEmpty,
                     ),
                   ),
                 ],
@@ -15949,7 +16277,9 @@ class _DashboardPageState extends State<DashboardPage>
                         width: 40,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: primary ? const Color(0xFF3156A6) : const Color(0xFFF1F4F8),
+                          color: primary
+                              ? const Color(0xFF3156A6)
+                              : const Color(0xFFF1F4F8),
                           borderRadius: BorderRadius.circular(11),
                         ),
                         alignment: Alignment.center,
@@ -15960,13 +16290,26 @@ class _DashboardPageState extends State<DashboardPage>
                           right: -6,
                           top: -6,
                           child: Container(
-                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: const BoxDecoration(color: Color(0xFFB42318), shape: BoxShape.circle),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFB42318),
+                              shape: BoxShape.circle,
+                            ),
                             alignment: Alignment.center,
                             child: Text(
                               badgeCount > 99 ? '99+' : badgeCount.toString(),
-                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
@@ -15982,10 +16325,14 @@ class _DashboardPageState extends State<DashboardPage>
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
-                          color: primary ? const Color(0xFF3156A6) : const Color(0xFF344054),
+                          color: primary
+                              ? const Color(0xFF3156A6)
+                              : const Color(0xFF344054),
                           fontSize: 9,
                           height: 1.05,
-                          fontWeight: primary ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight: primary
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
                       ),
                     ),
@@ -16013,7 +16360,11 @@ class _DashboardPageState extends State<DashboardPage>
             leading: Icon(icon, color: const Color(0xFF475467), size: 21),
             title: LiveTranslatedText(
               label,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF1D2939), fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1D2939),
+                fontWeight: FontWeight.w500,
+              ),
             ),
             onTap: onTap,
           );
@@ -16032,7 +16383,11 @@ class _DashboardPageState extends State<DashboardPage>
                       const Expanded(
                         child: LiveTranslatedText(
                           'More options',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF101828)),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF101828),
+                          ),
                         ),
                       ),
                       IconButton(
@@ -16043,10 +16398,14 @@ class _DashboardPageState extends State<DashboardPage>
                     ],
                   ),
                 ),
-                option(Icons.translate_rounded, AppLocalizations.of(context).language, () {
+                option(
+                  Icons.translate_rounded,
+                  AppLocalizations.of(context).language,
+                  () {
                   Navigator.pop(sheetContext);
                   _showLanguageDialog();
-                }),
+                  },
+                ),
                 if (!_isStaffMode)
                   option(Icons.lock_clock_outlined, 'Daily Closing', () {
                     Navigator.pop(sheetContext);
@@ -16061,10 +16420,14 @@ class _DashboardPageState extends State<DashboardPage>
                   Navigator.pushNamed(context, '/more');
                 }),
                 const Divider(height: 8, indent: 16, endIndent: 16),
-                option(Icons.logout_rounded, AppLocalizations.of(context).logout, () {
+                option(
+                  Icons.logout_rounded,
+                  AppLocalizations.of(context).logout,
+                  () {
                   Navigator.pop(sheetContext);
                   _performLogout(context);
-                }),
+                  },
+                ),
               ],
             ),
           ),
@@ -16092,7 +16455,11 @@ class _DashboardPageState extends State<DashboardPage>
           padding: const EdgeInsets.fromLTRB(5, 7, 5, 4),
           decoration: BoxDecoration(
             color: navigationSurface,
-            border: Border(top: BorderSide(color: appColors.outlineVariant.withValues(alpha: 0.7))),
+            border: Border(
+              top: BorderSide(
+                color: appColors.outlineVariant.withValues(alpha: 0.7),
+              ),
+            ),
           ),
           child: Row(
             children: [
@@ -16101,7 +16468,10 @@ class _DashboardPageState extends State<DashboardPage>
                 label: 'New Bill',
                 color: const Color(0xFF3156A6),
                 primary: true,
-                onTap: () => Navigator.pushNamed(context, '/sales-entry').then((_) => _loadSales()),
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  '/sales-entry',
+                ).then((_) => _loadSales()),
               ),
               _buildDashboardDockItem(
                 icon: Icons.local_shipping_outlined,
@@ -16151,6 +16521,14 @@ class _DashboardPageState extends State<DashboardPage>
               children: [
                 // 0. GREETING HEADER
                 _buildGreetingHeader(),
+
+                // Put the owner's daily results and actions before setup and
+                // reporting content so the most time-sensitive work is visible
+                // near the top of the dashboard.
+                _buildLowStockBanner(),
+                if (!_isStaffMode) _buildPendingOnlineOrdersNotice(),
+                if (_pendingInvoices.isNotEmpty) _buildPendingInvoices(),
+                if (!_isStaffMode) _buildModernPerformanceOverview(),
 
                 // Keep the local payment detection history easy to reach.
                 Card(
@@ -16323,9 +16701,6 @@ class _DashboardPageState extends State<DashboardPage>
                 if (!_isStaffMode) _buildDailyHealthScoreCard(),
 
                 // Today's business summary was removed to keep the dashboard lean.
-
-                // 0.3 LOW STOCK ALERT (NEW)
-                _buildLowStockBanner(),
                 if (!_isStaffMode) _buildMarketingBanner(),
 
                 // 0.4 ASK RETAIL MIND (AI NATURAL LANGUAGE QUERY)
@@ -16344,9 +16719,6 @@ class _DashboardPageState extends State<DashboardPage>
                   _buildGettingStartedSection(),
                   const SizedBox(height: 32),
                 ],
-
-                // 2.5 UPCOMING DEADLINES (Payment Tracking)
-                if (_pendingInvoices.isNotEmpty) _buildPendingInvoices(),
 
                 // 3. SHOP SETUP ALERT (Only if not setup AND has sales - otherwise redundant with getting started)
                 if (!_isShopSetup && sales.isNotEmpty)
@@ -18076,7 +18448,8 @@ class _ShopSettingsBottomSheetState extends State<_ShopSettingsBottomSheet> {
                             child: Image.memory(
                               bytes,
                               fit: BoxFit.contain,
-                              cacheWidth: LowMemoryPerformance.decodeCacheDimension(
+                              cacheWidth:
+                                  LowMemoryPerformance.decodeCacheDimension(
                                 MediaQuery.of(context).size.width - 40,
                                 MediaQuery.of(context).devicePixelRatio,
                                 minPixels: 320,
