@@ -8673,6 +8673,7 @@ class _DashboardPageState extends State<DashboardPage>
     final sortedProds = totals.keys.toList()
       ..sort((a, b) => totals[b]!.compareTo(totals[a]!));
     final selected = sortedProds.take(5).toList();
+    final compactMonthLabels = MediaQuery.sizeOf(context).width < 460;
 
     const monthNames = [
       'Jan',
@@ -8758,13 +8759,14 @@ class _DashboardPageState extends State<DashboardPage>
                       interval: 1,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx >= 1 && idx <= 12) {
+                        if (idx >= 1 && idx <= 12 &&
+                            (!compactMonthLabels || idx.isOdd)) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: LiveTranslatedText(
                               monthNames[idx - 1],
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: compactMonthLabels ? 9 : 11,
                                 color: Color(0xFF6B7280),
                               ),
                             ),
@@ -8772,7 +8774,7 @@ class _DashboardPageState extends State<DashboardPage>
                         }
                         return const LiveTranslatedText('');
                       },
-                      reservedSize: 28,
+                      reservedSize: compactMonthLabels ? 22 : 28,
                     ),
                   ),
                   leftTitles: AxisTitles(
@@ -8839,12 +8841,17 @@ class _DashboardPageState extends State<DashboardPage>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    LiveTranslatedText(
-                      prod,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF1F2937),
-                        fontWeight: FontWeight.w500,
+                    SizedBox(
+                      width: math.min(MediaQuery.sizeOf(context).width * 0.42, 170.0),
+                      child: LiveTranslatedText(
+                        prod,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF1F2937),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -15945,30 +15952,156 @@ class _DashboardPageState extends State<DashboardPage>
         'en-IN';
   }
 
-  Widget _buildDashboardDockIcon(
-    IconData icon,
-    String label,
-    Color color, {
-    double size = 22,
-    bool labelOnPrimary = false,
+  Widget _buildDashboardDockItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    bool primary = false,
+    int badgeCount = 0,
   }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: size),
-        const SizedBox(height: 3),
-        LiveTranslatedText(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.poppins(
-            color: labelOnPrimary ? Colors.white : const Color(0xFF334155),
-            fontSize: 8,
-            fontWeight: FontWeight.w600,
-            height: 1,
+    final foreground = primary ? Colors.white : color;
+    return Expanded(
+      child: Tooltip(
+        message: label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: primary ? const Color(0xFF3156A6) : const Color(0xFFF1F4F8),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(icon, color: foreground, size: 20),
+                      ),
+                      if (badgeCount > 0)
+                        Positioned(
+                          right: -6,
+                          top: -6,
+                          child: Container(
+                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: const BoxDecoration(color: Color(0xFFB42318), shape: BoxShape.circle),
+                            alignment: Alignment.center,
+                            child: Text(
+                              badgeCount > 99 ? '99+' : badgeCount.toString(),
+                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 23,
+                    child: Center(
+                      child: LiveTranslatedText(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          color: primary ? const Color(0xFF3156A6) : const Color(0xFF344054),
+                          fontSize: 9,
+                          height: 1.05,
+                          fontWeight: primary ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  void _showDashboardActionsSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        Widget option(IconData icon, String label, VoidCallback onTap) {
+          return ListTile(
+            dense: true,
+            leading: Icon(icon, color: const Color(0xFF475467), size: 21),
+            title: LiveTranslatedText(
+              label,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF1D2939), fontWeight: FontWeight.w500),
+            ),
+            onTap: onTap,
+          );
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 6),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: LiveTranslatedText(
+                          'More options',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF101828)),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                      ),
+                    ],
+                  ),
+                ),
+                option(Icons.translate_rounded, AppLocalizations.of(context).language, () {
+                  Navigator.pop(sheetContext);
+                  _showLanguageDialog();
+                }),
+                if (!_isStaffMode)
+                  option(Icons.lock_clock_outlined, 'Daily Closing', () {
+                    Navigator.pop(sheetContext);
+                    _showDailyClosingSheet();
+                  }),
+                option(Icons.help_outline_rounded, 'How to Use', () {
+                  Navigator.pop(sheetContext);
+                  _showHowToUseDialog(context);
+                }),
+                option(Icons.settings_outlined, 'More & Settings', () {
+                  Navigator.pop(sheetContext);
+                  Navigator.pushNamed(context, '/more');
+                }),
+                const Divider(height: 8, indent: 16, endIndent: 16),
+                option(Icons.logout_rounded, AppLocalizations.of(context).logout, () {
+                  Navigator.pop(sheetContext);
+                  _performLogout(context);
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -15985,291 +16118,50 @@ class _DashboardPageState extends State<DashboardPage>
 
     return Scaffold(
       backgroundColor: surfaceColor,
-      bottomNavigationBar: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+      bottomNavigationBar: SafeArea(
+        top: false,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(5, 7, 5, 4),
           decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, -5),
+            color: navigationSurface,
+            border: Border(top: BorderSide(color: appColors.outlineVariant.withValues(alpha: 0.7))),
+          ),
+          child: Row(
+            children: [
+              _buildDashboardDockItem(
+                icon: Icons.add_shopping_cart_rounded,
+                label: 'New Bill',
+                color: const Color(0xFF3156A6),
+                primary: true,
+                onTap: () => Navigator.pushNamed(context, '/sales-entry').then((_) => _loadSales()),
+              ),
+              _buildDashboardDockItem(
+                icon: Icons.local_shipping_outlined,
+                label: 'Online Orders',
+                color: const Color(0xFFB54708),
+                badgeCount: _onlinePendingOrders,
+                onTap: () => Navigator.pushNamed(context, '/online-orders'),
+              ),
+              _buildDashboardDockItem(
+                icon: Icons.card_giftcard_outlined,
+                label: 'Gift Card',
+                color: const Color(0xFF475467),
+                onTap: _openGiftCardFromPrefs,
+              ),
+              if (!_isStaffMode)
+                _buildDashboardDockItem(
+                  icon: Icons.query_stats_rounded,
+                  label: 'Ask AI',
+                  color: const Color(0xFF475467),
+                  onTap: () => Navigator.pushNamed(context, '/query'),
+                ),
+              _buildDashboardDockItem(
+                icon: Icons.more_horiz_rounded,
+                label: 'More',
+                color: const Color(0xFF475467),
+                onTap: _showDashboardActionsSheet,
               ),
             ],
-            border: Border(
-              top: BorderSide(
-                color: appColors.outlineVariant.withValues(alpha: 0.55),
-              ),
-            ),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: [
-                // 1. Add Sale
-                GestureDetector(
-                  onTap: () => Navigator.pushNamed(
-                    context,
-                    '/sales-entry',
-                  ).then((_) => _loadSales()),
-                  child: Tooltip(
-                    message: AppLocalizations.of(context).addSale,
-                    child: Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF6366F1,
-                            ).withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: _buildDashboardDockIcon(
-                        Icons.add_shopping_cart,
-                        'New Bill',
-                        Colors.white,
-                        size: 23,
-                        labelOnPrimary: true,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 1.2 Online Orders
-                GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/online-orders'),
-                  child: Tooltip(
-                    message: 'Online Orders',
-                    child: Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(11),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFFFB300,
-                            ).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: const Color(
-                                0xFFFFB300,
-                              ).withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: _buildDashboardDockIcon(
-                            Icons.local_shipping,
-                            'Online Orders',
-                            const Color(0xFFFFB300),
-                            size: 23,
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.redAccent,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const LiveTranslatedText(
-                              '1',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // 2. Gift Card
-                GestureDetector(
-                  onTap: _openGiftCardFromPrefs,
-                  child: Tooltip(
-                    message: 'Gift Card',
-                    child: Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEC4899).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFFEC4899).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: _buildDashboardDockIcon(
-                        Icons.card_giftcard_rounded,
-                        'Gift Card',
-                        const Color(0xFFEC4899),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 3. My AI Analytics
-                if (!_isStaffMode) ...[
-                  GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, '/query'),
-                    child: Tooltip(
-                      message: 'My AI Analytics',
-                      child: Container(
-                        padding: const EdgeInsets.all(11),
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF7C3AED,
-                          ).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: const Color(
-                              0xFF7C3AED,
-                            ).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: _buildDashboardDockIcon(
-                          Icons.analytics_rounded,
-                          'Ask AI',
-                          const Color(0xFF7C3AED),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                // 4. Language
-                GestureDetector(
-                  onTap: _showLanguageDialog,
-                  child: Tooltip(
-                    message: AppLocalizations.of(context).language,
-                    child: Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: _buildDashboardDockIcon(
-                        Icons.translate,
-                        'Language',
-                        const Color(0xFF6366F1),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 5. Daily Closing
-                if (!_isStaffMode)
-                  GestureDetector(
-                    onTap: _showDailyClosingSheet,
-                    child: Tooltip(
-                      message: 'Daily Closing',
-                      child: Container(
-                        padding: const EdgeInsets.all(11),
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF0D9488,
-                          ).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: const Color(
-                              0xFF0D9488,
-                            ).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: _buildDashboardDockIcon(
-                          Icons.lock_clock_rounded,
-                          'Daily Closing',
-                          const Color(0xFF0D9488),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (!_isStaffMode) const SizedBox(width: 8),
-                // 6. How to Use
-                GestureDetector(
-                  onTap: () => _showHowToUseDialog(context),
-                  child: Tooltip(
-                    message: 'How to Use',
-                    child: Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: _buildDashboardDockIcon(
-                        Icons.help_outline,
-                        'Help',
-                        const Color(0xFF10B981),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // More & Settings
-                GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/more'),
-                  child: Tooltip(
-                    message: 'More & Settings',
-                    child: Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF334155).withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(
-                            0xFF334155,
-                          ).withValues(alpha: 0.20),
-                        ),
-                      ),
-                      child: _buildDashboardDockIcon(
-                        Icons.grid_view_rounded,
-                        'More',
-                        const Color(0xFF334155),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 7. Logout
-                GestureDetector(
-                  onTap: () => _performLogout(context),
-                  child: Tooltip(
-                    message: AppLocalizations.of(context).logout,
-                    child: Container(
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: _buildDashboardDockIcon(
-                        Icons.logout_rounded,
-                        'Logout',
-                        const Color(0xFFEF4444),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
