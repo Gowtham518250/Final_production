@@ -40,7 +40,7 @@ class ProductPriceAnalytics {
   }
 
   static String _normalizedName(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+      value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
   static List<ProductPriceBucket> aggregateSales(Iterable<dynamic> sales) {
     final grouped = <String, Map<String, dynamic>>{};
