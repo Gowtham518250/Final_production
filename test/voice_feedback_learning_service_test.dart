@@ -17,7 +17,6 @@ void main() {
         correctedItemName: 'బూస్ట్',
         languageCode: 'te',
         originalConfidence: 0.72,
-        syncToShop: false,
       );
     }
 
