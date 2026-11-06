@@ -13,14 +13,18 @@ import android.os.Environment
 import android.os.Message
 import android.provider.MediaStore
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -36,8 +40,9 @@ import java.util.Locale
 
 class CreativeStudioActivity : ComponentActivity() {
     companion object {
+        private const val TAG = "RetailMindCreative"
         private const val CREATIVE_STUDIO_URL =
-            "https://retail-mind-hpx3.onrender.com/creative-studio"
+            "https://retail-mind-hpx3.onrender.com/creative-studio?platform=android"
         private const val BACKEND_HOST = "retail-mind-hpx3.onrender.com"
         private const val STORAGE_PERMISSION_REQUEST = 7402
         private const val MAX_EXPORT_BYTES = 40 * 1024 * 1024
@@ -119,6 +124,33 @@ class CreativeStudioActivity : ComponentActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                Log.i(TAG, "Page loading: ${url ?: "unknown URL"}")
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                Log.i(TAG, "Page loaded: ${url ?: "unknown URL"}; title=${view?.title ?: "unknown"}")
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                if (request?.isForMainFrame == true) {
+                    Log.e(TAG, "Main-frame WebView error ${error?.errorCode}: ${error?.description}; url=${request.url}")
+                } else {
+                    Log.w(TAG, "WebView resource error ${error?.errorCode}: ${error?.description}; url=${request?.url}")
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                response: WebResourceResponse?
+            ) {
+                Log.w(TAG, "WebView HTTP ${response?.statusCode}: ${request?.url}")
+            }
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
                 request: WebResourceRequest?
@@ -143,6 +175,11 @@ class CreativeStudioActivity : ComponentActivity() {
         }
 
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                logConsoleMessage(consoleMessage)
+                return true
+            }
+
             override fun onCreateWindow(
                 view: WebView?,
                 isDialog: Boolean,
@@ -197,6 +234,11 @@ class CreativeStudioActivity : ComponentActivity() {
         }
 
         popup.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                logConsoleMessage(consoleMessage)
+                return true
+            }
+
             override fun onCloseWindow(window: WebView?) {
                 dialog.dismiss()
             }
@@ -212,6 +254,16 @@ class CreativeStudioActivity : ComponentActivity() {
         resultMsg?.sendToTarget()
         dialog.show()
         return true
+    }
+
+    private fun logConsoleMessage(consoleMessage: ConsoleMessage?) {
+        if (consoleMessage == null) return
+        val message = "${consoleMessage.message()} (${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
+        when (consoleMessage.messageLevel()) {
+            ConsoleMessage.MessageLevel.ERROR -> Log.e(TAG, message)
+            ConsoleMessage.MessageLevel.WARNING -> Log.w(TAG, message)
+            else -> Log.d(TAG, message)
+        }
     }
 
     private fun openExternal(uri: Uri): Boolean {
