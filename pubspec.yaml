@@ -37,6 +37,8 @@ dependencies:
     path: packages/notification_listener_service
   permission_handler: ^12.0.1
   url_launcher: ^6.3.0
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
   connectivity_plus: ^5.0.2
   device_info_plus: ^10.1.0
   crypto: ^3.0.3
