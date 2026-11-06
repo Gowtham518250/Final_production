@@ -132,12 +132,20 @@ class SyncQueueManager {
         final phone = data['customer_phone']?.toString().trim() ?? '';
         final customerId = int.tryParse(data['customer_id']?.toString() ?? '');
         final dueDate = data['due_date']?.toString().trim() ?? '';
+        final parsedDate = DateTime.tryParse(dueDate);
+        final validIsoDate = dueDate.length == 10 &&
+            dueDate[4] == '-' &&
+            dueDate[7] == '-' &&
+            parsedDate != null &&
+            parsedDate.toIso8601String().startsWith(dueDate);
         final hasCustomer = phone.isNotEmpty ||
             (customerId != null && customerId > 0);
-        return hasCustomer &&
-            RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}
-  }
+        return hasCustomer && validIsoDate;
 
+      default:
+        return true;
+    }
+  }
   static String _businessIdentifier(Map<dynamic, dynamic> data) {
     String firstNonEmpty(Iterable<dynamic> values) {
       for (final value in values) {
