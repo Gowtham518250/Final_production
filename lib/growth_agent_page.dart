@@ -933,10 +933,30 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
       }
       if (offerValidUntil != null) caption += '\nOffer valid until: ' + dateText;
-      final address = _shopAddressText();
-      final phone = _shopPhoneText();
-      if (address.isNotEmpty) caption += '\nShop location: ' + address;
-      if (phone.isNotEmpty) caption += '\nContact: ' + phone;
+    }
+    // Keep verified facts in the caption even when the owner edits its wording.
+    if (discountPrice != null && originalPrice != null) {
+      final percent = GrowthMarketingPricing.discountPercent(originalPrice, discountPrice);
+      if (!caption.contains('Original price:')) {
+        caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
+      }
+      if (!caption.contains('Discounted price:')) {
+        caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
+      }
+      if (percent != null && !caption.contains('% OFF')) {
+        caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
+      }
+    }
+    if (offerValidUntil != null && !caption.contains('Offer valid until:')) {
+      caption += '\nOffer valid until: ' + dateText;
+    }
+    final address = _shopAddressText();
+    final phone = _shopPhoneText();
+    if (address.isNotEmpty && !caption.contains(address)) {
+      caption += '\nShop location: ' + address;
+    }
+    if (phone.isNotEmpty && !caption.contains(phone)) {
+      caption += '\nContact: ' + phone;
       _captionController.text = caption;
     }
 
@@ -952,6 +972,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..['headline'] = _headlineController.text.trim()
       ..['caption'] = caption
       ..['offer'] = offer
+      ..['trigger_type'] = discountPrice != null || offer.isNotEmpty ? 'owner_offer' : 'manual'
       ..['template'] = _template
       ..['ad_format'] = _adFormat
       ..['content_version'] = (_number(current['content_version']).toInt()).clamp(1, 2147483646) + 1
