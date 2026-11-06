@@ -808,26 +808,59 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
     final shopName = _shopController.text.trim();
     final offer = _offerController.text.trim();
+    final originalPrice = current['original_price'] is num
+        ? (current['original_price'] as num).toDouble()
+        : current['product_price'] is num
+            ? (current['product_price'] as num).toDouble()
+            : null;
+    final discountText = _discountPriceController.text.trim();
+    double? discountPrice;
+    if (discountText.isNotEmpty) {
+      discountPrice = double.tryParse(discountText);
+      if (discountPrice == null || originalPrice == null || discountPrice < 0 || discountPrice >= originalPrice) {
+        _showMessage('Discounted price must be valid and lower than the original product price.');
+        return null;
+      }
+    }
+    DateTime? offerValidUntil;
+    if (_offerValidUntilController.text.trim().isNotEmpty) {
+      offerValidUntil = DateTime.tryParse(_offerValidUntilController.text.trim());
+      if (offerValidUntil == null || discountPrice == null) {
+        _showMessage('Enter a valid offer end date and discounted price.');
+        return null;
+      }
+    }
+
     var caption = _captionController.text.trim();
     final originalCaption = current['caption']?.toString().trim() ?? '';
     final captionWasNotManuallyEdited = caption == originalCaption;
     final shopChanged = shopName != (current['shop_name']?.toString() ?? '');
     final offerChanged = offer != (current['offer']?.toString() ?? '');
+    final discountChanged = discountPrice != (current['discount_price'] is num ? (current['discount_price'] as num).toDouble() : null);
+    final dateText = offerValidUntil == null ? '' : _formatDate(offerValidUntil);
+    final dateChanged = dateText != (current['offer_valid_until']?.toString() ?? '');
 
-    // Keep the default caption consistent with shop/offer edits. If the owner
-    // has written a custom caption, preserve their wording.
-    if (captionWasNotManuallyEdited && (shopChanged || offerChanged)) {
-      final rawPrice = current['product_price'];
-      final price = rawPrice is num ? rawPrice.toDouble() : null;
+    if (captionWasNotManuallyEdited && (shopChanged || offerChanged || discountChanged || dateChanged)) {
       caption = GrowthAdCopy.caption(
         shopName: shopName,
         goal: current['goal']?.toString() ?? 'nearby',
         language: current['language']?.toString() ?? 'en',
         productName: current['product_name']?.toString(),
-        price: price,
+        price: discountPrice ?? originalPrice,
         offer: offer,
         offerCode: current['offer_code']?.toString() ?? '',
       );
+      if (discountPrice != null && originalPrice != null) {
+        final percent = ((originalPrice - discountPrice) / originalPrice) * 100;
+        caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
+        caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
+        caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
+      }
+      if (offerValidUntil != null) caption += '\nOffer valid until: ' + dateText;
+      final address = _shopAddressText();
+      final phone = _shopPhoneText();
+      if (address.isNotEmpty) caption += '\nShop location: ' + address;
+      if (phone.isNotEmpty) caption += '\nContact: ' + phone;
       _captionController.text = caption;
     }
 
@@ -836,11 +869,101 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..['headline'] = _headlineController.text.trim()
       ..['caption'] = caption
       ..['offer'] = offer
+      ..['original_price'] = originalPrice
+      ..['product_price'] = originalPrice
+      ..['discount_price'] = discountPrice
+      ..['discount_percent'] = discountPrice == null || originalPrice == null || originalPrice <= 0
+          ? null
+          : ((originalPrice - discountPrice) / originalPrice) * 100
+      ..['offer_valid_until'] = offerValidUntil == null ? null : dateText
       ..['template'] = _template
-      ..['ad_format'] = _adFormat;
+      ..['ad_format'] = _adFormat
+      ..['content_version'] = (_number(current['content_version']).toInt()).clamp(1, 2147483646) + 1
+      ..['approved_version'] = null
+      ..['approved_by'] = null
+      ..['approved_at'] = null
+      ..['status'] = 'PENDING_APPROVAL'
+      ..['updated_at'] = DateTime.now().toIso8601String()
+      ..['requires_owner_review'] = true
+      ..['pending_sync'] = true;
     _currentDraft = updated;
     await _persistCampaign(updated);
     return updated;
+  }
+
+  Future<void> _approveCampaign(Map<String, dynamic> campaign) async {
+    if (_busy) return;
+    final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
+    final version = _number(campaign['content_version']).toInt();
+    if (id.isEmpty || version < 1 || campaign['pending_sync'] == true) {
+      _showMessage('Sync this campaign with the server before approving it.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final response = await ApiClient.postJson(
+        '/growth/marketing/campaigns/' + Uri.encodeComponent(id) + '/approve',
+        <String, dynamic>{'expected_version': version},
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw StateError('Approval failed. Refresh the campaign and review its latest version.');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) throw StateError('The approval response was not recognized.');
+      final approved = Map<String, dynamic>.from(decoded)..['pending_sync'] = false;
+      _campaigns.removeWhere((item) => (item['campaign_id'] ?? item['id'])?.toString() == id);
+      _campaigns.insert(0, approved);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
+      if (_currentDraft != null && (_currentDraft!['id'] ?? _currentDraft!['campaign_id'])?.toString() == id) {
+        _currentDraft = approved;
+      }
+      if (mounted) setState(() {});
+      _showMessage('Campaign approved. You can now share the approved poster manually.');
+    } catch (error) {
+      _showMessage(error is StateError ? error.message : 'Could not approve this campaign.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _rejectCampaign(Map<String, dynamic> campaign) async {
+    if (_busy) return;
+    final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
+    final version = _number(campaign['content_version']).toInt();
+    if (id.isEmpty || version < 1 || campaign['pending_sync'] == true) {
+      _showMessage('Sync this campaign with the server before rejecting it.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final response = await ApiClient.postJson(
+        '/growth/marketing/campaigns/' + Uri.encodeComponent(id) + '/reject',
+        <String, dynamic>{
+          'expected_version': version,
+          'reason': 'Owner rejected after reviewing the campaign.',
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw StateError('Rejection failed. Refresh the campaign and try again.');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) throw StateError('The rejection response was not recognized.');
+      final rejected = Map<String, dynamic>.from(decoded)..['pending_sync'] = false;
+      _campaigns.removeWhere((item) => (item['campaign_id'] ?? item['id'])?.toString() == id);
+      _campaigns.insert(0, rejected);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
+      if (_currentDraft != null && (_currentDraft!['id'] ?? _currentDraft!['campaign_id'])?.toString() == id) {
+        _currentDraft = rejected;
+      }
+      if (mounted) setState(() {});
+      _showMessage('Campaign rejected. It will not be eligible for sharing until a new version is reviewed.');
+    } catch (error) {
+      _showMessage(error is StateError ? error.message : 'Could not reject this campaign.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _sharePoster() async {
@@ -933,7 +1056,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     setState(() {
       _currentDraft = draft;
       _shopController.text = draft['shop_name']?.toString() ?? 'My Shop';
+      _shopDetails = draft['shop_details'] is Map
+          ? Map<String, dynamic>.from(draft['shop_details'] as Map)
+          : _shopDetails;
       _offerController.text = draft['offer']?.toString() ?? '';
+      _discountPriceController.text = draft['discount_price']?.toString() ?? '';
+      _offerValidUntilController.text = draft['offer_valid_until']?.toString() ?? '';
       _headlineController.text = draft['headline']?.toString() ?? '';
       _captionController.text = draft['caption']?.toString() ?? '';
       final goal = draft['goal']?.toString() ?? 'nearby';
