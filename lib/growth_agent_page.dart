@@ -1140,60 +1140,6 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return latest;
   }
 
-  Future<void> _sharePoster() async {
-    final draft = _currentDraft;
-    if (_busy || draft == null) return;
-    final version = _number(draft['content_version']).toInt();
-    final approvedVersion = _number(draft['approved_version']).toInt();
-    if (draft['status'] != 'APPROVED' || version < 1 || approvedVersion != version || _hasUnsavedCampaignEdits) {
-      _showMessage('Only the unchanged, server-approved campaign version can be shared.');
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final campaignId = (draft['campaign_id'] ?? draft['id']).toString();
-      final latest = await _refreshCampaignFromServer(campaignId);
-      if (latest == null ||
-          latest['status'] != 'APPROVED' ||
-          _number(latest['content_version']).toInt() != version ||
-          _number(latest['approved_version']).toInt() != version) {
-        _showMessage('This campaign version is no longer approved. Refresh and review the latest version.');
-        return;
-      }
-      if (_hasUnsavedCampaignEdits) {
-        _showMessage('This campaign has unsaved edits. Save the new version and approve it before sharing.');
-        return;
-      }
-      await WidgetsBinding.instance.endOfFrame;
-      final renderObject = _posterKey.currentContext?.findRenderObject();
-      if (renderObject is! RenderRepaintBoundary) {
-        throw StateError('Advertisement preview is not ready yet.');
-      }
-      final logicalWidth = renderObject.size.width;
-      final pixelRatio = logicalWidth > 0
-          ? (1080.0 / logicalWidth).clamp(2.0, 5.0).toDouble()
-          : math.max(3.0, MediaQuery.of(context).devicePixelRatio).toDouble();
-      final image = await renderObject.toImage(pixelRatio: pixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
-      if (byteData == null) throw StateError('Could not render poster image.');
-      final Uint8List bytes = byteData.buffer.asUint8List();
-      final directory = await getTemporaryDirectory();
-      final id = (draft['campaign_id'] ?? draft['id']).toString();
-      final file = File(directory.path + '/retailmind_ad_' + id + '.png');
-      await file.writeAsBytes(bytes, flush: true);
-      await Share.shareXFiles(
-        <XFile>[XFile(file.path)],
-        text: _captionController.text.trim(),
-        subject: 'Advertisement from ' + _shopController.text.trim(),
-      );
-    } catch (_) {
-      _showMessage('Could not share the approved poster. Please try again.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _shareCaption(Map<String, dynamic> campaign) async {
     final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
     final version = _number(campaign['content_version']).toInt();
