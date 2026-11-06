@@ -6345,8 +6345,12 @@ class PaymentDetectionService {
       'decision': event.decision.name,
       // A detector event must never self-assert merchant/provider verification.
       'verification_status': 'unverified',
-      'source_event_hash': event.sourceEventFingerprint ??
-          sha256.convert(utf8.encode(event.id)).toString(),
+      // The backend column and request schema allow exactly 64 characters.
+      // sourceEventFingerprint adds a "source_event_" display prefix, so hash
+      // the unprefixed source identity here to avoid a 422 on notification events.
+      'source_event_hash': sha256
+          .convert(utf8.encode(event.sourceEventIdentity ?? event.id))
+          .toString(),
       'detected_at': (event.sourceTimestamp ?? event.timestamp).toIso8601String(),
     };
   }
