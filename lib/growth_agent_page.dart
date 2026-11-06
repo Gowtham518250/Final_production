@@ -290,50 +290,100 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       return;
     }
 
-    final product = _selectedProduct;
-    final now = DateTime.now();
-    final code = GrowthAdCopy.offerCode(now);
-    final goalText = _goal;
-    final productName = product?['name']?.toString() ?? '';
-    final price = _productPrice(product);
-    final headline = GrowthAdCopy.headline(_goal, _language);
-    final caption = GrowthAdCopy.caption(
-      shopName: shop,
-      goal: _goal,
-      language: _language,
-      productName: productName,
-      price: price,
-      offer: _offerController.text,
-      offerCode: code,
-    );
+    setState(() => _busy = true);
+    try {
+      final product = _selectedProduct;
+      final now = DateTime.now();
+      final code = GrowthAdCopy.offerCode(now);
+      final productName = product?['name']?.toString() ?? '';
+      final price = _productPrice(product);
+      var headline = GrowthAdCopy.headline(_goal, _language);
+      var caption = GrowthAdCopy.caption(
+        shopName: shop,
+        goal: _goal,
+        language: _language,
+        productName: productName,
+        price: price,
+        offer: _offerController.text,
+        offerCode: code,
+      );
+      var generationSource = 'local_template';
+      String? authoritativeShopName;
 
-    final draft = <String, dynamic>{
-      'id': now.microsecondsSinceEpoch.toString(),
-      'shop_name': shop,
-      'goal': goalText,
-      'language': _language,
-      'template': _template,
-      'ad_format': _adFormat,
-      'product_name': productName,
-      'product_price': price,
-      'headline': headline,
-      'caption': caption,
-      'offer': _offerController.text.trim(),
-      'offer_code': code,
-      'created_at': now.toIso8601String(),
-      'redemptions': 0,
-      'tracking_mode': 'manual_local',
-    };
+      // The backend resolves the authenticated owner's profile and product
+      // record itself. A client cannot request another shop's product copy.
+      try {
+        final rawProductId = product?['id'] ?? product?['product_id'];
+        final productId = rawProductId == null
+            ? null
+            : int.tryParse(rawProductId.toString());
+        final response = await ApiClient.postJson(
+          '/growth/marketing/generate',
+          <String, dynamic>{
+            'goal': _goal,
+            'language': _language,
+            'ad_format': _adFormat,
+            'product_id': productId,
+            'offer': _offerController.text.trim(),
+            'offer_code': code,
+          },
+        ).timeout(const Duration(seconds: 18));
 
-    setState(() {
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map) {
+            final data = Map<String, dynamic>.from(decoded);
+            final serverHeadline = data['headline']?.toString().trim() ?? '';
+            final serverCaption = data['caption']?.toString().trim() ?? '';
+            if (serverHeadline.isNotEmpty && serverCaption.isNotEmpty) {
+              headline = serverHeadline;
+              caption = serverCaption;
+              generationSource = data['generation_source']?.toString() ?? 'server';
+              authoritativeShopName = data['shop_name']?.toString();
+            }
+          }
+        }
+      } catch (_) {
+        // Keep the offline-safe, deterministic local draft when API/AI is down.
+      }
+
+      final draft = <String, dynamic>{
+        'id': now.microsecondsSinceEpoch.toString(),
+        'shop_name': (authoritativeShopName?.trim().isNotEmpty ?? false)
+            ? authoritativeShopName!.trim()
+            : shop,
+        'goal': _goal,
+        'language': _language,
+        'template': _template,
+        'ad_format': _adFormat,
+        'product_name': productName,
+        'product_price': price,
+        'headline': headline,
+        'caption': caption,
+        'offer': _offerController.text.trim(),
+        'offer_code': code,
+        'created_at': now.toIso8601String(),
+        'redemptions': 0,
+        'tracking_mode': 'manual_local',
+        'generation_source': generationSource,
+        'requires_owner_review': true,
+      };
+
+      if (authoritativeShopName?.trim().isNotEmpty ?? false) {
+        _shopController.text = authoritativeShopName!.trim();
+      }
       _currentDraft = draft;
       _headlineController.text = headline;
       _captionController.text = caption;
-      _busy = true;
-    });
-    try {
       await _persistCampaign(draft);
-      _showMessage('Ad draft saved on this device. No advertising spend used.');
+
+      _showMessage(
+        generationSource == 'groq'
+            ? 'AI draft generated from your shop data. Review every detail before sharing.'
+            : generationSource == 'template_fallback'
+                ? 'Draft created with safe fallback copy. Review product details before sharing.'
+                : 'Offline ad draft saved on this device. No advertising spend used.',
+      );
     } catch (_) {
       _showMessage('Ad created, but the draft could not be saved.');
     } finally {
