@@ -370,10 +370,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         : double.tryParse(enteredDiscountText);
     final savedProductId = draft['product_id']?.toString() ?? '';
     final savedProductName = draft['product_name']?.toString() ?? '';
+    final savedProductPrice = draft['original_price'] is num
+        ? (draft['original_price'] as num).toDouble()
+        : draft['product_price'] is num
+            ? (draft['product_price'] as num).toDouble()
+            : null;
     final selectedProduct = _selectedProduct;
     final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
     final selectedProductId = selectedRawId?.toString() ?? '';
     final selectedProductName = selectedProduct?['name']?.toString() ?? '';
+    final selectedProductPrice = _productPrice(selectedProduct);
     return
         _shopController.text.trim() != (draft['shop_name']?.toString() ?? '') ||
         _headlineController.text.trim() != (draft['headline']?.toString() ?? '') ||
@@ -386,7 +392,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _template != (draft['template']?.toString() ?? 'bold') ||
         _adFormat != (draft['ad_format']?.toString() ?? 'feed') ||
         selectedProductId != savedProductId ||
-        selectedProductName != savedProductName;
+        selectedProductName != savedProductName ||
+        selectedProductPrice != savedProductPrice;
   }
 
   Map<String, dynamic>? get _selectedProduct {
@@ -876,13 +883,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final productChanged = selectedProductId != savedProductId ||
         selectedProductName != savedProductName;
     final productName = selectedProductName;
-    final originalPrice = productChanged
+    final savedOriginalPrice = current['original_price'] is num
+        ? (current['original_price'] as num).toDouble()
+        : current['product_price'] is num
+            ? (current['product_price'] as num).toDouble()
+            : null;
+    final originalPrice = selectedProduct != null
         ? _productPrice(selectedProduct)
-        : current['original_price'] is num
-            ? (current['original_price'] as num).toDouble()
-            : current['product_price'] is num
-                ? (current['product_price'] as num).toDouble()
-                : null;
+        : (savedProductId == null && selectedProductId == null)
+            ? savedOriginalPrice
+            : null;
+    final priceChanged = originalPrice != savedOriginalPrice;
 
     final discountText = _discountPriceController.text.trim();
     double? discountPrice;
@@ -921,7 +932,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final dateText = offerValidUntil == null ? '' : _formatDate(offerValidUntil);
     final dateChanged = dateText != (current['offer_valid_until']?.toString() ?? '');
     if (captionWasNotManuallyEdited &&
-        (shopChanged || offerChanged || discountChanged || dateChanged || productChanged)) {
+        (shopChanged || offerChanged || discountChanged || dateChanged || productChanged || priceChanged)) {
       caption = GrowthAdCopy.caption(
         shopName: shopName,
         goal: current['goal']?.toString() ?? 'nearby',
