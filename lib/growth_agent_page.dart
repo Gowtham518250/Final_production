@@ -243,6 +243,36 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         }
       }
 
+      // Merge the server's owner-scoped campaign history with local drafts.
+      // Local copies win when a recent offline edit has not reached the API.
+      try {
+        final historyResponse = await ApiClient.getJson('/growth/marketing/campaigns?limit=50')
+            .timeout(const Duration(seconds: 10));
+        if (historyResponse.statusCode == 200) {
+          final decoded = jsonDecode(historyResponse.body);
+          final remoteRows = decoded is Map && decoded['campaigns'] is List
+              ? decoded['campaigns'] as List
+              : const <dynamic>[];
+          final merged = <String, Map<String, dynamic>>{};
+          for (final row in remoteRows.whereType<Map>()) {
+            final item = Map<String, dynamic>.from(row);
+            final id = (item['campaign_id'] ?? item['id'])?.toString() ?? '';
+            if (id.isNotEmpty) merged[id] = item;
+          }
+          for (final item in campaigns) {
+            final id = (item['campaign_id'] ?? item['id'])?.toString() ?? '';
+            if (id.isNotEmpty) merged[id] = item;
+          }
+          campaigns = merged.values.toList()
+            ..sort((a, b) => (b['updated_at'] ?? b['created_at'] ?? '').toString()
+                .compareTo((a['updated_at'] ?? a['created_at'] ?? '').toString()));
+          if (campaigns.length > 20) campaigns = campaigns.take(20).toList();
+          await prefs.setString(_campaignStorageKey, jsonEncode(campaigns));
+        }
+      } catch (_) {
+        // Remote history is optional; keep the local offline workspace intact.
+      }
+
       if (!mounted) return;
       setState(() {
         _shopController.text = shopName.isEmpty ? 'My Shop' : shopName;
@@ -271,15 +301,69 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Future<void> _persistCampaign(Map<String, dynamic> campaign) async {
-    final id = campaign['id']?.toString();
-    _campaigns.removeWhere((item) => item['id']?.toString() == id);
-    _campaigns.insert(0, Map<String, dynamic>.from(campaign));
+    final id = campaign['id']?.toString() ?? campaign['campaign_id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final localDraft = Map<String, dynamic>.from(campaign)
+      ..['id'] = id
+      ..['campaign_id'] = id;
+    _campaigns.removeWhere(
+      (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
+    );
+    _campaigns.insert(0, localDraft);
     if (_campaigns.length > 20) {
       _campaigns = _campaigns.take(20).toList();
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
     if (mounted) setState(() {});
+
+    // Local persistence happens first, so drafts survive network outages.
+    // The API derives shop identity from the access token and enforces product
+    // ownership again before storing the shared campaign history.
+    try {
+      final rawProductId = localDraft['product_id'];
+      final response = await ApiClient.postJson(
+        '/growth/marketing/campaigns',
+        <String, dynamic>{
+          'campaign_id': id,
+          'goal': localDraft['goal']?.toString() ?? 'nearby',
+          'language': localDraft['language']?.toString() ?? 'en',
+          'ad_format': localDraft['ad_format']?.toString() ?? 'feed',
+          'template': localDraft['template']?.toString() ?? 'bold',
+          'product_id': rawProductId == null ? null : int.tryParse(rawProductId.toString()),
+          'product_name': localDraft['product_name']?.toString() ?? '',
+          'product_price': localDraft['product_price'] == null
+              ? null
+              : _number(localDraft['product_price']),
+          'headline': localDraft['headline']?.toString() ?? '',
+          'caption': localDraft['caption']?.toString() ?? '',
+          'offer': localDraft['offer']?.toString() ?? '',
+          'offer_code': localDraft['offer_code']?.toString() ?? '',
+          'generation_source': localDraft['generation_source']?.toString() ?? 'manual',
+          'redemptions': _number(localDraft['redemptions']).toInt(),
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) {
+          final remote = Map<String, dynamic>.from(decoded)
+            ..['tracking_mode'] = 'manual_local'
+            ..['product_price'] ??= localDraft['product_price']
+            ..['requires_owner_review'] = true;
+          _campaigns.removeWhere(
+            (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
+          );
+          _campaigns.insert(0, remote);
+          if (_campaigns.length > 20) {
+            _campaigns = _campaigns.take(20).toList();
+          }
+          await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
+          if (mounted) setState(() {});
+        }
+      }
+    } catch (_) {
+      // Local draft remains available and will be merged when history loads.
+    }
   }
 
   Future<void> _generateCampaign() async {
@@ -290,50 +374,104 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       return;
     }
 
-    final product = _selectedProduct;
-    final now = DateTime.now();
-    final code = GrowthAdCopy.offerCode(now);
-    final goalText = _goal;
-    final productName = product?['name']?.toString() ?? '';
-    final price = _productPrice(product);
-    final headline = GrowthAdCopy.headline(_goal, _language);
-    final caption = GrowthAdCopy.caption(
-      shopName: shop,
-      goal: _goal,
-      language: _language,
-      productName: productName,
-      price: price,
-      offer: _offerController.text,
-      offerCode: code,
-    );
+    setState(() => _busy = true);
+    try {
+      final product = _selectedProduct;
+      final now = DateTime.now();
+      final code = GrowthAdCopy.offerCode(now);
+      final productName = product?['name']?.toString() ?? '';
+      final price = _productPrice(product);
+      final rawProductId = product?['id'] ?? product?['product_id'];
+      final productId = rawProductId == null
+          ? null
+          : int.tryParse(rawProductId.toString());
+      int? authoritativeProductId;
+      var headline = GrowthAdCopy.headline(_goal, _language);
+      var caption = GrowthAdCopy.caption(
+        shopName: shop,
+        goal: _goal,
+        language: _language,
+        productName: productName,
+        price: price,
+        offer: _offerController.text,
+        offerCode: code,
+      );
+      var generationSource = 'local_template';
+      String? authoritativeShopName;
 
-    final draft = <String, dynamic>{
-      'id': now.microsecondsSinceEpoch.toString(),
-      'shop_name': shop,
-      'goal': goalText,
-      'language': _language,
-      'template': _template,
-      'ad_format': _adFormat,
-      'product_name': productName,
-      'product_price': price,
-      'headline': headline,
-      'caption': caption,
-      'offer': _offerController.text.trim(),
-      'offer_code': code,
-      'created_at': now.toIso8601String(),
-      'redemptions': 0,
-      'tracking_mode': 'manual_local',
-    };
+      // The backend resolves the authenticated owner's profile and product
+      // record itself. A client cannot request another shop's product copy.
+      try {
+        final response = await ApiClient.postJson(
+          '/growth/marketing/generate',
+          <String, dynamic>{
+            'goal': _goal,
+            'language': _language,
+            'ad_format': _adFormat,
+            'product_id': productId,
+            'product_name': productName,
+            'offer': _offerController.text.trim(),
+            'offer_code': code,
+          },
+        ).timeout(const Duration(seconds: 18));
 
-    setState(() {
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is Map) {
+            final data = Map<String, dynamic>.from(decoded);
+            final serverHeadline = data['headline']?.toString().trim() ?? '';
+            final serverCaption = data['caption']?.toString().trim() ?? '';
+            if (serverHeadline.isNotEmpty && serverCaption.isNotEmpty) {
+              headline = serverHeadline;
+              caption = serverCaption;
+              generationSource = data['generation_source']?.toString() ?? 'server';
+              authoritativeShopName = data['shop_name']?.toString();
+              authoritativeProductId = int.tryParse(data['product_id']?.toString() ?? '');
+            }
+          }
+        }
+      } catch (_) {
+        // Keep the offline-safe, deterministic local draft when API/AI is down.
+      }
+
+      final draft = <String, dynamic>{
+        'id': now.microsecondsSinceEpoch.toString(),
+        'shop_name': (authoritativeShopName?.trim().isNotEmpty ?? false)
+            ? authoritativeShopName!.trim()
+            : shop,
+        'goal': _goal,
+        'language': _language,
+        'template': _template,
+        'ad_format': _adFormat,
+        'product_id': authoritativeProductId ?? productId,
+        'product_name': productName,
+        'product_price': price,
+        'headline': headline,
+        'caption': caption,
+        'offer': _offerController.text.trim(),
+        'offer_code': code,
+        'created_at': now.toIso8601String(),
+        'redemptions': 0,
+        'tracking_mode': 'manual_local',
+        'generation_source': generationSource,
+        'requires_owner_review': true,
+      };
+
+      if (authoritativeShopName?.trim().isNotEmpty ?? false) {
+        _shopController.text = authoritativeShopName!.trim();
+      }
       _currentDraft = draft;
       _headlineController.text = headline;
       _captionController.text = caption;
-      _busy = true;
-    });
-    try {
       await _persistCampaign(draft);
-      _showMessage('Ad draft saved on this device. No advertising spend used.');
+
+      _showMessage(
+        generationSource == 'groq'
+            ? 'AI draft generated from your shop data. Review every detail before sharing.'
+            : generationSource == 'template_fallback'
+                ? 'Draft created with safe fallback copy. Review product details before sharing.'
+                : 'Offline ad draft saved on this device. No advertising spend used.',
+      );
     } catch (_) {
       _showMessage('Ad created, but the draft could not be saved.');
     } finally {

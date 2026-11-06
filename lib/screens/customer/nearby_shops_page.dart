@@ -1,6 +1,8 @@
 import '../../live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'shop_locations_map.dart';
 import '../../api_client.dart';
 import 'dart:convert';
 import '../../visual_widgets.dart';
@@ -75,22 +77,30 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
       final response = await ApiClient.getJson('/store/shops/nearby?lat=${_currentPosition!.latitude}&lng=${_currentPosition!.longitude}&radius_km=10');
       
       final List<Map<String, dynamic>> loadedShops = [];
-      
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is List) {
-          for (var shop in data) {
-             loadedShops.add({
-              'id': shop['shop_id']?.toString() ?? '',
-              'name': shop['shop_name'] ?? 'Shop',
-              'distance': '${(shop['distance_km'] ?? 0.0).toStringAsFixed(1)} km',
-              'rating': shop['rating']?.toString() ?? '5.0',
-              'tags': shop['tags'] ?? ['Groceries', 'Online'],
-              'address': shop['address'] ?? '',
-              'phone': shop['phone'] ?? '',
-              'is_online': shop['is_online'] ?? true,
-             });
-          }
+        final decoded = json.decode(response.body);
+        // The API contract is {shops: [...], count: n}; accept a raw list too
+        // for compatibility with older deployments during rollout.
+        final rawShops = decoded is Map && decoded['shops'] is List
+            ? decoded['shops'] as List
+            : decoded is List
+                ? decoded
+                : const <dynamic>[];
+        for (final rawShop in rawShops.whereType<Map>()) {
+          final shop = Map<String, dynamic>.from(rawShop);
+          final distanceKm = double.tryParse(shop['distance_km']?.toString() ?? '') ?? 0;
+          loadedShops.add({
+            ...shop,
+            'id': shop['shop_id']?.toString() ?? '',
+            'name': shop['shop_name']?.toString() ?? 'Shop',
+            'distance': '${distanceKm.toStringAsFixed(1)} km',
+            'rating': shop['rating']?.toString() ?? 'New',
+            'tags': shop['tags'] ?? shop['categories'] ?? const ['Groceries', 'Online'],
+            'address': shop['address'] ?? '',
+            'phone': shop['phone'] ?? '',
+            'is_online': shop['is_online'] ?? true,
+          });
         }
       } else if (response.statusCode == 404) {
         // No shops found - this is not an error, just empty result
@@ -144,6 +154,38 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
         });
       }
     }
+  }
+
+  String _shopAddress(Map<String, dynamic> shop) {
+    final values = <String>[
+      for (final key in const [
+        'address_line1', 'address_line2', 'address', 'location', 'city', 'state', 'postal_code',
+      ])
+        if ((shop[key]?.toString().trim() ?? '').isNotEmpty)
+          shop[key].toString().trim(),
+    ];
+    final seen = <String>{};
+    return values.where((value) => seen.add(value.toLowerCase())).join(', ');
+  }
+
+  Future<void> _openShopDirections(Map<String, dynamic> shop) async {
+    final latitude = double.tryParse(
+      (shop['latitude'] ?? shop['shop_latitude'] ?? '').toString(),
+    );
+    final longitude = double.tryParse(
+      (shop['longitude'] ?? shop['shop_longitude'] ?? '').toString(),
+    );
+    final address = _shopAddress(shop);
+    if ((latitude == null || longitude == null) && address.isEmpty) return;
+
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': latitude != null && longitude != null
+          ? '$latitude,$longitude'
+          : address,
+      'travelmode': 'driving',
+    });
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -214,9 +256,36 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _realShops.length,
+                      itemCount: _realShops.length + 1,
                       itemBuilder: (context, index) {
-                        final shop = _realShops[index];
+                        if (index == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (ShopLocationsMap.shopsWithCoordinates(_realShops).isNotEmpty) ...[
+                                  const LiveTranslatedText(
+                                    'Nearby shop locations',
+                                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  ShopLocationsMap(
+                                    shops: _realShops,
+                                    height: 300,
+                                    onShopSelected: _openShopDirections,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  LiveTranslatedText(
+                                    'Tap a numbered pin to open directions to that shop.',
+                                    style: TextStyle(fontSize: 11, color: subTextColor),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }
+                        final shop = _realShops[index - 1];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: GestureDetector(
@@ -257,6 +326,30 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                                             const SizedBox(width: 4),
                                             LiveTranslatedText(shop['rating'], style: TextStyle(color: subTextColor, fontSize: 13)),
                                           ],
+                                        ),
+                                        if (_shopAddress(shop).isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          LiveTranslatedText(
+                                            _shopAddress(shop),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 11, color: subTextColor),
+                                          ),
+                                        ],
+                                        if ((shop['phone']?.toString() ?? '').isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          LiveTranslatedText(
+                                            'Phone: ${shop['phone']}',
+                                            style: TextStyle(fontSize: 11, color: subTextColor),
+                                          ),
+                                        ],
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: TextButton.icon(
+                                            onPressed: () => _openShopDirections(shop),
+                                            icon: const Icon(Icons.directions_outlined, size: 16),
+                                            label: const LiveTranslatedText('Directions'),
+                                          ),
                                         ),
                                       ],
                                     ),
