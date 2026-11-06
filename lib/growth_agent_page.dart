@@ -36,6 +36,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   final _shopController = TextEditingController();
   final _offerController = TextEditingController();
+  final _discountPriceController = TextEditingController();
+  final _offerValidUntilController = TextEditingController();
   final _headlineController = TextEditingController();
   final _captionController = TextEditingController();
   final _posterKey = GlobalKey();
@@ -51,6 +53,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   String _campaignStorageKey = 'retailmind_growth_campaigns_v1_guest';
   List<Map<String, dynamic>> _products = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _campaigns = <Map<String, dynamic>>[];
+  Map<String, dynamic> _shopDetails = <String, dynamic>{};
+  bool _automationEnabled = false;
+  bool _autoNewProducts = true;
+  bool _autoWeekly = false;
+  int _weeklyDay = 0;
   Map<String, dynamic>? _currentDraft;
 
   @override
@@ -63,6 +70,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   void dispose() {
     _shopController.dispose();
     _offerController.dispose();
+    _discountPriceController.dispose();
+    _offerValidUntilController.dispose();
     _headlineController.dispose();
     _captionController.dispose();
     super.dispose();
@@ -155,6 +164,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       _campaignStorageKey = 'retailmind_growth_campaigns_v1_' + userId.toString();
 
       var shopName = '';
+      var shopDetails = <String, dynamic>{};
+      var automationEnabled = false;
+      var autoNewProducts = true;
+      var autoWeekly = false;
+      var weeklyDay = 0;
       for (final key in const ['shop_name', 'shopName', 'business_name']) {
         final value = prefs.getString(key)?.trim() ?? '';
         if (value.isNotEmpty) {
@@ -171,13 +185,19 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         if (profileResponse.statusCode == 200) {
           final decoded = jsonDecode(profileResponse.body);
           if (decoded is Map) {
+            final profileData = decoded['profile'] is Map
+                ? Map<String, dynamic>.from(decoded['profile'] as Map)
+                : decoded['shop_profile'] is Map
+                    ? Map<String, dynamic>.from(decoded['shop_profile'] as Map)
+                    : Map<String, dynamic>.from(decoded);
+            shopDetails = profileData;
             for (final key in const [
               'shop_name',
               'business_name',
               'shopName',
               'name',
             ]) {
-              final candidate = decoded[key]?.toString().trim() ?? '';
+              final candidate = profileData[key]?.toString().trim() ?? '';
               if (candidate.isNotEmpty) {
                 shopName = candidate;
                 break;
@@ -187,6 +207,23 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         }
       } catch (_) {
         // Offline/profile unavailable: use stored name or let the owner edit.
+      }
+
+      try {
+        final settingsResponse = await ApiClient.getJson(
+          '/growth/marketing/automation/settings',
+        ).timeout(const Duration(seconds: 8));
+        if (settingsResponse.statusCode == 200) {
+          final decodedSettings = jsonDecode(settingsResponse.body);
+          if (decodedSettings is Map) {
+            automationEnabled = decodedSettings['enabled'] == true;
+            autoNewProducts = decodedSettings['new_products_enabled'] != false;
+            autoWeekly = decodedSettings['weekly_enabled'] == true;
+            weeklyDay = int.tryParse(decodedSettings['weekly_day']?.toString() ?? '') ?? 0;
+          }
+        }
+      } catch (_) {
+        // Automation preferences are optional while the backend is offline.
       }
 
       var products = <Map<String, dynamic>>[];
@@ -261,7 +298,23 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           }
           for (final item in campaigns) {
             final id = (item['campaign_id'] ?? item['id'])?.toString() ?? '';
-            if (id.isNotEmpty) merged[id] = item;
+            if (id.isEmpty) continue;
+            final remote = merged[id];
+            final localIsPendingSync = item['pending_sync'] == true;
+            final localUpdated = DateTime.tryParse(
+              item['updated_at']?.toString() ?? item['created_at']?.toString() ?? '',
+            );
+            final remoteUpdated = remote == null
+                ? null
+                : DateTime.tryParse(
+                    remote['updated_at']?.toString() ?? remote['created_at']?.toString() ?? '',
+                  );
+            if (remote == null ||
+                localIsPendingSync ||
+                (localUpdated != null &&
+                    (remoteUpdated == null || localUpdated.isAfter(remoteUpdated)))) {
+              merged[id] = item;
+            }
           }
           campaigns = merged.values.toList()
             ..sort((a, b) => (b['updated_at'] ?? b['created_at'] ?? '').toString()
@@ -276,6 +329,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       if (!mounted) return;
       setState(() {
         _shopController.text = shopName.isEmpty ? 'My Shop' : shopName;
+        _shopDetails = shopDetails;
+        _automationEnabled = automationEnabled;
+        _autoNewProducts = autoNewProducts;
+        _autoWeekly = autoWeekly;
+        _weeklyDay = weeklyDay.clamp(0, 6);
         _products = products;
         _campaigns = campaigns;
         _selectedProductKey = products.isEmpty ? null : _productKey(products.first, 0);
