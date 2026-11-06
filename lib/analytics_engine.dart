@@ -319,6 +319,39 @@ class AnalyticsEngine {
     return _parseEventDate(sale) ?? getLocalDate(sale);
   }
 
+  static Map<String, dynamic> recordedEventTimestampFields(
+    Map<String, dynamic> sale,
+  ) {
+    final raw = sale['raw'];
+    final nested = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : const <String, dynamic>{};
+    final fields = <String, dynamic>{};
+    for (final field in const [
+      'sale_timestamp',
+      'invoice_timestamp',
+      'created_at',
+      'createdAt',
+      'timestamp',
+      'updated_at',
+      'updatedAt',
+      'event_timestamp',
+    ]) {
+      final value = sale[field] ?? nested[field];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        fields[field] = value;
+      }
+    }
+    for (final field in const ['date', 'sale_date']) {
+      final value = sale[field] ?? nested[field];
+      if (value != null &&
+          RegExp(r'[ T]\d{1,2}:\d{2}').hasMatch(value.toString())) {
+        fields[field] = value;
+      }
+    }
+    return fields;
+  }
+
   DateTime? _parseEventDate(Map<String, dynamic> sale) {
     for (final field in const [
       'sale_timestamp',
@@ -332,6 +365,20 @@ class AnalyticsEngine {
     ]) {
       final raw = sale[field]?.toString().trim();
       if (raw == null || raw.isEmpty || raw == 'null') continue;
+      final parsed = _parseBackendTimestamp(raw);
+      if (parsed != null) return parsed;
+    }
+
+    // Some legacy sales store their recorded clock in `date` while keeping
+    // `business_date` date-only. Do not treat date-only values as event times.
+    for (final field in const ['date', 'sale_date']) {
+      final raw = sale[field]?.toString().trim();
+      if (raw == null ||
+          raw.isEmpty ||
+          raw == 'null' ||
+          !RegExp(r'[ T]\d{1,2}:\d{2}').hasMatch(raw)) {
+        continue;
+      }
       final parsed = _parseBackendTimestamp(raw);
       if (parsed != null) return parsed;
     }
@@ -497,7 +544,9 @@ class AnalyticsEngine {
     }
 
     void addLine(Map<String, dynamic> line) {
-      final existingIndex = lines.indexWhere((existing) => sameLine(existing, line));
+      final existingIndex = lines.indexWhere(
+        (existing) => sameLine(existing, line),
+      );
       if (existingIndex < 0) {
         lines.add(line);
       } else {
@@ -525,14 +574,15 @@ class AnalyticsEngine {
 
       // Legacy GET /sales returns one flat row per invoice line. These records
       // share sale_id/invoice_number but do not contain items/line_items.
-      final name = (record['product_name'] ??
-              record['product'] ??
-              record['item'] ??
-              record['name'] ??
-              record['description'] ??
-              '')
-          .toString()
-          .trim();
+      final name =
+          (record['product_name'] ??
+                  record['product'] ??
+                  record['item'] ??
+                  record['name'] ??
+                  record['description'] ??
+                  '')
+              .toString()
+              .trim();
       if (name.isEmpty ||
           AnalyticsEngine.isPlaceholderProductName(name) ||
           name.toLowerCase() == 'unknown product') {
@@ -609,10 +659,7 @@ class AnalyticsEngine {
       final record = Map<String, dynamic>.from(raw);
       if (!isVoidedSale(record)) continue;
       cancelledAliases.addAll(
-        CacheConsistencyService.identityTokens(
-          record,
-          dataset: 'sales',
-        ),
+        CacheConsistencyService.identityTokens(record, dataset: 'sales'),
       );
       if (_isOnlineSale(record)) {
         cancelledOnlineReferences.addAll(_onlineOrderReferences(record));
@@ -635,7 +682,9 @@ class AnalyticsEngine {
       );
       if (aliases.intersection(cancelledAliases).isNotEmpty) continue;
       if (_isOnlineSale(record) &&
-          _onlineOrderReferences(record).any(cancelledOnlineReferences.contains)) {
+          _onlineOrderReferences(
+            record,
+          ).any(cancelledOnlineReferences.contains)) {
         continue;
       }
 
@@ -738,12 +787,11 @@ class AnalyticsEngine {
           : status;
       transaction['transaction_key'] =
           transaction['transaction_key']?.toString() ??
-              _canonicalTransactionKey(transaction);
+          _canonicalTransactionKey(transaction);
       transactionsWithDates.add(transaction);
 
       final key = transaction['transaction_key'].toString();
-      final mon =
-          '${_months[dt.month - 1]} ${dt.year.toString().substring(2)}';
+      final mon = '${_months[dt.month - 1]} ${dt.year.toString().substring(2)}';
       if (salesByMonthCache.containsKey(mon)) {
         salesByMonthCache[mon] = (salesByMonthCache[mon] ?? 0.0) + gross;
       }
@@ -760,17 +808,21 @@ class AnalyticsEngine {
         }
       }
 
-      final eventDt = getEventDate(transaction);
+      final eventDt = _parseEventDate(transaction);
       if (day == todayDate) {
         todayRevenue += gross;
         todayKeys.add(key);
-        todayHourRevenue[eventDt.hour] =
-            (todayHourRevenue[eventDt.hour] ?? 0.0) + gross;
+        if (eventDt != null) {
+          todayHourRevenue[eventDt.hour] =
+              (todayHourRevenue[eventDt.hour] ?? 0.0) + gross;
+        }
       } else if (day == yesterdayDate) {
         yesterdayRevenue += gross;
         yesterdayKeys.add(key);
-        yesterdayHourRevenue[eventDt.hour] =
-            (yesterdayHourRevenue[eventDt.hour] ?? 0.0) + gross;
+        if (eventDt != null) {
+          yesterdayHourRevenue[eventDt.hour] =
+              (yesterdayHourRevenue[eventDt.hour] ?? 0.0) + gross;
+        }
       } else if (day == prevDayDate) {
         previousDayRevenue += gross;
       }

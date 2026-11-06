@@ -213,8 +213,12 @@ class _KhataPageState extends State<KhataPage>
     required double expectedPaidAmount,
     String? invoiceId,
     String? invoiceNumber,
+    String? saleId,
   }) async {
-    if (!_isValidCustomerPhone(customerPhone) || !amount.isFinite || amount <= 0) return;
+    if (!_isValidCustomerPhone(customerPhone) ||
+        !amount.isFinite ||
+        amount <= 0)
+      return;
 
     try {
       final invoices = (await LocalStorageService.loadLocalInvoices())
@@ -222,9 +226,11 @@ class _KhataPageState extends State<KhataPage>
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
 
-      final target = (invoiceId ?? '').trim();
-      final number = (invoiceNumber ?? '').trim();
+      final target = (invoiceId ?? '').trim().toLowerCase();
+      final number = (invoiceNumber ?? '').trim().toLowerCase();
+      final localSaleId = (saleId ?? '').trim().toLowerCase();
 
+      var invoicesChanged = false;
       for (final invoice in invoices) {
         final invPhone =
             (invoice['customer_phone'] ??
@@ -237,20 +243,21 @@ class _KhataPageState extends State<KhataPage>
         if (!_isValidCustomerPhone(invPhone)) continue;
 
         final ids = <String>{
-          (invoice['invoice_id'] ?? '').toString().trim(),
-          (invoice['backend_id'] ?? '').toString().trim(),
-          (invoice['id'] ?? '').toString().trim(),
+          (invoice['invoice_id'] ?? '').toString().trim().toLowerCase(),
+          (invoice['backend_id'] ?? '').toString().trim().toLowerCase(),
+          (invoice['id'] ?? '').toString().trim().toLowerCase(),
         }..removeWhere((v) => v.isEmpty || v == 'null');
 
         final numbers = <String>{
-          (invoice['invoice_number'] ?? '').toString().trim(),
-          (invoice['sale_id'] ?? '').toString().trim(),
-          (invoice['number'] ?? '').toString().trim(),
+          (invoice['invoice_number'] ?? '').toString().trim().toLowerCase(),
+          (invoice['sale_id'] ?? '').toString().trim().toLowerCase(),
+          (invoice['number'] ?? '').toString().trim().toLowerCase(),
         }..removeWhere((v) => v.isEmpty || v == 'null');
 
         final sameInvoice =
             (target.isNotEmpty && ids.contains(target)) ||
-            (number.isNotEmpty && numbers.contains(number));
+            (number.isNotEmpty && numbers.contains(number)) ||
+            (localSaleId.isNotEmpty && numbers.contains(localSaleId));
 
         if (!sameInvoice) continue;
 
@@ -277,7 +284,8 @@ class _KhataPageState extends State<KhataPage>
 
         // Idempotent mirror: if recordUnifiedPayment() already persisted the
         // invoice amount, keep that value instead of applying the payment twice.
-        final targetPaid = expectedPaidAmount.isFinite && expectedPaidAmount > oldPaid
+        final targetPaid =
+            expectedPaidAmount.isFinite && expectedPaidAmount > oldPaid
             ? expectedPaidAmount
             : oldPaid;
         final newPaid = targetPaid.clamp(0.0, total).toDouble();
@@ -290,8 +298,71 @@ class _KhataPageState extends State<KhataPage>
         invoice['customer_phone'] = invPhone;
         invoice['updated_at'] = DateTime.now().toUtc().toIso8601String();
 
+        invoicesChanged = true;
+      }
+      if (invoicesChanged) {
         await LocalStorageService.saveLocalInvoices(invoices);
-        return;
+      }
+
+      final targetIds = <String>{target, number, localSaleId}
+        ..removeWhere((value) => value.isEmpty);
+      final sales = await LocalStorageService.loadSales();
+      var salesChanged = false;
+      for (var index = 0; index < sales.length; index++) {
+        final rawSale = sales[index];
+        if (rawSale is! Map) continue;
+        final sale = Map<String, dynamic>.from(rawSale);
+        final saleIds = <String>{
+          for (final key in const [
+            'invoice_id',
+            'invoice_number',
+            'sale_id',
+            'offline_id',
+            'backend_id',
+            'id',
+            '_bill_id',
+          ])
+            (sale[key] ?? '').toString().trim().toLowerCase(),
+        }..removeWhere((value) => value.isEmpty || value == 'null');
+        if (saleIds.intersection(targetIds).isEmpty) continue;
+
+        final total =
+            double.tryParse(
+              (sale['total_amount'] ??
+                      sale['total'] ??
+                      sale['invoice_total'] ??
+                      sale['grand_total'] ??
+                      0)
+                  .toString(),
+            ) ??
+            0.0;
+        if (!total.isFinite || total <= 0) continue;
+        final oldPaid =
+            double.tryParse(
+              (sale['paid_amount'] ?? sale['amount_paid'] ?? sale['paid'] ?? 0)
+                  .toString(),
+            ) ??
+            0.0;
+        final newPaid =
+            (oldPaid > expectedPaidAmount ? oldPaid : expectedPaidAmount)
+                .clamp(0.0, total)
+                .toDouble();
+        final paymentStatus = invoicePaymentStatusFor(total, newPaid);
+        sale
+          ..['paid_amount'] = newPaid
+          ..['amount_paid'] = newPaid
+          ..['pending_amount'] = (total - newPaid)
+              .clamp(0.0, double.infinity)
+              .toDouble()
+          ..['payment_status'] = paymentStatus
+          ..['status'] = paymentStatus
+          ..['updated_at'] = DateTime.now().toUtc().toIso8601String();
+        sales[index] = sale;
+        salesChanged = true;
+      }
+      if (salesChanged) {
+        await LocalStorageService.saveSales(sales);
+        SyncService.triggerDashboardRefresh();
       }
     } catch (e) {
       if (kDebugMode) {
@@ -518,9 +589,7 @@ class _KhataPageState extends State<KhataPage>
     return list;
   }
 
-  Future<void> _loadKhata({
-    bool refreshInvoiceAnalytics = true,
-  }) async {
+  Future<void> _loadKhata({bool refreshInvoiceAnalytics = true}) async {
     if (!mounted) return;
     if (_khataLoadInProgress) {
       _khataReloadQueued = true;
@@ -590,12 +659,13 @@ class _KhataPageState extends State<KhataPage>
     final rawId = (customer['customer_id'] ?? customer['customerId'] ?? '')
         .toString()
         .trim();
-    final phone = (customer['customer_phone'] ??
-            customer['phone'] ??
-            customer['mobile'] ??
-            '')
-        .toString()
-        .trim();
+    final phone =
+        (customer['customer_phone'] ??
+                customer['phone'] ??
+                customer['mobile'] ??
+                '')
+            .toString()
+            .trim();
 
     // Local unified rows may place a phone in customer_id as a fallback.
     final rawIdIsPhone = _isValidCustomerPhone(rawId);
@@ -620,7 +690,9 @@ class _KhataPageState extends State<KhataPage>
         .map(_deadlineKeyForCustomer)
         .where((key) => key.isNotEmpty)
         .toSet();
-    final deadlines = await LocalStorageService.loadKhataDeadlines(deadlineKeys);
+    final deadlines = await LocalStorageService.loadKhataDeadlines(
+      deadlineKeys,
+    );
 
     // Keep local-first dates visible while their durable operation is pending.
     // Index pending values by both identifiers for legacy invoice rows.
@@ -644,7 +716,9 @@ class _KhataPageState extends State<KhataPage>
       }
     } catch (error) {
       if (kDebugMode) {
-        debugPrint('Could not inspect pending Khata deadline operations: $error');
+        debugPrint(
+          'Could not inspect pending Khata deadline operations: $error',
+        );
       }
     }
 
@@ -716,37 +790,48 @@ class _KhataPageState extends State<KhataPage>
             for (final rawInvoice in history) {
               if (rawInvoice is! Map) continue;
               final invoice = Map<String, dynamic>.from(rawInvoice);
-              final status = (invoice['payment_status'] ?? invoice['status'] ?? '')
-                  .toString()
-                  .split('.')
-                  .last
-                  .toUpperCase();
-              final total = double.tryParse(
-                    (invoice['total_amount'] ?? invoice['total'] ?? 0).toString(),
+              final status =
+                  (invoice['payment_status'] ?? invoice['status'] ?? '')
+                      .toString()
+                      .split('.')
+                      .last
+                      .toUpperCase();
+              final total =
+                  double.tryParse(
+                    (invoice['total_amount'] ?? invoice['total'] ?? 0)
+                        .toString(),
                   ) ??
                   0.0;
-              final paid = double.tryParse(
-                    (invoice['paid_amount'] ?? invoice['amount_paid'] ?? 0).toString(),
+              final paid =
+                  double.tryParse(
+                    (invoice['paid_amount'] ?? invoice['amount_paid'] ?? 0)
+                        .toString(),
                   ) ??
                   0.0;
-              if (status == 'PAID' || status == 'CANCELLED' ||
-                  status == 'DRAFT' || total - paid <= 0.01) {
+              if (status == 'PAID' ||
+                  status == 'CANCELLED' ||
+                  status == 'DRAFT' ||
+                  total - paid <= 0.01) {
                 continue;
               }
-              final parsed = DateTime.tryParse(invoice['due_date']?.toString() ?? '');
+              final parsed = DateTime.tryParse(
+                invoice['due_date']?.toString() ?? '',
+              );
               if (parsed != null) candidates.add(parsed);
             }
           }
           if (candidates.isNotEmpty) {
             candidates.sort((a, b) => a.compareTo(b));
-            backendDueDate = candidates.first.toIso8601String().substring(0, 10);
+            backendDueDate = candidates.first.toIso8601String().substring(
+              0,
+              10,
+            );
           }
         }
 
         final storedDueDate = deadlines[deadlineKey];
-        final dueDateRaw = (
-          pendingDueDate ?? backendDueDate ?? storedDueDate
-        )?.trim();
+        final dueDateRaw = (pendingDueDate ?? backendDueDate ?? storedDueDate)
+            ?.trim();
         DateTime? dueDate;
         if (dueDateRaw != null && dueDateRaw.isNotEmpty) {
           dueDate = DateTime.tryParse(dueDateRaw);
@@ -894,8 +979,9 @@ class _KhataPageState extends State<KhataPage>
 
   void _showPaymentModal(Map<String, dynamic> customer) {
     final rawBalance = customer['total_balance'];
-    final currentBalance = rawBalance is num ? rawBalance.toDouble() :
-        double.tryParse(rawBalance?.toString() ?? '') ?? 0.0;
+    final currentBalance = rawBalance is num
+        ? rawBalance.toDouble()
+        : double.tryParse(rawBalance?.toString() ?? '') ?? 0.0;
     final TextEditingController amountController = TextEditingController();
     final TextEditingController notesController = TextEditingController();
     String selectedMethod = 'CASH';
@@ -985,12 +1071,16 @@ class _KhataPageState extends State<KhataPage>
                   const SizedBox(height: 16),
                   TextField(
                     controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       label: LiveTranslatedText('Payment Received (₹)'),
                       hintText: '0.00',
                       prefixIcon: const Icon(Icons.currency_rupee),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1000,19 +1090,32 @@ class _KhataPageState extends State<KhataPage>
                         child: LiveTranslatedText(
                           'Enter only the amount actually received.',
                           maxLines: 2,
-                          style: TextStyle(fontSize: 11, color: Color(0xFF667085)),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF667085),
+                          ),
                         ),
                       ),
                       TextButton.icon(
                         onPressed: currentBalance > 0
                             ? () {
-                                amountController.text = currentBalance.toStringAsFixed(2);
-                                amountController.selection = TextSelection.collapsed(offset: amountController.text.length);
+                                amountController.text = currentBalance
+                                    .toStringAsFixed(2);
+                                amountController.selection =
+                                    TextSelection.collapsed(
+                                      offset: amountController.text.length,
+                                    );
                               }
                             : null,
-                        icon: const Icon(Icons.account_balance_wallet_outlined, size: 15),
+                        icon: const Icon(
+                          Icons.account_balance_wallet_outlined,
+                          size: 15,
+                        ),
                         label: const LiveTranslatedText('Use full balance'),
-                        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                        ),
                       ),
                     ],
                   ),
@@ -1096,7 +1199,9 @@ class _KhataPageState extends State<KhataPage>
                               }
 
                               if (amt > currentBalance + 0.01) {
-                                _showToast('Payment cannot exceed the current pending balance.');
+                                _showToast(
+                                  'Payment cannot exceed the current pending balance.',
+                                );
                                 return;
                               }
 
@@ -1244,6 +1349,7 @@ class _KhataPageState extends State<KhataPage>
                                     expectedPaidAmount: alreadyPaid + applied,
                                     invoiceId: invoiceId,
                                     invoiceNumber: invoiceNumber,
+                                    saleId: invoice['sale_id']?.toString(),
                                   );
 
                                   final paymentPayload = <String, dynamic>{
@@ -1333,6 +1439,7 @@ class _KhataPageState extends State<KhataPage>
 
                                 await _loadKhata();
                                 await _loadInvoiceAnalytics();
+                                SyncService.triggerDashboardRefresh();
                                 unawaited(SyncService.processQueueSafe());
                               } catch (e) {
                                 _showToast(
@@ -1388,7 +1495,8 @@ class _KhataPageState extends State<KhataPage>
     ).then((picked) async {
       if (picked == null) return;
 
-      final dateStr = picked.year.toString() +
+      final dateStr =
+          picked.year.toString() +
           '-' +
           picked.month.toString().padLeft(2, '0') +
           '-' +
@@ -1399,7 +1507,8 @@ class _KhataPageState extends State<KhataPage>
               .trim();
       final rawCustomerId = (customer['customer_id'] ?? '').toString().trim();
       final parsedCustomerId = int.tryParse(rawCustomerId);
-      final customerId = parsedCustomerId != null &&
+      final customerId =
+          parsedCustomerId != null &&
               parsedCustomerId > 0 &&
               !_isValidCustomerPhone(rawCustomerId)
           ? parsedCustomerId
@@ -1407,7 +1516,8 @@ class _KhataPageState extends State<KhataPage>
       final backendPhone = _isValidCustomerPhone(customerPhone)
           ? customerPhone
           : (_isValidCustomerPhone(rawCustomerId) ? rawCustomerId : '');
-      final scopeKey = customerId?.toString() ??
+      final scopeKey =
+          customerId?.toString() ??
           (backendPhone.isNotEmpty ? backendPhone : '');
 
       if (scopeKey.isEmpty) {
@@ -2046,94 +2156,94 @@ class _KhataPageState extends State<KhataPage>
             padding: const EdgeInsets.all(16),
             sliver: SliverToBoxAdapter(
               child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInvoiceAnalyticsHero(),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                LiveTranslatedText(
-                  'Invoice performance',
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _exportSummary,
-                  icon: const Icon(Icons.ios_share_rounded, size: 16),
-                  label: LiveTranslatedText(
-                    'Export',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(foregroundColor: _primary),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _buildInvoiceSummaryCards(),
-            const SizedBox(height: 20),
-            _buildPaymentStatusChart(),
-            const SizedBox(height: 20),
-            _buildTopOutstandingCustomers(),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInvoiceAnalyticsHero(),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       LiveTranslatedText(
-                        'All invoices',
+                        'Invoice performance',
                         style: GoogleFonts.inter(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF0F172A),
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      LiveTranslatedText(
-                        'Paid, partially paid and outstanding records',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: const Color(0xFF64748B),
+                      TextButton.icon(
+                        onPressed: _exportSummary,
+                        icon: const Icon(Icons.ios_share_rounded, size: 16),
+                        label: LiveTranslatedText(
+                          'Export',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(foregroundColor: _primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildInvoiceSummaryCards(),
+                  const SizedBox(height: 20),
+                  _buildPaymentStatusChart(),
+                  const SizedBox(height: 20),
+                  _buildTopOutstandingCustomers(),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            LiveTranslatedText(
+                              'All invoices',
+                              style: GoogleFonts.inter(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            LiveTranslatedText(
+                              'Paid, partially paid and outstanding records',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _primary.withValues(alpha: 0.09),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: LiveTranslatedText(
+                          '${invoices.length} shown',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: _primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _primary.withValues(alpha: 0.09),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: LiveTranslatedText(
-                    '${invoices.length} shown',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: _primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _buildInvoiceSearchAndSort(),
-            const SizedBox(height: 10),
-            _buildInvoiceStatusChips(),
-            const SizedBox(height: 12),
-            if (invoices.isEmpty) _buildInvoiceEmptyState(),
-          ],
+                  const SizedBox(height: 10),
+                  _buildInvoiceSearchAndSort(),
+                  const SizedBox(height: 10),
+                  _buildInvoiceStatusChips(),
+                  const SizedBox(height: 12),
+                  if (invoices.isEmpty) _buildInvoiceEmptyState(),
+                ],
               ),
             ),
           ),

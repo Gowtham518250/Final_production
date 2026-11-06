@@ -1,6 +1,7 @@
 import 'live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'analytics_engine.dart';
 import 'export_service.dart';
 
 enum ExportTimeRange { today, last7Days, last30Days, thisYear, custom }
@@ -35,6 +36,12 @@ class DataExportWidget extends StatefulWidget {
   }) {
     if (allSales.isEmpty) return const [];
 
+    final analytics = AnalyticsEngine()..recalculateAnalytics(allSales, 0);
+    final canonicalSales = analytics.sales
+        .whereType<Map>()
+        .map((sale) => Map<String, dynamic>.from(sale))
+        .toList();
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -56,15 +63,26 @@ class DataExportWidget extends StatefulWidget {
         break;
       case ExportTimeRange.custom:
         if (customStartDate != null && customEndDate != null) {
-          startDate = DateTime(customStartDate.year, customStartDate.month, customStartDate.day);
-          endDate = DateTime(customEndDate.year, customEndDate.month, customEndDate.day, 23, 59, 59);
+          startDate = DateTime(
+            customStartDate.year,
+            customStartDate.month,
+            customStartDate.day,
+          );
+          endDate = DateTime(
+            customEndDate.year,
+            customEndDate.month,
+            customEndDate.day,
+            23,
+            59,
+            59,
+          );
         } else {
-          return allSales;
+          return canonicalSales;
         }
         break;
     }
 
-    return allSales.where((sale) {
+    return canonicalSales.where((sale) {
       final saleDate = resolveSalesDate(sale);
       if (saleDate == null) return false;
       return !saleDate.isBefore(startDate) && !saleDate.isAfter(endDate);
@@ -113,12 +131,12 @@ class _DataExportWidgetState extends State<DataExportWidget> {
         return;
       }
 
-      final totalRevenue = filteredSales.fold(0.0, (sum, sale) {
-        final val = sale['total_with_tax'] ?? sale['total'] ?? 0;
-        return sum + (double.tryParse(val.toString()) ?? 0.0);
-      });
+      final totalRevenue = ExportService.totalInvoiceRevenue(filteredSales);
 
-      String rangeLabel = _selectedTimeRange == ExportTimeRange.custom && _customStartDate != null && _customEndDate != null
+      String rangeLabel =
+          _selectedTimeRange == ExportTimeRange.custom &&
+              _customStartDate != null &&
+              _customEndDate != null
           ? '${_customStartDate.toString().split(' ')[0]}_to_${_customEndDate.toString().split(' ')[0]}'
           : _selectedTimeRange.name;
 
@@ -128,25 +146,36 @@ class _DataExportWidgetState extends State<DataExportWidget> {
       if (_selectedFormat == ExportFormat.excel) {
         setState(() => _statusMessage = 'Generating Excel (XLSX)...');
         final bytes = await ExportService.generateExcel(filteredSales);
-        filePath = await ExportService.saveExcel(bytes,
-            fileName:
-                'sales_${rangeLabel}_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+        filePath = await ExportService.saveExcel(
+          bytes,
+          fileName:
+              'sales_${rangeLabel}_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+        );
         fileType = 'Excel (XLSX)';
       } else if (_selectedFormat == ExportFormat.gstr1) {
         setState(() => _statusMessage = 'Generating GSTR-1 CSV...');
         final csv = await ExportService.generateGSTR1CSV(filteredSales);
-        filePath = await ExportService.saveCSV(csv,
-            fileName: 'GSTR1_${rangeLabel}_${DateTime.now().millisecondsSinceEpoch}.csv');
+        filePath = await ExportService.saveCSV(
+          csv,
+          fileName:
+              'GSTR1_${rangeLabel}_${DateTime.now().millisecondsSinceEpoch}.csv',
+        );
         fileType = 'GSTR-1 CSV';
       } else if (_selectedFormat == ExportFormat.tally) {
         setState(() => _statusMessage = 'Generating Tally Export...');
         final csv = await ExportService.generateTallyCSV(filteredSales);
-        filePath = await ExportService.saveCSV(csv,
-            fileName: 'TallySales_${rangeLabel}_${DateTime.now().millisecondsSinceEpoch}.csv');
+        filePath = await ExportService.saveCSV(
+          csv,
+          fileName:
+              'TallySales_${rangeLabel}_${DateTime.now().millisecondsSinceEpoch}.csv',
+        );
         fileType = 'Tally CSV';
       } else {
         setState(() => _statusMessage = 'Generating PDF...');
-        String dateRangeText = _selectedTimeRange == ExportTimeRange.custom && _customStartDate != null && _customEndDate != null
+        String dateRangeText =
+            _selectedTimeRange == ExportTimeRange.custom &&
+                _customStartDate != null &&
+                _customEndDate != null
             ? '${_customStartDate.toString().split(' ')[0]} to ${_customEndDate.toString().split(' ')[0]}'
             : '${_selectedTimeRange.name.replaceAll('_', ' ').toUpperCase()} (${filteredSales.length} transactions)';
 
@@ -173,7 +202,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
       }
     } catch (e) {
       setState(() {
-        _statusMessage = '❌ Error: ${e.toString().length > 50 ? '${e.toString().substring(0, 50)}...' : e.toString()}';
+        _statusMessage =
+            '❌ Error: ${e.toString().length > 50 ? '${e.toString().substring(0, 50)}...' : e.toString()}';
       });
     } finally {
       setState(() => _isExporting = false);
@@ -222,7 +252,10 @@ class _DataExportWidgetState extends State<DataExportWidget> {
               const Spacer(),
               if (_showSuccess)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green.shade100,
                     borderRadius: BorderRadius.circular(20),
@@ -259,28 +292,32 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 label: 'Today',
                 range: ExportTimeRange.today,
                 isSelected: _selectedTimeRange == ExportTimeRange.today,
-                onTap: () => setState(() => _selectedTimeRange = ExportTimeRange.today),
+                onTap: () =>
+                    setState(() => _selectedTimeRange = ExportTimeRange.today),
               ),
               _TimeRangeChip(
                 label: 'Last 7 Days',
                 range: ExportTimeRange.last7Days,
                 isSelected: _selectedTimeRange == ExportTimeRange.last7Days,
-                onTap: () =>
-                    setState(() => _selectedTimeRange = ExportTimeRange.last7Days),
+                onTap: () => setState(
+                  () => _selectedTimeRange = ExportTimeRange.last7Days,
+                ),
               ),
               _TimeRangeChip(
                 label: 'Last 30 Days',
                 range: ExportTimeRange.last30Days,
                 isSelected: _selectedTimeRange == ExportTimeRange.last30Days,
-                onTap: () =>
-                    setState(() => _selectedTimeRange = ExportTimeRange.last30Days),
+                onTap: () => setState(
+                  () => _selectedTimeRange = ExportTimeRange.last30Days,
+                ),
               ),
               _TimeRangeChip(
                 label: 'This Year',
                 range: ExportTimeRange.thisYear,
                 isSelected: _selectedTimeRange == ExportTimeRange.thisYear,
-                onTap: () =>
-                    setState(() => _selectedTimeRange = ExportTimeRange.thisYear),
+                onTap: () => setState(
+                  () => _selectedTimeRange = ExportTimeRange.thisYear,
+                ),
               ),
               _TimeRangeChip(
                 label: 'Custom Range',
@@ -291,8 +328,12 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                     context: context,
                     firstDate: DateTime(2020),
                     lastDate: DateTime.now(),
-                    initialDateRange: _customStartDate != null && _customEndDate != null
-                        ? DateTimeRange(start: _customStartDate!, end: _customEndDate!)
+                    initialDateRange:
+                        _customStartDate != null && _customEndDate != null
+                        ? DateTimeRange(
+                            start: _customStartDate!,
+                            end: _customEndDate!,
+                          )
                         : null,
                     builder: (context, child) {
                       return Theme(
@@ -319,12 +360,18 @@ class _DataExportWidgetState extends State<DataExportWidget> {
               ),
             ],
           ),
-          if (_selectedTimeRange == ExportTimeRange.custom && _customStartDate != null && _customEndDate != null)
+          if (_selectedTimeRange == ExportTimeRange.custom &&
+              _customStartDate != null &&
+              _customEndDate != null)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: LiveTranslatedText(
                 'Selected: ${_customStartDate.toString().split(' ')[0]} to ${_customEndDate.toString().split(' ')[0]}',
-                style: const TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           const SizedBox(height: 16),
@@ -345,7 +392,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 child: _FormatRadio(
                   label: '📊 Excel',
                   isSelected: _selectedFormat == ExportFormat.excel,
-                  onTap: () => setState(() => _selectedFormat = ExportFormat.excel),
+                  onTap: () =>
+                      setState(() => _selectedFormat = ExportFormat.excel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -353,7 +401,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 child: _FormatRadio(
                   label: '📄 PDF',
                   isSelected: _selectedFormat == ExportFormat.pdf,
-                  onTap: () => setState(() => _selectedFormat = ExportFormat.pdf),
+                  onTap: () =>
+                      setState(() => _selectedFormat = ExportFormat.pdf),
                 ),
               ),
               const SizedBox(width: 8),
@@ -361,7 +410,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 child: _FormatRadio(
                   label: '🏛️ GSTR-1',
                   isSelected: _selectedFormat == ExportFormat.gstr1,
-                  onTap: () => setState(() => _selectedFormat = ExportFormat.gstr1),
+                  onTap: () =>
+                      setState(() => _selectedFormat = ExportFormat.gstr1),
                 ),
               ),
               const SizedBox(width: 8),
@@ -369,7 +419,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 child: _FormatRadio(
                   label: '📘 Tally',
                   isSelected: _selectedFormat == ExportFormat.tally,
-                  onTap: () => setState(() => _selectedFormat = ExportFormat.tally),
+                  onTap: () =>
+                      setState(() => _selectedFormat = ExportFormat.tally),
                 ),
               ),
             ],
@@ -399,7 +450,10 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                     ),
                     LiveTranslatedText(
                       'Transactions',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
@@ -407,10 +461,29 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 Column(
                   children: [
                     LiveTranslatedText(
-                      '₹${filteredSales.fold(0.0, (sum, sale) {
-                        final val = sale['total_with_tax'] ?? sale['total'] ?? 0;
-                        return sum + (double.tryParse(val.toString()) ?? 0.0);
-                      }).toStringAsFixed(0)}',
+                      ExportService.formatProductQuantity(
+                        ExportService.totalProductsSold(filteredSales),
+                      ),
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      'Products Sold',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(width: 1, height: 30, color: Colors.blue.shade200),
+                Column(
+                  children: [
+                    LiveTranslatedText(
+                      '₹${ExportService.totalInvoiceRevenue(filteredSales).toStringAsFixed(0)}',
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -419,7 +492,10 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                     ),
                     LiveTranslatedText(
                       'Total Revenue',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
@@ -437,15 +513,15 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                 color: _showSuccess
                     ? Colors.green.shade50
                     : _statusMessage.contains('❌')
-                        ? Colors.red.shade50
-                        : Colors.blue.shade50,
+                    ? Colors.red.shade50
+                    : Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: _showSuccess
                       ? Colors.green.shade300
                       : _statusMessage.contains('❌')
-                          ? Colors.red.shade300
-                          : Colors.blue.shade300,
+                      ? Colors.red.shade300
+                      : Colors.blue.shade300,
                 ),
               ),
               child: LiveTranslatedText(
@@ -456,8 +532,8 @@ class _DataExportWidgetState extends State<DataExportWidget> {
                   color: _showSuccess
                       ? Colors.green.shade700
                       : _statusMessage.contains('❌')
-                          ? Colors.red.shade700
-                          : Colors.blue.shade700,
+                      ? Colors.red.shade700
+                      : Colors.blue.shade700,
                 ),
               ),
             ),
@@ -576,7 +652,9 @@ class _FormatRadio extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? Colors.blue.shade600 : Colors.grey.shade400,
+                  color: isSelected
+                      ? Colors.blue.shade600
+                      : Colors.grey.shade400,
                   width: 2,
                 ),
               ),
@@ -600,7 +678,9 @@ class _FormatRadio extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.blue.shade900 : Colors.grey.shade700,
+                  color: isSelected
+                      ? Colors.blue.shade900
+                      : Colors.grey.shade700,
                 ),
               ),
             ),

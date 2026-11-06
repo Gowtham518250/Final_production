@@ -29,6 +29,8 @@ import 'api_client.dart';
 import 'app_localizations.dart';
 import 'localization.dart';
 import 'local_storage_service.dart';
+import 'invoice_payment_status.dart';
+import 'invoice_dedup_helper.dart';
 import 'google_drive_service.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math' as math;
@@ -115,6 +117,7 @@ import 'widgets/dashboard/shop_modules_section.dart';
 import 'widgets/dashboard/compact_quick_actions.dart';
 import 'widgets/dashboard/printer_monetization_banner.dart';
 import 'widgets/dashboard/recent_bill_data.dart';
+import 'widgets/dashboard/dashboard_action_dock.dart';
 import 'widgets/dashboard/recent_bill_details_dialog.dart';
 import 'printer_settings_page.dart';
 import 'daily_summary_notification_service.dart';
@@ -735,11 +738,11 @@ class _DashboardPageState extends State<DashboardPage>
                 : 'Payment Detected',
             merchantVerifiedCredit
                 ? activity
-                 : needsConflictReview
-                 ? '$activity — conflicting details; verify in your bank history.'
-                 : autoAcceptedCredit
-                 ? '$activity — automatically accepted as a detection; invoice totals stay unchanged.'
-                 : '$activity — verify before recording.',
+                : needsConflictReview
+                ? '$activity — conflicting details; verify in your bank history.'
+                : autoAcceptedCredit
+                ? '$activity — automatically accepted as a detection; invoice totals stay unchanged.'
+                : '$activity — verify before recording.',
             merchantVerifiedCredit,
             localOnly: true,
             // The voice queue intentionally rejects duplicate/conflict events.
@@ -1004,7 +1007,11 @@ class _DashboardPageState extends State<DashboardPage>
       }
 
       final saleId = normalize(event.saleId);
-      final payer = normalize(event.payerName);
+      if (saleId.isEmpty || saleId == 'null') {
+        // A payer name or a single open invoice is not sufficient evidence to
+        // assign an incoming payment to a Khata bill automatically.
+        return;
+      }
       final candidates = <Map<String, dynamic>>[];
       for (final raw in rawInvoices) {
         if (raw is! Map) continue;
@@ -1020,43 +1027,26 @@ class _DashboardPageState extends State<DashboardPage>
         );
         final due = (total - paid).clamp(0.0, double.infinity);
         if (total <= 0 || due < 0.01 || amount > due + 0.01) continue;
-        if (saleId.isNotEmpty && recordId(row) == saleId) {
-          candidates
-            ..clear()
-            ..add(row);
-          break;
-        }
-        if (payer.isNotEmpty) {
-          final customer = normalize(row['customer_name'] ?? row['name']);
-          if (customer.isNotEmpty &&
-              !customer.contains(payer) &&
-              !payer.contains(customer))
-            continue;
-        }
         candidates.add(row);
       }
 
-      if (candidates.length != 1) {
-        if (kDebugMode && candidates.length > 1) {
+      final target = findInvoiceByExplicitPaymentReference(candidates, saleId);
+      if (target == null) {
+        if (kDebugMode && candidates.isNotEmpty) {
           debugPrint(
-            '⚠️ Payment ₹$amount matched ${candidates.length} invoices; manual confirmation required.',
+            '⚠️ Payment ₹$amount has no unique invoice reference match; '
+            'Khata invoices were not changed.',
           );
         }
         return;
       }
 
-      final target = candidates.first;
       final total = money(
         target['total_amount'] ??
             target['total'] ??
             target['invoice_total'] ??
             target['grand_total'],
       );
-      final oldPaid = money(
-        target['paid_amount'] ?? target['amount_paid'] ?? target['paid'],
-      );
-      final newPaid = (oldPaid + amount).clamp(0.0, total);
-      final newStatus = newPaid >= total - 0.01 ? 'PAID' : 'PARTIAL';
       final invoiceNumber =
           (target['invoice_number'] ??
                   target['sale_id'] ??
@@ -1067,20 +1057,27 @@ class _DashboardPageState extends State<DashboardPage>
           '';
       if (invoiceNumber.isEmpty) return;
 
-      final updated = <String, dynamic>{
-        ...target,
-        'paid_amount': newPaid,
-        'amount_paid': newPaid,
-        'payment_status': newStatus,
-        'status': newStatus,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-        'last_payment_amount': amount,
-        'last_payment_source':
-            event.detectionSource?.toString() ?? 'payment_detection',
-        if (event.referenceId != null)
-          'last_payment_utr': event.referenceId.toString(),
-      };
       final targetId = recordId(target);
+      if (targetId.isEmpty) return;
+      final paymentFingerprint = event.normalizedReferenceId != null
+          ? event.fingerprint
+          : (event.sourceEventFingerprint ?? event.fingerprint);
+      final idempotencyKey = 'detected_${targetId}_$paymentFingerprint';
+      final updated = applyInvoicePaymentOnce(
+        target,
+        amount: amount,
+        idempotencyKey: idempotencyKey,
+      );
+      if (updated == null) return;
+      final newPaid = money(updated['paid_amount']);
+      final newStatus = updated['payment_status'].toString();
+      updated
+        ..['last_payment_source'] =
+            event.detectionSource?.toString() ?? 'payment_detection'
+        ..['updated_at'] = DateTime.now().toUtc().toIso8601String();
+      if (event.referenceId != null) {
+        updated['last_payment_utr'] = event.referenceId.toString();
+      }
       final updatedInvoices = rawInvoices.map((raw) {
         if (raw is! Map) return raw;
         final row = Map<String, dynamic>.from(raw);
@@ -1093,7 +1090,7 @@ class _DashboardPageState extends State<DashboardPage>
         'payment_status': newStatus,
         'paid_amount': newPaid,
         'amount': amount,
-        'idempotency_key': 'detected_${targetId}_${event.fingerprint}',
+        'idempotency_key': idempotencyKey,
       });
       await SyncService.updateSalePayment(invoiceNumber, newStatus, newPaid);
       await SyncService.processQueueSafe();
@@ -1701,11 +1698,11 @@ class _DashboardPageState extends State<DashboardPage>
   Future<void> _refreshDashboardLowStock() async {
     final hasPendingMutation =
         await SyncQueueManager.hasAnyPendingAction(const [
-        'save_sale',
-        'sync_sale',
-        'create_local_product',
-        'update_local_product',
-        'decrease_stock',
+          'save_sale',
+          'sync_sale',
+          'create_local_product',
+          'update_local_product',
+          'decrease_stock',
         ]);
     if (hasPendingMutation) {
       if (kDebugMode) {
@@ -2398,10 +2395,14 @@ class _DashboardPageState extends State<DashboardPage>
     final previous = _isOnlineStoreActive;
     setState(() => _onlineStoreLoading = true);
     try {
-      final result = await OnlineStoreService.setShopOnlineStatus(enable)
-          .timeout(const Duration(seconds: 20));
+      final result = await OnlineStoreService.setShopOnlineStatus(
+        enable,
+      ).timeout(const Duration(seconds: 20));
       if (result['success'] != true) {
-        throw StateError(result['error']?.toString() ?? 'The server could not update the store status.');
+        throw StateError(
+          result['error']?.toString() ??
+              'The server could not update the store status.',
+        );
       }
       await ScopedSharedPreferences.setBool('online_store_active', enable);
       await ScopedSharedPreferences.setBool('shop_published_online', enable);
@@ -2431,9 +2432,11 @@ class _DashboardPageState extends State<DashboardPage>
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText(enable
-              ? 'Online Shopping enabled. Your shop is visible to customers.'
-              : 'Online Shopping disabled.'),
+          content: LiveTranslatedText(
+            enable
+                ? 'Online Shopping enabled. Your shop is visible to customers.'
+                : 'Online Shopping disabled.',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -2444,7 +2447,10 @@ class _DashboardPageState extends State<DashboardPage>
         _onlineStoreLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText('Could not update Online Shopping: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: LiveTranslatedText('Could not update Online Shopping: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -3327,6 +3333,14 @@ class _DashboardPageState extends State<DashboardPage>
 
             setIfMissing('business_date', businessDate);
             setIfMissing('date', businessDate ?? eventTimestamp);
+
+            final paymentState = mergeInvoicePaymentState(row, firstItem);
+            if (jsonEncode(paymentState) != jsonEncode(row)) {
+              row
+                ..addAll(paymentState)
+                ..['sync_status'] = 'synced';
+              rowChanged = true;
+            }
 
             // Backend invoice.created_at is the canonical event time. Replace
             // stale midnight timestamps in old local snapshots rather than
@@ -4754,6 +4768,8 @@ class _DashboardPageState extends State<DashboardPage>
         ])
           if (tx.containsKey(field)) field: tx[field],
       };
+      final eventTimestampMetadata =
+          AnalyticsEngine.recordedEventTimestampFields(tx);
 
       if (invoiceNumber.isEmpty) {
         if (kDebugMode)
@@ -4802,6 +4818,7 @@ class _DashboardPageState extends State<DashboardPage>
 
         flattened.add({
           ...transactionMetadata,
+          ...eventTimestampMetadata,
           'product': prodName,
           'quantity': q,
           'price': p,
@@ -4931,6 +4948,7 @@ class _DashboardPageState extends State<DashboardPage>
 
         flattened.add({
           ...transactionMetadata,
+          ...eventTimestampMetadata,
           'product': displayProd,
           'product_name': displayProd,
           'product_id': bCode,
@@ -4993,6 +5011,57 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  Future<List<dynamic>> _reconcileLocalInvoicePayments(
+    List<dynamic> salesHistory,
+  ) async {
+    try {
+      final localInvoices = (await LocalStorageService.loadLocalInvoices())
+          .whereType<Map>()
+          .map((invoice) => Map<String, dynamic>.from(invoice))
+          .toList();
+      if (localInvoices.isEmpty || salesHistory.isEmpty) return salesHistory;
+
+      final invoicesByToken = <String, List<Map<String, dynamic>>>{};
+      for (final invoice in localInvoices) {
+        for (final token in InvoiceDedupHelper.identityTokens(invoice)) {
+          invoicesByToken.putIfAbsent(token, () => []).add(invoice);
+        }
+      }
+
+      var changed = false;
+      final reconciled = salesHistory.map((raw) {
+        if (raw is! Map) return raw;
+        final sale = Map<String, dynamic>.from(raw);
+        var merged = sale;
+        final checkedInvoices = <Map<String, dynamic>>{};
+        for (final token in InvoiceDedupHelper.identityTokens(sale)) {
+          for (final invoice
+              in invoicesByToken[token] ?? const <Map<String, dynamic>>[]) {
+            if (!checkedInvoices.add(invoice) ||
+                !InvoiceDedupHelper.sameInvoice(merged, invoice)) {
+              continue;
+            }
+            merged = mergeInvoicePaymentState(merged, invoice);
+          }
+        }
+        if (jsonEncode(merged) == jsonEncode(sale)) return raw;
+        changed = true;
+        return merged;
+      }).toList();
+
+      if (changed) {
+        await LocalStorageService.saveSales(reconciled);
+      }
+      return reconciled;
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Local invoice payment reconciliation failed: $e');
+        debugPrint(st.toString());
+      }
+      return salesHistory;
+    }
+  }
+
   Future<void> _loadSales() async {
     if (!mounted || _salesLoadInProgress) return;
     _salesLoadInProgress = true;
@@ -5011,8 +5080,9 @@ class _DashboardPageState extends State<DashboardPage>
       // Never block the dashboard on the network. A background reconciliation
       // runs after the local dashboard has rendered.
       final List<dynamic> history = await LocalStorageService.loadSales();
+      final reconciledHistory = await _reconcileLocalInvoicePayments(history);
       final historyComplete = await SalesRestoreService.isFullHistoryRestored();
-      if (history.isEmpty && !historyComplete && mounted) {
+      if (reconciledHistory.isEmpty && !historyComplete && mounted) {
         setState(() => _salesHistoryHydrating = true);
       }
       // #region agent log
@@ -5021,7 +5091,7 @@ class _DashboardPageState extends State<DashboardPage>
         message: 'DASHBOARD LOAD SALES',
         hypothesisId: 'H4',
         data: {
-          'localCacheCount': history.length,
+          'localCacheCount': reconciledHistory.length,
           'willFetchBackendInBackground': true,
         },
       );
@@ -5029,7 +5099,7 @@ class _DashboardPageState extends State<DashboardPage>
 
       List<Map<String, dynamic>> localSalesFlattened = [];
       try {
-        localSalesFlattened = await _flattenLocalSales(history);
+        localSalesFlattened = await _flattenLocalSales(reconciledHistory);
       } catch (e) {
         debugPrint('Local sales decode error: $e');
         localSalesFlattened = [];
@@ -5080,7 +5150,7 @@ class _DashboardPageState extends State<DashboardPage>
         _recomputeDailyHealthScore();
 
         // Background-only cloud reconciliation. It must never block the cashier UI.
-        final localWasEmptyAtBoot = history.isEmpty;
+        final localWasEmptyAtBoot = reconciledHistory.isEmpty;
         if (!_salesReconciliationInProgress) {
           _salesReconciliationInProgress = true;
           unawaited(() async {
@@ -5844,73 +5914,73 @@ class _DashboardPageState extends State<DashboardPage>
             onRetry: _checkLowStock,
           ),
         Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2), // Red 50
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFECACA)), // Red 200
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF2F2), // Red 50
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFECACA)), // Red 200
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () => Navigator.pushNamed(context, '/inventory'),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEF4444),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.warning_amber_rounded,
-                semanticLabel: 'Warning Amber Rounded',
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LiveTranslatedText(
-                    'LOW STOCK DETECTED',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFFB91C1C), // Red 700
-                      letterSpacing: 0.5,
-                    ),
+          child: InkWell(
+            onTap: () => Navigator.pushNamed(context, '/inventory'),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  LiveTranslatedText(
-                    'Items needing restock: $displayNames',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: const Color(0xFF7F1D1D), // Red 900
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    semanticLabel: 'Warning Amber Rounded',
+                    color: Colors.white,
+                    size: 20,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveTranslatedText(
+                        'LOW STOCK DETECTED',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFFB91C1C), // Red 700
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      LiveTranslatedText(
+                        'Items needing restock: $displayNames',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: const Color(0xFF7F1D1D), // Red 900
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  semanticLabel: 'Arrow Forward Ios Rounded',
+                  color: Color(0xFFEF4444),
+                  size: 14,
+                ),
+              ],
             ),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              semanticLabel: 'Arrow Forward Ios Rounded',
-              color: Color(0xFFEF4444),
-              size: 14,
-            ),
-          ],
-        ),
-      ),
+          ),
         ),
       ],
     );
@@ -6201,13 +6271,13 @@ class _DashboardPageState extends State<DashboardPage>
       final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
       final userEmailValue =
           [
-        prefs.getString('shop_email'),
-        prefs.getString('user_email'),
-        prefs.getString('email'),
-      ].firstWhere(
-        (value) => value != null && value.trim().isNotEmpty,
-        orElse: () => '',
-      );
+            prefs.getString('shop_email'),
+            prefs.getString('user_email'),
+            prefs.getString('email'),
+          ].firstWhere(
+            (value) => value != null && value.trim().isNotEmpty,
+            orElse: () => '',
+          );
       final userEmail = (userEmailValue ?? '').trim();
 
       if (userId <= 0 || userEmail.isEmpty) {
@@ -10836,15 +10906,18 @@ class _DashboardPageState extends State<DashboardPage>
                           final totalVal = s['total'] is num
                               ? (s['total'] as num).toDouble()
                               : 0.0;
-                          final localDate = engine.getLocalDate(s);
-                          final h = localDate.hour == 0
-                              ? 12
-                              : (localDate.hour > 12
-                                    ? localDate.hour - 12
-                                    : localDate.hour);
-                          final amPm = localDate.hour >= 12 ? 'PM' : 'AM';
+                          final eventTime = ExportService.resolveSalesEventTime(
+                            s,
+                          );
+                          final localDate =
+                              eventTime ??
+                              ExportService.resolveSalesDate(s) ??
+                              engine.getLocalDate(s);
+                          final timeLabel = eventTime == null
+                              ? 'Time not recorded'
+                              : ExportService.formatSalesTime(eventTime);
                           final formattedDate =
-                              '${localDate.day.toString().padLeft(2, '0')}/${localDate.month.toString().padLeft(2, '0')}/${localDate.year}  ${h.toString().padLeft(2, '0')}:${localDate.minute.toString().padLeft(2, '0')} $amPm';
+                              '${localDate.day.toString().padLeft(2, '0')}/${localDate.month.toString().padLeft(2, '0')}/${localDate.year}  $timeLabel';
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -11108,15 +11181,16 @@ class _DashboardPageState extends State<DashboardPage>
                       final itemCountLabel = bill.items.length == 1
                           ? '1 item'
                           : '${bill.items.length} items';
-                      final localDate = engine.getLocalDate(s);
-                      final h = localDate.hour == 0
-                          ? 12
-                          : (localDate.hour > 12
-                                ? localDate.hour - 12
-                                : localDate.hour);
-                      final amPm = localDate.hour >= 12 ? 'PM' : 'AM';
+                      final eventTime = ExportService.resolveSalesEventTime(s);
+                      final localDate =
+                          eventTime ??
+                          ExportService.resolveSalesDate(s) ??
+                          engine.getLocalDate(s);
+                      final timeLabel = eventTime == null
+                          ? 'Time not recorded'
+                          : ExportService.formatSalesTime(eventTime);
                       final formattedDate =
-                          '${localDate.day.toString().padLeft(2, '0')}/${localDate.month.toString().padLeft(2, '0')}/${localDate.year}  ${h.toString().padLeft(2, '0')}:${localDate.minute.toString().padLeft(2, '0')} $amPm';
+                          '${localDate.day.toString().padLeft(2, '0')}/${localDate.month.toString().padLeft(2, '0')}/${localDate.year}  $timeLabel';
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(
@@ -11126,94 +11200,94 @@ class _DashboardPageState extends State<DashboardPage>
                         child: InkWell(
                           onTap: () => _showRecentBillDetails(bill),
                           borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                              ),
                             ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
                               child: Column(
                                 children: [
                                   Row(
-                              children: [
-                                Container(
+                                    children: [
+                                      Container(
                                         width: 42,
                                         height: 42,
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF6366F1),
-                                        Color(0xFF8B5CF6),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFF6366F1),
+                                              Color(0xFF8B5CF6),
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
                                           borderRadius: BorderRadius.circular(
                                             12,
-                                      ),
-                                  ),
-                                  child: const Icon(
+                                          ),
+                                        ),
+                                        child: const Icon(
                                           Icons.receipt_long_rounded,
-                                    color: Colors.white,
+                                          color: Colors.white,
                                           size: 21,
-                                  ),
-                                ),
+                                        ),
+                                      ),
                                       const SizedBox(width: 11),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                            children: [
-                                              LiveTranslatedText(
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            LiveTranslatedText(
                                               bill.customerName.isNotEmpty
                                                   ? bill.customerName
                                                   : 'Walk-in Customer',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
+                                              style: const TextStyle(
                                                 fontWeight: FontWeight.w700,
                                                 fontSize: 14,
-                                                  color: Color(0xFF1F2937),
-                                                ),
+                                                color: Color(0xFF1F2937),
                                               ),
+                                            ),
                                             const SizedBox(height: 3),
-                                                LiveTranslatedText(
+                                            LiveTranslatedText(
                                               '${bill.invoiceNumber.isEmpty ? 'Bill' : 'Invoice: ${bill.invoiceNumber}'} · $itemCountLabel',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
+                                              style: const TextStyle(
                                                 color: Color(0xFF64748B),
-                                                    fontSize: 10.5,
-                                                  ),
-                                                ),
-                                              ],
+                                                fontSize: 10.5,
+                                              ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 8),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
                                       ConstrainedBox(
                                         constraints: const BoxConstraints(
                                           maxWidth: 100,
-                                          ),
-                                            child: LiveTranslatedText(
+                                        ),
+                                        child: LiveTranslatedText(
                                           '₹${_formatCompactNumber(totalVal)}',
                                           maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                          overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 14,
                                             color: Color(0xFF4F46E5),
-                                            ),
                                           ),
+                                        ),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 9),
                                   Row(
-                                  children: [
+                                    children: [
                                       const Icon(
                                         Icons.schedule_rounded,
                                         size: 13,
@@ -11225,38 +11299,38 @@ class _DashboardPageState extends State<DashboardPage>
                                           formattedDate,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                          style: const TextStyle(
                                             color: Color(0xFF64748B),
                                             fontSize: 10.5,
                                           ),
+                                        ),
                                       ),
-                                    ),
-                                    Container(
+                                      Container(
                                         constraints: const BoxConstraints(
                                           maxWidth: 132,
                                         ),
-                                      padding: const EdgeInsets.symmetric(
+                                        padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
                                           vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
+                                        ),
+                                        decoration: BoxDecoration(
                                           color: statusColor.withValues(
                                             alpha: 0.1,
                                           ),
                                           borderRadius: BorderRadius.circular(
                                             999,
-                                      ),
+                                          ),
                                         ),
                                         child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
                                               isPaid
                                                   ? Icons.check_circle_rounded
                                                   : Icons.payments_outlined,
                                               size: 12,
                                               color: statusColor,
-                                          ),
+                                            ),
                                             const SizedBox(width: 4),
                                             Flexible(
                                               child: LiveTranslatedText(
@@ -11265,22 +11339,22 @@ class _DashboardPageState extends State<DashboardPage>
                                                     : paymentStatus,
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
+                                                style: TextStyle(
                                                   color: statusColor,
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.w700,
                                                 ),
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
                         ),
                       );
                     }),
@@ -16248,104 +16322,6 @@ class _DashboardPageState extends State<DashboardPage>
         'en-IN';
   }
 
-  Widget _buildDashboardDockItem({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-    bool primary = false,
-    int badgeCount = 0,
-  }) {
-    final foreground = primary ? Colors.white : color;
-    return Expanded(
-      child: Tooltip(
-        message: label,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 3),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: primary
-                              ? const Color(0xFF3156A6)
-                              : const Color(0xFFF1F4F8),
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(icon, color: foreground, size: 20),
-                      ),
-                      if (badgeCount > 0)
-                        Positioned(
-                          right: -6,
-                          top: -6,
-                          child: Container(
-                            constraints: const BoxConstraints(
-                              minWidth: 18,
-                              minHeight: 18,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
-                            ),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFB42318),
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              badgeCount > 99 ? '99+' : badgeCount.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    height: 23,
-                    child: Center(
-                      child: LiveTranslatedText(
-                        label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(
-                          color: primary
-                              ? const Color(0xFF3156A6)
-                              : const Color(0xFF344054),
-                          fontSize: 9,
-                          height: 1.05,
-                          fontWeight: primary
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   void _showDashboardActionsSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -16402,8 +16378,8 @@ class _DashboardPageState extends State<DashboardPage>
                   Icons.translate_rounded,
                   AppLocalizations.of(context).language,
                   () {
-                  Navigator.pop(sheetContext);
-                  _showLanguageDialog();
+                    Navigator.pop(sheetContext);
+                    _showLanguageDialog();
                   },
                 ),
                 if (!_isStaffMode)
@@ -16424,8 +16400,8 @@ class _DashboardPageState extends State<DashboardPage>
                   Icons.logout_rounded,
                   AppLocalizations.of(context).logout,
                   () {
-                  Navigator.pop(sheetContext);
-                  _performLogout(context);
+                    Navigator.pop(sheetContext);
+                    _performLogout(context);
                   },
                 ),
               ],
@@ -16449,59 +16425,72 @@ class _DashboardPageState extends State<DashboardPage>
 
     return Scaffold(
       backgroundColor: surfaceColor,
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(5, 7, 5, 4),
-          decoration: BoxDecoration(
-            color: navigationSurface,
-            border: Border(
-              top: BorderSide(
-                color: appColors.outlineVariant.withValues(alpha: 0.7),
-              ),
+      bottomNavigationBar: DashboardActionDock(
+        backgroundColor: navigationSurface,
+        borderColor: appColors.outlineVariant.withValues(alpha: 0.7),
+        items: [
+          DashboardActionItem(
+            icon: Icons.add_shopping_cart,
+            label: 'New Bill',
+            color: const Color(0xFF4F46E5),
+            primary: true,
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/sales-entry',
+            ).then((_) => _loadSales()),
+          ),
+          DashboardActionItem(
+            icon: Icons.local_shipping_rounded,
+            label: 'Online Orders',
+            color: const Color(0xFFD97706),
+            badgeCount: _onlinePendingOrders,
+            onTap: () => Navigator.pushNamed(context, '/online-orders'),
+          ),
+          DashboardActionItem(
+            icon: Icons.card_giftcard_rounded,
+            label: 'Gift Card',
+            color: const Color(0xFFDB2777),
+            onTap: _openGiftCardFromPrefs,
+          ),
+          if (!_isStaffMode)
+            DashboardActionItem(
+              icon: Icons.analytics_rounded,
+              label: 'AI Analytics',
+              color: const Color(0xFF7C3AED),
+              onTap: () => Navigator.pushNamed(context, '/query'),
             ),
+          DashboardActionItem(
+            icon: Icons.translate_rounded,
+            label: AppLocalizations.of(context).language,
+            color: const Color(0xFF2563EB),
+            onTap: _showLanguageDialog,
           ),
-          child: Row(
-            children: [
-              _buildDashboardDockItem(
-                icon: Icons.add_shopping_cart_rounded,
-                label: 'New Bill',
-                color: const Color(0xFF3156A6),
-                primary: true,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/sales-entry',
-                ).then((_) => _loadSales()),
-              ),
-              _buildDashboardDockItem(
-                icon: Icons.local_shipping_outlined,
-                label: 'Online Orders',
-                color: const Color(0xFFB54708),
-                badgeCount: _onlinePendingOrders,
-                onTap: () => Navigator.pushNamed(context, '/online-orders'),
-              ),
-              _buildDashboardDockItem(
-                icon: Icons.card_giftcard_outlined,
-                label: 'Gift Card',
-                color: const Color(0xFF475467),
-                onTap: _openGiftCardFromPrefs,
-              ),
-              if (!_isStaffMode)
-                _buildDashboardDockItem(
-                  icon: Icons.query_stats_rounded,
-                  label: 'Ask AI',
-                  color: const Color(0xFF475467),
-                  onTap: () => Navigator.pushNamed(context, '/query'),
-                ),
-              _buildDashboardDockItem(
-                icon: Icons.more_horiz_rounded,
-                label: 'More',
-                color: const Color(0xFF475467),
-                onTap: _showDashboardActionsSheet,
-              ),
-            ],
+          if (!_isStaffMode)
+            DashboardActionItem(
+              icon: Icons.lock_clock_rounded,
+              label: 'Daily Closing',
+              color: const Color(0xFF0F766E),
+              onTap: _showDailyClosingSheet,
+            ),
+          DashboardActionItem(
+            icon: Icons.help_outline_rounded,
+            label: 'How to Use',
+            color: const Color(0xFF059669),
+            onTap: () => _showHowToUseDialog(context),
           ),
-        ),
+          DashboardActionItem(
+            icon: Icons.grid_view_rounded,
+            label: 'More & Settings',
+            color: const Color(0xFF475569),
+            onTap: () => Navigator.pushNamed(context, '/more'),
+          ),
+          DashboardActionItem(
+            icon: Icons.logout_rounded,
+            label: AppLocalizations.of(context).logout,
+            color: const Color(0xFFDC2626),
+            onTap: () => _performLogout(context),
+          ),
+        ],
       ),
       body: ErrorBoundary(
         onError: (error, stack) {
@@ -18450,11 +18439,11 @@ class _ShopSettingsBottomSheetState extends State<_ShopSettingsBottomSheet> {
                               fit: BoxFit.contain,
                               cacheWidth:
                                   LowMemoryPerformance.decodeCacheDimension(
-                                MediaQuery.of(context).size.width - 40,
-                                MediaQuery.of(context).devicePixelRatio,
-                                minPixels: 320,
-                                maxPixels: 960,
-                              ),
+                                    MediaQuery.of(context).size.width - 40,
+                                    MediaQuery.of(context).devicePixelRatio,
+                                    minPixels: 320,
+                                    maxPixels: 960,
+                                  ),
                             ),
                           ),
                         ),

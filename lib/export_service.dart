@@ -19,8 +19,8 @@ class ExportService {
     final value = rawDate.toString().trim();
     final trimmed = value.replaceFirst(RegExp(r'\s+Z$'), 'Z');
     final hasClock = RegExp(r'[ T]\d{1,2}:\d{2}').hasMatch(trimmed);
-    final hasExplicitZone = trimmed.endsWith('Z') ||
-        RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(trimmed);
+    final hasExplicitZone =
+        trimmed.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(trimmed);
 
     // Match the transaction-history screen: timestamps without an explicit
     // offset are backend UTC timestamps, not device-local wall-clock values.
@@ -140,9 +140,8 @@ class ExportService {
     return null;
   }
 
-  static String formatSalesDate(DateTime? value) => value == null
-      ? 'N/A'
-      : DateFormat('dd/MM/yyyy').format(value.toLocal());
+  static String formatSalesDate(DateTime? value) =>
+      value == null ? 'N/A' : DateFormat('dd/MM/yyyy').format(value.toLocal());
 
   static String formatSalesTime(DateTime? value) => value == null
       ? 'Not recorded'
@@ -155,6 +154,26 @@ class ExportService {
     }
     final parsed = double.tryParse(value?.toString() ?? '');
     return parsed != null && parsed.isFinite ? parsed : fallback;
+  }
+
+  static double totalInvoiceRevenue(List<Map<String, dynamic>> sales) {
+    return sales.fold<double>(
+      0,
+      (sum, sale) => sum + _exportNumber(sale['total_amount'] ?? sale['total']),
+    );
+  }
+
+  static double totalProductsSold(List<Map<String, dynamic>> sales) {
+    return flattenSalesForExport(sales).fold<double>(
+      0,
+      (sum, line) => sum + _exportNumber(line['quantity'] ?? line['qty'], 1),
+    );
+  }
+
+  static String formatProductQuantity(double quantity) {
+    return quantity == quantity.roundToDouble()
+        ? quantity.toStringAsFixed(0)
+        : quantity.toString();
   }
 
   static String _firstExportText(
@@ -203,6 +222,37 @@ class ExportService {
     return CurrencyManager.multiply(price, quantity);
   }
 
+  static double _invoiceExportTotal(Map<String, dynamic> sale) {
+    for (final field in const [
+      'total_amount',
+      'total',
+      'total_with_tax',
+      'line_total',
+      'amount',
+    ]) {
+      final raw = sale[field];
+      if (raw == null || raw.toString().trim().isEmpty) continue;
+      final parsed = double.tryParse(raw.toString());
+      if (parsed != null && parsed.isFinite) return parsed;
+    }
+    return _lineExportTotal(sale);
+  }
+
+  static double? _declaredInvoiceExportTotal(Map<String, dynamic> sale) {
+    for (final field in const [
+      'total_amount',
+      'total',
+      'total_with_tax',
+      'amount',
+    ]) {
+      final raw = sale[field];
+      if (raw == null || raw.toString().trim().isEmpty) continue;
+      final parsed = double.tryParse(raw.toString());
+      if (parsed != null && parsed.isFinite) return parsed;
+    }
+    return null;
+  }
+
   /// Converts invoice snapshots into export rows without using invoice totals
   /// as if they were product-line totals. Parent timestamps/payment metadata
   /// are inherited; product, quantity, price and amount come from each line.
@@ -218,8 +268,8 @@ class ExportService {
       final rawLines = lineItems is List && lineItems.isNotEmpty
           ? lineItems
           : items is List
-              ? items
-              : const <dynamic>[];
+          ? items
+          : const <dynamic>[];
 
       if (rawLines.isEmpty) {
         final row = Map<String, dynamic>.from(sale);
@@ -233,7 +283,7 @@ class ExportService {
         row['qty'] = quantity;
         row['price'] = price;
         row['unit_price'] = price;
-        row['export_total'] = _lineExportTotal(row);
+        row['export_total'] = _invoiceExportTotal(row);
         rows.add(row);
         continue;
       }
@@ -252,10 +302,7 @@ class ExportService {
           row[entry.key] = value;
         }
         final name = _firstExportText(line, sale);
-        final quantity = _exportNumber(
-          line['quantity'] ?? line['qty'],
-          1,
-        );
+        final quantity = _exportNumber(line['quantity'] ?? line['qty'], 1);
         final price = _exportNumber(
           line['unit_price'] ?? line['price'] ?? line['selling_price'],
         );
@@ -271,6 +318,32 @@ class ExportService {
         row['export_total'] = _lineExportTotal(line);
         rows.add(row);
       }
+
+      final invoiceTotal = _declaredInvoiceExportTotal(sale);
+      if (invoiceTotal != null) {
+        final lineTotal = rawLines.whereType<Map>().fold<double>(
+          0,
+          (sum, line) =>
+              sum + _lineExportTotal(Map<String, dynamic>.from(line)),
+        );
+        final adjustment = double.parse(
+          (invoiceTotal - lineTotal).toStringAsFixed(2),
+        );
+        if (adjustment.abs() >= 0.01) {
+          rows.add({
+            ...sale,
+            'product_name': 'Invoice Adjustment',
+            'product': 'Invoice Adjustment',
+            'item': 'Invoice Adjustment',
+            'quantity': 0,
+            'qty': 0,
+            'price': 0,
+            'unit_price': 0,
+            'export_total': adjustment,
+            'is_invoice_adjustment': true,
+          });
+        }
+      }
     }
     return rows;
   }
@@ -282,13 +355,23 @@ class ExportService {
       // Export one row per actual product line, not one fake N/A product per bill.
       final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
-        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA =
+            resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB =
+            resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
       List<List<dynamic>> csvData = [
-        ['Date', 'Product', 'Quantity', 'Price', 'Total', 'Payment Method'],
+        [
+          'Date',
+          'Recorded Time',
+          'Product',
+          'Quantity',
+          'Price',
+          'Total',
+          'Payment Method',
+        ],
       ];
 
       for (var sale in sortedSales) {
@@ -296,10 +379,15 @@ class ExportService {
         final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
         final double total = _exportNumber(sale['export_total']);
         final saleDate = resolveSalesDate(sale);
+        final saleEventTime = resolveSalesEventTime(sale);
 
         csvData.add([
-          saleDate == null ? formatSalesDate(null) : _formatDate(saleDate),
-          sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item',
+          formatSalesDate(saleDate),
+          formatSalesTime(saleEventTime),
+          sale['product_name'] ??
+              sale['product'] ??
+              sale['item'] ??
+              'Unspecified item',
           qty,
           'Rs.${price.toStringAsFixed(2)}',
           'Rs.${total.toStringAsFixed(2)}',
@@ -315,7 +403,9 @@ class ExportService {
   }
 
   /// Generate GSTR-1 CSV from sales data
-  static Future<String> generateGSTR1CSV(List<Map<String, dynamic>> sales) async {
+  static Future<String> generateGSTR1CSV(
+    List<Map<String, dynamic>> sales,
+  ) async {
     try {
       List<List<dynamic>> csvData = [
         [
@@ -331,14 +421,20 @@ class ExportService {
           'E-Commerce GSTIN',
           'Rate',
           'Taxable Value',
-          'Cess Amount'
-        ]
+          'Cess Amount',
+        ],
       ];
 
       for (var sale in sales) {
-        final double price = double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
-        final double qty = double.tryParse(sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1') ?? 1;
-        final double gstPercent = double.tryParse(sale['gstPercent']?.toString() ?? '18') ?? 18.0;
+        final double price =
+            double.tryParse(sale['price']?.toString() ?? '0') ?? 0;
+        final double qty =
+            double.tryParse(
+              sale['quantity']?.toString() ?? sale['qty']?.toString() ?? '1',
+            ) ??
+            1;
+        final double gstPercent =
+            double.tryParse(sale['gstPercent']?.toString() ?? '18') ?? 18.0;
         final saleDate = resolveSalesDate(sale) ?? DateTime.now();
 
         final double invoiceValue = CurrencyManager.multiply(price, qty);
@@ -357,7 +453,7 @@ class ExportService {
           '', // E-Commerce GSTIN
           gstPercent.toStringAsFixed(2), // Rate
           taxableValue.toStringAsFixed(2), // Taxable Value
-          '0' // Cess Amount
+          '0', // Cess Amount
         ]);
       }
 
@@ -369,10 +465,22 @@ class ExportService {
   }
 
   /// Generate Tally Prime Sales Register CSV
-  static Future<String> generateTallyCSV(List<Map<String, dynamic>> sales) async {
+  static Future<String> generateTallyCSV(
+    List<Map<String, dynamic>> sales,
+  ) async {
     try {
       List<List<dynamic>> csvData = [
-        ['Date', 'Voucher Type', 'Voucher Number', 'Party Name', 'Sales Ledger', 'Item Name', 'Billed Qty', 'Rate', 'Amount']
+        [
+          'Date',
+          'Voucher Type',
+          'Voucher Number',
+          'Party Name',
+          'Sales Ledger',
+          'Item Name',
+          'Billed Qty',
+          'Rate',
+          'Amount',
+        ],
       ];
 
       final exportRows = flattenSalesForExport(sales);
@@ -385,13 +493,19 @@ class ExportService {
         csvData.add([
           saleDate == null ? formatSalesDate(null) : _formatDate(saleDate),
           'Sales',
-          sale['invoice_number'] ?? sale['invoiceId'] ?? sale['sale_id'] ?? 'N/A',
+          sale['invoice_number'] ??
+              sale['invoiceId'] ??
+              sale['sale_id'] ??
+              'N/A',
           sale['customer_name'] ?? sale['customerName'] ?? 'Walk-in',
           'Local Sales',
-          sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item',
+          sale['product_name'] ??
+              sale['product'] ??
+              sale['item'] ??
+              'Unspecified item',
           qty.toString(),
           price.toStringAsFixed(2),
-          total.toStringAsFixed(2)
+          total.toStringAsFixed(2),
         ]);
       }
 
@@ -403,12 +517,16 @@ class ExportService {
   }
 
   /// Generate Excel from sales data
-  static Future<List<int>> generateExcel(List<Map<String, dynamic>> sales) async {
+  static Future<List<int>> generateExcel(
+    List<Map<String, dynamic>> sales,
+  ) async {
     try {
       final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
-        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA =
+            resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB =
+            resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
@@ -416,8 +534,31 @@ class ExportService {
       Sheet sheetObject = excel['Sales Report'];
       excel.delete('Sheet1'); // Remove default sheet
 
+      final summarySheet = excel['Summary'];
+      summarySheet.appendRow([TextCellValue('Metric'), TextCellValue('Value')]);
+      summarySheet.appendRow([
+        TextCellValue('Transactions'),
+        IntCellValue(sales.length),
+      ]);
+      summarySheet.appendRow([
+        TextCellValue('Products Sold'),
+        DoubleCellValue(totalProductsSold(sales)),
+      ]);
+      summarySheet.appendRow([
+        TextCellValue('Total Revenue'),
+        DoubleCellValue(totalInvoiceRevenue(sales)),
+      ]);
+
       // Header row
-      List<String> headers = ['Date', 'Product', 'Quantity', 'Price', 'Total', 'Payment Method'];
+      List<String> headers = [
+        'Date',
+        'Recorded Time',
+        'Product',
+        'Quantity',
+        'Price',
+        'Total',
+        'Payment Method',
+      ];
       sheetObject.appendRow(headers.map((h) => TextCellValue(h)).toList());
 
       // Data rows
@@ -426,14 +567,23 @@ class ExportService {
         final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
         final double total = _exportNumber(sale['export_total']);
         final saleDate = resolveSalesDate(sale);
+        final saleEventTime = resolveSalesEventTime(sale);
 
         sheetObject.appendRow([
-          TextCellValue(saleDate == null ? formatSalesDate(null) : _formatDate(saleDate)),
-          TextCellValue(sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item'),
+          TextCellValue(formatSalesDate(saleDate)),
+          TextCellValue(formatSalesTime(saleEventTime)),
+          TextCellValue(
+            sale['product_name'] ??
+                sale['product'] ??
+                sale['item'] ??
+                'Unspecified item',
+          ),
           DoubleCellValue(qty),
           TextCellValue('Rs.${price.toStringAsFixed(2)}'),
           TextCellValue('Rs.${total.toStringAsFixed(2)}'),
-          TextCellValue(sale['paymentMethod'] ?? sale['payment_method'] ?? 'Cash'),
+          TextCellValue(
+            sale['paymentMethod'] ?? sale['payment_method'] ?? 'Cash',
+          ),
         ]);
       }
 
@@ -451,7 +601,7 @@ class ExportService {
         dir = Directory('/storage/emulated/0/Downloads');
       }
       if (!await dir.exists()) {
-         return await getApplicationDocumentsDirectory();
+        return await getApplicationDocumentsDirectory();
       }
       return dir;
     }
@@ -465,11 +615,11 @@ class ExportService {
       final timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       String formattedFileName = fileName ?? 'retail_sales_$timestamp';
       if (!formattedFileName.endsWith('.xlsx')) formattedFileName += '.xlsx';
-      
+
       final file = File('${directory.path}/$formattedFileName');
       await file.writeAsBytes(bytes);
       await _scanMediaFile(file.path);
-      
+
       await NotificationService().showDownloadNotification(
         'Excel Export Complete',
         'Saved as $formattedFileName in Downloads',
@@ -486,15 +636,18 @@ class ExportService {
   static Future<String> saveCSV(String csvContent, {String? fileName}) async {
     try {
       final directory = await _getPublicDirectory();
-      final timestamp = DateTime.now().toString().replaceAll(RegExp(r'[^0-9]'), '');
+      final timestamp = DateTime.now().toString().replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      );
       String formattedFileName = fileName ?? 'sales_$timestamp';
       if (!formattedFileName.endsWith('.csv')) formattedFileName += '.csv';
-      
+
       final file = File('${directory.path}/$formattedFileName');
-      
+
       await file.writeAsString(csvContent);
       await _scanMediaFile(file.path);
-      
+
       // Show notification
       await NotificationService().showDownloadNotification(
         'Export Complete',
@@ -519,8 +672,10 @@ class ExportService {
     try {
       final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
-        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA =
+            resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB =
+            resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
@@ -586,7 +741,13 @@ class ExportService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text('Total Transactions: ${sales.length}'),
-                      pw.Text('Total Revenue: ${totalRevenue ?? 'Rs.0.00'}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      pw.Text(
+                        'Products Sold: ${formatProductQuantity(totalProductsSold(sales))}',
+                      ),
+                      pw.Text(
+                        'Total Revenue: ${totalRevenue ?? 'Rs.0.00'}',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
                     ],
                   ),
                 ],
@@ -596,21 +757,38 @@ class ExportService {
             // Table
             pw.Text(
               'Transaction Details',
-              style: pw.TextStyle(
-                fontSize: 14,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
             pw.TableHelper.fromTextArray(
-              headers: ['Sale Date', 'Recorded Time', 'Product', 'Qty', 'Price', 'Total', 'Method'],
+              headers: [
+                'Sale Date',
+                'Recorded Time',
+                'Product',
+                'Qty',
+                'Price',
+                'Total',
+                'Method',
+              ],
               data: sortedSales.map((sale) {
-                final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
-                final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
+                final double price = _exportNumber(
+                  sale['unit_price'] ?? sale['price'],
+                );
+                final double qty = _exportNumber(
+                  sale['quantity'] ?? sale['qty'],
+                  1,
+                );
                 final double total = _exportNumber(sale['export_total']);
-                final String name = (sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item').toString();
+                final String name =
+                    (sale['product_name'] ??
+                            sale['product'] ??
+                            sale['item'] ??
+                            'Unspecified item')
+                        .toString();
                 final String dateStr = formatSalesDate(resolveSalesDate(sale));
-                final String timeStr = formatSalesTime(resolveSalesEventTime(sale));
+                final String timeStr = formatSalesTime(
+                  resolveSalesEventTime(sale),
+                );
 
                 return [
                   dateStr,
@@ -664,8 +842,10 @@ class ExportService {
     try {
       final sortedSales = flattenSalesForExport(sales);
       sortedSales.sort((a, b) {
-        final dateA = resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final dateB = resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateA =
+            resolveSalesDate(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final dateB =
+            resolveSalesDate(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
         return dateA.compareTo(dateB);
       });
 
@@ -721,7 +901,10 @@ class ExportService {
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Text('Total Transactions: ${sales.length}'),
-                      pw.Text('Total Revenue: ${totalRevenue ?? 'Rs.0.00'}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                      pw.Text(
+                        'Total Revenue: ${totalRevenue ?? 'Rs.0.00'}',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
                     ],
                   ),
                 ],
@@ -730,23 +913,40 @@ class ExportService {
             pw.SizedBox(height: 20),
             pw.Text(
               'Transaction Details',
-              style: pw.TextStyle(
-                fontSize: 14,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
             pw.TableHelper.fromTextArray(
-              headers: ['Sale Date', 'Recorded Time', 'Product', 'Qty', 'Price', 'Total', 'Method'],
+              headers: [
+                'Sale Date',
+                'Recorded Time',
+                'Product',
+                'Qty',
+                'Price',
+                'Total',
+                'Method',
+              ],
               data: sortedSales.map((sale) {
-                 final double price = _exportNumber(sale['unit_price'] ?? sale['price']);
-                 final double qty = _exportNumber(sale['quantity'] ?? sale['qty'], 1);
-                 final double total = _exportNumber(sale['export_total']);
-                 final String name = (sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unspecified item').toString();
-                 final String dateStr = formatSalesDate(resolveSalesDate(sale));
-                 final String timeStr = formatSalesTime(resolveSalesEventTime(sale));
+                final double price = _exportNumber(
+                  sale['unit_price'] ?? sale['price'],
+                );
+                final double qty = _exportNumber(
+                  sale['quantity'] ?? sale['qty'],
+                  1,
+                );
+                final double total = _exportNumber(sale['export_total']);
+                final String name =
+                    (sale['product_name'] ??
+                            sale['product'] ??
+                            sale['item'] ??
+                            'Unspecified item')
+                        .toString();
+                final String dateStr = formatSalesDate(resolveSalesDate(sale));
+                final String timeStr = formatSalesTime(
+                  resolveSalesEventTime(sale),
+                );
 
-                 return [
+                return [
                   dateStr,
                   timeStr,
                   name,
@@ -758,7 +958,10 @@ class ExportService {
               }).toList(),
               border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey),
               cellStyle: const pw.TextStyle(fontSize: 8),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9,
+              ),
             ),
           ],
         ),
@@ -767,10 +970,10 @@ class ExportService {
       final directory = await _getPublicDirectory();
       final timestamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       final file = File('${directory.path}/report_$timestamp.pdf');
-      
+
       await file.writeAsBytes(await pdf.save());
       await _scanMediaFile(file.path);
-      
+
       // Show notification
       await NotificationService().showDownloadNotification(
         'PDF Report Generated',
@@ -817,26 +1020,26 @@ class ExportService {
     if (date is DateTime) {
       return DateFormat('dd/MM/yyyy HH:mm').format(date.toLocal());
     }
-    
+
     String str = date.toString().trim();
     if (str.isEmpty || str == 'null') return 'N/A';
-    
-    try {
-       // Attempt direct parse (handles ISO8601 like 2026-04-03T...)
-       DateTime? dt = DateTime.tryParse(str);
-       
-       // Fallback for non-ISO formats often found in manual entries
-       if (dt == null && str.contains('-')) {
-          // If it's something like "2026-04-03" (10 chars), try suffixing
-          if (str.length == 10) str = '${str}T12:00:00';
-          dt = DateTime.tryParse(str);
-       }
 
-       if (dt != null) {
-         return DateFormat('dd/MM/yyyy').format(dt.toLocal());
-       }
+    try {
+      // Attempt direct parse (handles ISO8601 like 2026-04-03T...)
+      DateTime? dt = DateTime.tryParse(str);
+
+      // Fallback for non-ISO formats often found in manual entries
+      if (dt == null && str.contains('-')) {
+        // If it's something like "2026-04-03" (10 chars), try suffixing
+        if (str.length == 10) str = '${str}T12:00:00';
+        dt = DateTime.tryParse(str);
+      }
+
+      if (dt != null) {
+        return DateFormat('dd/MM/yyyy').format(dt.toLocal());
+      }
     } catch (_) {}
-    
+
     return str.length > 10 ? str.substring(0, 10) : str;
   }
 }
