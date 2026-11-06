@@ -984,6 +984,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..['caption'] = caption
       ..['offer'] = offer
       ..['trigger_type'] = discountPrice != null || offer.isNotEmpty ? 'owner_offer' : 'manual'
+      ..['goal'] = _goal
+      ..['language'] = _language
       ..['template'] = _template
       ..['ad_format'] = _adFormat
       ..['content_version'] = (_number(current['content_version']).toInt()).clamp(1, 2147483646) + 1
