@@ -1147,13 +1147,27 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Future<void> _markRedeemed(Map<String, dynamic> campaign) async {
-    final updated = Map<String, dynamic>.from(campaign);
-    updated['redemptions'] =
-        (_number(updated['redemptions']).toInt()) + 1;
-    await _persistCampaign(updated);
-    _showMessage(
-      'Manual redemption count updated on this device. Checkout is not connected to this tracking code.',
+    final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
+    if (campaign['status'] != 'APPROVED' || id.isEmpty) {
+      _showMessage('Only approved campaigns can record manual redemptions.');
+      return;
+    }
+    final updated = Map<String, dynamic>.from(campaign)
+      ..['redemptions'] = _number(campaign['redemptions']).toInt() + 1
+      ..['local_redemption_updated_at'] = DateTime.now().toIso8601String()
+      ..['updated_at'] = DateTime.now().toIso8601String();
+    _campaigns.removeWhere(
+      (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
     );
+    _campaigns.insert(0, updated);
+    if (_currentDraft != null &&
+        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id) {
+      _currentDraft = updated;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
+    if (mounted) setState(() {});
+    _showMessage('Manual redemption count updated on this device only. It does not change campaign approval.');
   }
   void _openCampaignForEditing(Map<String, dynamic> campaign) {
     final draft = Map<String, dynamic>.from(campaign);
