@@ -602,33 +602,90 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       return;
     }
 
+    final product = _selectedProduct;
+    final productName = product?['name']?.toString() ?? '';
+    final originalPrice = _productPrice(product);
+    final rawProductId = product?['id'] ?? product?['product_id'];
+    final productId = rawProductId == null ? null : int.tryParse(rawProductId.toString());
+    final discountText = _discountPriceController.text.trim();
+    double? discountPrice;
+    if (discountText.isNotEmpty) {
+      discountPrice = double.tryParse(discountText);
+      if (discountPrice == null || !discountPrice.isFinite || discountPrice < 0) {
+        _showMessage('Enter a valid discounted price.');
+        return;
+      }
+      if (productId == null || originalPrice == null) {
+        _showMessage('Select a server-synced product with a verified price before adding a discount.');
+        return;
+      }
+      if (discountPrice >= originalPrice) {
+        _showMessage('Discounted price must be lower than the original product price.');
+        return;
+      }
+    }
+
+    DateTime? offerValidUntil;
+    final validUntilText = _offerValidUntilController.text.trim();
+    if (validUntilText.isNotEmpty) {
+      offerValidUntil = DateTime.tryParse(validUntilText);
+      if (offerValidUntil == null) {
+        _showMessage('Enter the offer end date as YYYY-MM-DD.');
+        return;
+      }
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      final expiryDate = DateTime(offerValidUntil.year, offerValidUntil.month, offerValidUntil.day);
+      if (expiryDate.isBefore(todayDate)) {
+        _showMessage('Offer end date cannot be in the past.');
+        return;
+      }
+      if (discountPrice == null) {
+        _showMessage('Enter a discounted price before setting an offer end date.');
+        return;
+      }
+    }
+
     setState(() => _busy = true);
     try {
-      final product = _selectedProduct;
       final now = DateTime.now();
       final code = GrowthAdCopy.offerCode(now);
-      final productName = product?['name']?.toString() ?? '';
-      final price = _productPrice(product);
-      final rawProductId = product?['id'] ?? product?['product_id'];
-      final productId = rawProductId == null
-          ? null
-          : int.tryParse(rawProductId.toString());
-      int? authoritativeProductId;
+      final offerText = _offerController.text.trim();
       var headline = GrowthAdCopy.headline(_goal, _language);
       var caption = GrowthAdCopy.caption(
         shopName: shop,
         goal: _goal,
         language: _language,
         productName: productName,
-        price: price,
-        offer: _offerController.text,
+        price: discountPrice ?? originalPrice,
+        offer: offerText,
         offerCode: code,
       );
-      var generationSource = 'local_template';
-      String? authoritativeShopName;
+      final locationText = _shopAddressText();
+      final phoneText = _shopPhoneText();
+      if (discountPrice != null && originalPrice != null) {
+        final percent = ((originalPrice - discountPrice) / originalPrice) * 100;
+        caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
+        caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
+        caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
+      }
+      if (offerValidUntil != null) {
+        caption += '\nOffer valid until: ' + _formatDate(offerValidUntil);
+      }
+      if (locationText.isNotEmpty) caption += '\nShop location: ' + locationText;
+      if (phoneText.isNotEmpty) caption += '\nContact: ' + phoneText;
 
-      // The backend resolves the authenticated owner's profile and product
-      // record itself. A client cannot request another shop's product copy.
+      var generationSource = 'local_template';
+      var authoritativeShopName = shop;
+      var authoritativeShopDetails = Map<String, dynamic>.from(_shopDetails);
+      var authoritativeProductId = productId;
+      var authoritativeOriginalPrice = originalPrice;
+      var authoritativeDiscountPrice = discountPrice;
+      double? authoritativeDiscountPercent;
+      if (discountPrice != null && originalPrice != null && originalPrice > 0) {
+        authoritativeDiscountPercent = ((originalPrice - discountPrice) / originalPrice) * 100;
+      }
+
       try {
         final response = await ApiClient.postJson(
           '/growth/marketing/generate',
@@ -638,8 +695,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             'ad_format': _adFormat,
             'product_id': productId,
             'product_name': productName,
-            'offer': _offerController.text.trim(),
+            'offer': offerText,
             'offer_code': code,
+            'discount_price': discountPrice,
+            'offer_valid_until': offerValidUntil == null ? null : _formatDate(offerValidUntil),
           },
         ).timeout(const Duration(seconds: 18));
 
@@ -653,41 +712,77 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               headline = serverHeadline;
               caption = serverCaption;
               generationSource = data['generation_source']?.toString() ?? 'server';
-              authoritativeShopName = data['shop_name']?.toString();
-              authoritativeProductId = int.tryParse(data['product_id']?.toString() ?? '');
+              authoritativeShopName = data['shop_name']?.toString() ?? shop;
+              authoritativeProductId = int.tryParse(data['product_id']?.toString() ?? '') ?? productId;
+              if (data['shop_details'] is Map) {
+                authoritativeShopDetails = Map<String, dynamic>.from(data['shop_details'] as Map);
+              }
+              authoritativeOriginalPrice = data['original_price'] is num
+                  ? (data['original_price'] as num).toDouble()
+                  : originalPrice;
+              authoritativeDiscountPrice = data['discount_price'] is num
+                  ? (data['discount_price'] as num).toDouble()
+                  : discountPrice;
+              authoritativeDiscountPercent = data['discount_percent'] is num
+                  ? (data['discount_percent'] as num).toDouble()
+                  : authoritativeDiscountPercent;
+              offerValidUntil = DateTime.tryParse(data['offer_valid_until']?.toString() ?? '') ?? offerValidUntil;
             }
           }
+        } else if (discountPrice != null) {
+          String detail = 'The server could not verify this discount. Check the product price and try again.';
+          try {
+            final body = jsonDecode(response.body);
+            if (body is Map && body['detail'] != null) detail = body['detail'].toString();
+          } catch (_) {}
+          throw StateError(detail);
         }
-      } catch (_) {
-        // Keep the offline-safe, deterministic local draft when API/AI is down.
+      } catch (error) {
+        if (discountPrice != null) {
+          _showMessage(error is StateError ? error.message : 'Discount verification is unavailable. Try again when online.');
+          return;
+        }
+        // A no-discount campaign can still be drafted offline using the last
+        // loaded shop profile. It remains local and requires owner review.
       }
 
       final draft = <String, dynamic>{
         'id': now.microsecondsSinceEpoch.toString(),
-        'shop_name': (authoritativeShopName?.trim().isNotEmpty ?? false)
-            ? authoritativeShopName!.trim()
-            : shop,
+        'shop_name': authoritativeShopName,
+        'shop_details': authoritativeShopDetails,
         'goal': _goal,
         'language': _language,
         'template': _template,
         'ad_format': _adFormat,
-        'product_id': authoritativeProductId ?? productId,
+        'product_id': authoritativeProductId,
         'product_name': productName,
-        'product_price': price,
+        'product_price': authoritativeOriginalPrice,
+        'original_price': authoritativeOriginalPrice,
+        'discount_price': authoritativeDiscountPrice,
+        'discount_percent': authoritativeDiscountPercent,
+        'offer_valid_until': offerValidUntil == null ? null : _formatDate(offerValidUntil),
         'headline': headline,
         'caption': caption,
-        'offer': _offerController.text.trim(),
+        'offer': offerText,
         'offer_code': code,
         'created_at': now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
         'redemptions': 0,
         'tracking_mode': 'manual_local',
         'generation_source': generationSource,
+        'trigger_type': authoritativeDiscountPrice != null || offerText.isNotEmpty ? 'owner_offer' : 'manual',
+        'content_version': 1,
+        'status': 'PENDING_APPROVAL',
+        'pending_sync': true,
         'requires_owner_review': true,
       };
 
-      if (authoritativeShopName?.trim().isNotEmpty ?? false) {
-        _shopController.text = authoritativeShopName!.trim();
-      }
+      _shopDetails = authoritativeShopDetails;
+      _shopController.text = authoritativeShopName;
+      _discountPriceController.text = authoritativeDiscountPrice == null
+          ? ''
+          : authoritativeDiscountPrice.toString();
+      _offerValidUntilController.text = offerValidUntil == null ? '' : _formatDate(offerValidUntil);
       _currentDraft = draft;
       _headlineController.text = headline;
       _captionController.text = caption;
@@ -695,13 +790,13 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
       _showMessage(
         generationSource == 'groq'
-            ? 'AI draft generated from your shop data. Review every detail before sharing.'
+            ? 'AI campaign draft generated. Review the shop details, price and discount before approving.'
             : generationSource == 'template_fallback'
-                ? 'Draft created with safe fallback copy. Review product details before sharing.'
-                : 'Offline ad draft saved on this device. No advertising spend used.',
+                ? 'Campaign draft generated with verified shop data. Review it before approving.'
+                : 'Campaign draft saved. Review it before approving.',
       );
-    } catch (_) {
-      _showMessage('Ad created, but the draft could not be saved.');
+    } catch (error) {
+      _showMessage(error is StateError ? error.message : 'Campaign draft could not be generated or saved.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
