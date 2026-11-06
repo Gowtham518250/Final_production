@@ -209,7 +209,7 @@ class CreativeStudioActivity : ComponentActivity() {
             return false
         }
         transport.webView = popup
-        resultMsg.sendToTarget()
+        resultMsg?.sendToTarget()
         dialog.show()
         return true
     }
