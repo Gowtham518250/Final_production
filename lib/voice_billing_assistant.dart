@@ -2013,28 +2013,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         transcript,
         _selectedLang.code,
       );
-      final correctedTranscript =
-          await VoiceFeedbackLearningService.applyLearnedCorrections(
-        transcript: phoneticTranscript,
-        languageCode: _selectedLang.code,
-      );
-      final correctedOrOriginal = correctedTranscript.trim().isNotEmpty
-          ? correctedTranscript
-          : phoneticTranscript;
+      // Learned pronunciations are now applied server-side using aliases scoped
+      // to the authenticated shop. Do not apply device-wide aliases here: the
+      // same tablet may be used by multiple shops.
       final cleanTranscript =
           RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
-        correctedOrOriginal,
+        phoneticTranscript,
       );
       var parsedResult = parsed;
       // The audio endpoint already produced a draft. Re-run the text parser
-      // only when learned corrections or deterministic number normalization
-      // changed the transcript, avoiding an unnecessary second AI request.
-      if (correctedTranscript != phoneticTranscript ||
-          cleanTranscript != phoneticTranscript) {
+      // only when deterministic number normalization changed the transcript.
+      if (cleanTranscript != phoneticTranscript) {
         parsedResult = await _parseWithGroq(cleanTranscript);
       }
       parsedResult = await _applyDeterministicScaleCorrection(
-        transcriptBeforeNormalization: correctedOrOriginal,
+        transcriptBeforeNormalization: phoneticTranscript,
         normalizedTranscript: cleanTranscript,
         aiItems: parsedResult.items,
         aiWarnings: parsedResult.warnings,
