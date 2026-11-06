@@ -466,6 +466,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id) {
             _currentDraft = remote;
           }
+          final serverShopName = remote['shop_name']?.toString().trim() ?? '';
+          if (serverShopName.isNotEmpty) _shopController.text = serverShopName;
+          if (remote['shop_details'] is Map) {
+            _shopDetails = Map<String, dynamic>.from(remote['shop_details'] as Map);
+          }
           if (_campaigns.length > 20) {
             _campaigns = _campaigns.take(20).toList();
           }
@@ -1461,10 +1466,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         children: [
           TextField(
             controller: _shopController,
+            readOnly: true,
             textCapitalization: TextCapitalization.words,
-            onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               label: LiveTranslatedText('Shop name'),
+              helperText: 'Managed from your saved Shop Profile.',
               prefixIcon: Icon(Icons.storefront_rounded),
               border: OutlineInputBorder(),
             ),
