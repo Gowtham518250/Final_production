@@ -2,6 +2,22 @@
 ///
 /// This intentionally uses local templates, not a paid AI API. It never invents
 /// a discount: an offer appears only when the owner explicitly enters one.
+class GrowthMarketingPricing {
+  /// Returns a percentage only for a valid, strictly discounted price.
+  static double? discountPercent(double? originalPrice, double? discountedPrice) {
+    if (originalPrice == null ||
+        discountedPrice == null ||
+        !originalPrice.isFinite ||
+        !discountedPrice.isFinite ||
+        originalPrice <= 0 ||
+        discountedPrice < 0 ||
+        discountedPrice >= originalPrice) {
+      return null;
+    }
+    return ((originalPrice - discountedPrice) / originalPrice) * 100;
+  }
+}
+
 class GrowthAdCopy {
   static String headline(String goal, String language) {
     final telugu = language == 'te';

@@ -41,6 +41,18 @@ void main() {
     expect(hindi, isNot(contains('RM123456')));
   });
 
+  test('discount percentage is calculated from verified original and offer prices', () {
+    expect(GrowthMarketingPricing.discountPercent(1000, 800), 20);
+    expect(GrowthMarketingPricing.discountPercent(999, 799), closeTo(20.02002002, 0.000001));
+  });
+
+  test('invalid discounts are not represented as percentages', () {
+    expect(GrowthMarketingPricing.discountPercent(0, 0), isNull);
+    expect(GrowthMarketingPricing.discountPercent(100, 100), isNull);
+    expect(GrowthMarketingPricing.discountPercent(100, 120), isNull);
+    expect(GrowthMarketingPricing.discountPercent(100, -1), isNull);
+  });
+
   test('offer codes have a stable prefix and six-character suffix', () {
     final code = GrowthAdCopy.offerCode(DateTime(2026, 10, 27));
     expect(code, matches(RegExp(r'^RM[0-9]{6}$')));
