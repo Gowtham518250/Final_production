@@ -1097,6 +1097,45 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
   }
 
+  Future<Map<String, dynamic>?> _refreshCampaignFromServer(String campaignId) async {
+    final response = await ApiClient.getJson(
+      '/growth/marketing/campaigns?limit=100',
+    ).timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) {
+      throw StateError('Could not verify the latest campaign approval. Connect to the internet and retry.');
+    }
+    final decoded = jsonDecode(response.body);
+    final rows = decoded is Map && decoded['campaigns'] is List
+        ? decoded['campaigns'] as List
+        : const <dynamic>[];
+    Map<String, dynamic>? latest;
+    for (final row in rows.whereType<Map>()) {
+      final item = Map<String, dynamic>.from(row);
+      final id = (item['campaign_id'] ?? item['id'])?.toString() ?? '';
+      if (id == campaignId) {
+        latest = item;
+        break;
+      }
+    }
+    if (latest == null) return null;
+
+    latest['pending_sync'] = false;
+    _campaigns.removeWhere(
+      (item) => (item['campaign_id'] ?? item['id'])?.toString() == campaignId,
+    );
+    _campaigns.insert(0, latest);
+    if (_campaigns.length > 20) _campaigns = _campaigns.take(20).toList();
+
+    if (_currentDraft != null &&
+        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == campaignId) {
+      _currentDraft = latest;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
+    if (mounted) setState(() {});
+    return latest;
+  }
+
   Future<void> _sharePoster() async {
     final draft = _currentDraft;
     if (_busy || draft == null) return;
@@ -1108,6 +1147,19 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
     setState(() => _busy = true);
     try {
+      final campaignId = (draft['campaign_id'] ?? draft['id']).toString();
+      final latest = await _refreshCampaignFromServer(campaignId);
+      if (latest == null ||
+          latest['status'] != 'APPROVED' ||
+          _number(latest['content_version']).toInt() != version ||
+          _number(latest['approved_version']).toInt() != version) {
+        _showMessage('This campaign version is no longer approved. Refresh and review the latest version.');
+        return;
+      }
+      if (_hasUnsavedCampaignEdits) {
+        _showMessage('This campaign has unsaved edits. Save the new version and approve it before sharing.');
+        return;
+      }
       await WidgetsBinding.instance.endOfFrame;
       final renderObject = _posterKey.currentContext?.findRenderObject();
       if (renderObject is! RenderRepaintBoundary) {
@@ -1139,23 +1191,37 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Future<void> _shareCaption(Map<String, dynamic> campaign) async {
+    final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
     final version = _number(campaign['content_version']).toInt();
     final approvedVersion = _number(campaign['approved_version']).toInt();
-    if (campaign['status'] != 'APPROVED' ||
-        version < 1 ||
-        approvedVersion != version) {
+    if (id.isEmpty || campaign['status'] != 'APPROVED' ||
+        version < 1 || approvedVersion != version) {
       _showMessage('Only an approved campaign caption can be shared.');
       return;
     }
-    final caption = campaign['caption']?.toString() ?? '';
+    if (_currentDraft != null &&
+        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id &&
+        _hasUnsavedCampaignEdits) {
+      _showMessage('Save your edits and obtain approval for the new version before sharing.');
+      return;
+    }
     try {
-      await Share.share(
-        caption,
-        subject: 'Advertisement from ' +
-            (campaign['shop_name']?.toString() ?? 'Retail Mind'),
-      );
+      final latest = await _refreshCampaignFromServer(id);
+      if (latest == null ||
+          latest['status'] != 'APPROVED' ||
+          _number(latest['content_version']).toInt() != version ||
+          _number(latest['approved_version']).toInt() != version) {
+        _showMessage('This campaign version is no longer approved. Review the latest version.');
+        return;
+      }
+      final caption = latest['caption']?.toString().trim() ?? '';
+      if (caption.isEmpty) {
+        _showMessage('This campaign has no caption to share.');
+        return;
+      }
+      await Share.share(caption);
     } catch (_) {
-      _showMessage('Could not open the share menu.');
+      _showMessage('Could not verify this campaign approval. Connect to the internet and retry.');
     }
   }
 
