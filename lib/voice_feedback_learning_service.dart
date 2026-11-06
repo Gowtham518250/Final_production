@@ -17,6 +17,7 @@ class VoiceFeedbackLearningService {
     required String correctedItemName,
     required String languageCode,
     required double originalConfidence,
+    bool syncToShop = true,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -45,7 +46,8 @@ class VoiceFeedbackLearningService {
       try {
         final cleanOriginal = originalTranscript.trim();
         final cleanProductName = correctedItemName.trim();
-        if (cleanOriginal.isNotEmpty &&
+        if (syncToShop &&
+            cleanOriginal.isNotEmpty &&
             cleanProductName.isNotEmpty &&
             cleanOriginal.toLowerCase() != cleanProductName.toLowerCase()) {
           final response = await ApiClient.postJson(
