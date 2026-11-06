@@ -1105,6 +1105,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final draftStatus = _currentDraft?['status']?.toString() ?? '';
+    final draftVersion = _number(_currentDraft?['content_version']).toInt();
+    final isApproved = draftStatus == 'APPROVED' &&
+        draftVersion > 0 &&
+        _number(_currentDraft?['approved_version']).toInt() == draftVersion;
+    final needsApproval = draftStatus == 'PENDING_APPROVAL';
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
@@ -1162,43 +1168,94 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                           const SizedBox(height: 12),
                           _editFields(),
                           const SizedBox(height: 12),
-                          FilledButton.icon(
-                            onPressed: _busy ? null : _sharePoster,
-                            icon: _busy
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.share_rounded),
-                            label: Text(_busy
-                                ? 'Preparing poster…'
-                                : 'Share poster and caption'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _purple,
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
+                          if (needsApproval) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: const Text(
+                                'Review this exact campaign version. Sharing is disabled until the owner approves it.',
+                                style: TextStyle(color: Color(0xFF92400E), fontSize: 12),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          OutlinedButton.icon(
-                            onPressed: _busy
-                                ? null
-                                : () => _shareCaption(_currentDraft!),
-                            icon: const Icon(Icons.text_snippet_outlined),
-                            label: const Text('Share text only'),
-                          ),
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                              onPressed: _busy ? null : () => _approveCampaign(_currentDraft!),
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Approve campaign'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF15803D),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : () => _rejectCampaign(_currentDraft!),
+                              icon: const Icon(Icons.cancel_outlined),
+                              label: const Text('Reject campaign'),
+                            ),
+                          ] else if (isApproved) ...[
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: const Text(
+                                'Approved version. You can now share this poster manually.',
+                                style: TextStyle(color: Color(0xFF166534), fontSize: 12),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                              onPressed: _busy ? null : _sharePoster,
+                              icon: _busy
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.share_rounded),
+                              label: Text(_busy ? 'Preparing poster…' : 'Share approved poster'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: _purple,
+                                padding: const EdgeInsets.symmetric(vertical: 15),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : () => _shareCaption(_currentDraft!),
+                              icon: const Icon(Icons.text_snippet_outlined),
+                              label: const Text('Share approved caption'),
+                            ),
+                          ] else ...[
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: const Text(
+                                'This campaign is not approved. Save it to the server and submit it for owner review before sharing.',
+                                style: TextStyle(color: _muted, fontSize: 12),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                   const SizedBox(height: 24),
-                  _sectionTitle('3. Your campaign history',
-                      'Drafts are saved locally on this device.'),
+                  _sectionTitle('3. Campaign approvals and history',
+                      'Review pending drafts and see which campaign versions were approved.'),
                   const SizedBox(height: 10),
                   _campaignHistory(),
                   const SizedBox(height: 16),
@@ -1812,7 +1869,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
         child: const LiveTranslatedText(
-          'Your saved advertisements will show here.',
+          'Your campaign drafts and approvals will show here.',
           style: TextStyle(color: _muted),
         ),
       );
@@ -1821,15 +1878,24 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       children: _campaigns.map((campaign) {
         final product = campaign['product_name']?.toString() ?? '';
         final code = campaign['offer_code']?.toString() ?? '';
+        final status = campaign['status']?.toString() ?? 'DRAFT';
+        final campaignId = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
         final date = DateTime.tryParse(campaign['created_at']?.toString() ?? '');
         final dateLabel = date == null
             ? ''
-            : date.day.toString().padLeft(2, '0') +
-                '/' +
-                date.month.toString().padLeft(2, '0') +
-                '/' +
+            : date.day.toString().padLeft(2, '0') + '/' +
+                date.month.toString().padLeft(2, '0') + '/' +
                 date.year.toString();
         final redemptions = _number(campaign['redemptions']).toInt();
+        final discountPrice = campaign['discount_price'] is num
+            ? (campaign['discount_price'] as num).toDouble()
+            : null;
+        final originalPrice = campaign['original_price'] is num
+            ? (campaign['original_price'] as num).toDouble()
+            : campaign['product_price'] is num
+                ? (campaign['product_price'] as num).toDouble()
+                : null;
+        final canApprove = status == 'PENDING_APPROVAL' && campaign['pending_sync'] != true;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
@@ -1863,10 +1929,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                           campaign['headline']?.toString() ?? 'Shop advertisement',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: _ink,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: const TextStyle(color: _ink, fontWeight: FontWeight.w800),
                         ),
                         Text(
                           (product.isEmpty ? 'Shop promotion' : product) +
@@ -1876,21 +1939,24 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Share caption',
-                    onPressed: () => _shareCaption(campaign),
-                    icon: const Icon(Icons.share_outlined),
-                  ),
+                  _statusChip(status),
                 ],
               ),
               const SizedBox(height: 9),
+              if (discountPrice != null && originalPrice != null)
+                Text(
+                  '₹' + originalPrice.toStringAsFixed(2) + ' → ₹' + discountPrice.toStringAsFixed(2) +
+                      ' · ' + _number(campaign['discount_percent']).toStringAsFixed(2) + '% OFF',
+                  style: const TextStyle(color: Color(0xFF15803D), fontWeight: FontWeight.w700, fontSize: 12),
+                ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _chip('Code: ' + code, Icons.confirmation_number_outlined),
-                  _chip('Redemptions: ' + redemptions.toString(),
-                      Icons.local_offer_outlined),
+                  if (code.isNotEmpty) _chip('Code: ' + code, Icons.confirmation_number_outlined),
+                  _chip('Redemptions: ' + redemptions.toString(), Icons.local_offer_outlined),
+                  if (campaign['pending_sync'] == true)
+                    _chip('Sync pending', Icons.sync_problem_outlined),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1902,15 +1968,36 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                   TextButton.icon(
                     onPressed: () => _openCampaignForEditing(campaign),
                     icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Open draft'),
+                    label: const Text('Open campaign'),
                   ),
-                  TextButton.icon(
-                    onPressed: () => _markRedeemed(campaign),
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                    label: const Text('Record redemption'),
-                  ),
+                  if (canApprove)
+                    TextButton.icon(
+                      onPressed: _busy ? null : () => _approveCampaign(campaign),
+                      icon: const Icon(Icons.check_circle_outline, color: Color(0xFF15803D)),
+                      label: const Text('Approve'),
+                    ),
+                  if (canApprove)
+                    TextButton.icon(
+                      onPressed: _busy ? null : () => _rejectCampaign(campaign),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Reject'),
+                    ),
+                  if (status == 'APPROVED')
+                    TextButton.icon(
+                      onPressed: () => _shareCaption(campaign),
+                      icon: const Icon(Icons.share_outlined),
+                      label: const Text('Share caption'),
+                    ),
+                  if (status == 'APPROVED')
+                    TextButton.icon(
+                      onPressed: () => _markRedeemed(campaign),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      label: const Text('Record redemption'),
+                    ),
                 ],
               ),
+              if (campaignId.isEmpty)
+                const Text('This local draft needs a campaign ID before it can sync.', style: TextStyle(color: _muted, fontSize: 11)),
             ],
           ),
         );
@@ -1918,6 +2005,32 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     );
   }
 
+  Widget _statusChip(String status) {
+    final Color background;
+    final Color foreground;
+    switch (status) {
+      case 'APPROVED':
+        background = const Color(0xFFDCFCE7);
+        foreground = const Color(0xFF166534);
+        break;
+      case 'PENDING_APPROVAL':
+        background = const Color(0xFFFEF3C7);
+        foreground = const Color(0xFF92400E);
+        break;
+      case 'REJECTED':
+        background = const Color(0xFFFEE2E2);
+        foreground = const Color(0xFF991B1B);
+        break;
+      default:
+        background = const Color(0xFFF1F5F9);
+        foreground = const Color(0xFF475569);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(20)),
+      child: Text(status.replaceAll('_', ' '), style: TextStyle(color: foreground, fontSize: 10, fontWeight: FontWeight.w800)),
+    );
+  }
   Widget _chip(String label, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
