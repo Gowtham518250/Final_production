@@ -2591,11 +2591,41 @@ class SyncService {
       ).timeout(const Duration(seconds: 20));
 
       final success = res.statusCode == 200 || res.statusCode == 201;
-      if (!success && kDebugMode) {
-        final body = res.body.length > 600 ? res.body.substring(0, 600) : res.body;
-        debugPrint('❌ Khata deadline API rejected update: HTTP ${res.statusCode} $body');
+      if (!success) {
+        if (kDebugMode) {
+          final body = res.body.length > 600 ? res.body.substring(0, 600) : res.body;
+          debugPrint('❌ Khata deadline API rejected update: HTTP ${res.statusCode} $body');
+        }
+        return false;
       }
-      return success;
+
+      // Keep the offline invoice mirror in step with the committed backend date.
+      final dueDate = data['due_date']?.toString().trim() ?? '';
+      if (dueDate.isNotEmpty) {
+        try {
+          final rawId = int.tryParse(data['customer_id']?.toString() ?? '');
+          final phone = data['customer_phone']?.toString().trim() ?? '';
+          await LocalStorageService.updateLocalInvoiceDueDates(
+            customerId: rawId,
+            customerPhone: phone,
+            dueDate: dueDate,
+          );
+          final localKey = rawId != null && rawId > 0 ? rawId.toString() : phone;
+          if (localKey.isNotEmpty) {
+            await LocalStorageService.saveKhataDeadline(
+              customerIdOrPhone: localKey,
+              dueDate: dueDate,
+            );
+          }
+        } catch (mirrorError) {
+          // The server commit already succeeded. A failed local mirror must
+          // not turn that acknowledgement into a duplicate backend write.
+          if (kDebugMode) {
+            debugPrint('⚠️ Khata deadline committed; local mirror refresh failed: $mirrorError');
+          }
+        }
+      }
+      return true;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error syncing Khata deadline: $e');
       return false;
