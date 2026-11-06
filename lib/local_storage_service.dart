@@ -1225,9 +1225,9 @@ class LocalStorageService {
           .toString()
           .trim();
 
-      final matchesCustomer = id != null
-          ? invoiceId == id
-          : invoicePhone == phone;
+      final matchesCustomer =
+          (id != null && invoiceId == id) ||
+          (phone.isNotEmpty && invoicePhone == phone);
       if (!matchesCustomer) continue;
 
       final total = double.tryParse(
