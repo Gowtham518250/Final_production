@@ -2619,7 +2619,8 @@ class SyncService {
               customerIdOrPhone: localKey,
               dueDate: dueDate,
             );
-          }        } catch (mirrorError) {
+          }
+        } catch (mirrorError) {
           // The server commit already succeeded. A failed local mirror must
           // not turn that acknowledgement into a duplicate backend write.
           if (kDebugMode) {
