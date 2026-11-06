@@ -125,8 +125,19 @@ class _KhataPageState extends State<KhataPage>
 
   Future<void> _handleRealtimeMessage(Map<String, dynamic> message) async {
     switch (message['type']?.toString()) {
-      case 'payment.updated':
       case 'invoice.updated':
+        if (message['change']?.toString() == 'invoice_due_date_updated') {
+          try {
+            await SyncService.downloadUserDataSafe();
+          } catch (error) {
+            if (kDebugMode) {
+              debugPrint('Khata deadline refresh from backend failed: $error');
+            }
+          }
+        }
+        await _loadKhata();
+        break;
+      case 'payment.updated':
       case 'invoice.created':
       case 'order.status_changed':
         await _loadKhata();
@@ -177,11 +188,18 @@ class _KhataPageState extends State<KhataPage>
 
   /// Khata only accepts real customer phone numbers.
   /// Indian mobile format: 10 digits beginning with 6-9, optionally prefixed by 91/+91.
+  String _normalizeCustomerPhone(String value) {
+    var digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 12 && digits.startsWith('91')) {
+      digits = digits.substring(2);
+    } else if (digits.length == 11 && digits.startsWith('0')) {
+      digits = digits.substring(1);
+    }
+    return digits;
+  }
+
   bool _isValidCustomerPhone(String value) {
-    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final normalized = digits.startsWith('91') && digits.length == 12
-        ? digits.substring(2)
-        : digits;
+    final normalized = _normalizeCustomerPhone(value);
     return normalized.length == 10 &&
         RegExp(r'^[6-9][0-9]{9}$').hasMatch(normalized);
   }
@@ -572,17 +590,21 @@ class _KhataPageState extends State<KhataPage>
     final rawId = (customer['customer_id'] ?? customer['customerId'] ?? '')
         .toString()
         .trim();
-    if (rawId.isNotEmpty && rawId != '0' && rawId.toLowerCase() != 'null') {
-      return rawId;
-    }
-
     final phone = (customer['customer_phone'] ??
             customer['phone'] ??
             customer['mobile'] ??
             '')
         .toString()
         .trim();
+
+    // Local unified rows may place a phone in customer_id as a fallback.
+    final rawIdIsPhone = _isValidCustomerPhone(rawId);
+    final parsedId = int.tryParse(rawId);
+    if (parsedId != null && parsedId > 0 && !rawIdIsPhone) {
+      return parsedId.toString();
+    }
     if (phone.isNotEmpty && phone.toLowerCase() != 'null') return phone;
+    if (rawIdIsPhone) return rawId;
 
     return (customer['customer_name'] ?? customer['name'] ?? '')
         .toString()
@@ -599,6 +621,32 @@ class _KhataPageState extends State<KhataPage>
         .where((key) => key.isNotEmpty)
         .toSet();
     final deadlines = await LocalStorageService.loadKhataDeadlines(deadlineKeys);
+
+    // Keep local-first dates visible while their durable operation is pending.
+    // Index pending values by both identifiers for legacy invoice rows.
+    final pendingDeadlineByCustomer = <String, String>{};
+    try {
+      for (final item in await SyncQueueManager.getAll()) {
+        if (item['action']?.toString() != 'update_khata_deadline') continue;
+        final data = item['data'];
+        if (data is! Map) continue;
+        final id = int.tryParse(data['customer_id']?.toString() ?? '');
+        final phone = data['customer_phone']?.toString().trim() ?? '';
+        final dueDate = data['due_date']?.toString().trim() ?? '';
+        if (dueDate.isNotEmpty) {
+          if (id != null && id > 0) {
+            pendingDeadlineByCustomer[id.toString()] = dueDate;
+          }
+          if (phone.isNotEmpty) {
+            pendingDeadlineByCustomer[phone] = dueDate;
+          }
+        }
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Could not inspect pending Khata deadline operations: $error');
+      }
+    }
 
     _customers = [];
     _totalOutstanding = 0.0;
@@ -657,8 +705,48 @@ class _KhataPageState extends State<KhataPage>
           0.0;
       if (bal > 0.01) {
         final deadlineKey = _deadlineKeyForCustomer(c);
+        final pendingDueDate = pendingDeadlineByCustomer[deadlineKey];
+
+        // Use the latest server invoice dates before older local preferences.
+        String? backendDueDate = c['due_date']?.toString().trim();
+        if (backendDueDate == null || backendDueDate.isEmpty) {
+          final history = c['history'];
+          final candidates = <DateTime>[];
+          if (history is List) {
+            for (final rawInvoice in history) {
+              if (rawInvoice is! Map) continue;
+              final invoice = Map<String, dynamic>.from(rawInvoice);
+              final status = (invoice['payment_status'] ?? invoice['status'] ?? '')
+                  .toString()
+                  .split('.')
+                  .last
+                  .toUpperCase();
+              final total = double.tryParse(
+                    (invoice['total_amount'] ?? invoice['total'] ?? 0).toString(),
+                  ) ??
+                  0.0;
+              final paid = double.tryParse(
+                    (invoice['paid_amount'] ?? invoice['amount_paid'] ?? 0).toString(),
+                  ) ??
+                  0.0;
+              if (status == 'PAID' || status == 'CANCELLED' ||
+                  status == 'DRAFT' || total - paid <= 0.01) {
+                continue;
+              }
+              final parsed = DateTime.tryParse(invoice['due_date']?.toString() ?? '');
+              if (parsed != null) candidates.add(parsed);
+            }
+          }
+          if (candidates.isNotEmpty) {
+            candidates.sort((a, b) => a.compareTo(b));
+            backendDueDate = candidates.first.toIso8601String().substring(0, 10);
+          }
+        }
+
         final storedDueDate = deadlines[deadlineKey];
-        final dueDateRaw = (storedDueDate ?? c['due_date']?.toString())?.trim();
+        final dueDateRaw = (
+          pendingDueDate ?? backendDueDate ?? storedDueDate
+        )?.trim();
         DateTime? dueDate;
         if (dueDateRaw != null && dueDateRaw.isNotEmpty) {
           dueDate = DateTime.tryParse(dueDateRaw);
@@ -1290,54 +1378,75 @@ class _KhataPageState extends State<KhataPage>
   }
 
   void _showDeadlineModal(Map<String, dynamic> customer) {
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 7));
+    final initialDate = DateTime.now().add(const Duration(days: 7));
 
     showDatePicker(
       context: context,
-      initialDate: selectedDate,
+      initialDate: initialDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     ).then((picked) async {
       if (picked == null) return;
 
-      final dateStr =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      final dateStr = picked.year.toString() +
+          '-' +
+          picked.month.toString().padLeft(2, '0') +
+          '-' +
+          picked.day.toString().padLeft(2, '0');
       final customerPhone =
           (customer['customer_phone'] ?? customer['phone'] ?? '')
               .toString()
               .trim();
       final rawCustomerId = (customer['customer_id'] ?? '').toString().trim();
-      final customerId = rawCustomerId.isNotEmpty &&
-              rawCustomerId != '0' &&
-              rawCustomerId.toLowerCase() != 'null'
-          ? rawCustomerId
-          : '';
-      final scopeKey = _deadlineKeyForCustomer(customer);
+      final parsedCustomerId = int.tryParse(rawCustomerId);
+      final customerId = parsedCustomerId != null &&
+              parsedCustomerId > 0 &&
+              !_isValidCustomerPhone(rawCustomerId)
+          ? parsedCustomerId
+          : null;
+      final backendPhone = _isValidCustomerPhone(customerPhone)
+          ? customerPhone
+          : (_isValidCustomerPhone(rawCustomerId) ? rawCustomerId : '');
+      final scopeKey = customerId?.toString() ??
+          (backendPhone.isNotEmpty ? backendPhone : '');
 
       if (scopeKey.isEmpty) {
-        _showToast('Could not identify this customer');
+        _showToast(
+          'Add this customer phone number or backend customer ID before setting a synced deadline.',
+        );
         return;
       }
 
       try {
-        // Local-first: deadline is immediately visible to the merchant.
+        final queued = await SyncQueueManager.enqueue('update_khata_deadline', {
+          'operation_id': 'KHATA_DEADLINE_' + scopeKey + '_' + dateStr,
+          'customer_phone': backendPhone.isNotEmpty ? backendPhone : null,
+          'customer_id': customerId,
+          'due_date': dateStr,
+        });
+        if (!queued) {
+          _showToast(
+            'Deadline could not be added to the secure sync queue. Please retry.',
+          );
+          return;
+        }
+
         await LocalStorageService.saveKhataDeadline(
           customerIdOrPhone: scopeKey,
           dueDate: dateStr,
         );
+        if (customerId != null && backendPhone.isNotEmpty) {
+          await LocalStorageService.saveKhataDeadline(
+            customerIdOrPhone: backendPhone,
+            dueDate: dateStr,
+          );
+        }
 
-        await SyncQueueManager.enqueue('update_khata_deadline', {
-          'operation_id': 'KHATA_DEADLINE_${scopeKey}_$dateStr',
-          'customer_phone': customerPhone,
-          'customer_id': int.tryParse(customerId),
-          'due_date': dateStr,
-        });
-
-        _showToast('⏰ Payment deadline set to $dateStr');
+        _showToast('Deadline saved and queued for backend sync.');
         await _loadKhata(refreshInvoiceAnalytics: false);
         unawaited(SyncService.processQueueSafe());
-      } catch (e) {
-        _showToast('Error setting deadline: $e');
+      } catch (error) {
+        _showToast('Error setting deadline: ' + error.toString());
       }
     });
   }

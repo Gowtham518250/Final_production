@@ -1196,6 +1196,76 @@ class LocalStorageService {
     return deadlines;
   }
 
+  /// Mirror a server-acknowledged Khata deadline into local invoice rows.
+  /// The backend remains authoritative; this keeps the current device's
+  /// offline-first invoice history consistent after a successful queue ACK.
+  static Future<int> updateLocalInvoiceDueDates({
+    String? customerPhone,
+    int? customerId,
+    required String dueDate,
+  }) async {
+    if (!await _hasValidUserId()) return 0;
+    final phone = (customerPhone ?? '').trim();
+    final id = customerId != null && customerId > 0 ? customerId : null;
+    if (phone.isEmpty && id == null) return 0;
+
+    final invoices = await loadLocalInvoices();
+    var updatedCount = 0;
+    for (final raw in invoices) {
+      if (raw is! Map) continue;
+      final invoice = Map<String, dynamic>.from(raw);
+
+      final invoiceId = int.tryParse(
+        (invoice['customer_id'] ?? invoice['customerId'] ?? '').toString(),
+      );
+      final invoicePhone = (invoice['customer_phone'] ??
+              invoice['phone'] ??
+              invoice['mobile'] ??
+              '')
+          .toString()
+          .trim();
+
+      final matchesCustomer =
+          (id != null && invoiceId == id) ||
+          (phone.isNotEmpty && invoicePhone == phone);
+      if (!matchesCustomer) continue;
+
+      final total = double.tryParse(
+            (invoice['total_amount'] ?? invoice['total'] ?? 0).toString(),
+          ) ??
+          0.0;
+      final paid = double.tryParse(
+            (invoice['paid_amount'] ?? invoice['amount_paid'] ?? 0).toString(),
+          ) ??
+          0.0;
+      final paymentStatus = (invoice['payment_status'] ?? '')
+          .toString()
+          .split('.')
+          .last
+          .toUpperCase();
+      final invoiceStatus = (invoice['status'] ?? '')
+          .toString()
+          .split('.')
+          .last
+          .toUpperCase();
+      final hasBalance = total - paid > 0.01;
+      final isReceivable = !{'PAID', 'CANCELLED', 'DRAFT'}.contains(invoiceStatus) &&
+          !{'PAID'}.contains(paymentStatus);
+      if (!hasBalance || !isReceivable) continue;
+
+      invoice['due_date'] = dueDate;
+      invoice['updated_at'] = DateTime.now().toUtc().toIso8601String();
+      final index = invoices.indexOf(raw);
+      if (index >= 0) invoices[index] = invoice;
+      updatedCount++;
+    }
+
+    if (updatedCount > 0) {
+      await saveLocalInvoices(invoices);
+    }
+    return updatedCount;
+  }
+
   static Future<void> saveKhataBalances(Map<String, double> balances) async {
     if (!await _hasValidUserId()) return;
     final box = await _getBox(_khataBoxBase, encrypted: true);

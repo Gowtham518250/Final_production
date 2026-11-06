@@ -58,3 +58,9 @@
 -keepclassmembers class * {
     public <init>();
 }
+
+# Android WebView JavaScript bridges are invoked by name from JavaScript.
+# Retain the annotated methods when R8 minifies the production APK.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

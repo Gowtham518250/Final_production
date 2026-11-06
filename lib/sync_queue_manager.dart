@@ -34,6 +34,7 @@ class SyncQueueManager {
     'record_payment',
     'payment_detection_evidence',
     'record_khata_payment',
+    'update_khata_deadline',
     'decrease_stock',
     'delete_product',
     'create_purchase_order',
@@ -115,6 +116,31 @@ class SyncQueueManager {
 
       case 'delete_product':
         return data['id'] != null || data['product_id'] != null;
+
+      case 'payment_detection_evidence':
+        final eventKey = data['event_key']?.toString().trim() ?? '';
+        final amount = data['amount'];
+        final direction = data['direction']?.toString().trim().toLowerCase() ?? '';
+        return eventKey.length >= 8 &&
+            amount is num &&
+            amount.isFinite &&
+            amount > 0 &&
+            const {'credit', 'debit', 'unknown'}.contains(direction) &&
+            (data['detected_source']?.toString().trim().length ?? 0) >= 2;
+
+      case 'update_khata_deadline':
+        final phone = data['customer_phone']?.toString().trim() ?? '';
+        final customerId = int.tryParse(data['customer_id']?.toString() ?? '');
+        final dueDate = data['due_date']?.toString().trim() ?? '';
+        final parsedDate = DateTime.tryParse(dueDate);
+        final validIsoDate = dueDate.length == 10 &&
+            dueDate[4] == '-' &&
+            dueDate[7] == '-' &&
+            parsedDate != null &&
+            parsedDate.toIso8601String().startsWith(dueDate);
+        final hasCustomer = phone.isNotEmpty ||
+            (customerId != null && customerId > 0);
+        return hasCustomer && validIsoDate;
 
       default:
         return true;

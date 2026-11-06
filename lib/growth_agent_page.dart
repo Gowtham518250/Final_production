@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:share_plus/share_plus.dart';
@@ -30,6 +31,9 @@ class GrowthAgentPage extends StatefulWidget {
 }
 
 class _GrowthAgentPageState extends State<GrowthAgentPage> {
+  static const MethodChannel _creativeStudioChannel =
+      MethodChannel('com.retailmind.app/creative_studio');
+
   static const Color _ink = Color(0xFF182230);
   static const Color _muted = Color(0xFF64748B);
   static const Color _purple = Color(0xFF5B3DF5);
@@ -1312,6 +1316,18 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
 
+  Future<void> _openCreativeStudio() async {
+    try {
+      await _creativeStudioChannel.invokeMethod<void>('open');
+    } on PlatformException catch (error) {
+      _showMessage(
+        error.message ?? 'Could not open Adobe Express Creative Studio.',
+      );
+    } on MissingPluginException {
+      _showMessage('Creative Studio is available in the Android APK build.');
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -1339,6 +1355,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         foregroundColor: _ink,
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: 'Open Adobe Express Creative Studio',
+            onPressed: _openCreativeStudio,
+            icon: const Icon(Icons.palette_outlined, color: _purple),
+          ),
           IconButton(
             tooltip: AppLocalizations.of(context).translate('Refresh shop data'),
             onPressed: _loading ? null : _loadWorkspace,
