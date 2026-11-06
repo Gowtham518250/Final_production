@@ -1085,19 +1085,21 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Future<void> _sharePoster() async {
-    if (_busy || _currentDraft == null) return;
+    final draft = _currentDraft;
+    if (_busy || draft == null) return;
+    final version = _number(draft['content_version']).toInt();
+    final approvedVersion = _number(draft['approved_version']).toInt();
+    if (draft['status'] != 'APPROVED' || version < 1 || approvedVersion != version || _hasUnsavedCampaignEdits) {
+      _showMessage('Only the unchanged, server-approved campaign version can be shared.');
+      return;
+    }
     setState(() => _busy = true);
     try {
-      await _saveCurrentEdits();
       await WidgetsBinding.instance.endOfFrame;
-      final renderObject =
-          _posterKey.currentContext?.findRenderObject();
+      final renderObject = _posterKey.currentContext?.findRenderObject();
       if (renderObject is! RenderRepaintBoundary) {
         throw StateError('Advertisement preview is not ready yet.');
       }
-
-      // Keep exported artwork at social-ad resolution regardless of the
-      // device's logical preview width (feed 1080×1350; Story 1080×1920).
       final logicalWidth = renderObject.size.width;
       final pixelRatio = logicalWidth > 0
           ? (1080.0 / logicalWidth).clamp(2.0, 5.0).toDouble()
@@ -1106,29 +1108,32 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
       if (byteData == null) throw StateError('Could not render poster image.');
-
       final Uint8List bytes = byteData.buffer.asUint8List();
       final directory = await getTemporaryDirectory();
-      final id = _currentDraft!['id'].toString();
-      final file = File(
-        directory.path + '/retailmind_ad_' + id + '.png',
-      );
+      final id = (draft['campaign_id'] ?? draft['id']).toString();
+      final file = File(directory.path + '/retailmind_ad_' + id + '.png');
       await file.writeAsBytes(bytes, flush: true);
-
-      final shareText = _captionController.text.trim();
       await Share.shareXFiles(
         <XFile>[XFile(file.path)],
-        text: shareText,
+        text: _captionController.text.trim(),
         subject: 'Advertisement from ' + _shopController.text.trim(),
       );
-    } catch (error) {
-      _showMessage('Could not share the poster. Please try again.');
+    } catch (_) {
+      _showMessage('Could not share the approved poster. Please try again.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _shareCaption(Map<String, dynamic> campaign) async {
+    final version = _number(campaign['content_version']).toInt();
+    final approvedVersion = _number(campaign['approved_version']).toInt();
+    if (campaign['status'] != 'APPROVED' ||
+        version < 1 ||
+        approvedVersion != version) {
+      _showMessage('Only an approved campaign caption can be shared.');
+      return;
+    }
     final caption = campaign['caption']?.toString() ?? '';
     try {
       await Share.share(
