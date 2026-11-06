@@ -243,6 +243,36 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         }
       }
 
+      // Merge the server's owner-scoped campaign history with local drafts.
+      // Local copies win when a recent offline edit has not reached the API.
+      try {
+        final historyResponse = await ApiClient.getJson('/growth/marketing/campaigns?limit=50')
+            .timeout(const Duration(seconds: 10));
+        if (historyResponse.statusCode == 200) {
+          final decoded = jsonDecode(historyResponse.body);
+          final remoteRows = decoded is Map && decoded['campaigns'] is List
+              ? decoded['campaigns'] as List
+              : const <dynamic>[];
+          final merged = <String, Map<String, dynamic>>{};
+          for (final row in remoteRows.whereType<Map>()) {
+            final item = Map<String, dynamic>.from(row);
+            final id = (item['campaign_id'] ?? item['id'])?.toString() ?? '';
+            if (id.isNotEmpty) merged[id] = item;
+          }
+          for (final item in campaigns) {
+            final id = (item['campaign_id'] ?? item['id'])?.toString() ?? '';
+            if (id.isNotEmpty) merged[id] = item;
+          }
+          campaigns = merged.values.toList()
+            ..sort((a, b) => (b['updated_at'] ?? b['created_at'] ?? '').toString()
+                .compareTo((a['updated_at'] ?? a['created_at'] ?? '').toString()));
+          if (campaigns.length > 20) campaigns = campaigns.take(20).toList();
+          await prefs.setString(_campaignStorageKey, jsonEncode(campaigns));
+        }
+      } catch (_) {
+        // Remote history is optional; keep the local offline workspace intact.
+      }
+
       if (!mounted) return;
       setState(() {
         _shopController.text = shopName.isEmpty ? 'My Shop' : shopName;
@@ -271,15 +301,65 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Future<void> _persistCampaign(Map<String, dynamic> campaign) async {
-    final id = campaign['id']?.toString();
-    _campaigns.removeWhere((item) => item['id']?.toString() == id);
-    _campaigns.insert(0, Map<String, dynamic>.from(campaign));
+    final id = campaign['id']?.toString() ?? campaign['campaign_id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final localDraft = Map<String, dynamic>.from(campaign)
+      ..['id'] = id
+      ..['campaign_id'] = id;
+    _campaigns.removeWhere(
+      (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
+    );
+    _campaigns.insert(0, localDraft);
     if (_campaigns.length > 20) {
       _campaigns = _campaigns.take(20).toList();
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
     if (mounted) setState(() {});
+
+    // Local persistence happens first, so drafts survive network outages.
+    // The API derives shop identity from the access token and enforces product
+    // ownership again before storing the shared campaign history.
+    try {
+      final rawProductId = localDraft['product_id'];
+      final response = await ApiClient.postJson(
+        '/growth/marketing/campaigns',
+        <String, dynamic>{
+          'campaign_id': id,
+          'goal': localDraft['goal']?.toString() ?? 'nearby',
+          'language': localDraft['language']?.toString() ?? 'en',
+          'ad_format': localDraft['ad_format']?.toString() ?? 'feed',
+          'template': localDraft['template']?.toString() ?? 'bold',
+          'product_id': rawProductId == null ? null : int.tryParse(rawProductId.toString()),
+          'product_name': localDraft['product_name']?.toString() ?? '',
+          'headline': localDraft['headline']?.toString() ?? '',
+          'caption': localDraft['caption']?.toString() ?? '',
+          'offer': localDraft['offer']?.toString() ?? '',
+          'offer_code': localDraft['offer_code']?.toString() ?? '',
+          'generation_source': localDraft['generation_source']?.toString() ?? 'manual',
+          'redemptions': _number(localDraft['redemptions']).toInt(),
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map) {
+          final remote = Map<String, dynamic>.from(decoded)
+            ..['tracking_mode'] = 'manual_local'
+            ..['requires_owner_review'] = true;
+          _campaigns.removeWhere(
+            (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
+          );
+          _campaigns.insert(0, remote);
+          if (_campaigns.length > 20) {
+            _campaigns = _campaigns.take(20).toList();
+          }
+          await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
+          if (mounted) setState(() {});
+        }
+      }
+    } catch (_) {
+      // Local draft remains available and will be merged when history loads.
+    }
   }
 
   Future<void> _generateCampaign() async {
