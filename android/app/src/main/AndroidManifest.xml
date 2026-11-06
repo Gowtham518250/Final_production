@@ -45,6 +45,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".CreativeStudioActivity"
+            android:label="Retail Mind Creative Studio"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
