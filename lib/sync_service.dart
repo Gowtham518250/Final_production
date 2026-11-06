@@ -2610,14 +2610,16 @@ class SyncService {
             customerPhone: phone,
             dueDate: dueDate,
           );
-          final localKey = rawId != null && rawId > 0 ? rawId.toString() : phone;
-          if (localKey.isNotEmpty) {
+          final localKeys = <String>{
+            if (rawId != null && rawId > 0) rawId.toString(),
+            if (phone.isNotEmpty) phone,
+          };
+          for (final localKey in localKeys) {
             await LocalStorageService.saveKhataDeadline(
               customerIdOrPhone: localKey,
               dueDate: dueDate,
             );
-          }
-        } catch (mirrorError) {
+          }        } catch (mirrorError) {
           // The server commit already succeeded. A failed local mirror must
           // not turn that acknowledgement into a duplicate backend write.
           if (kDebugMode) {
