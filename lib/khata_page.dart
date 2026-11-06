@@ -596,8 +596,8 @@ class _KhataPageState extends State<KhataPage>
     // Do not treat a 10-digit mobile number as the backend integer customer ID.
     final rawIdIsPhone = _isValidCustomerPhone(rawId) &&
         (!_isValidCustomerPhone(phone) ||
-            rawId.replaceAll(RegExp(r'\\D'), '').replaceFirst(RegExp(r'^91'), '') ==
-                phone.replaceAll(RegExp(r'\\D'), '').replaceFirst(RegExp(r'^91'), ''));
+            rawId.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^91'), '') ==
+                phone.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^91'), ''));
     final parsedId = int.tryParse(rawId);
     if (parsedId != null && parsedId > 0 && !rawIdIsPhone) {
       return parsedId.toString();
@@ -1395,8 +1395,8 @@ class _KhataPageState extends State<KhataPage>
       final parsedCustomerId = int.tryParse(rawCustomerId);
       final rawIdIsPhone = _isValidCustomerPhone(rawCustomerId) &&
           (!_isValidCustomerPhone(customerPhone) ||
-              rawCustomerId.replaceAll(RegExp(r'\\D'), '').replaceFirst(RegExp(r'^91'), '') ==
-                  customerPhone.replaceAll(RegExp(r'\\D'), '').replaceFirst(RegExp(r'^91'), ''));
+              rawCustomerId.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^91'), '') ==
+                  customerPhone.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^91'), ''));
       final customerId = parsedCustomerId != null &&
               parsedCustomerId > 0 &&
               !rawIdIsPhone
