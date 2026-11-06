@@ -481,7 +481,6 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   String _shopAddressText() {
     final canonicalAddress = (_shopDetails['address'] ?? '').toString().trim();
-    if (canonicalAddress.isNotEmpty) return canonicalAddress;
     final values = <String>[
       _shopDetails['address_line1']?.toString() ?? '',
       _shopDetails['address_line2']?.toString() ?? '',
@@ -491,8 +490,13 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       _shopDetails['postal_code']?.toString() ?? '',
     ].map((value) => value.trim()).where((value) => value.isNotEmpty).toList();
     final unique = <String>[];
+    if (canonicalAddress.isNotEmpty) unique.add(canonicalAddress);
     for (final value in values) {
-      if (!unique.contains(value)) unique.add(value);
+      if (value.isEmpty) continue;
+      final alreadyIncluded = unique.any(
+        (existing) => existing.toLowerCase().contains(value.toLowerCase()),
+      );
+      if (!alreadyIncluded) unique.add(value);
     }
     return unique.join(', ');
   }
@@ -1923,6 +1927,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             controller: _captionController,
             minLines: 3,
             maxLines: 6,
+            maxLength: 1200,
+            onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               label: LiveTranslatedText('Caption to share'),
               border: OutlineInputBorder(),
