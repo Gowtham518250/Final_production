@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'api_client.dart';
-
 /// 🧠 ADVANCED: Voice Feedback Learning Service
 /// Learns from user corrections to improve voice recognition accuracy over time
 class VoiceFeedbackLearningService {
@@ -17,7 +15,6 @@ class VoiceFeedbackLearningService {
     required String correctedItemName,
     required String languageCode,
     required double originalConfidence,
-    bool syncToShop = true,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -40,34 +37,8 @@ class VoiceFeedbackLearningService {
       
       await prefs.setStringList(_userCorrectionsKey, corrections);
 
-      // Learn only from an explicit cashier correction. The backend resolves the
-      // exact product name inside the authenticated shop, so device data cannot
-      // create or activate aliases in another shop's catalog.
-      try {
-        final cleanOriginal = originalTranscript.trim();
-        final cleanProductName = correctedItemName.trim();
-        if (syncToShop &&
-            cleanOriginal.isNotEmpty &&
-            cleanProductName.isNotEmpty &&
-            cleanOriginal.toLowerCase() != cleanProductName.toLowerCase()) {
-          final response = await ApiClient.postJson(
-            ApiClient.voiceBillingAliasesEndpoint,
-            {
-              'alias_text': cleanOriginal,
-              'product_name': cleanProductName,
-              'language_code': languageCode,
-            },
-          );
-          if (response.statusCode < 200 || response.statusCode >= 300) {
-            if (kDebugMode) {
-              debugPrint('Shop voice learning did not accept this correction (HTTP ${response.statusCode}).');
-            }
-          }
-        }
-      } catch (_) {
-        // Local correction history remains available if the shop is offline.
-        if (kDebugMode) debugPrint('Shop voice learning sync unavailable.');
-      }
+      // This is device-local history only. Never apply it automatically to billing;
+      // shop-scoped aliases are submitted separately after bill confirmation.
 
       if (kDebugMode) {
         debugPrint('Voice correction recorded for language $languageCode.');
