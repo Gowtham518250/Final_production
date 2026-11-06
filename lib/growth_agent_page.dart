@@ -369,9 +369,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         ? null
         : double.tryParse(enteredDiscountText);
     final savedProductId = draft['product_id']?.toString() ?? '';
+    final savedProductName = draft['product_name']?.toString() ?? '';
     final selectedProduct = _selectedProduct;
     final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
     final selectedProductId = selectedRawId?.toString() ?? '';
+    final selectedProductName = selectedProduct?['name']?.toString() ?? '';
     return
         _shopController.text.trim() != (draft['shop_name']?.toString() ?? '') ||
         _headlineController.text.trim() != (draft['headline']?.toString() ?? '') ||
@@ -383,7 +385,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _language != (draft['language']?.toString() ?? 'en') ||
         _template != (draft['template']?.toString() ?? 'bold') ||
         _adFormat != (draft['ad_format']?.toString() ?? 'feed') ||
-        selectedProductId != savedProductId;
+        selectedProductId != savedProductId ||
+        selectedProductName != savedProductName;
   }
 
   Map<String, dynamic>? get _selectedProduct {
@@ -863,10 +866,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
     final selectedProductId = selectedRawId == null ? null : int.tryParse(selectedRawId.toString());
     final savedProductId = current['product_id'] == null ? null : int.tryParse(current['product_id'].toString());
-    final productChanged = selectedProductId != savedProductId;
-    final productName = productChanged
-        ? (selectedProduct?['name']?.toString() ?? '')
-        : (current['product_name']?.toString() ?? '');
+    final savedProductName = current['product_name']?.toString() ?? '';
+    final selectedProductName = selectedProduct?['name']?.toString() ?? '';
+    final productChanged = selectedProductId != savedProductId ||
+        selectedProductName != savedProductName;
+    final productName = selectedProductName;
     final originalPrice = productChanged
         ? _productPrice(selectedProduct)
         : current['original_price'] is num
