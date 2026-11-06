@@ -363,7 +363,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     if (id == null || id.isEmpty) return;
     final localDraft = Map<String, dynamic>.from(campaign)
       ..['id'] = id
-      ..['campaign_id'] = id;
+      ..['campaign_id'] = id
+      ..['pending_sync'] = true
+      ..['requires_owner_review'] = true;
     _campaigns.removeWhere(
       (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
     );
@@ -375,11 +377,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
     if (mounted) setState(() {});
 
-    // Local persistence happens first, so drafts survive network outages.
-    // The API derives shop identity from the access token and enforces product
-    // ownership again before storing the shared campaign history.
+    // Local-first persistence keeps the campaign available offline. The server
+    // re-reads shop and product facts using the authenticated owner's identity.
     try {
       final rawProductId = localDraft['product_id'];
+      final discountValue = localDraft['discount_price'];
       final response = await ApiClient.postJson(
         '/growth/marketing/campaigns',
         <String, dynamic>{
@@ -393,11 +395,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           'product_price': localDraft['product_price'] == null
               ? null
               : _number(localDraft['product_price']),
+          'discount_price': discountValue == null
+              ? null
+              : _number(discountValue),
+          'offer_valid_until': localDraft['offer_valid_until']?.toString(),
           'headline': localDraft['headline']?.toString() ?? '',
           'caption': localDraft['caption']?.toString() ?? '',
           'offer': localDraft['offer']?.toString() ?? '',
           'offer_code': localDraft['offer_code']?.toString() ?? '',
           'generation_source': localDraft['generation_source']?.toString() ?? 'manual',
+          'trigger_type': localDraft['trigger_type']?.toString() ?? 'manual',
+          'submit_for_approval': true,
           'redemptions': _number(localDraft['redemptions']).toInt(),
         },
       ).timeout(const Duration(seconds: 12));
@@ -407,6 +415,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           final remote = Map<String, dynamic>.from(decoded)
             ..['tracking_mode'] = 'manual_local'
             ..['product_price'] ??= localDraft['product_price']
+            ..['pending_sync'] = false
             ..['requires_owner_review'] = true;
           _campaigns.removeWhere(
             (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
@@ -417,10 +426,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           }
           await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
           if (mounted) setState(() {});
+        } else {
+          _showMessage('Campaign saved locally. Server response was not recognized; approval sync is pending.');
         }
+      } else {
+        _showMessage('Campaign saved locally. Server approval sync is pending.');
       }
     } catch (_) {
-      // Local draft remains available and will be merged when history loads.
+      // Keep a local pending-sync marker; the next refresh will retry this draft.
     }
   }
 
@@ -455,6 +468,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     bool? weeklyEnabled,
     int? weeklyDay,
   }) async {
+    final previousEnabled = _automationEnabled;
+    final previousNewProducts = _autoNewProducts;
+    final previousWeekly = _autoWeekly;
+    final previousWeeklyDay = _weeklyDay;
     final nextEnabled = enabled ?? _automationEnabled;
     final nextNewProducts = newProductsEnabled ?? _autoNewProducts;
     final nextWeekly = weeklyEnabled ?? _autoWeekly;
@@ -488,10 +505,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _automationEnabled = !nextEnabled;
-          _autoNewProducts = !nextNewProducts;
-          _autoWeekly = !nextWeekly;
-          _weeklyDay = 0;
+          _automationEnabled = previousEnabled;
+          _autoNewProducts = previousNewProducts;
+          _autoWeekly = previousWeekly;
+          _weeklyDay = previousWeeklyDay;
         });
       }
       _showMessage('Could not save automation settings. Check your connection and try again.');
