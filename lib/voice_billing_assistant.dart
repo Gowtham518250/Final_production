@@ -2345,12 +2345,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         _selectedLang.code,
       );
 
-      if (commit) {
-        clean = await VoiceFeedbackLearningService.applyLearnedCorrections(
-          transcript: clean,
-          languageCode: _selectedLang.code,
-        );
-      }
+      // Do not apply device-wide learned aliases to a shop's transcript.
+      // Confirmed shop aliases are expanded by the authenticated backend parser.
       // Repair numbers the recogniser spelled by sound (Telugu "రేణు ఉందలు"
       // = 200) before the AI sees them. Every repair is reported below so the
       // shopkeeper verifies it; ordinary words are never converted.
@@ -2697,7 +2693,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   }
 
   void _confirmOrder() {
-    final pendingVoiceAliasCorrections = <Map<String, String>>[];
+    final pendingVoiceAliasCorrections = <Map<String, dynamic>>[];
     final seenAliasCorrections = <String>{};
     for (int i = 0; i < ParsedItems.length; i++) {
       final m = _editControllers[i];
@@ -2732,6 +2728,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           pendingVoiceAliasCorrections.add({
             'alias_text': alias,
             'product_name': canonicalName,
+            'original_confidence': ParsedItems[i].confidence,
           });
         }
       }
@@ -2794,9 +2791,20 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     for (final correction in pendingVoiceAliasCorrections) {
       final productName = (correction['product_name'] ?? '').trim();
       if (!confirmedNames.contains(productName.toLowerCase())) continue;
+      final aliasText = (correction['alias_text'] ?? '').toString().trim();
+      final originalConfidence =
+          (correction['original_confidence'] as num?)?.toDouble() ?? 0.0;
+      unawaited(
+        VoiceFeedbackLearningService.recordCorrection(
+          originalTranscript: aliasText,
+          correctedItemName: productName,
+          languageCode: _selectedLang.code,
+          originalConfidence: originalConfidence,
+        ),
+      );
       unawaited(
         _recordShopVoiceAlias(
-          aliasText: correction['alias_text'] ?? '',
+          aliasText: aliasText,
           correctedProductName: productName,
         ),
       );
