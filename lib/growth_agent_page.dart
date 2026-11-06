@@ -424,6 +424,159 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
   }
 
+  String _shopAddressText() {
+    final values = <String>[
+      _shopDetails['address_line1']?.toString() ?? '',
+      _shopDetails['address_line2']?.toString() ?? '',
+      _shopDetails['address']?.toString() ?? '',
+      _shopDetails['location']?.toString() ?? '',
+      _shopDetails['city']?.toString() ?? '',
+      _shopDetails['state']?.toString() ?? '',
+      _shopDetails['postal_code']?.toString() ?? '',
+    ].map((value) => value.trim()).where((value) => value.isNotEmpty).toList();
+    final unique = <String>[];
+    for (final value in values) {
+      if (!unique.contains(value)) unique.add(value);
+    }
+    return unique.join(', ');
+  }
+
+  String _shopPhoneText() =>
+      (_shopDetails['phone'] ?? _shopDetails['phone_number'] ?? '').toString().trim();
+
+  String _formatDate(DateTime value) =>
+      value.year.toString().padLeft(4, '0') + '-' +
+      value.month.toString().padLeft(2, '0') + '-' +
+      value.day.toString().padLeft(2, '0');
+
+  Future<void> _saveAutomationSettings({
+    bool? enabled,
+    bool? newProductsEnabled,
+    bool? weeklyEnabled,
+    int? weeklyDay,
+  }) async {
+    final nextEnabled = enabled ?? _automationEnabled;
+    final nextNewProducts = newProductsEnabled ?? _autoNewProducts;
+    final nextWeekly = weeklyEnabled ?? _autoWeekly;
+    final nextWeeklyDay = weeklyDay ?? _weeklyDay;
+    setState(() {
+      _automationEnabled = nextEnabled;
+      _autoNewProducts = nextNewProducts;
+      _autoWeekly = nextWeekly;
+      _weeklyDay = nextWeeklyDay;
+    });
+    try {
+      final response = await ApiClient.putJson(
+        '/growth/marketing/automation/settings',
+        <String, dynamic>{
+          'enabled': nextEnabled,
+          'new_products_enabled': nextNewProducts,
+          'weekly_enabled': nextWeekly,
+          'weekly_day': nextWeeklyDay,
+          'language': _language,
+          'max_campaigns_per_week': 3,
+        },
+      ).timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw StateError('Could not save marketing automation settings.');
+      }
+      _showMessage(
+        nextEnabled
+            ? 'Automatic draft generation is enabled. Every generated campaign still needs owner approval.'
+            : 'Automatic draft generation is paused.',
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _automationEnabled = !nextEnabled;
+          _autoNewProducts = !nextNewProducts;
+          _autoWeekly = !nextWeekly;
+          _weeklyDay = 0;
+        });
+      }
+      _showMessage('Could not save automation settings. Check your connection and try again.');
+    }
+  }
+
+  Widget _automationSettingsCard() {
+    const days = <String>[
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Automatic campaign drafts',
+            style: TextStyle(color: _ink, fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Retail Mind can prepare drafts from shop events. It never publishes without your approval.',
+            style: TextStyle(color: _muted, fontSize: 12, height: 1.4),
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Enable marketing automation'),
+            subtitle: const Text('Master switch for automatic draft generation'),
+            value: _automationEnabled,
+            onChanged: _busy ? null : (value) => _saveAutomationSettings(enabled: value),
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('New product drafts'),
+            subtitle: const Text('Prepare a draft when a new in-stock product is added'),
+            value: _autoNewProducts,
+            onChanged: !_automationEnabled || _busy
+                ? null
+                : (value) => _saveAutomationSettings(newProductsEnabled: value),
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Weekly shop promotion'),
+            subtitle: const Text('Prepare at most one weekly product highlight'),
+            value: _autoWeekly,
+            onChanged: !_automationEnabled || _busy
+                ? null
+                : (value) => _saveAutomationSettings(weeklyEnabled: value),
+          ),
+          if (_automationEnabled && _autoWeekly)
+            DropdownButtonFormField<int>(
+              value: _weeklyDay.clamp(0, 6),
+              decoration: const InputDecoration(
+                labelText: 'Weekly draft day',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: List<DropdownMenuItem<int>>.generate(
+                days.length,
+                (index) => DropdownMenuItem<int>(
+                  value: index,
+                  child: Text(days[index]),
+                ),
+              ),
+              onChanged: _busy || !_automationEnabled
+                  ? null
+                  : (value) {
+                      if (value != null) _saveAutomationSettings(weeklyDay: value);
+                    },
+            ),
+          const SizedBox(height: 4),
+          const Text(
+            'Default limit: 3 automatic drafts per rolling 7 days. New drafts appear in Campaign approvals.',
+            style: TextStyle(color: _muted, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _generateCampaign() async {
     if (_busy) return;
     final shop = _shopController.text.trim();
