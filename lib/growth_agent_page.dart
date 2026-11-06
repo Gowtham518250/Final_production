@@ -1132,6 +1132,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
                   _hero(),
+                  const SizedBox(height: 14),
+                  _automationSettingsCard(),
                   const SizedBox(height: 16),
                   if (_message.isNotEmpty) ...[
                     _notice(_message),
@@ -1296,6 +1298,33 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               border: OutlineInputBorder(),
             ),
           ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Shop details on poster', style: TextStyle(fontWeight: FontWeight.w800, color: _ink)),
+                const SizedBox(height: 5),
+                Text(
+                  _shopAddressText().isEmpty ? 'Add your shop address in Shop Profile to show its location.' : _shopAddressText(),
+                  style: const TextStyle(fontSize: 12, color: _muted),
+                ),
+                if (_shopPhoneText().isNotEmpty)
+                  Text(_shopPhoneText(), style: const TextStyle(fontSize: 12, color: _muted)),
+                if (_shopAddressText().isEmpty)
+                  TextButton(
+                    onPressed: () => _showMessage('Open Shop Profile and save your shop address, city and PIN code.'),
+                    child: const Text('Shop profile details needed'),
+                  ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: _goal,
@@ -1391,7 +1420,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             ],
             onChanged: _busy || _products.isEmpty
                 ? null
-                : (value) => setState(() => _selectedProductKey = value),
+                : (value) => setState(() {
+                      _selectedProductKey = value;
+                      _discountPriceController.clear();
+                      _offerValidUntilController.clear();
+                    }),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1405,6 +1438,32 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               prefixIcon: Icon(Icons.local_offer_outlined),
               border: OutlineInputBorder(),
               counterText: '',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _discountPriceController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Discounted price (₹, optional)',
+              prefixIcon: const Icon(Icons.sell_outlined),
+              border: const OutlineInputBorder(),
+              helperText: _selectedProduct == null || _productPrice(_selectedProduct) == null
+                  ? 'Select a server-synced product to validate a discount.'
+                  : 'Original inventory price: ₹' + _productPrice(_selectedProduct)!.toStringAsFixed(2),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _offerValidUntilController,
+            keyboardType: TextInputType.datetime,
+            decoration: const InputDecoration(
+              labelText: 'Offer valid until (YYYY-MM-DD)',
+              hintText: '2026-12-31',
+              prefixIcon: Icon(Icons.event_outlined),
+              border: OutlineInputBorder(),
+              helperText: 'Optional. Only applies when a discounted price is entered.',
             ),
           ),
           const SizedBox(height: 14),
@@ -1680,6 +1739,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             headline: _headlineController.text.trim(),
             productName: product,
             price: price,
+            discountPrice: _currentDraft!['discount_price'] is num
+                ? (_currentDraft!['discount_price'] as num).toDouble()
+                : null,
+            discountPercent: _currentDraft!['discount_percent'] is num
+                ? (_currentDraft!['discount_percent'] as num).toDouble()
+                : null,
+            offerValidUntil: _currentDraft!['offer_valid_until']?.toString() ?? '',
+            shopAddress: _shopAddressText(),
+            shopPhone: _shopPhoneText(),
             offer: _offerController.text.trim(),
             offerCode: _currentDraft!['offer_code'].toString(),
             language: _currentDraft!['language']?.toString() ?? 'en',
@@ -1904,6 +1972,11 @@ class _PosterArtwork extends StatelessWidget {
     required this.headline,
     required this.productName,
     required this.price,
+    required this.discountPrice,
+    required this.discountPercent,
+    required this.offerValidUntil,
+    required this.shopAddress,
+    required this.shopPhone,
     required this.offer,
     required this.offerCode,
     required this.language,
@@ -1915,6 +1988,11 @@ class _PosterArtwork extends StatelessWidget {
   final String headline;
   final String productName;
   final double? price;
+  final double? discountPrice;
+  final double? discountPercent;
+  final String offerValidUntil;
+  final String shopAddress;
+  final String shopPhone;
   final String offer;
   final String offerCode;
   final String language;
@@ -1929,7 +2007,7 @@ class _PosterArtwork extends StatelessWidget {
     final isStory = format == 'story';
     final isSquare = format == 'square';
     final hasProduct = productName.trim().isNotEmpty;
-    final hasOffer = offer.trim().isNotEmpty;
+    final hasOffer = offer.trim().isNotEmpty || discountPrice != null;
     final colors = isFestive
         ? const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)]
         : isFresh
@@ -1973,12 +2051,22 @@ class _PosterArtwork extends StatelessWidget {
             : isMinimal
                 ? (language == 'te' ? 'దుకాణ సమాచారం' : language == 'hi' ? 'दुकान की जानकारी' : 'SHOP UPDATE')
                 : (language == 'te' ? 'దుకాణ ప్రత్యేకతలు' : language == 'hi' ? 'दुकान की खास बातें' : 'SHOP HIGHLIGHTS');
-    final priceText = price == null
+    final displayPrice = discountPrice ?? price;
+    final priceText = displayPrice == null
         ? ''
         : '₹' +
-            (price == price!.truncateToDouble()
-                ? price!.toStringAsFixed(0)
-                : price!.toStringAsFixed(2));
+            (displayPrice == displayPrice.truncateToDouble()
+                ? displayPrice.toStringAsFixed(0)
+                : displayPrice.toStringAsFixed(2));
+    final originalPriceText = price == null
+        ? ''
+        : '₹' +
+            (price == price.truncateToDouble()
+                ? price.toStringAsFixed(0)
+                : price.toStringAsFixed(2));
+    final discountLabel = discountPercent == null
+        ? ''
+        : discountPercent!.toStringAsFixed(discountPercent! % 1 == 0 ? 0 : 2) + '% OFF';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
@@ -2175,6 +2263,40 @@ class _PosterArtwork extends StatelessWidget {
                               ],
                             ),
                     ),
+                  if (discountPrice != null && originalPriceText.isNotEmpty) ...[
+                    SizedBox(height: isSquare ? 4 : 8),
+                    Row(
+                      children: [
+                        Text(
+                          originalPriceText,
+                          style: TextStyle(
+                            color: mutedColor,
+                            fontSize: isSquare ? 8 : 11,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isSquare ? 6 : 9,
+                            vertical: isSquare ? 3 : 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accentColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            discountLabel,
+                            style: TextStyle(
+                              color: accentTextColor,
+                              fontWeight: FontWeight.w900,
+                              fontSize: isSquare ? 8 : 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (hasOffer) ...[
                     SizedBox(height: isSquare ? 6 : 11),
                     Container(
@@ -2222,6 +2344,36 @@ class _PosterArtwork extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  if (shopAddress.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        shopAddress,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: mutedColor, fontSize: isSquare ? 6.5 : 8.5, height: 1.1),
+                      ),
+                    ),
+                  if (shopPhone.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        shopPhone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: mutedColor, fontSize: isSquare ? 6.5 : 8.5),
+                      ),
+                    ),
+                  if (offerValidUntil.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Valid until: ' + offerValidUntil,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: mutedColor, fontSize: isSquare ? 6.5 : 8.5),
+                      ),
+                    ),
                   if (hasOffer) ...[
                     const SizedBox(height: 5),
                     Text(
