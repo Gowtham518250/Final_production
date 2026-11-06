@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api_client.dart';
 import '../../visual_widgets.dart';
@@ -137,6 +138,69 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
     Navigator.pushNamed(context, '/customer-home', arguments: shopId);
   }
 
+  String _shopFullAddress(Map<String, dynamic> shop) {
+    final parts = <String>[
+      for (final key in const ['address_line1', 'address_line2', 'address', 'location', 'city', 'state', 'postal_code'])
+        if ((shop[key]?.toString().trim() ?? '').isNotEmpty)
+          shop[key].toString().trim(),
+    ];
+    final seen = <String>{};
+    return parts.where((part) => seen.add(part.toLowerCase())).join(', ');
+  }
+
+  Future<void> _openShopDirections(Map<String, dynamic> shop) async {
+    final lat = double.tryParse((shop['latitude'] ?? shop['shop_latitude'] ?? '').toString());
+    final lng = double.tryParse((shop['longitude'] ?? shop['shop_longitude'] ?? '').toString());
+    final address = _shopFullAddress(shop);
+    if ((lat == null || lng == null) && address.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('This shop has not added a map location yet.')),
+      );
+      return;
+    }
+
+    final destination = lat != null && lng != null
+        ? '$lat,$lng'
+        : address;
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': destination,
+      'travelmode': 'driving',
+    });
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Could not open maps on this device.')),
+      );
+    }
+  }
+
+  Future<void> _callShop(Map<String, dynamic> shop) async {
+    final phone = shop['phone']?.toString().trim() ?? '';
+    if (phone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: phone);
+    if (!await launchUrl(uri) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Could not start the phone call.')),
+      );
+    }
+  }
+
+  Future<void> _openShopWebsite(Map<String, dynamic> shop) async {
+    var value = shop['website']?.toString().trim() ?? '';
+    if (value.isEmpty) return;
+    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+      value = 'https://$value';
+    }
+    final uri = Uri.tryParse(value);
+    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Could not open the shop website.')),
+      );
+    }
+  }
+
   Widget _rating(Map<String, dynamic> item) {
     final rating = double.tryParse(item['rating']?.toString() ?? '') ?? 0;
     final count = int.tryParse(item['rating_count']?.toString() ?? '') ?? 0;
@@ -159,79 +223,182 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
 
   Widget _shopCard(Map<String, dynamic> shop) {
     final id = shop['shop_id']?.toString() ?? '';
-    final name = shop['shop_name']?.toString() ?? 'Shop';
-    final address = shop['address']?.toString() ?? '';
-    final tagline = shop['tagline']?.toString() ?? '';
+    final name = shop['shop_name']?.toString().trim().isNotEmpty == true
+        ? shop['shop_name'].toString().trim()
+        : 'Shop';
+    final address = _shopFullAddress(shop);
+    final tagline = shop['tagline']?.toString().trim() ?? '';
+    final description = shop['shop_description']?.toString().trim().isNotEmpty == true
+        ? shop['shop_description'].toString().trim()
+        : (shop['description']?.toString().trim() ?? '');
+    final phone = shop['phone']?.toString().trim() ?? '';
+    final website = shop['website']?.toString().trim() ?? '';
+    final categories = shop['categories'] is List
+        ? (shop['categories'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
+        : (shop['categories']?.toString().split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? <String>[]);
+    final logoUrl = shop['logo_url']?.toString().trim() ?? '';
+    final hasCoordinates = double.tryParse((shop['latitude'] ?? '').toString()) != null &&
+        double.tryParse((shop['longitude'] ?? '').toString()) != null;
 
-    return InkWell(
-      onTap: () => _openShop(id),
+    return Material(
+      color: Colors.white,
       borderRadius: BorderRadius.circular(20),
-      child: Ink(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: const [
-            BoxShadow(color: Color(0x0D0F172A), blurRadius: 20, offset: Offset(0, 8)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundColor: AppColors.brandLight,
-                  child: const Icon(Icons.storefront_rounded, color: AppColors.brand),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: LiveTranslatedText(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded, color: Colors.black45),
-              ],
-            ),
-            if (tagline.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              LiveTranslatedText(tagline, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600)),
+      child: InkWell(
+        onTap: () => _openShop(id),
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: const [
+              BoxShadow(color: Color(0x0D0F172A), blurRadius: 20, offset: Offset(0, 8)),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _rating(shop),
-                const Spacer(),
-                if (address.isNotEmpty)
-                  Flexible(
-                    child: LiveTranslatedText(
-                      address,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 27,
+                    backgroundColor: AppColors.brandLight,
+                    backgroundImage: logoUrl.startsWith('http') ? NetworkImage(logoUrl) : null,
+                    child: logoUrl.startsWith('http')
+                        ? null
+                        : const Icon(Icons.storefront_rounded, color: AppColors.brand),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LiveTranslatedText(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        LiveTranslatedText(
+                          shop['shop_type']?.toString() ?? 'General',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                      ],
                     ),
                   ),
+                  _rating(shop),
+                ],
+              ),
+              if (tagline.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                LiveTranslatedText(tagline, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
               ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFECFDF5),
-                borderRadius: BorderRadius.circular(999),
+              if (description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                LiveTranslatedText(description, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 12, height: 1.35)),
+              ],
+              if (categories.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: categories.take(3).map((category) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandLight,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: LiveTranslatedText(category, style: const TextStyle(
+                      color: AppColors.brand, fontSize: 10, fontWeight: FontWeight.w700)),
+                  )).toList(),
+                ),
+              ],
+              if (address.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 17, color: AppColors.brand),
+                    const SizedBox(width: 6),
+                    Expanded(child: LiveTranslatedText(address, maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.3))),
+                  ],
+                ),
+              ] else ...[
+                const SizedBox(height: 12),
+                Row(children: [
+                  Icon(Icons.location_off_outlined, size: 16, color: Colors.grey.shade500),
+                  const SizedBox(width: 6),
+                  LiveTranslatedText('Location not provided', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                ]),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (hasCoordinates || address.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => _openShopDirections(shop),
+                      icon: const Icon(Icons.directions_outlined, size: 16),
+                      label: const LiveTranslatedText('Directions'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      ),
+                    ),
+                  if (phone.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => _callShop(shop),
+                      icon: const Icon(Icons.call_outlined, size: 16),
+                      label: const LiveTranslatedText('Call'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      ),
+                    ),
+                  if (website.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => _openShopWebsite(shop),
+                      icon: const Icon(Icons.language_outlined, size: 16),
+                      label: const LiveTranslatedText('Website'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const LiveTranslatedText('Online shopping enabled',
+                      style: TextStyle(color: Color(0xFF047857), fontSize: 10, fontWeight: FontWeight.w800)),
+                  ),
+                ],
               ),
-              child: const LiveTranslatedText(
-                'Online shopping enabled',
-                style: TextStyle(color: Color(0xFF047857), fontSize: 11, fontWeight: FontWeight.w800),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _openShop(id),
+                  icon: const Icon(Icons.store_mall_directory_outlined, size: 16),
+                  label: const LiveTranslatedText('Visit shop'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
