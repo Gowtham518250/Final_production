@@ -135,7 +135,8 @@ class SyncQueueManager {
         final hasCustomer = phone.isNotEmpty ||
             (customerId != null && customerId > 0);
         return hasCustomer &&
-            RegExp(r'^\\d{4}-\\d{2}-\\d{2}
+            RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$').hasMatch(dueDate);
+
         return true;
     }
   }
