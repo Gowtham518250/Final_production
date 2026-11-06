@@ -409,6 +409,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             'language': _language,
             'ad_format': _adFormat,
             'product_id': productId,
+            'product_name': productName,
             'offer': _offerController.text.trim(),
             'offer_code': code,
           },
