@@ -1418,13 +1418,25 @@ class SyncService {
       if (eventKey.length < 8) {
         throw ArgumentError('Payment detection evidence requires a stable event_key.');
       }
-      await SyncQueueManager.enqueue(
+
+      // A false enqueue result means the observation was not durably saved.
+      // Never report success merely because the local history UI displayed it.
+      final queued = await SyncQueueManager.enqueue(
         'payment_detection_evidence',
         Map<String, dynamic>.from(evidence),
       );
+      if (!queued) {
+        throw StateError('Payment detection evidence was not accepted by the durable outbox.');
+      }
+
       _syncStatusController.add(await SyncQueueManager.getQueueSize());
-      await processQueueSafe();
+      // If another queue pass is active, wait briefly and then try to flush
+      // this newly-added item instead of silently skipping this sync request.
+      await processQueueSafe(waitForActiveSync: true);
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ Payment detection evidence could not be queued/synced: $e');
+      }
       await ErrorLogHelper.logException(
         e,
         StackTrace.current,
@@ -2095,8 +2107,21 @@ class SyncService {
         '${ApiClient.invoicesPrefix}/payment-detections',
         data,
         headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 12));
-      return response.statusCode == 200 || response.statusCode == 201;
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      }
+      if (kDebugMode) {
+        final body = response.body.length > 600
+            ? response.body.substring(0, 600)
+            : response.body;
+        debugPrint(
+          '❌ Payment detection evidence API rejected event '
+          '${data['event_key']}: HTTP ${response.statusCode} $body',
+        );
+      }
+      return false;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Payment detection evidence sync deferred: $e');
@@ -2551,13 +2576,26 @@ class SyncService {
             (key, value) => value == null || value.toString().trim().isEmpty,
           );
 
+      if ((payload['customer_phone']?.toString().trim().isEmpty ?? true) &&
+          (int.tryParse(payload['customer_id']?.toString() ?? '') ?? 0) <= 0) {
+        if (kDebugMode) {
+          debugPrint('❌ Khata deadline sync skipped: customer ID/phone is missing.');
+        }
+        return false;
+      }
+
       final res = await ApiClient.postJson(
         '/api/khata/update-deadline',
         payload,
         headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 20));
 
-      return res.statusCode == 200 || res.statusCode == 201;
+      final success = res.statusCode == 200 || res.statusCode == 201;
+      if (!success && kDebugMode) {
+        final body = res.body.length > 600 ? res.body.substring(0, 600) : res.body;
+        debugPrint('❌ Khata deadline API rejected update: HTTP ${res.statusCode} $body');
+      }
+      return success;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error syncing Khata deadline: $e');
       return false;
