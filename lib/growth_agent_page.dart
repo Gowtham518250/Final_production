@@ -855,17 +855,32 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
     final shopName = _shopController.text.trim();
     final offer = _offerController.text.trim();
-    final originalPrice = current['original_price'] is num
-        ? (current['original_price'] as num).toDouble()
-        : current['product_price'] is num
-            ? (current['product_price'] as num).toDouble()
-            : null;
+    final selectedProduct = _selectedProduct;
+    final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
+    final selectedProductId = selectedRawId == null ? null : int.tryParse(selectedRawId.toString());
+    final savedProductId = current['product_id'] == null ? null : int.tryParse(current['product_id'].toString());
+    final productChanged = selectedProductId != savedProductId;
+    final productName = productChanged
+        ? (selectedProduct?['name']?.toString() ?? '')
+        : (current['product_name']?.toString() ?? '');
+    final originalPrice = productChanged
+        ? _productPrice(selectedProduct)
+        : current['original_price'] is num
+            ? (current['original_price'] as num).toDouble()
+            : current['product_price'] is num
+                ? (current['product_price'] as num).toDouble()
+                : null;
+
     final discountText = _discountPriceController.text.trim();
     double? discountPrice;
     if (discountText.isNotEmpty) {
       discountPrice = double.tryParse(discountText);
-      if (discountPrice == null || originalPrice == null || discountPrice < 0 || discountPrice >= originalPrice) {
-        _showMessage('Discounted price must be valid and lower than the original product price.');
+      if (discountPrice == null ||
+          originalPrice == null ||
+          discountPrice < 0 ||
+          discountPrice >= originalPrice ||
+          selectedProductId == null) {
+        _showMessage('Select a server-synced product and enter a valid lower discounted price.');
         return null;
       }
     }
@@ -874,6 +889,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       offerValidUntil = DateTime.tryParse(_offerValidUntilController.text.trim());
       if (offerValidUntil == null || discountPrice == null) {
         _showMessage('Enter a valid offer end date and discounted price.');
+        return null;
+      }
+      final now = DateTime.now();
+      if (DateTime(offerValidUntil.year, offerValidUntil.month, offerValidUntil.day)
+          .isBefore(DateTime(now.year, now.month, now.day))) {
+        _showMessage('Offer end date cannot be in the past.');
         return null;
       }
     }
@@ -886,19 +907,19 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final discountChanged = discountPrice != (current['discount_price'] is num ? (current['discount_price'] as num).toDouble() : null);
     final dateText = offerValidUntil == null ? '' : _formatDate(offerValidUntil);
     final dateChanged = dateText != (current['offer_valid_until']?.toString() ?? '');
-
-    if (captionWasNotManuallyEdited && (shopChanged || offerChanged || discountChanged || dateChanged)) {
+    if (captionWasNotManuallyEdited &&
+        (shopChanged || offerChanged || discountChanged || dateChanged || productChanged)) {
       caption = GrowthAdCopy.caption(
         shopName: shopName,
         goal: current['goal']?.toString() ?? 'nearby',
         language: current['language']?.toString() ?? 'en',
-        productName: current['product_name']?.toString(),
+        productName: productName,
         price: discountPrice ?? originalPrice,
         offer: offer,
         offerCode: current['offer_code']?.toString() ?? '',
       );
-      if (discountPrice != null && originalPrice != null) {
-        final percent = ((originalPrice - discountPrice) / originalPrice) * 100;
+      final percent = GrowthMarketingPricing.discountPercent(originalPrice, discountPrice);
+      if (discountPrice != null && originalPrice != null && percent != null) {
         caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
         caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
         caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
@@ -913,17 +934,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
     final updated = Map<String, dynamic>.from(current)
       ..['shop_name'] = shopName
-      ..['headline'] = _headlineController.text.trim()
-      ..['caption'] = caption
-      ..['offer'] = offer
+      ..['product_id'] = selectedProductId
+      ..['product_name'] = productName
       ..['original_price'] = originalPrice
       ..['product_price'] = originalPrice
       ..['discount_price'] = discountPrice
-      ..['discount_percent'] = GrowthMarketingPricing.discountPercent(
-        originalPrice,
-        discountPrice,
-      )
+      ..['discount_percent'] = GrowthMarketingPricing.discountPercent(originalPrice, discountPrice)
       ..['offer_valid_until'] = offerValidUntil == null ? null : dateText
+      ..['headline'] = _headlineController.text.trim()
+      ..['caption'] = caption
+      ..['offer'] = offer
       ..['template'] = _template
       ..['ad_format'] = _adFormat
       ..['content_version'] = (_number(current['content_version']).toInt()).clamp(1, 2147483646) + 1
