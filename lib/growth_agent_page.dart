@@ -333,7 +333,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _automationEnabled = automationEnabled;
         _autoNewProducts = autoNewProducts;
         _autoWeekly = autoWeekly;
-        _weeklyDay = weeklyDay.clamp(0, 6);
+        _weeklyDay = weeklyDay.clamp(0, 6).toInt();
         _products = products;
         _campaigns = campaigns;
         _selectedProductKey = products.isEmpty ? null : _productKey(products.first, 0);
@@ -620,7 +620,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           ),
           if (_automationEnabled && _autoWeekly)
             DropdownButtonFormField<int>(
-              value: _weeklyDay.clamp(0, 6),
+              value: _weeklyDay.clamp(0, 6).toInt(),
               decoration: const InputDecoration(
                 labelText: 'Weekly draft day',
                 border: OutlineInputBorder(),
