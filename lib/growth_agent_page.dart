@@ -1316,17 +1316,171 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
 
-  Future<void> _openCreativeStudio() async {
-    try {
-      await _creativeStudioChannel.invokeMethod<void>('open');
-    } on PlatformException catch (error) {
-      _showMessage(
-        error.message ?? 'Could not open Adobe Express Creative Studio.',
+  Future<Map<String, dynamic>> _prepareApprovedPosterExport() async {
+    final draft = _currentDraft;
+    if (draft == null) {
+      throw StateError('Create an advertisement first.');
+    }
+
+    final version = _number(draft['content_version']).toInt();
+    final approvedVersion = _number(draft['approved_version']).toInt();
+    if (draft['status'] != 'APPROVED' ||
+        version < 1 ||
+        approvedVersion != version ||
+        _hasUnsavedCampaignEdits) {
+      throw StateError(
+        'Save your edits and get approval for this exact campaign version before exporting.',
       );
-    } on MissingPluginException {
-      _showMessage('Creative Studio is available in the Android APK build.');
+    }
+
+    final campaignId = (draft['campaign_id'] ?? draft['id']).toString();
+    final latest = await _refreshCampaignFromServer(campaignId);
+    if (latest == null ||
+        latest['status'] != 'APPROVED' ||
+        _number(latest['content_version']).toInt() != version ||
+        _number(latest['approved_version']).toInt() != version) {
+      throw StateError(
+        'This campaign version is no longer approved. Refresh and review the latest version.',
+      );
+    }
+    if (_hasUnsavedCampaignEdits) {
+      throw StateError(
+        'This campaign has unsaved edits. Save the new version and obtain approval first.',
+      );
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    final renderObject = _posterKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) {
+      throw StateError('Advertisement preview is not ready yet.');
+    }
+
+    final logicalWidth = renderObject.size.width;
+    final pixelRatio = logicalWidth > 0
+        ? (1080.0 / logicalWidth).clamp(2.0, 5.0).toDouble()
+        : math.max(3.0, MediaQuery.of(context).devicePixelRatio).toDouble();
+    final image = await renderObject.toImage(pixelRatio: pixelRatio);
+    try {
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw StateError('Could not render poster image.');
+      }
+      return <String, dynamic>{
+        'bytes': byteData.buffer.asUint8List(),
+        'campaignId': campaignId,
+        'shopName': _shopController.text.trim(),
+        'caption': _captionController.text.trim(),
+      };
+    } finally {
+      image.dispose();
     }
   }
+
+  Future<File> _writePosterToTemporaryFile(
+    Uint8List bytes,
+    String campaignId,
+  ) async {
+    final directory = await getTemporaryDirectory();
+    final safeId = campaignId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final file = File(
+      directory.path + '/retailmind_ad_' + safeId + '.png',
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  Future<void> _sharePoster() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final export = await _prepareApprovedPosterExport();
+      final file = await _writePosterToTemporaryFile(
+        export['bytes'] as Uint8List,
+        export['campaignId'] as String,
+      );
+      await Share.shareXFiles(
+        <XFile>[XFile(file.path)],
+        text: export['caption'] as String,
+        subject: 'Advertisement from ' + (export['shopName'] as String),
+      );
+    } catch (error) {
+      _showMessage(
+        error is StateError
+            ? error.message.toString()
+            : 'Could not share the approved poster. Please try again.',
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _savePosterToPhone() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final export = await _prepareApprovedPosterExport();
+      final safeId = (export['campaignId'] as String)
+          .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+      final fileName = 'retail_mind_ad_' + safeId + '.png';
+      final result = await _creativeStudioChannel.invokeMapMethod<String, dynamic>(
+        'save_poster',
+        <String, dynamic>{
+          'base64': base64Encode(export['bytes'] as Uint8List),
+          'fileName': fileName,
+        },
+      );
+      if (result == null || result['success'] != true) {
+        throw StateError(
+          result?['message']?.toString() ??
+              'Android could not save the poster.',
+        );
+      }
+      _showMessage(
+        'Saved to Downloads/Retail Mind/' +
+            (result['fileName']?.toString() ?? fileName),
+      );
+    } on PlatformException catch (error) {
+      _showMessage(error.message ?? 'Could not save the poster to your phone.');
+    } catch (error) {
+      _showMessage(
+        error is StateError
+            ? error.message.toString()
+            : 'Could not save the poster to your phone.',
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sendPosterToAdobeExpress() async {
+    if (_busy) return;
+    if (_currentDraft == null) {
+      _showMessage('Create an advertisement first, then approve it to send it to Adobe Express.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final export = await _prepareApprovedPosterExport();
+      final file = await _writePosterToTemporaryFile(
+        export['bytes'] as Uint8List,
+        export['campaignId'] as String,
+      );
+      await Share.shareXFiles(
+        <XFile>[XFile(file.path)],
+        text: 'Retail Mind poster. Choose Adobe Express in the Android share menu, if installed, to continue editing this image.',
+        subject: 'Edit advertisement from ' + (export['shopName'] as String),
+      );
+    } catch (error) {
+      _showMessage(
+        error is StateError
+            ? error.message.toString()
+            : 'Could not send the poster to another app.',
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
 
   void _showMessage(String message) {
     if (!mounted) return;
@@ -1356,8 +1510,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         elevation: 0,
         actions: [
           IconButton(
-            tooltip: 'Open Adobe Express Creative Studio',
-            onPressed: _openCreativeStudio,
+            tooltip: 'Send approved poster to Adobe Express',
+            onPressed: _sendPosterToAdobeExpress,
             icon: const Icon(Icons.palette_outlined, color: _purple),
           ),
           IconButton(
@@ -1468,6 +1622,20 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : _savePosterToPhone,
+                              icon: const Icon(Icons.download_rounded),
+                              label: const Text('Save PNG to Downloads'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : _sendPosterToAdobeExpress,
+                              icon: const Icon(Icons.palette_outlined),
+                              label: const Text('Continue in Adobe Express'),
+                            ),
+                            const Text(
+                              'Adobe Express receives the poster as a PNG image. Choose it from the Android share menu if it is installed; text is flattened into the image.',
+                              style: TextStyle(color: _muted, fontSize: 11, height: 1.35),
                             ),
                             OutlinedButton.icon(
                               onPressed: _busy ? null : () => _shareCaption(_currentDraft!),
