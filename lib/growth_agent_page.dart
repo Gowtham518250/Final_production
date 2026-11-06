@@ -438,10 +438,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   String _shopAddressText() {
+    final canonicalAddress = (_shopDetails['address'] ?? '').toString().trim();
+    if (canonicalAddress.isNotEmpty) return canonicalAddress;
     final values = <String>[
       _shopDetails['address_line1']?.toString() ?? '',
       _shopDetails['address_line2']?.toString() ?? '',
-      _shopDetails['address']?.toString() ?? '',
       _shopDetails['location']?.toString() ?? '',
       _shopDetails['city']?.toString() ?? '',
       _shopDetails['state']?.toString() ?? '',
@@ -663,11 +664,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       );
       final locationText = _shopAddressText();
       final phoneText = _shopPhoneText();
-      if (discountPrice != null && originalPrice != null) {
-        final percent = ((originalPrice - discountPrice) / originalPrice) * 100;
+      final discountPercent = GrowthMarketingPricing.discountPercent(
+        originalPrice,
+        discountPrice,
+      );
+      if (discountPrice != null && originalPrice != null && discountPercent != null) {
         caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
         caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
-        caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
+        caption += '\n' + discountPercent.toStringAsFixed(2) + '% OFF';
       }
       if (offerValidUntil != null) {
         caption += '\nOffer valid until: ' + _formatDate(offerValidUntil);
@@ -682,9 +686,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       var authoritativeOriginalPrice = originalPrice;
       var authoritativeDiscountPrice = discountPrice;
       double? authoritativeDiscountPercent;
-      if (discountPrice != null && originalPrice != null && originalPrice > 0) {
-        authoritativeDiscountPercent = ((originalPrice - discountPrice) / originalPrice) * 100;
-      }
+      authoritativeDiscountPercent = GrowthMarketingPricing.discountPercent(
+        originalPrice,
+        discountPrice,
+      );
 
       try {
         final response = await ApiClient.postJson(
@@ -872,9 +877,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..['original_price'] = originalPrice
       ..['product_price'] = originalPrice
       ..['discount_price'] = discountPrice
-      ..['discount_percent'] = discountPrice == null || originalPrice == null || originalPrice <= 0
-          ? null
-          : ((originalPrice - discountPrice) / originalPrice) * 100
+      ..['discount_percent'] = GrowthMarketingPricing.discountPercent(
+        originalPrice,
+        discountPrice,
+      )
       ..['offer_valid_until'] = offerValidUntil == null ? null : dateText
       ..['template'] = _template
       ..['ad_format'] = _adFormat
