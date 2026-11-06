@@ -18,6 +18,8 @@ class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val CREATIVE_STUDIO_CHANNEL =
             "com.retailmind.app/creative_studio"
+        private const val MAX_POSTER_BYTES = 40 * 1024 * 1024
+        private const val STORAGE_PERMISSION_REQUEST = 7403
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -137,10 +139,5 @@ class MainActivity : FlutterFragmentActivity() {
         }
         File(folder, fileName).writeBytes(bytes)
         return fileName
-    }
-
-    companion object {
-        private const val MAX_POSTER_BYTES = 40 * 1024 * 1024
-        private const val STORAGE_PERMISSION_REQUEST = 7403
     }
 }
