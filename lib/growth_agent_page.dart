@@ -339,6 +339,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _selectedProductKey = products.isEmpty ? null : _productKey(products.first, 0);
         _loading = false;
       });
+
+      // Retry local-first drafts that could not reach the API during an offline session.
+      final pendingSyncDrafts = campaigns
+          .where((item) => item['pending_sync'] == true)
+          .take(10)
+          .toList();
+      for (final pendingDraft in pendingSyncDrafts) {
+        if (!mounted) break;
+        await _persistCampaign(pendingDraft);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -346,6 +356,34 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _message = 'Could not load shop data. You can still create a general shop ad.';
       });
     }
+  }
+
+  bool get _hasUnsavedCampaignEdits {
+    final draft = _currentDraft;
+    if (draft == null) return false;
+    final savedDiscount = draft['discount_price'] is num
+        ? (draft['discount_price'] as num).toDouble()
+        : null;
+    final enteredDiscountText = _discountPriceController.text.trim();
+    final enteredDiscount = enteredDiscountText.isEmpty
+        ? null
+        : double.tryParse(enteredDiscountText);
+    final savedProductId = draft['product_id']?.toString() ?? '';
+    final selectedProduct = _selectedProduct;
+    final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
+    final selectedProductId = selectedRawId?.toString() ?? '';
+    return
+        _shopController.text.trim() != (draft['shop_name']?.toString() ?? '') ||
+        _headlineController.text.trim() != (draft['headline']?.toString() ?? '') ||
+        _captionController.text.trim() != (draft['caption']?.toString() ?? '') ||
+        _offerController.text.trim() != (draft['offer']?.toString() ?? '') ||
+        enteredDiscount != savedDiscount ||
+        _offerValidUntilController.text.trim() != (draft['offer_valid_until']?.toString() ?? '') ||
+        _goal != (draft['goal']?.toString() ?? 'nearby') ||
+        _language != (draft['language']?.toString() ?? 'en') ||
+        _template != (draft['template']?.toString() ?? 'bold') ||
+        _adFormat != (draft['ad_format']?.toString() ?? 'feed') ||
+        selectedProductId != savedProductId;
   }
 
   Map<String, dynamic>? get _selectedProduct {
@@ -421,6 +459,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
           );
           _campaigns.insert(0, remote);
+          if (_currentDraft != null &&
+              (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id) {
+            _currentDraft = remote;
+          }
           if (_campaigns.length > 20) {
             _campaigns = _campaigns.take(20).toList();
           }
@@ -899,6 +941,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   Future<void> _approveCampaign(Map<String, dynamic> campaign) async {
     if (_busy) return;
+    if (_currentDraft != null &&
+        ((_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() ==
+            (campaign['campaign_id'] ?? campaign['id'])?.toString()) &&
+        _hasUnsavedCampaignEdits) {
+      final saved = await _saveCurrentEdits();
+      if (saved != null) {
+        _showMessage('Your edits were saved as a new pending version. Review that version and approve it separately.');
+      }
+      return;
+    }
     final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
     final version = _number(campaign['content_version']).toInt();
     if (id.isEmpty || version < 1 || campaign['pending_sync'] == true) {
@@ -1115,7 +1167,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final draftVersion = _number(_currentDraft?['content_version']).toInt();
     final isApproved = draftStatus == 'APPROVED' &&
         draftVersion > 0 &&
-        _number(_currentDraft?['approved_version']).toInt() == draftVersion;
+        _number(_currentDraft?['approved_version']).toInt() == draftVersion &&
+        !_hasUnsavedCampaignEdits;
     final needsApproval = draftStatus == 'PENDING_APPROVAL';
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
@@ -1521,6 +1574,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           TextField(
             controller: _offerValidUntilController,
             keyboardType: TextInputType.datetime,
+            onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
               labelText: 'Offer valid until (YYYY-MM-DD)',
               hintText: '2026-12-31',
@@ -1779,6 +1833,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final price = _currentDraft!['product_price'] is num
             ? (_currentDraft!['product_price'] as num).toDouble()
         : null;
+    final discountText = _discountPriceController.text.trim();
+    final editedDiscount = discountText.isEmpty ? null : double.tryParse(discountText);
+    final previewDiscount = discountText.isEmpty
+        ? (_currentDraft!['discount_price'] is num
+            ? (_currentDraft!['discount_price'] as num).toDouble()
+            : null)
+        : editedDiscount;
+    final previewDiscountPercent = GrowthMarketingPricing.discountPercent(price, previewDiscount);
     final width = math.min(360.0, MediaQuery.of(context).size.width - 48.0).toDouble();
     final template = _currentDraft!['template']?.toString() ?? _template;
     final format = _currentDraft!['ad_format']?.toString() ?? _adFormat;
@@ -1802,13 +1864,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             headline: _headlineController.text.trim(),
             productName: product,
             price: price,
-            discountPrice: _currentDraft!['discount_price'] is num
-                ? (_currentDraft!['discount_price'] as num).toDouble()
-                : null,
-            discountPercent: _currentDraft!['discount_percent'] is num
-                ? (_currentDraft!['discount_percent'] as num).toDouble()
-                : null,
-            offerValidUntil: _currentDraft!['offer_valid_until']?.toString() ?? '',
+            discountPrice: previewDiscount,
+            discountPercent: previewDiscountPercent,
+            offerValidUntil: _offerValidUntilController.text.trim(),
             shopAddress: _shopAddressText(),
             shopPhone: _shopPhoneText(),
             offer: _offerController.text.trim(),
