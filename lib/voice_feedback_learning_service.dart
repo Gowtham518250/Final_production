@@ -36,9 +36,12 @@ class VoiceFeedbackLearningService {
       }
       
       await prefs.setStringList(_userCorrectionsKey, corrections);
-      
+
+      // This is device-local history only. Never apply it automatically to billing;
+      // shop-scoped aliases are submitted separately after bill confirmation.
+
       if (kDebugMode) {
-        debugPrint('📚 Recorded correction: "$originalTranscript" → "$correctedItemName"');
+        debugPrint('Voice correction recorded for language $languageCode.');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to record correction: $e');
@@ -51,34 +54,39 @@ class VoiceFeedbackLearningService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final corrections = prefs.getStringList(_userCorrectionsKey) ?? [];
-      
-      final Map<String, int> mispronunciationCount = {};
-      final Map<String, String> correctionMap = {};
-      
+      final phraseVotes = <String, Map<String, int>>{};
+
       for (final entry in corrections) {
         final data = json.decode(entry);
-        if (data['language'] == languageCode) {
-          final original = data['original_transcript'].toString().toLowerCase().trim();
-          final corrected = data['corrected_name'].toString().toLowerCase().trim();
-          
-          // Count occurrences
-          mispronunciationCount[original] = (mispronunciationCount[original] ?? 0) + 1;
-          
-          // If this mispronunciation appears 3+ times, save the most common correction
-          final count = mispronunciationCount[original] ?? 0;
-          if (count >= 3) {
-            correctionMap[original] = corrected;
-          }
-        }
+        if (data['language'] != languageCode) continue;
+        final original = _normalizeLearningPhrase(
+          (data['original_transcript'] ?? '').toString(),
+        );
+        final corrected = _normalizeLearningPhrase(
+          (data['corrected_name'] ?? '').toString(),
+        );
+        if (original.isEmpty || corrected.isEmpty || original == corrected) continue;
+        final votes = phraseVotes.putIfAbsent(original, () => <String, int>{});
+        votes[corrected] = (votes[corrected] ?? 0) + 1;
       }
-      
+
+      final correctionMap = <String, String>{};
+      phraseVotes.forEach((original, votes) {
+        final ranked = votes.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        if (ranked.isNotEmpty &&
+            ranked.first.value >= 3 &&
+            (ranked.length == 1 || ranked.first.value > ranked[1].value)) {
+          correctionMap[original] = ranked.first.key;
+        }
+      });
       return correctionMap;
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Failed to get common corrections: $e');
+      if (kDebugMode) debugPrint('Voice correction lookup failed: $e');
       return {};
     }
   }
-  
+
   /// Record accuracy metrics
   static Future<void> recordAccuracyMetrics({
     required String languageCode,
@@ -174,7 +182,66 @@ class VoiceFeedbackLearningService {
     if (kDebugMode) debugPrint('🗑️ Cleared voice learning data');
   }
   
-  /// Apply learned corrections to transcript
+  static String _normalizeLearningPhrase(String value) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  // Treat letters/digits in Latin and common Indic blocks as word characters.
+  // This avoids ASCII-only word-boundary behavior for Indian-language aliases.
+  static bool _isLearningWordCodeUnit(int unit) {
+    return (unit >= 0x30 && unit <= 0x39) ||
+        (unit >= 0x41 && unit <= 0x5A) ||
+        (unit >= 0x61 && unit <= 0x7A) ||
+        (unit >= 0x00C0 && unit <= 0x02AF) ||
+        (unit >= 0x0300 && unit <= 0x036F) ||
+        (unit >= 0x0900 && unit <= 0x0DFF) ||
+        (unit >= 0x0E00 && unit <= 0x0EFF) ||
+        (unit >= 0x1000 && unit <= 0x109F) ||
+        unit == 0x200C ||
+        unit == 0x200D ||
+        unit == 0x5F;
+  }
+
+  static String _replaceWholeLearningPhrase(
+    String source,
+    String phrase,
+    String replacement,
+  ) {
+    final needle = _normalizeLearningPhrase(phrase);
+    if (needle.isEmpty) return source;
+
+    final lowerSource = source.toLowerCase();
+    final output = StringBuffer();
+    var appendFrom = 0;
+    var searchFrom = 0;
+
+    while (searchFrom < lowerSource.length) {
+      final found = lowerSource.indexOf(needle, searchFrom);
+      if (found < 0) break;
+      final end = found + needle.length;
+      final leftBoundary = found == 0 ||
+          !_isLearningWordCodeUnit(source.codeUnitAt(found - 1));
+      final rightBoundary = end >= source.length ||
+          !_isLearningWordCodeUnit(source.codeUnitAt(end));
+
+      if (leftBoundary && rightBoundary && found >= appendFrom) {
+        output.write(source.substring(appendFrom, found));
+        output.write(replacement);
+        appendFrom = end;
+      }
+      searchFrom = end;
+    }
+
+    if (appendFrom == 0) return source;
+    output.write(source.substring(appendFrom));
+    return output.toString();
+  }
+
+  /// Apply learned corrections using literal, Unicode-aware phrase boundaries.
+  /// Longest aliases run first so a short alias cannot consume a longer phrase.
   static Future<String> applyLearnedCorrections({
     required String transcript,
     required String languageCode,
@@ -182,19 +249,24 @@ class VoiceFeedbackLearningService {
     try {
       final corrections = await getCommonCorrections(languageCode);
       if (corrections.isEmpty) return transcript;
-      
-      String corrected = transcript.toLowerCase();
-      corrections.forEach((mispronounced, correct) {
-        corrected = corrected.replaceAll(RegExp(r'\b' + mispronounced + r'\b'), correct);
-      });
-      
+
+      var corrected = transcript.toLowerCase();
+      final entries = corrections.entries.toList()
+        ..sort((a, b) => b.key.length.compareTo(a.key.length));
+      for (final entry in entries) {
+        corrected = _replaceWholeLearningPhrase(
+          corrected,
+          entry.key,
+          entry.value,
+        );
+      }
       return corrected;
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Failed to apply corrections: $e');
+      if (kDebugMode) debugPrint('Voice correction matching failed: $e');
       return transcript;
     }
   }
-  
+
   /// Get learning statistics
   static Future<Map<String, dynamic>> getLearningStatistics() async {
     try {
