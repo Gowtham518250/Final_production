@@ -957,8 +957,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
     if (phone.isNotEmpty && !caption.contains(phone)) {
       caption += '\nContact: ' + phone;
-      _captionController.text = caption;
     }
+    if (productName.isNotEmpty && !caption.contains(productName)) {
+      caption += '\nProduct: ' + productName;
+    }
+    if (shopName.isNotEmpty && !caption.contains(shopName)) {
+      caption += '\nShop: ' + shopName;
+    }
+    _captionController.text = caption;
 
     final updated = Map<String, dynamic>.from(current)
       ..['shop_name'] = shopName
