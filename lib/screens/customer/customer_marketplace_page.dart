@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'shop_locations_map.dart';
+
 import '../../api_client.dart';
 import '../../visual_widgets.dart';
 
@@ -676,17 +678,52 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                 ],
               ),
               const SizedBox(height: 12),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _shops.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: isWide ? 3 : 1,
-                  childAspectRatio: isWide ? 1.55 : 2.05,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+              if (ShopLocationsMap.shopsWithCoordinates(_shops).isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.map_outlined, size: 18, color: AppColors.brand),
+                    const SizedBox(width: 7),
+                    const Expanded(
+                      child: LiveTranslatedText(
+                        'Shop locations',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      '${ShopLocationsMap.shopsWithCoordinates(_shops).length} mapped',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                  ],
                 ),
-                itemBuilder: (_, i) => _shopCard(_shops[i]),
+                const SizedBox(height: 9),
+                ShopLocationsMap(
+                  shops: _shops,
+                  onShopSelected: _openShopDirections,
+                ),
+                const SizedBox(height: 18),
+              ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 1100
+                      ? 3
+                      : constraints.maxWidth >= 680
+                          ? 2
+                          : 1;
+                  final cardWidth = columns == 1
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - (12 * (columns - 1))) / columns;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: _shops
+                        .map((shop) => SizedBox(
+                              width: cardWidth,
+                              child: _shopCard(shop),
+                            ))
+                        .toList(growable: false),
+                  );
+                },
               ),
             ],
             if (_products.isNotEmpty) ...[
