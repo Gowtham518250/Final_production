@@ -188,6 +188,22 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
     }
   }
 
+  Future<void> _emailShop(Map<String, dynamic> shop) async {
+    final email = shop['email']?.toString().trim() ?? '';
+    if (email.isEmpty) return;
+    final shopName = shop['shop_name']?.toString().trim() ?? 'shop';
+    final uri = Uri(
+      scheme: 'mailto',
+      path: email,
+      queryParameters: {'subject': 'Enquiry about $shopName'},
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Could not open your email app.')),
+      );
+    }
+  }
+
   Future<void> _openShopWebsite(Map<String, dynamic> shop) async {
     var value = shop['website']?.toString().trim() ?? '';
     if (value.isEmpty) return;
@@ -234,6 +250,7 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
         ? shop['shop_description'].toString().trim()
         : (shop['description']?.toString().trim() ?? '');
     final phone = shop['phone']?.toString().trim() ?? '';
+    final email = shop['email']?.toString().trim() ?? '';
     final website = shop['website']?.toString().trim() ?? '';
     final categories = shop['categories'] is List
         ? (shop['categories'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
@@ -362,6 +379,17 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                       onPressed: () => _callShop(shop),
                       icon: const Icon(Icons.call_outlined, size: 16),
                       label: const LiveTranslatedText('Call'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brand,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      ),
+                    ),
+                  if (email.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => _emailShop(shop),
+                      icon: const Icon(Icons.email_outlined, size: 16),
+                      label: const LiveTranslatedText('Email'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.brand,
                         visualDensity: VisualDensity.compact,
