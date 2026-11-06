@@ -332,6 +332,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           'template': localDraft['template']?.toString() ?? 'bold',
           'product_id': rawProductId == null ? null : int.tryParse(rawProductId.toString()),
           'product_name': localDraft['product_name']?.toString() ?? '',
+          'product_price': localDraft['product_price'] == null
+              ? null
+              : _number(localDraft['product_price']),
           'headline': localDraft['headline']?.toString() ?? '',
           'caption': localDraft['caption']?.toString() ?? '',
           'offer': localDraft['offer']?.toString() ?? '',
@@ -345,6 +348,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         if (decoded is Map) {
           final remote = Map<String, dynamic>.from(decoded)
             ..['tracking_mode'] = 'manual_local'
+            ..['product_price'] ??= localDraft['product_price']
             ..['requires_owner_review'] = true;
           _campaigns.removeWhere(
             (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
@@ -377,6 +381,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       final code = GrowthAdCopy.offerCode(now);
       final productName = product?['name']?.toString() ?? '';
       final price = _productPrice(product);
+      final rawProductId = product?['id'] ?? product?['product_id'];
+      final productId = rawProductId == null
+          ? null
+          : int.tryParse(rawProductId.toString());
+      int? authoritativeProductId;
       var headline = GrowthAdCopy.headline(_goal, _language);
       var caption = GrowthAdCopy.caption(
         shopName: shop,
@@ -393,10 +402,6 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       // The backend resolves the authenticated owner's profile and product
       // record itself. A client cannot request another shop's product copy.
       try {
-        final rawProductId = product?['id'] ?? product?['product_id'];
-        final productId = rawProductId == null
-            ? null
-            : int.tryParse(rawProductId.toString());
         final response = await ApiClient.postJson(
           '/growth/marketing/generate',
           <String, dynamic>{
@@ -420,6 +425,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               caption = serverCaption;
               generationSource = data['generation_source']?.toString() ?? 'server';
               authoritativeShopName = data['shop_name']?.toString();
+              authoritativeProductId = int.tryParse(data['product_id']?.toString() ?? '');
             }
           }
         }
@@ -436,6 +442,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         'language': _language,
         'template': _template,
         'ad_format': _adFormat,
+        'product_id': authoritativeProductId ?? productId,
         'product_name': productName,
         'product_price': price,
         'headline': headline,
