@@ -2319,12 +2319,13 @@ class _PosterArtwork extends StatelessWidget {
             (displayPrice == displayPrice.truncateToDouble()
                 ? displayPrice.toStringAsFixed(0)
                 : displayPrice.toStringAsFixed(2));
-    final originalPriceText = price == null
+    final originalPrice = price;
+    final originalPriceText = originalPrice == null
         ? ''
         : '₹' +
-            (price == price.truncateToDouble()
-                ? price.toStringAsFixed(0)
-                : price.toStringAsFixed(2));
+            (originalPrice == originalPrice.truncateToDouble()
+                ? originalPrice.toStringAsFixed(0)
+                : originalPrice.toStringAsFixed(2));
     final discountLabel = discountPercent == null
         ? ''
         : discountPercent!.toStringAsFixed(discountPercent! % 1 == 0 ? 0 : 2) + '% OFF';
