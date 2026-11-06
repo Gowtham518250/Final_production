@@ -17,6 +17,7 @@ void main() {
         correctedItemName: 'బూస్ట్',
         languageCode: 'te',
         originalConfidence: 0.72,
+        syncToShop: false,
       );
     }
 
@@ -35,6 +36,7 @@ void main() {
         correctedItemName: 'dove',
         languageCode: 'en',
         originalConfidence: 0.8,
+        syncToShop: false,
       );
     }
 
@@ -58,6 +60,7 @@ void main() {
         correctedItemName: 'boost',
         languageCode: 'en',
         originalConfidence: 0.6,
+        syncToShop: false,
       );
       await VoiceFeedbackLearningService.recordCorrection(
         originalTranscript: 'bubt',
