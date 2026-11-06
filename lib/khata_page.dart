@@ -636,10 +636,13 @@ class _KhataPageState extends State<KhataPage>
         if (data is! Map) continue;
         final id = int.tryParse(data['customer_id']?.toString() ?? '');
         final phone = data['customer_phone']?.toString().trim() ?? '';
-        final key = id != null && id > 0 ? id.toString() : phone;
-        final dueDate = data['due_date']?.toString().trim() ?? '';
-        if (key.isNotEmpty && dueDate.isNotEmpty) {
-          pendingDeadlineByCustomer[key] = dueDate;
+        if (dueDate.isNotEmpty) {
+          if (id != null && id > 0) {
+            pendingDeadlineByCustomer[id.toString()] = dueDate;
+          }
+          if (phone.isNotEmpty) {
+            pendingDeadlineByCustomer[phone] = dueDate;
+          }
         }
       }
     } catch (error) {
@@ -1423,7 +1426,7 @@ class _KhataPageState extends State<KhataPage>
       try {
         final queued = await SyncQueueManager.enqueue('update_khata_deadline', {
           'operation_id': 'KHATA_DEADLINE_${scopeKey}_$dateStr',
-          'customer_phone': customerId == null ? backendPhone : null,
+          'customer_phone': backendPhone.isNotEmpty ? backendPhone : null,
           'customer_id': customerId,
           'due_date': dateStr,
         });
@@ -1437,6 +1440,12 @@ class _KhataPageState extends State<KhataPage>
           customerIdOrPhone: scopeKey,
           dueDate: dateStr,
         );
+        if (customerId != null && backendPhone.isNotEmpty) {
+          await LocalStorageService.saveKhataDeadline(
+            customerIdOrPhone: backendPhone,
+            dueDate: dateStr,
+          );
+        }
 
         _showToast('⏰ Deadline saved and queued for backend sync.');
         await _loadKhata(refreshInvoiceAnalytics: false);
