@@ -56,10 +56,7 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
           );
     }
 
-    return ErrorBoundaryScope(
-      onError: _handleError,
-      child: widget.child,
-    );
+    return ErrorBoundaryScope(onError: _handleError, child: widget.child);
   }
 }
 
@@ -145,7 +142,10 @@ class _DefaultErrorWidget extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFEF4444),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 16,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -166,13 +166,18 @@ class GlobalErrorHandler {
   factory GlobalErrorHandler() => _instance;
   GlobalErrorHandler._internal();
 
-  final List<void Function(Object error, StackTrace stackTrace)> _errorHandlers = [];
+  final List<void Function(Object error, StackTrace stackTrace)>
+  _errorHandlers = [];
 
-  void addErrorHandler(void Function(Object error, StackTrace stackTrace) handler) {
+  void addErrorHandler(
+    void Function(Object error, StackTrace stackTrace) handler,
+  ) {
     _errorHandlers.add(handler);
   }
 
-  void removeErrorHandler(void Function(Object error, StackTrace stackTrace) handler) {
+  void removeErrorHandler(
+    void Function(Object error, StackTrace stackTrace) handler,
+  ) {
     _errorHandlers.remove(handler);
   }
 
@@ -187,7 +192,11 @@ class GlobalErrorHandler {
 
 /// Error SnackBar Helper
 class ErrorSnackBar {
-  static void show(BuildContext context, String message, {VoidCallback? onAction}) {
+  static void show(
+    BuildContext context,
+    String message, {
+    VoidCallback? onAction,
+  }) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(

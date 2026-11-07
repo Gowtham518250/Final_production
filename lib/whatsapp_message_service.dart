@@ -7,7 +7,7 @@ import 'secure_preferences_service.dart';
 /// WhatsApp Message Service - Build and send localized messages via WhatsApp
 class WhatsAppMessageService {
   static const String _tag = '💬 WHATSAPP_MSG';
-  
+
   /// Build day closing report message
   static String buildDayClosingMessage({
     required double upiSales,
@@ -17,7 +17,7 @@ class WhatsAppMessageService {
   }) {
     final discrepancy = recordedCash - actualCash;
     final discrepancyText = _buildDiscrepancyText(discrepancy, language);
-    
+
     switch (language) {
       case VoiceLanguage.hindi:
         return '''✅ आज का हिसाब
@@ -27,7 +27,7 @@ Cash दर्ज: ₹${recordedCash.toStringAsFixed(0)}
 Cash मिला: ₹${actualCash.toStringAsFixed(0)}
 ━━━━━━━━━━━━━━━
 $discrepancyText''';
-      
+
       case VoiceLanguage.tamil:
         return '''✅ இன்றைய கணக்கு
 ━━━━━━━━━━━━━━━
@@ -36,7 +36,7 @@ UPI: ₹${upiSales.toStringAsFixed(0)}
 பெற்ற நகை: ₹${actualCash.toStringAsFixed(0)}
 ━━━━━━━━━━━━━━━
 $discrepancyText''';
-      
+
       case VoiceLanguage.telugu:
         return '''✅ నేటి ఖాతా
 ━━━━━━━━━━━━━━━
@@ -45,7 +45,7 @@ UPI: ₹${upiSales.toStringAsFixed(0)}
 అందుకున్న నగదు: ₹${actualCash.toStringAsFixed(0)}
 ━━━━━━━━━━━━━━━
 $discrepancyText''';
-      
+
       case VoiceLanguage.kannada:
         return '''✅ ಇಂದಿನ ಹಿಸಾಬು
 ━━━━━━━━━━━━━━━
@@ -54,7 +54,7 @@ UPI: ₹${upiSales.toStringAsFixed(0)}
 ಪಡೆದ ನಗದು: ₹${actualCash.toStringAsFixed(0)}
 ━━━━━━━━━━━━━━━
 $discrepancyText''';
-      
+
       default:
         return '''✅ Today's Summary
 ━━━━━━━━━━━━━━━
@@ -65,7 +65,7 @@ Cash Received: ₹${actualCash.toStringAsFixed(2)}
 $discrepancyText''';
     }
   }
-  
+
   /// Build udhar reminder message
   static String buildUdharReminderMessage({
     required String customerName,
@@ -75,32 +75,34 @@ $discrepancyText''';
     switch (language) {
       case VoiceLanguage.hindi:
         return '$customerName भाई, ₹${amount.toStringAsFixed(0)} बाकी है। जब आएं तब दे देना। 🙏';
-      
+
       case VoiceLanguage.tamil:
         return '$customerName அண்ணா, ₹${amount.toStringAsFixed(0)} மீதம் உள்ளது. வரும்போது கொடுங்கள். 🙏';
-      
+
       case VoiceLanguage.telugu:
         return '$customerName, ₹${amount.toStringAsFixed(0)} బాకీ ఉంది. వచ్చినప్పుడు ఇవ్వండి. 🙏';
-      
+
       case VoiceLanguage.kannada:
         return '$customerName, ₹${amount.toStringAsFixed(0)} ಮಿತಿ ಉಳಿದಿದೆ. ವಿನಂತಿಸುವಾಗ ಕೊಡಿ. 🙏';
-      
+
       default:
         return '$customerName, ₹${amount.toStringAsFixed(2)} is pending. Please settle when convenient. 🙏';
     }
   }
-  
+
   /// Build multi-shop consolidated report
   static String buildConsolidatedShopReport({
-    required List<Map<String, dynamic>> shops,  // [{name, sales}, ...]
+    required List<Map<String, dynamic>> shops, // [{name, sales}, ...]
     required double totalSales,
     VoiceLanguage language = VoiceLanguage.english,
   }) {
     List<String> shopLines = [];
     for (int i = 0; i < shops.length; i++) {
-      shopLines.add('${i + 1}. ${shops[i]['name']}: ₹${shops[i]['sales'].toStringAsFixed(0)}');
+      shopLines.add(
+        '${i + 1}. ${shops[i]['name']}: ₹${shops[i]['sales'].toStringAsFixed(0)}',
+      );
     }
-    
+
     switch (language) {
       case VoiceLanguage.hindi:
         return '''📊 आज का हिसाब
@@ -108,14 +110,14 @@ ${shopLines.join('\n')}
 ━━━━━━━━━━━━━━━
 कुल: ₹${totalSales.toStringAsFixed(0)}
 🙏 धन्यवाद''';
-      
+
       case VoiceLanguage.tamil:
         return '''📊 இன்றைய கணக்கு
 ${shopLines.join('\n')}
 ━━━━━━━━━━━━━━━
 மொத்தம்: ₹${totalSales.toStringAsFixed(0)}
 🙏 நன்றி''';
-      
+
       default:
         return '''📊 Today's Summary
 ${shopLines.join('\n')}
@@ -124,7 +126,7 @@ Total: ₹${totalSales.toStringAsFixed(2)}
 🙏 Thank You''';
     }
   }
-  
+
   /// Build delivery status message
   static String buildDeliveryStatusMessage({
     required String orderId,
@@ -135,15 +137,15 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     switch (language) {
       case VoiceLanguage.hindi:
         return 'Order #$orderId की स्थिति: $deliveryStatus\nराशि: ₹${amount.toStringAsFixed(0)}\n🚚';
-      
+
       case VoiceLanguage.tamil:
         return 'Order #$orderId அச்சம்: $deliveryStatus\nத्राणि: ₹${amount.toStringAsFixed(0)}\n🚚';
-      
+
       default:
         return 'Order #$orderId Status: $deliveryStatus\nAmount: ₹${amount.toStringAsFixed(2)}\n🚚';
     }
   }
-  
+
   /// Build festival alert message
   static String buildFestivalAlertMessage({
     required String festivalName,
@@ -156,16 +158,19 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     switch (language) {
       case VoiceLanguage.hindi:
         return '🎉 $festivalName में $daysUntil दिन बाकी\n$itemName स्टॉक करें!\n अभी: $currentStock, सुझाव: $recommendedStock';
-      
+
       case VoiceLanguage.tamil:
         return '🎉 $festivalName ற்கு $daysUntil நாட்கள் உள்ளது\n$itemName சேகரிக்க வேண்டும்!\nதற்போது: $currentStock, பரிந்துரை: $recommendedStock';
-      
+
       default:
         return '🎉 $festivalName in $daysUntil days\nStock up $itemName!\nNow: $currentStock, Recommended: $recommendedStock';
     }
   }
-  
-  static String _buildDiscrepancyText(double discrepancy, VoiceLanguage language) {
+
+  static String _buildDiscrepancyText(
+    double discrepancy,
+    VoiceLanguage language,
+  ) {
     if (discrepancy.abs() < 10) {
       switch (language) {
         case VoiceLanguage.hindi:
@@ -213,16 +218,17 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     sb.writeln('📅 *Date:* ${now.day}/${now.month}/${now.year}');
     sb.writeln('');
     sb.writeln('🛒 *Items Purchased:*');
-    
+
     for (var item in items) {
-      final name  = item['product_name'] ?? item['name'] ?? 'Item';
-      final qty   = item['quantity'] ?? item['qty'] ?? 1;
+      final name = item['product_name'] ?? item['name'] ?? 'Item';
+      final qty = item['quantity'] ?? item['qty'] ?? 1;
       final price = item['price'] ?? 0;
-      final lineTotal = (qty is num ? qty : double.tryParse(qty.toString()) ?? 1)
-                      * (price is num ? price : double.tryParse(price.toString()) ?? 0);
+      final lineTotal =
+          (qty is num ? qty : double.tryParse(qty.toString()) ?? 1) *
+          (price is num ? price : double.tryParse(price.toString()) ?? 0);
       sb.writeln('• $name (x$qty) — ₹${lineTotal.toStringAsFixed(0)}');
     }
-    
+
     sb.writeln('');
     sb.writeln('💰 *Total: ₹${totalAmount.toStringAsFixed(0)}*');
     sb.writeln('');
@@ -249,9 +255,9 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     sb.writeln('');
     sb.writeln('📦 *Items:*');
     for (final item in cartItems) {
-      final name  = item['product_name'] ?? item['name'] ?? 'Item';
-      final qty   = item['quantity'] ?? item['qty'] ?? 1;
-      final unit  = item['unit'] ?? '';
+      final name = item['product_name'] ?? item['name'] ?? 'Item';
+      final qty = item['quantity'] ?? item['qty'] ?? 1;
+      final unit = item['unit'] ?? '';
       final price = item['price'] ?? 0;
       sb.writeln('• $name — $qty $unit @ ₹$price');
     }
@@ -306,7 +312,8 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     sb.writeln('💳 *Pay Online via UPI:*');
 
     if (cleanUpi.isNotEmpty) {
-      final upiUri = 'upi://pay?pa=$cleanUpi&pn=${Uri.encodeComponent(shopName)}&am=$formattedAmount&cu=INR&tn=PaymentToShop';
+      final upiUri =
+          'upi://pay?pa=$cleanUpi&pn=${Uri.encodeComponent(shopName)}&am=$formattedAmount&cu=INR&tn=PaymentToShop';
       sb.writeln('Tap to Pay: $upiUri');
       sb.writeln('UPI ID: `$cleanUpi`');
     } else {
@@ -314,7 +321,9 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     }
 
     sb.writeln('');
-    sb.writeln('Kindly clear your balance at your earliest convenience. Thank you! 🙏');
+    sb.writeln(
+      'Kindly clear your balance at your earliest convenience. Thank you! 🙏',
+    );
     return sb.toString();
   }
 
@@ -358,19 +367,29 @@ Total: ₹${totalSales.toStringAsFixed(2)}
     if (cleanPhone.length == 10) cleanPhone = '91$cleanPhone';
 
     final encoded = Uri.encodeComponent(message);
-    final Uri whatsappUri = Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encoded');
-    final Uri webUri      = Uri.parse('https://wa.me/$cleanPhone?text=$encoded');
+    final Uri whatsappUri = Uri.parse(
+      'whatsapp://send?phone=$cleanPhone&text=$encoded',
+    );
+    final Uri webUri = Uri.parse('https://wa.me/$cleanPhone?text=$encoded');
 
     try {
       if (await canLaunchUrl(whatsappUri)) {
-        final opened = await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+        final opened = await launchUrl(
+          whatsappUri,
+          mode: LaunchMode.externalApplication,
+        );
         if (opened) return true;
       }
       // Some Android builds report false from canLaunchUrl for HTTPS even
       // though a browser is available. Try the web fallback directly.
-      final openedWeb = await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      final openedWeb = await launchUrl(
+        webUri,
+        mode: LaunchMode.externalApplication,
+      );
       if (openedWeb) return true;
-      debugPrint('$_tag Could not launch WhatsApp/browser for phone: $cleanPhone');
+      debugPrint(
+        '$_tag Could not launch WhatsApp/browser for phone: $cleanPhone',
+      );
       return false;
     } catch (e) {
       debugPrint('$_tag WhatsApp launch error: $e');

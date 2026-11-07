@@ -128,7 +128,9 @@ class SuggestedQuestionsBar extends StatelessWidget {
               final suggestion = kDefaultQuerySuggestions[index];
               return _SuggestionChipItem(
                 suggestion: suggestion,
-                onTap: isLoading ? null : () => onSuggestionSelected(suggestion.query),
+                onTap: isLoading
+                    ? null
+                    : () => onSuggestionSelected(suggestion.query),
               );
             },
           ),
@@ -142,10 +144,7 @@ class _SuggestionChipItem extends StatelessWidget {
   final QuerySuggestion suggestion;
   final VoidCallback? onTap;
 
-  const _SuggestionChipItem({
-    required this.suggestion,
-    this.onTap,
-  });
+  const _SuggestionChipItem({required this.suggestion, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -181,11 +180,7 @@ class _SuggestionChipItem extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  suggestion.icon,
-                  size: 16,
-                  color: suggestion.accentColor,
-                ),
+                Icon(suggestion.icon, size: 16, color: suggestion.accentColor),
                 const SizedBox(width: 8),
                 LiveTranslatedText(
                   suggestion.title,

@@ -6,7 +6,7 @@ import 'transaction_service.dart';
 import 'local_storage_service.dart';
 
 /// Bridge between notification detection and sale matching.
-/// 
+///
 /// Pipeline:
 /// 1. V18 detects SMS/Notification → PaymentEvent (70-80% confidence, fraud detection)
 /// 2. SmartPaymentMatcher matches with sales data
@@ -17,10 +17,10 @@ class HybridPaymentPipeline {
   static const String _tag = '🔗 HYBRID_PIPELINE';
 
   /// Combined payment detection + matching
-  /// 
+  ///
   /// Input: PaymentEvent from V18 (already parsed, fraud-checked)
   /// Output: (PaymentConfidence, suggestedAction)
-  /// 
+  ///
   /// Matching can suggest a sale, but only an explicit verification can record it.
   static Future<HybridPaymentResult> processPaymentEvent({
     required PaymentEvent smsPayment,
@@ -28,8 +28,10 @@ class HybridPaymentPipeline {
     required Function(PaymentConfidence)? onConflictDetected,
   }) async {
     if (kDebugMode) {
-      debugPrint('$_tag Processing: ₹${smsPayment.amount} '
-          '(source: ${smsPayment.detectionSource})');
+      debugPrint(
+        '$_tag Processing: ₹${smsPayment.amount} '
+        '(source: ${smsPayment.detectionSource})',
+      );
     }
 
     final direction = TransactionService.classifyDetectedMessage(
@@ -44,7 +46,8 @@ class HybridPaymentPipeline {
         confidence: PaymentConfidence(
           score: 0,
           status: 'NOT_INCOMING',
-          reason: 'Failed, duplicate, or outgoing transaction cannot be recorded as received',
+          reason:
+              'Failed, duplicate, or outgoing transaction cannot be recorded as received',
           details: {'direction': direction.name},
           conflicts: const [],
         ),
@@ -55,11 +58,15 @@ class HybridPaymentPipeline {
     // ========== STAGE 1: Check for fraud (V18 hard-block) ==========
     // CRITICAL: Block fraudulent payments before proceeding
     // Reject failed/duplicate/suspicious payments marked by detection system
-    if (smsPayment.isFailed || smsPayment.isDuplicate || smsPayment.confidenceScore < 0.3) {
+    if (smsPayment.isFailed ||
+        smsPayment.isDuplicate ||
+        smsPayment.confidenceScore < 0.3) {
       if (kDebugMode) {
-        debugPrint('$_tag 🚫 FRAUD BLOCKED: isFailed=${smsPayment.isFailed}, '
-            'isDuplicate=${smsPayment.isDuplicate}, '
-            'confidence=${smsPayment.confidenceScore.toStringAsFixed(2)}');
+        debugPrint(
+          '$_tag 🚫 FRAUD BLOCKED: isFailed=${smsPayment.isFailed}, '
+          'isDuplicate=${smsPayment.isDuplicate}, '
+          'confidence=${smsPayment.confidenceScore.toStringAsFixed(2)}',
+        );
       }
       return HybridPaymentResult(
         decision: PaymentDecision.rejected,
@@ -67,7 +74,10 @@ class HybridPaymentPipeline {
           score: 0,
           status: 'FRAUD_BLOCKED',
           reason: 'Payment failed, duplicate, or suspicious',
-          details: {'reason': 'fraud_or_failed_payment', 'confidence': smsPayment.confidenceScore},
+          details: {
+            'reason': 'fraud_or_failed_payment',
+            'confidence': smsPayment.confidenceScore,
+          },
           conflicts: [],
         ),
         action: HybridAction.reject,
@@ -84,11 +94,15 @@ class HybridPaymentPipeline {
     );
 
     if (kDebugMode) {
-      debugPrint('$_tag Confidence: ${confidence.score.toStringAsFixed(0)}% '
-          '(${confidence.status})');
+      debugPrint(
+        '$_tag Confidence: ${confidence.score.toStringAsFixed(0)}% '
+        '(${confidence.status})',
+      );
       if (confidence.conflicts.isNotEmpty) {
-        debugPrint('$_tag ⚠️ CONFLICTS (${confidence.conflicts.length}): '
-            '${confidence.conflicts.take(2).join(", ")}');
+        debugPrint(
+          '$_tag ⚠️ CONFLICTS (${confidence.conflicts.length}): '
+          '${confidence.conflicts.take(2).join(", ")}',
+        );
       }
     }
 
@@ -127,9 +141,11 @@ class HybridPaymentPipeline {
     }
 
     if (kDebugMode) {
-      debugPrint('$_tag → ACTION: ${action.name} | '
-          'DECISION: ${finalDecision.name} | '
-          'SALE: ${matchedSaleId ?? "unmatched"}');
+      debugPrint(
+        '$_tag → ACTION: ${action.name} | '
+        'DECISION: ${finalDecision.name} | '
+        'SALE: ${matchedSaleId ?? "unmatched"}',
+      );
     }
 
     return HybridPaymentResult(
@@ -154,8 +170,9 @@ class HybridPaymentPipeline {
       phone: null, // payerPhone not available
       amount: event.amount,
       type: event.isFailed ? 'FAILED' : direction,
-      transactionType:
-          TransactionService.transactionTypeForDetectedMessage(event.rawText),
+      transactionType: TransactionService.transactionTypeForDetectedMessage(
+        event.rawText,
+      ),
       reference: event.referenceId,
       createdAt: event.timestamp,
       notes:
@@ -259,8 +276,10 @@ class HybridPaymentIntegration {
       );
     }
 
-    debugPrint('🔗 MARKING SALE PAID: $saleId ← ₹${payment.amount} '
-        'from $source (${payment.id})');
+    debugPrint(
+      '🔗 MARKING SALE PAID: $saleId ← ₹${payment.amount} '
+      'from $source (${payment.id})',
+    );
 
     // Save to transaction history for audit
     final transaction = Transaction(

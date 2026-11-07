@@ -13,20 +13,25 @@ class EnhancedSyncQueue {
   static const String _queueKey = 'enhanced_sync_queue';
   static const String _overflowKey = 'sync_queue_overflow';
   static const int _maxQueueSize = 1000; // Maximum operations in main queue
-  static const int _maxOverflowSize = 5000; // Maximum operations in overflow storage
-  
+  static const int _maxOverflowSize =
+      5000; // Maximum operations in overflow storage
+
   EnhancedSyncQueue._();
-  
+
   static EnhancedSyncQueue get instance {
     _instance ??= EnhancedSyncQueue._();
     return _instance!;
   }
-  
+
   /// Enqueue an operation with overflow protection
-  Future<bool> enqueue(String action, Map<String, dynamic> data, {SyncPriority priority = SyncPriority.normal}) async {
+  Future<bool> enqueue(
+    String action,
+    Map<String, dynamic> data, {
+    SyncPriority priority = SyncPriority.normal,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Create operation record
       final operation = {
         'action': action,
@@ -38,17 +43,18 @@ class EnhancedSyncQueue {
         'retry_count': 0,
         'max_retries': 5,
       };
-      
+
       // Load current queue
       final queue = await _loadQueue();
-      
+
       // Check if queue is full
       if (queue.length >= _maxQueueSize) {
-        if (kDebugMode) debugPrint('⚠️ Main queue full, moving to overflow storage');
+        if (kDebugMode)
+          debugPrint('⚠️ Main queue full, moving to overflow storage');
         await _moveToOverflow(operation);
         return true;
       }
-      
+
       // Add to queue based on priority
       if (priority == SyncPriority.high) {
         // High priority goes to front
@@ -57,66 +63,69 @@ class EnhancedSyncQueue {
         // Normal priority goes to end
         queue.add(operation);
       }
-      
+
       // Save queue
       await _saveQueue(queue);
-      
-      if (kDebugMode) debugPrint('📋 Enqueued operation: $action (Queue size: ${queue.length})');
+
+      if (kDebugMode)
+        debugPrint(
+          '📋 Enqueued operation: $action (Queue size: ${queue.length})',
+        );
       return true;
-      
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error enqueuing operation: $e');
       return false;
     }
   }
-  
+
   /// Process queue with overflow handling
   Future<SyncResult> processQueue() async {
     final result = SyncResult();
-    
+
     try {
       final token = await SecureTokenStorage.getToken();
       if (token == null || token.isEmpty) {
         if (kDebugMode) debugPrint('🔒 No token available, skipping sync');
         return result;
       }
-      
+
       // Process main queue first
       await _processMainQueue(result, token);
-      
+
       // Process overflow queue if main queue is empty
       if (result.processedCount == 0) {
         await _processOverflowQueue(result, token);
       }
-      
+
       if (kDebugMode) {
-        debugPrint('📊 Sync completed: ${result.processedCount} processed, ${result.successCount} success, ${result.errorCount} errors');
+        debugPrint(
+          '📊 Sync completed: ${result.processedCount} processed, ${result.successCount} success, ${result.errorCount} errors',
+        );
       }
-      
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Queue processing error: $e');
     }
-    
+
     return result;
   }
-  
+
   /// Process main queue
   Future<void> _processMainQueue(SyncResult result, String token) async {
     final queue = await _loadQueue();
     final List<int> toRemove = [];
-    
+
     for (int i = 0; i < queue.length; i++) {
       if (result.processedCount >= 50) break; // Safety limit
-      
+
       final operation = queue[i];
       if (operation['synced'] == true) {
         toRemove.add(i);
         continue;
       }
-      
+
       try {
         final success = await _syncOperation(operation, token);
-        
+
         if (success) {
           operation['synced'] = true;
           toRemove.add(i);
@@ -129,71 +138,77 @@ class EnhancedSyncQueue {
             await _moveToOverflow(operation);
             toRemove.add(i);
             result.errorCount++;
-            if (kDebugMode) debugPrint('⚠️ Max retries reached, moved to overflow: ${operation['action']}');
+            if (kDebugMode)
+              debugPrint(
+                '⚠️ Max retries reached, moved to overflow: ${operation['action']}',
+              );
           }
         }
-        
+
         result.processedCount++;
-        
       } catch (e) {
         operation['retry_count'] = (operation['retry_count'] as int) + 1;
         if (kDebugMode) debugPrint('❌ Sync error: ${operation['action']} - $e');
       }
     }
-    
+
     // Remove synced items
     for (final index in toRemove.reversed) {
       queue.removeAt(index);
     }
-    
+
     await _saveQueue(queue);
   }
-  
+
   /// Process overflow queue
   Future<void> _processOverflowQueue(SyncResult result, String token) async {
     final overflow = await _loadOverflow();
     final List<int> toRemove = [];
-    
+
     for (int i = 0; i < overflow.length; i++) {
       if (result.processedCount >= 30) break; // Lower limit for overflow
-      
+
       final operation = overflow[i];
       if (operation['synced'] == true) {
         toRemove.add(i);
         continue;
       }
-      
+
       try {
         final success = await _syncOperation(operation, token);
-        
+
         if (success) {
           operation['synced'] = true;
           toRemove.add(i);
           result.successCount++;
-          if (kDebugMode) debugPrint('✅ Synced from overflow: ${operation['action']}');
+          if (kDebugMode)
+            debugPrint('✅ Synced from overflow: ${operation['action']}');
         }
-        
+
         result.processedCount++;
-        
       } catch (e) {
-        if (kDebugMode) debugPrint('❌ Overflow sync error: ${operation['action']} - $e');
+        if (kDebugMode)
+          debugPrint('❌ Overflow sync error: ${operation['action']} - $e');
       }
     }
-    
+
     // Remove synced items
     for (final index in toRemove.reversed) {
       overflow.removeAt(index);
     }
-    
+
     await _saveOverflow(overflow);
   }
-  
+
   /// Sync a single operation
-  Future<bool> _syncOperation(Map<String, dynamic> operation, String token) async {
+  Future<bool> _syncOperation(
+    Map<String, dynamic> operation,
+    String token,
+  ) async {
     try {
       final action = operation['action'] as String;
       final data = operation['data'] as Map<String, dynamic>;
-      
+
       String endpoint;
       switch (action) {
         case 'save_customer':
@@ -209,42 +224,42 @@ class EnhancedSyncQueue {
           if (kDebugMode) debugPrint('⚠️ Unknown action: $action');
           return false;
       }
-      
+
       final response = await ApiClient.postJson(
         endpoint,
         data,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      
+
       return response.statusCode == 200 || response.statusCode == 201;
-      
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Operation sync error: $e');
       return false;
     }
   }
-  
+
   /// Move operation to overflow storage
   Future<void> _moveToOverflow(Map<String, dynamic> operation) async {
     try {
       final overflow = await _loadOverflow();
-      
+
       if (overflow.length >= _maxOverflowSize) {
         // Overflow is also full, remove oldest
         overflow.removeAt(0);
-        if (kDebugMode) debugPrint('⚠️ Overflow full, removed oldest operation');
+        if (kDebugMode)
+          debugPrint('⚠️ Overflow full, removed oldest operation');
       }
-      
+
       overflow.add(operation);
       await _saveOverflow(overflow);
-      
-      if (kDebugMode) debugPrint('📦 Moved operation to overflow (Size: ${overflow.length})');
-      
+
+      if (kDebugMode)
+        debugPrint('📦 Moved operation to overflow (Size: ${overflow.length})');
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error moving to overflow: $e');
     }
   }
-  
+
   /// Load main queue
   Future<List<Map<String, dynamic>>> _loadQueue() async {
     try {
@@ -257,7 +272,7 @@ class EnhancedSyncQueue {
       return [];
     }
   }
-  
+
   /// Save main queue
   Future<void> _saveQueue(List<Map<String, dynamic>> queue) async {
     try {
@@ -267,7 +282,7 @@ class EnhancedSyncQueue {
       if (kDebugMode) debugPrint('❌ Error saving queue: $e');
     }
   }
-  
+
   /// Load overflow storage
   Future<List<Map<String, dynamic>>> _loadOverflow() async {
     try {
@@ -280,7 +295,7 @@ class EnhancedSyncQueue {
       return [];
     }
   }
-  
+
   /// Save overflow storage
   Future<void> _saveOverflow(List<Map<String, dynamic>> overflow) async {
     try {
@@ -290,22 +305,24 @@ class EnhancedSyncQueue {
       if (kDebugMode) debugPrint('❌ Error saving overflow: $e');
     }
   }
-  
+
   /// Get queue statistics
   Future<QueueStats> getStats() async {
     final queue = await _loadQueue();
     final overflow = await _loadOverflow();
-    
+
     int highPriority = 0;
     int normalPriority = 0;
     int synced = 0;
-    
+
     for (final op in queue) {
       if (op['synced'] == true) synced++;
-      if (op['priority'] == SyncPriority.high.toString()) highPriority++;
-      else normalPriority++;
+      if (op['priority'] == SyncPriority.high.toString())
+        highPriority++;
+      else
+        normalPriority++;
     }
-    
+
     return QueueStats(
       mainQueueSize: queue.length,
       overflowSize: overflow.length,
@@ -315,7 +332,7 @@ class EnhancedSyncQueue {
       totalPending: queue.length + overflow.length - synced,
     );
   }
-  
+
   /// Clear all queues (use with caution)
   Future<void> clearAll() async {
     try {
@@ -327,12 +344,12 @@ class EnhancedSyncQueue {
       if (kDebugMode) debugPrint('❌ Error clearing queues: $e');
     }
   }
-  
+
   /// Generate unique operation ID
   String _generateOperationId() {
     return 'OP_${DateTime.now().millisecondsSinceEpoch}_${_randomString(8)}';
   }
-  
+
   /// Generate random string for ID
   String _randomString(int length) {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -346,10 +363,7 @@ class EnhancedSyncQueue {
 }
 
 /// Sync priority levels
-enum SyncPriority {
-  high,
-  normal,
-}
+enum SyncPriority { high, normal }
 
 /// Sync result
 class SyncResult {
@@ -367,7 +381,7 @@ class QueueStats {
   final int normalPriorityPending;
   final int syncedCount;
   final int totalPending;
-  
+
   QueueStats({
     required this.mainQueueSize,
     required this.overflowSize,
@@ -376,7 +390,7 @@ class QueueStats {
     required this.syncedCount,
     required this.totalPending,
   });
-  
+
   bool get isOverflowActive => overflowSize > 0;
   bool get needsAttention => totalPending > 100;
 }

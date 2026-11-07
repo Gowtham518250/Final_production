@@ -44,26 +44,44 @@ class Worker {
     'phone': phone,
     'address': address,
     'salary': salary,
-    'assigned_work': assignedWork,  // 🔧 FIXED: Backend column is 'assigned_work'
+    'assigned_work':
+        assignedWork, // 🔧 FIXED: Backend column is 'assigned_work'
     'position': position,
-    'join_date': joinDate.toIso8601String(),  // 🔧 FIXED: Backend column is 'join_date'
+    'join_date': joinDate
+        .toIso8601String(), // 🔧 FIXED: Backend column is 'join_date'
     'status': status,
     'pin': pin,
     // 🔧 REMOVED: 'attendance' field is NOT supported in backend Worker model
   };
 
   factory Worker.fromJson(Map<String, dynamic> json) => Worker(
-    id: json['id']?.toString() ?? '',  // 🔧 FIXED: Handle both int and string IDs
+    id:
+        json['id']?.toString() ??
+        '', // 🔧 FIXED: Handle both int and string IDs
     name: json['name'] as String? ?? 'Unknown',
     phone: json['phone'] as String? ?? '',
     address: json['address'] as String? ?? '',
     salary: (json['salary'] as num?)?.toDouble() ?? 0,
-    assignedWork: json['assigned_work'] as String? ?? json['assignedWork'] as String? ?? '',  // 🔧 Try backend key first
+    assignedWork:
+        json['assigned_work'] as String? ??
+        json['assignedWork'] as String? ??
+        '', // 🔧 Try backend key first
     position: json['position'] as String? ?? 'Staff',
-    joinDate: (json['join_date'] != null ? DateTime.tryParse(json['join_date'] as String) : null) ?? (json['joinDate'] != null ? DateTime.tryParse(json['joinDate'] as String) : null) ?? DateTime.now(),  // 🔧 Try backend key first
+    joinDate:
+        (json['join_date'] != null
+            ? DateTime.tryParse(json['join_date'] as String)
+            : null) ??
+        (json['joinDate'] != null
+            ? DateTime.tryParse(json['joinDate'] as String)
+            : null) ??
+        DateTime.now(), // 🔧 Try backend key first
     status: json['status'] as String? ?? 'active',
     pin: json['pin'] as String? ?? '',
-    attendance: (json['attendance'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],  // 🔧 Keep local only
+    attendance:
+        (json['attendance'] as List<dynamic>?)
+            ?.map((e) => e as String)
+            .toList() ??
+        [], // 🔧 Keep local only
   );
 }
 
@@ -99,9 +117,8 @@ class Supplier {
     phone: json['phone'] as String? ?? '',
     email: json['email'] as String? ?? '',
     category: json['category'] as String? ?? 'General',
-    createdAt: json['createdAt'] != null 
-        ? DateTime.parse(json['createdAt'] as String) 
+    createdAt: json['createdAt'] != null
+        ? DateTime.parse(json['createdAt'] as String)
         : DateTime.now(),
   );
 }
-

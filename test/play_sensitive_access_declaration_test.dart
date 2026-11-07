@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('Android AccessibilityService is bound with Play-safe limits', () {
-    final manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
     expect(
       manifest.contains(
         'slayer.accessibility.service.flutter_accessibility_service.AccessibilityListener',
@@ -17,10 +19,7 @@ void main() {
     ).firstMatch(manifest)?.group(0);
     expect(accessibilityService, isNotNull);
     expect(accessibilityService!.contains('android:exported="true"'), isTrue);
-    expect(
-      accessibilityService.contains('BIND_ACCESSIBILITY_SERVICE'),
-      isTrue,
-    );
+    expect(accessibilityService.contains('BIND_ACCESSIBILITY_SERVICE'), isTrue);
     expect(
       manifest.contains('android.accessibilityservice.AccessibilityService'),
       isTrue,
@@ -45,28 +44,34 @@ void main() {
     expect(xml.contains('@string/accessibility_service_description'), isTrue);
   });
 
-  test('Play disclosure copy exists in Android strings and public privacy page', () {
-    final strings = File(
-      'android/app/src/main/res/values/strings.xml',
-    ).readAsStringSync();
-    expect(strings.contains('accessibility_service_description'), isTrue);
-    expect(strings.contains('notification_listener_label'), isTrue);
-    expect(strings.contains('does not tap, swipe, type'), isTrue);
+  test(
+    'Play disclosure copy exists in Android strings and public privacy page',
+    () {
+      final strings = File(
+        'android/app/src/main/res/values/strings.xml',
+      ).readAsStringSync();
+      expect(strings.contains('accessibility_service_description'), isTrue);
+      expect(strings.contains('notification_listener_label'), isTrue);
+      expect(strings.contains('does not tap, swipe, type'), isTrue);
 
-    final privacy = File('web/privacy.html').readAsStringSync();
-    expect(privacy.contains('Why we use Accessibility'), isTrue);
-    expect(privacy.contains('Why we read SMS'), isTrue);
-    expect(privacy.contains('notification access'), isTrue);
-    expect(privacy.contains('matched to a bill'), isTrue);
-    expect(privacy.contains('UTR/reference'), isTrue);
-  });
+      final privacy = File('web/privacy.html').readAsStringSync();
+      expect(privacy.contains('Why we use Accessibility'), isTrue);
+      expect(privacy.contains('Why we read SMS'), isTrue);
+      expect(privacy.contains('notification access'), isTrue);
+      expect(privacy.contains('matched to a bill'), isTrue);
+      expect(privacy.contains('UTR/reference'), isTrue);
+    },
+  );
 
-  test('in-app Accessibility disclosure names bill matching and retained fields', () {
-    final disclosure = File(
-      'lib/notification_access_disclosure.dart',
-    ).readAsStringSync();
-    expect(disclosure.contains('matched to a bill'), isTrue);
-    expect(disclosure.contains('UTR/reference'), isTrue);
-    expect(disclosure.contains('synced with your shop records'), isTrue);
-  });
+  test(
+    'in-app Accessibility disclosure names bill matching and retained fields',
+    () {
+      final disclosure = File(
+        'lib/notification_access_disclosure.dart',
+      ).readAsStringSync();
+      expect(disclosure.contains('matched to a bill'), isTrue);
+      expect(disclosure.contains('UTR/reference'), isTrue);
+      expect(disclosure.contains('synced with your shop records'), isTrue);
+    },
+  );
 }

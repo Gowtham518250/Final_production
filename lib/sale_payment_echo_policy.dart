@@ -50,14 +50,20 @@ class SalePaymentEchoPolicy {
 
       if (current.reference != null && previous.reference != null) {
         if (current.reference == previous.reference) {
-          return const SaleEchoResult(SaleEchoVerdict.hardEcho, 'same_reference');
+          return const SaleEchoResult(
+            SaleEchoVerdict.hardEcho,
+            'same_reference',
+          );
         }
         continue;
       }
 
       if (current.sourceFingerprint != null &&
           current.sourceFingerprint == previous.sourceFingerprint) {
-        return const SaleEchoResult(SaleEchoVerdict.hardEcho, 'same_native_post');
+        return const SaleEchoResult(
+          SaleEchoVerdict.hardEcho,
+          'same_native_post',
+        );
       }
 
       if ((current.amount - previous.amount).abs() >= 0.01 ||

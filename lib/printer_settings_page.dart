@@ -9,10 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 class PrinterSettingsPage extends StatefulWidget {
   final bool returnAfterConnect;
 
-  const PrinterSettingsPage({
-    super.key,
-    this.returnAfterConnect = false,
-  });
+  const PrinterSettingsPage({super.key, this.returnAfterConnect = false});
 
   @override
   State<PrinterSettingsPage> createState() => _PrinterSettingsPageState();
@@ -20,7 +17,7 @@ class PrinterSettingsPage extends StatefulWidget {
 
 class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
   final BlueThermalPrinter _bluetooth = BlueThermalPrinter.instance;
-  
+
   List<BluetoothDevice> _devices = [];
   BluetoothDevice? _selectedDevice;
   bool _connected = false;
@@ -73,21 +70,30 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
       if (!permissionsOk) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: LiveTranslatedText('Bluetooth permission is required to connect the printer.')),
+            const SnackBar(
+              content: LiveTranslatedText(
+                'Bluetooth permission is required to connect the printer.',
+              ),
+            ),
           );
         }
         if (mounted) setState(() => _isLoading = false);
         return;
       }
       bool? connected = await _bluetooth.connect(_selectedDevice!);
-      connected = connected == true && await _bluetooth.isConnected == true ? true : false;
+      connected = connected == true && await _bluetooth.isConnected == true
+          ? true
+          : false;
       if (connected == true) {
         setState(() => _connected = true);
-        
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('last_printer_name', _selectedDevice!.name ?? '');
-        await prefs.setString('last_printer_address', _selectedDevice!.address ?? '');
-        
+        await prefs.setString(
+          'last_printer_address',
+          _selectedDevice!.address ?? '',
+        );
+
         PrinterService.updateConnectionState(true, _selectedDevice);
 
         if (widget.returnAfterConnect && mounted) {
@@ -107,7 +113,10 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Failed to connect: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText('Failed to connect: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -129,11 +138,13 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
   Future<void> _testPrint() async {
     if (!_connected || _selectedDevice == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Please connect a printer first')),
+        const SnackBar(
+          content: LiveTranslatedText('Please connect a printer first'),
+        ),
       );
       return;
     }
-    
+
     // Send a test print
     await PrinterService.printTestReceipt(context: context);
   }
@@ -143,7 +154,13 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: LiveTranslatedText('Thermal Printer', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Thermal Printer',
+          style: GoogleFonts.poppins(
+            color: Colors.black87,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
@@ -167,7 +184,9 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: _connected ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                            color: _connected
+                                ? Colors.green.withValues(alpha: 0.1)
+                                : Colors.red.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -182,13 +201,21 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               LiveTranslatedText(
-                                _connected ? 'Printer Connected' : 'Printer Disconnected',
-                                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+                                _connected
+                                    ? 'Printer Connected'
+                                    : 'Printer Disconnected',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
                               if (_selectedDevice != null)
                                 LiveTranslatedText(
                                   _selectedDevice!.name ?? 'Unknown Device',
-                                  style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 13),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey[600],
+                                    fontSize: 13,
+                                  ),
                                 ),
                             ],
                           ),
@@ -197,7 +224,14 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  LiveTranslatedText('Paired Devices', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey[800])),
+                  LiveTranslatedText(
+                    'Paired Devices',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.grey[800],
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   if (_devices.isEmpty)
                     Center(
@@ -216,20 +250,44 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                         itemCount: _devices.length,
                         itemBuilder: (context, index) {
                           final device = _devices[index];
-                          final isSelected = _selectedDevice?.address == device.address;
+                          final isSelected =
+                              _selectedDevice?.address == device.address;
                           return Card(
                             elevation: 0,
                             margin: const EdgeInsets.only(bottom: 8),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: isSelected ? Colors.indigo : Colors.grey[200]!, width: isSelected ? 2 : 1),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Colors.indigo
+                                    : Colors.grey[200]!,
+                                width: isSelected ? 2 : 1,
+                              ),
                             ),
                             child: ListTile(
-                              leading: Icon(Icons.bluetooth_rounded, color: isSelected ? Colors.indigo : Colors.grey[400]),
-                              title: LiveTranslatedText(device.name ?? 'Unknown', style: GoogleFonts.poppins(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                              subtitle: LiveTranslatedText(device.address ?? '', style: GoogleFonts.poppins(fontSize: 12)),
+                              leading: Icon(
+                                Icons.bluetooth_rounded,
+                                color: isSelected
+                                    ? Colors.indigo
+                                    : Colors.grey[400],
+                              ),
+                              title: LiveTranslatedText(
+                                device.name ?? 'Unknown',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              subtitle: LiveTranslatedText(
+                                device.address ?? '',
+                                style: GoogleFonts.poppins(fontSize: 12),
+                              ),
                               trailing: isSelected && _connected
-                                  ? const Icon(Icons.check_circle_rounded, color: Colors.green)
+                                  ? const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: Colors.green,
+                                    )
                                   : null,
                               onTap: () {
                                 setState(() {
@@ -241,24 +299,34 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                         },
                       ),
                     ),
-                  
+
                   if (_devices.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: _selectedDevice == null ? null : (_connected ? _disconnect : _connect),
+                            onPressed: _selectedDevice == null
+                                ? null
+                                : (_connected ? _disconnect : _connect),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _connected ? Colors.red[50] : Colors.indigo,
-                              foregroundColor: _connected ? Colors.red : Colors.white,
+                              backgroundColor: _connected
+                                  ? Colors.red[50]
+                                  : Colors.indigo,
+                              foregroundColor: _connected
+                                  ? Colors.red
+                                  : Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               elevation: 0,
                             ),
                             child: LiveTranslatedText(
                               _connected ? 'DISCONNECT' : 'CONNECT PRINTER',
-                              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -268,11 +336,18 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                             child: ElevatedButton.icon(
                               onPressed: _testPrint,
                               icon: const Icon(Icons.receipt_long_rounded),
-                              label: LiveTranslatedText('TEST PRINT', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                              label: LiveTranslatedText(
+                                'TEST PRINT',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.indigo,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   side: const BorderSide(color: Colors.indigo),
@@ -285,7 +360,7 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                  ]
+                  ],
                 ],
               ),
             ),

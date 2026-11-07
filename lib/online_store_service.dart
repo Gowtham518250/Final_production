@@ -15,34 +15,37 @@ class OnlineStoreService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.putJson(
         '/api/shop/publish-status',
         {'is_published': isOnline},
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         // Save to local preferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('shop_published_online', isOnline);
-        
+
         if (kDebugMode) {
           debugPrint('✅ Shop online status updated: $isOnline');
         }
-        
+
         return {
           'success': true,
           'is_published': isOnline,
-          'message': isOnline 
-            ? 'Shop is now visible on Retail Mind marketplace' 
-            : 'Shop is now hidden from Retail Mind marketplace',
+          'message': isOnline
+              ? 'Shop is now visible on Retail Mind marketplace'
+              : 'Shop is now hidden from Retail Mind marketplace',
           'timestamp': data['timestamp'],
         };
       } else {
-        if (kDebugMode) debugPrint('⚠️ Failed to update shop online status: ${response.statusCode}');
+        if (kDebugMode)
+          debugPrint(
+            '⚠️ Failed to update shop online status: ${response.statusCode}',
+          );
         return {
           'success': false,
           'error': 'BACKEND_ERROR',
@@ -58,7 +61,7 @@ class OnlineStoreService {
       };
     }
   }
-  
+
   /// Read online-only store settings from the backend.
   static Future<Map<String, dynamic>> getOnlineSettings() async {
     try {
@@ -88,7 +91,8 @@ class OnlineStoreService {
       }
       return {
         'success': false,
-        'error': 'Unable to load online settings (HTTP ${response.statusCode}).',
+        'error':
+            'Unable to load online settings (HTTP ${response.statusCode}).',
       };
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to load online settings: $e');
@@ -109,7 +113,8 @@ class OnlineStoreService {
   }) async {
     try {
       final token = await SecureTokenStorage.getToken() ?? '';
-      if (token.isEmpty) return {'success': false, 'error': 'NOT_AUTHENTICATED'};
+      if (token.isEmpty)
+        return {'success': false, 'error': 'NOT_AUTHENTICATED'};
 
       final response = await ApiClient.putJson(
         '/api/shop/online-settings',
@@ -136,7 +141,10 @@ class OnlineStoreService {
       }
       return {
         'success': false,
-        'error': data['detail'] ?? data['message'] ?? 'Unable to save online store settings.',
+        'error':
+            data['detail'] ??
+            data['message'] ??
+            'Unable to save online store settings.',
       };
     } catch (e) {
       return {'success': false, 'error': e.toString()};
@@ -149,8 +157,9 @@ class OnlineStoreService {
   static Future<Map<String, dynamic>> setOnlineSettings(
     Map<String, dynamic> settings,
   ) async {
-    double asDouble(dynamic value) =>
-        value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? 0;
+    double asDouble(dynamic value) => value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '') ?? 0;
 
     return saveOnlineSettings(
       isOnlineStoreEnabled: settings['is_online_store_enabled'] == true,
@@ -172,7 +181,8 @@ class OnlineStoreService {
       isOnlineStoreEnabled: current['is_online_store_enabled'] == true,
       onlineSetupFee: fee,
       minOrder: double.tryParse(current['min_order']?.toString() ?? '0') ?? 0,
-      deliveryFee: double.tryParse(current['delivery_fee']?.toString() ?? '0') ?? 0,
+      deliveryFee:
+          double.tryParse(current['delivery_fee']?.toString() ?? '0') ?? 0,
       offerDelivery: current['offer_delivery'] != false,
       offerPickup: current['offer_pickup'] != false,
       acceptCod: current['accept_cod'] != false,
@@ -189,23 +199,23 @@ class OnlineStoreService {
         final prefs = await SharedPreferences.getInstance();
         return prefs.getBool('shop_published_online') ?? false;
       }
-      
+
       final response = await ApiClient.getJson(
         '/api/shop/publish-status',
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final isPublished = data['is_published'] ?? false;
-        
+
         // Cache locally
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('shop_published_online', isPublished);
-        
+
         return isPublished;
       }
-      
+
       // Fallback to cached value
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool('shop_published_online') ?? false;
@@ -216,7 +226,7 @@ class OnlineStoreService {
       return prefs.getBool('shop_published_online') ?? false;
     }
   }
-  
+
   /// PHASE 6 FIX: Publish shop to marketplace with location services
   static Future<Map<String, dynamic>> publishShopToMarketplace({
     required double latitude,
@@ -232,7 +242,7 @@ class OnlineStoreService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.postJson(
         '/api/shop/publish-marketplace',
         {
@@ -246,21 +256,21 @@ class OnlineStoreService {
         },
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        
+
         // Save status
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('shop_published_online', true);
-        
+
         if (kDebugMode) {
           debugPrint('✅ Shop published to marketplace');
           debugPrint('   Latitude: $latitude');
           debugPrint('   Longitude: $longitude');
           debugPrint('   Delivery: $enableDelivery');
         }
-        
+
         return {
           'success': true,
           'shop_id': data['shop_id'],
@@ -284,7 +294,7 @@ class OnlineStoreService {
       };
     }
   }
-  
+
   /// PHASE 6 FIX: Unpublish shop from marketplace
   static Future<Map<String, dynamic>> unpublishShopFromMarketplace() async {
     try {
@@ -292,21 +302,21 @@ class OnlineStoreService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.deleteJson(
         '/api/shop/publish-marketplace',
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200) {
         // Save status
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('shop_published_online', false);
-        
+
         if (kDebugMode) {
           debugPrint('✅ Shop unpublished from marketplace');
         }
-        
+
         return {
           'success': true,
           'message': 'Your shop is no longer visible to customers.',
@@ -327,7 +337,7 @@ class OnlineStoreService {
       };
     }
   }
-  
+
   /// Register customer for online store
   static Future<Map<String, dynamic>?> registerCustomer({
     required String phone,
@@ -343,13 +353,17 @@ class OnlineStoreService {
         if (address != null) 'address': address,
       };
 
-      final response = await ApiClient.postJson('/store/customer/register', body);
+      final response = await ApiClient.postJson(
+        '/store/customer/register',
+        body,
+      );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return json.decode(response.body);
       }
 
-      if (kDebugMode) debugPrint('❌ Customer registration failed: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('❌ Customer registration failed: ${response.statusCode}');
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Customer registration error: $e');
@@ -398,7 +412,10 @@ class OnlineStoreService {
 
         // Filter out unpublished shops
         final publishedShops = items
-            .where((item) => item['published'] == true || item['is_published'] == true)
+            .where(
+              (item) =>
+                  item['published'] == true || item['is_published'] == true,
+            )
             .map((item) => ShopInfo.fromJson(item))
             .toList();
 
@@ -496,14 +513,12 @@ class OnlineStoreService {
     String? comment,
   }) async {
     try {
-      final response = await ApiClient.postJson(
-        '/store/order/$orderId/rating',
-        {
-          'rating': rating,
-          if (comment != null && comment.trim().isNotEmpty)
-            'comment': comment.trim(),
-        },
-      );
+      final response =
+          await ApiClient.postJson('/store/order/$orderId/rating', {
+            'rating': rating,
+            if (comment != null && comment.trim().isNotEmpty)
+              'comment': comment.trim(),
+          });
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = json.decode(response.body);
         return {
@@ -556,7 +571,9 @@ class OnlineStoreService {
   /// Get customer orders
   static Future<List<OnlineOrder>> getCustomerOrders(int customerId) async {
     try {
-      final response = await ApiClient.getJson('/store/my-orders?customer_id=$customerId');
+      final response = await ApiClient.getJson(
+        '/store/my-orders?customer_id=$customerId',
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -614,10 +631,7 @@ class OnlineStoreService {
     String? notes,
   }) async {
     try {
-      final body = {
-        'status': newStatus,
-        if (notes != null) 'notes': notes,
-      };
+      final body = {'status': newStatus, if (notes != null) 'notes': notes};
 
       final response = await ApiClient.putJson(
         '/store/owner/orders/$orderId/action',
@@ -691,7 +705,9 @@ class ShopInfo {
       address: json['address'] ?? '',
       latitude: (json['latitude'] ?? 0.0).toDouble(),
       longitude: (json['longitude'] ?? 0.0).toDouble(),
-      distance: json['distance'] != null ? (json['distance'] as num).toDouble() : null,
+      distance: json['distance'] != null
+          ? (json['distance'] as num).toDouble()
+          : null,
       phone: json['phone'],
       openingHours: json['opening_hours'],
     );
@@ -743,11 +759,7 @@ class OrderItem {
     required this.price,
   });
 
-  toJson() => {
-    'product_id': productId,
-    'quantity': quantity,
-    'price': price,
-  };
+  toJson() => {'product_id': productId, 'quantity': quantity, 'price': price};
 }
 
 /// Online Order
@@ -778,12 +790,18 @@ class OnlineOrder {
       customerId: json['customer_id'] ?? 0,
       status: json['status'] ?? 'pending',
       totalAmount: (json['total_amount'] ?? 0).toDouble(),
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toString()),
-      items: itemsList.map((item) => OrderItem(
-        productId: item['product_id'] ?? 0,
-        quantity: item['quantity'] ?? 0,
-        price: (item['price'] ?? 0).toDouble(),
-      )).toList(),
+      createdAt: DateTime.parse(
+        json['created_at'] ?? DateTime.now().toString(),
+      ),
+      items: itemsList
+          .map(
+            (item) => OrderItem(
+              productId: item['product_id'] ?? 0,
+              quantity: item['quantity'] ?? 0,
+              price: (item['price'] ?? 0).toDouble(),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -819,11 +837,7 @@ class TrackingEvent {
   final DateTime timestamp;
   final String? message;
 
-  TrackingEvent({
-    required this.status,
-    required this.timestamp,
-    this.message,
-  });
+  TrackingEvent({required this.status, required this.timestamp, this.message});
 
   factory TrackingEvent.fromJson(Map<String, dynamic> json) {
     return TrackingEvent(

@@ -37,8 +37,9 @@ void main() {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var speechCount = 0;
-    messenger.setMockMethodCallHandler(const MethodChannel('flutter_tts'),
-        (call) async {
+    messenger.setMockMethodCallHandler(const MethodChannel('flutter_tts'), (
+      call,
+    ) async {
       if (call.method == 'speak') speechCount++;
       if (call.method == 'getLanguages') return <String>['en-IN'];
       if (call.method == 'isLanguageAvailable') return true;
@@ -46,7 +47,9 @@ void main() {
     });
     addTearDown(() {
       messenger.setMockMethodCallHandler(
-          const MethodChannel('flutter_tts'), null);
+        const MethodChannel('flutter_tts'),
+        null,
+      );
     });
 
     final service = GuidedVoiceService.instance;

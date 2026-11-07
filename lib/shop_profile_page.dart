@@ -833,7 +833,9 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     final address = locationController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Enter your shop name first.')),
+        const SnackBar(
+          content: LiveTranslatedText('Enter your shop name first.'),
+        ),
       );
       return;
     }
@@ -845,7 +847,9 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not open Google Maps.')),
+        const SnackBar(
+          content: LiveTranslatedText('Could not open Google Maps.'),
+        ),
       );
     }
   }
@@ -855,9 +859,11 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     final address = locationController.text.trim();
     if (name.isEmpty || address.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText(
-          'Add your shop name and address before registering on Google Maps.',
-        )),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Add your shop name and address before registering on Google Maps.',
+          ),
+        ),
       );
       return;
     }
@@ -891,13 +897,20 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
     final uri = action == 'search'
         ? Uri.https('www.google.com', '/maps/search/', {
             'api': '1',
-            'query': [name, address].where((part) => part.isNotEmpty).join(', '),
+            'query': [
+              name,
+              address,
+            ].where((part) => part.isNotEmpty).join(', '),
           })
         : Uri.parse('https://business.google.com/add');
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not open the Google Maps registration page.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Could not open the Google Maps registration page.',
+          ),
+        ),
       );
     }
   }
@@ -925,7 +938,10 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                   color: const Color(0xFFE8F1FF),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.location_on_rounded, color: Color(0xFF2563EB)),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  color: Color(0xFF2563EB),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -945,14 +961,19 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                       hasCoordinates
                           ? 'Store coordinates saved: ${_shopLatitude!.toStringAsFixed(6)}, ${_shopLongitude!.toStringAsFixed(6)}'
                           : 'Set your storefront location so customers can navigate to you.',
-                      style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        color: _secondaryTextColor,
+                      ),
                     ),
                     if (accuracy != null)
                       LiveTranslatedText(
                         'GPS accuracy: ±${accuracy.toStringAsFixed(0)} m${accuracy > 50 ? ' — retry outdoors for better accuracy' : ''}',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
-                          color: accuracy > 50 ? Colors.deepOrange : Colors.green.shade700,
+                          color: accuracy > 50
+                              ? Colors.deepOrange
+                              : Colors.green.shade700,
                         ),
                       ),
                   ],
@@ -963,7 +984,10 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
           const SizedBox(height: 12),
           LiveTranslatedText(
             'Stand at your shop entrance and tap the location pin above. Then check whether your shop already exists on Google Maps.',
-            style: GoogleFonts.poppins(fontSize: 11.5, color: _secondaryTextColor),
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              color: _secondaryTextColor,
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -997,9 +1021,11 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
       if (!await Geolocator.isLocationServiceEnabled()) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: LiveTranslatedText(
-              'Turn on location services, then stand at your shop and try again.',
-            )),
+            const SnackBar(
+              content: LiveTranslatedText(
+                'Turn on location services, then stand at your shop and try again.',
+              ),
+            ),
           );
         }
         return;
@@ -1642,7 +1668,9 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                                       color: _secondaryTextColor,
                                       size: 19,
                                     ),
-                                    tooltip: AppLocalizations.of(context).translate('Share Shop'),
+                                    tooltip: AppLocalizations.of(
+                                      context,
+                                    ).translate('Share Shop'),
                                   ),
                                 ],
                               ),
@@ -1874,7 +1902,9 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
               hint: 'Street, area, city',
               suffixIcon: IconButton(
                 icon: const Icon(Icons.my_location, color: _secondaryTextColor),
-                tooltip: AppLocalizations.of(context).translate('Capture storefront location'),
+                tooltip: AppLocalizations.of(
+                  context,
+                ).translate('Capture storefront location'),
                 onPressed: _fetchLocation,
               ),
               validator: (v) => v!.isEmpty ? 'Please enter location' : null,
@@ -2164,7 +2194,9 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                   child: IconButton(
                     icon: const Icon(Icons.sync),
                     onPressed: isLoading ? null : _forceRetrySync,
-                    tooltip: AppLocalizations.of(context).translate('Retry Sync'),
+                    tooltip: AppLocalizations.of(
+                      context,
+                    ).translate('Retry Sync'),
                   ),
                 ),
               ],

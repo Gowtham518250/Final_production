@@ -159,11 +159,16 @@ class InventoryStockHelper {
       if (raw is! Map) continue;
       final product = Map<String, dynamic>.from(raw);
       final id = (product['id'] ?? product['product_id'] ?? '').toString();
-      if (excludeProductId != null && id == excludeProductId.toString()) continue;
+      if (excludeProductId != null && id == excludeProductId.toString())
+        continue;
 
       final active = product['is_active'] != false;
-      final existingName = _normalizeProductIdentity(product['product_name'] ?? product['name']);
-      final existingSku = _normalizeProductIdentity(product['sku'] ?? product['barcode']);
+      final existingName = _normalizeProductIdentity(
+        product['product_name'] ?? product['name'],
+      );
+      final existingSku = _normalizeProductIdentity(
+        product['sku'] ?? product['barcode'],
+      );
       final types = <String>[];
       if (active && requestedName.isNotEmpty && existingName == requestedName) {
         types.add('PRODUCT_NAME');
@@ -174,7 +179,8 @@ class InventoryStockHelper {
       if (types.isEmpty) continue;
 
       final identity = id.isEmpty ? '$existingName|$existingSku' : id;
-      if (seen.add(identity)) matches.add({'match_types': types, 'product': product});
+      if (seen.add(identity))
+        matches.add({'match_types': types, 'product': product});
     }
     return matches;
   }
@@ -223,10 +229,10 @@ class InventoryStockHelper {
   }
 
   static String _normalizeInventoryIdentity(Object? value) {
-    return (value?.toString() ?? '')
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s-]+'), '');
+    return (value?.toString() ?? '').trim().toLowerCase().replaceAll(
+      RegExp(r'[\s-]+'),
+      '',
+    );
   }
 
   static Set<String> _productCodeValues(Map<String, dynamic> product) {
@@ -261,9 +267,7 @@ class InventoryStockHelper {
 
   /// Marks records written by the old Sales Entry price-learning callback.
   /// These are price hints, not inventory products.
-  static bool isLegacySalesPriceLearningProduct(
-    Map<String, dynamic> product,
-  ) {
+  static bool isLegacySalesPriceLearningProduct(Map<String, dynamic> product) {
     return product['source']?.toString().trim().toLowerCase() ==
         'self-learned (direct entry)';
   }
@@ -274,9 +278,7 @@ class InventoryStockHelper {
     Map<String, dynamic> localProducts,
     Map<dynamic, dynamic> payload,
   ) {
-    final payloadCodes = _productCodeValues(
-      Map<String, dynamic>.from(payload),
-    );
+    final payloadCodes = _productCodeValues(Map<String, dynamic>.from(payload));
     if (payloadCodes.isEmpty) {
       return Map<String, dynamic>.from(localProducts);
     }
@@ -344,21 +346,21 @@ class InventoryStockHelper {
       final existingServerId = existingOffline
           ? null
           : existing['id'] ??
-              existing['product_id'] ??
-              existing['backend_id'] ??
-              existing['server_id'];
+                existing['product_id'] ??
+                existing['backend_id'] ??
+                existing['server_id'];
       final incomingServerId = incomingOffline
           ? null
           : incoming['id'] ??
-              incoming['product_id'] ??
-              incoming['backend_id'] ??
-              incoming['server_id'];
+                incoming['product_id'] ??
+                incoming['backend_id'] ??
+                incoming['server_id'];
 
       final preferIncoming = existingPending != incomingPending
           ? incomingPending
           : existingOffline != incomingOffline
-              ? !incomingOffline
-              : true;
+          ? !incomingOffline
+          : true;
       final merged = preferIncoming
           ? <String, dynamic>{...existing, ...incoming}
           : <String, dynamic>{...incoming, ...existing};

@@ -7,17 +7,17 @@ class ErrorLogger {
   static const String _tag = '🚨 ERROR_LOGGER';
   static const String _logsKey = 'app_error_logs_v1';
   static const String _crashesKey = 'app_crashes_v1';
-  static const int maxLogsPerType = 100;  // Prevent storage bloat
-  
+  static const int maxLogsPerType = 100; // Prevent storage bloat
+
   final LocalStorageService _storage = LocalStorageService();
-  
+
   /// Log an error
   Future<void> logError({
     required String message,
-    required String source,  // e.g., 'PaymentDetection', 'ApiClient'
+    required String source, // e.g., 'PaymentDetection', 'ApiClient'
     String? stackTrace,
     Map<String, dynamic>? context,
-    String severity = 'ERROR',  // ERROR, WARNING, INFO
+    String severity = 'ERROR', // ERROR, WARNING, INFO
   }) async {
     try {
       final errorEntry = {
@@ -28,19 +28,19 @@ class ErrorLogger {
         'stackTrace': stackTrace,
         'context': context,
       };
-      
+
       final logsJson = await _storage.getString(_logsKey) ?? '[]';
       final List<dynamic> logs = jsonDecode(logsJson);
-      
+
       logs.add(errorEntry);
-      
+
       // Keep only recent logs
       if (logs.length > maxLogsPerType) {
         logs.removeRange(0, logs.length - maxLogsPerType);
       }
-      
+
       await _storage.setString(_logsKey, jsonEncode(logs));
-      
+
       if (kDebugMode) {
         print('$_tag [$severity] $source: $message');
         if (stackTrace != null) print(stackTrace);
@@ -49,7 +49,7 @@ class ErrorLogger {
       if (kDebugMode) print('$_tag ❌ Failed to log error: $e');
     }
   }
-  
+
   /// Log API error
   Future<void> logApiError({
     required String endpoint,
@@ -71,11 +71,12 @@ class ErrorLogger {
       },
     );
   }
-  
+
   /// Log network error
   Future<void> logNetworkError({
     required String endpoint,
-    required String errorType,  // 'Timeout', 'SocketException', 'ConnectionRefused'
+    required String
+    errorType, // 'Timeout', 'SocketException', 'ConnectionRefused'
     String? errorMessage,
   }) async {
     await logError(
@@ -89,7 +90,7 @@ class ErrorLogger {
       },
     );
   }
-  
+
   /// Log payment detection error
   Future<void> logPaymentError({
     required String detectionSource,
@@ -106,7 +107,7 @@ class ErrorLogger {
       },
     );
   }
-  
+
   /// Log crash
   Future<void> logCrash({
     required String message,
@@ -120,17 +121,17 @@ class ErrorLogger {
         'stackTrace': stackTrace,
         'source': source ?? 'UNKNOWN',
       };
-      
+
       final crashesJson = await _storage.getString(_crashesKey) ?? '[]';
       final List<dynamic> crashes = jsonDecode(crashesJson);
       crashes.add(crash);
-      
+
       if (crashes.length > maxLogsPerType) {
         crashes.removeRange(0, crashes.length - maxLogsPerType);
       }
-      
+
       await _storage.setString(_crashesKey, jsonEncode(crashes));
-      
+
       if (kDebugMode) {
         print('$_tag 💥 CRASH: $message');
         print(stackTrace);
@@ -139,7 +140,7 @@ class ErrorLogger {
       if (kDebugMode) print('$_tag ❌ Failed to log crash: $e');
     }
   }
-  
+
   /// Get all logs
   Future<List<Map<String, dynamic>>> getAllLogs() async {
     try {
@@ -149,7 +150,7 @@ class ErrorLogger {
       return [];
     }
   }
-  
+
   /// Get all crashes
   Future<List<Map<String, dynamic>>> getAllCrashes() async {
     try {
@@ -159,13 +160,13 @@ class ErrorLogger {
       return [];
     }
   }
-  
+
   /// Export logs as JSON for debugging
   Future<String> exportLogsAsJson() async {
     try {
       final logs = await getAllLogs();
       final crashes = await getAllCrashes();
-      
+
       final export = {
         'exportedAt': DateTime.now().toIso8601String(),
         'logs': logs,
@@ -177,21 +178,23 @@ class ErrorLogger {
           'warningCount': logs.where((l) => l['severity'] == 'WARNING').length,
         },
       };
-      
+
       return jsonEncode(export);
     } catch (e) {
       return '{"error": "$e"}';
     }
   }
-  
+
   /// Clear old logs (keep only last N hours)
   Future<void> clearOldLogs({int olderThanHours = 48}) async {
     try {
       final logsJson = await _storage.getString(_logsKey) ?? '[]';
       final List<dynamic> logs = jsonDecode(logsJson);
-      
-      final cutoffTime = DateTime.now().subtract(Duration(hours: olderThanHours));
-      
+
+      final cutoffTime = DateTime.now().subtract(
+        Duration(hours: olderThanHours),
+      );
+
       final recent = logs.where((log) {
         try {
           final timestamp = DateTime.parse(log['timestamp']);
@@ -200,9 +203,10 @@ class ErrorLogger {
           return false;
         }
       }).toList();
-      
+
       await _storage.setString(_logsKey, jsonEncode(recent));
-      if (kDebugMode) print('$_tag ✅ Logs cleaned: ${logs.length} → ${recent.length}');
+      if (kDebugMode)
+        print('$_tag ✅ Logs cleaned: ${logs.length} → ${recent.length}');
     } catch (e) {
       if (kDebugMode) print('$_tag ❌ Failed to clean logs: $e');
     }

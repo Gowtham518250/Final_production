@@ -3,20 +3,23 @@ import 'package:retail_mind/online_order_service.dart';
 
 void main() {
   group('Cancelled online-order invoice cleanup', () {
-    test('matches canonical ONL invoice after cloud restore changes its source', () {
-      expect(
-        OnlineOrderService.invoiceBelongsToOrder(
-          {
-            'id': 900,
-            'invoice_number': 'ONL-101-1761234567',
-            'source': 'cloud_restore',
-            'sync_status': 'synced',
-          },
-          {'order_id': 101, 'status': 'CANCELLED'},
-        ),
-        isTrue,
-      );
-    });
+    test(
+      'matches canonical ONL invoice after cloud restore changes its source',
+      () {
+        expect(
+          OnlineOrderService.invoiceBelongsToOrder(
+            {
+              'id': 900,
+              'invoice_number': 'ONL-101-1761234567',
+              'source': 'cloud_restore',
+              'sync_status': 'synced',
+            },
+            {'order_id': 101, 'status': 'CANCELLED'},
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('matches explicit online-order note after cloud restore', () {
       expect(

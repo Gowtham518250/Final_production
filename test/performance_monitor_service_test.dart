@@ -39,8 +39,8 @@ void main() {
     });
 
     test('empty monitor does not claim a measured performance score', () {
-      final summary =
-          PerformanceMonitorService.instance.getPerformanceSummary();
+      final summary = PerformanceMonitorService.instance
+          .getPerformanceSummary();
 
       expect(summary.performanceScore, 0);
       expect(summary.memoryMeasured, isFalse);

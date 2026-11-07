@@ -49,17 +49,23 @@ class AuthHelper {
     });
   }
 
-  static Future<bool> checkResponseStatus(int statusCode, BuildContext context) async {
+  static Future<bool> checkResponseStatus(
+    int statusCode,
+    BuildContext context,
+  ) async {
     if (statusCode == 401 || statusCode == 403) {
       // OFFLINE-FIRST: Check if user has valid local session before forcing logout
       final hasLocalSession = await SecureTokenStorage.isSessionValid();
-      
+
       if (statusCode == 401 && hasLocalSession) {
         // 401 with local session = likely offline or server error, don't force logout
-        if (kDebugMode) debugPrint('⚠️ 401 error but local session exists - keeping user logged in (offline mode)');
+        if (kDebugMode)
+          debugPrint(
+            '⚠️ 401 error but local session exists - keeping user logged in (offline mode)',
+          );
         return true; // Don't force logout
       }
-      
+
       // 403 or 401 without local session = force logout
       await SessionLogoutService.performFullLogout(notifyServer: false);
       if (context.mounted) {

@@ -94,7 +94,9 @@ class _RetailMindPromoPlayerPageState extends State<RetailMindPromoPlayerPage> {
 
                   if (snapshot.connectionState != ConnectionState.done) {
                     return const Center(
-                      child: CircularProgressIndicator(color: Color(0xFF818CF8)),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF818CF8),
+                      ),
                     );
                   }
 
@@ -134,9 +136,8 @@ class _RetailMindPromoPlayerPageState extends State<RetailMindPromoPlayerPage> {
                     'assets/videos/retail_mind_promo_poster.jpg',
                     fit: BoxFit.cover,
                     cacheWidth: 720,
-                    errorBuilder: (_, _, _) => const ColoredBox(
-                      color: Color(0xFF111827),
-                    ),
+                    errorBuilder: (_, _, _) =>
+                        const ColoredBox(color: Color(0xFF111827)),
                   ),
                   Center(
                     child: IconButton(

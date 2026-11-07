@@ -19,18 +19,19 @@ class QrScannerPage extends StatefulWidget {
   State<QrScannerPage> createState() => _QrScannerPageState();
 }
 
-class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProviderStateMixin {
+class _QrScannerPageState extends State<QrScannerPage>
+    with SingleTickerProviderStateMixin {
   final MobileScannerController cameraController = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     formats: [BarcodeFormat.all],
   );
-  
+
   final AudioPlayer _scanPlayer = AudioPlayer();
-  
+
   late AnimationController _animationController;
   bool _isProcessing = false;
   final List<String> _scannedCodes = [];
-  bool _isBatchMode = false; 
+  bool _isBatchMode = false;
   String _lastScannedCode = '';
   DateTime _lastScanTime = DateTime.fromMillisecondsSinceEpoch(0);
   double _zoomFactor = 0.0;
@@ -38,10 +39,10 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
   String? _recentPaymentAlert;
   Timer? _alertTimer;
   StreamSubscription? _paymentSub;
-  
+
   bool _heatmapEnabled = false;
   Map<String, dynamic>? _heatmapResult;
-  
+
   @override
   void initState() {
     super.initState();
@@ -49,13 +50,14 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-    
+
     // Real-time payment listener
     _paymentSub = PaymentDetectionService().onUiState.listen((event) {
       if (event.decision == PaymentDecision.confirmed) {
         if (!mounted) return;
         setState(() {
-          _recentPaymentAlert = "Confirmed ₹${event.amount.toStringAsFixed(0)} - ${event.payerName ?? 'Success'}";
+          _recentPaymentAlert =
+              "Confirmed ₹${event.amount.toStringAsFixed(0)} - ${event.payerName ?? 'Success'}";
         });
         _alertTimer?.cancel();
         _alertTimer = Timer(const Duration(seconds: 4), () {
@@ -77,7 +79,7 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
 
   void _onDetect(BarcodeCapture capture) {
     if (_isProcessing) return;
-    
+
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
@@ -92,12 +94,10 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
     if (candidates.isEmpty) return;
 
     String normalizeDigits(String value) => value.replaceAll(RegExp(r'\D'), '');
-    final gtinCandidates = candidates
-        .where((code) {
-          final digits = normalizeDigits(code);
-          return [8, 12, 13, 14].contains(digits.length);
-        })
-        .toList();
+    final gtinCandidates = candidates.where((code) {
+      final digits = normalizeDigits(code);
+      return [8, 12, 13, 14].contains(digits.length);
+    }).toList();
 
     String code;
     if (gtinCandidates.isNotEmpty) {
@@ -105,17 +105,17 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
         final rankA = normalizeDigits(a).length == 13
             ? 0
             : normalizeDigits(a).length == 12
-                ? 1
-                : normalizeDigits(a).length == 14
-                    ? 2
-                    : 3;
+            ? 1
+            : normalizeDigits(a).length == 14
+            ? 2
+            : 3;
         final rankB = normalizeDigits(b).length == 13
             ? 0
             : normalizeDigits(b).length == 12
-                ? 1
-                : normalizeDigits(b).length == 14
-                    ? 2
-                    : 3;
+            ? 1
+            : normalizeDigits(b).length == 14
+            ? 2
+            : 3;
         return rankA.compareTo(rankB);
       });
       code = normalizeDigits(gtinCandidates.first);
@@ -125,7 +125,8 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
 
     // 1-second Duplicate Protection
     final now = DateTime.now();
-    if (code == _lastScannedCode && now.difference(_lastScanTime).inMilliseconds < 1000) {
+    if (code == _lastScannedCode &&
+        now.difference(_lastScanTime).inMilliseconds < 1000) {
       return;
     }
 
@@ -143,7 +144,7 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
         HapticFeedback.lightImpact();
         unawaited(_playScanBeep());
         HapticFeedback.lightImpact();
-        
+
         setState(() => _isProcessing = true);
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) setState(() => _isProcessing = false);
@@ -155,7 +156,7 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
       // The audio plays immediately when the scanner recognizes the barcode.
       unawaited(_playScanBeep());
       HapticFeedback.mediumImpact();
-      
+
       // Delay pop slightly to ensure TTS is heard
       Future.delayed(const Duration(milliseconds: 250), () {
         if (mounted) Navigator.of(context).pop(code);
@@ -195,8 +196,10 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
     for (int i = 0; i < sampleCount; i++) {
       final t = i / sampleRate;
       final attack = (i / (sampleRate * 0.008)).clamp(0.0, 1.0);
-      final release =
-          ((sampleCount - i) / (sampleRate * 0.018)).clamp(0.0, 1.0);
+      final release = ((sampleCount - i) / (sampleRate * 0.018)).clamp(
+        0.0,
+        1.0,
+      );
       final envelope = math.min(attack, release);
       final sample =
           (math.sin(2 * math.pi * frequency * t) * 0.24 * envelope * 32767)
@@ -210,10 +213,7 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
   Future<void> _playScanBeep() async {
     try {
       await _scanPlayer.stop();
-      await _scanPlayer.play(
-        BytesSource(_buildScanBeepWav()),
-        volume: 1.0,
-      );
+      await _scanPlayer.play(BytesSource(_buildScanBeepWav()), volume: 1.0);
     } catch (e) {
       // Fall back to the platform click if the generated beep cannot play.
       SystemSound.play(SystemSoundType.click);
@@ -226,45 +226,56 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
   Future<void> _checkHeatmap(String code) async {
     try {
       final products = await LocalStorageService.loadBackendProducts();
-      final product = products.firstWhere((p) => p['sku'].toString() == code, orElse: () => {});
-      
+      final product = products.firstWhere(
+        (p) => p['sku'].toString() == code,
+        orElse: () => {},
+      );
+
       if (product.isEmpty) {
-        setState(() => _heatmapResult = {'name': 'Unknown Product', 'status': 'Unknown', 'color': Colors.grey});
+        setState(
+          () => _heatmapResult = {
+            'name': 'Unknown Product',
+            'status': 'Unknown',
+            'color': Colors.grey,
+          },
+        );
       } else {
         final stock = (product['current_stock'] as num).toDouble();
         final min = (product['min_stock'] as num).toDouble();
-        
+
         Color color;
         String status;
-        
+
         if (stock <= 0) {
-          color = Colors.red; status = "Out of Stock (High Demand!)";
+          color = Colors.red;
+          status = "Out of Stock (High Demand!)";
         } else if (stock <= min) {
-          color = Colors.orange; status = "Low Stock Velocity";
+          color = Colors.orange;
+          status = "Low Stock Velocity";
         } else {
-          color = Colors.green; status = "Healthy Profit Flow";
+          color = Colors.green;
+          status = "Healthy Profit Flow";
         }
-        
+
         setState(() {
           _heatmapResult = {
             'name': product['product_name'],
             'status': status,
             'color': color,
             'price': '₹${product['unit_price']}',
-            'sku': code
+            'sku': code,
           };
         });
       }
-      
+
       HapticFeedback.mediumImpact();
-      
+
       // Auto-clear heatmap after 3 seconds
       Timer(const Duration(seconds: 3), () {
         if (mounted) setState(() => _heatmapResult = null);
       });
-      
     } catch (e) {
-       print('Heatmap Error: $e');
+      print('Heatmap Error: $e');
     }
   }
 
@@ -290,7 +301,8 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
             onScaleUpdate: (ScaleUpdateDetails details) {
               setState(() {
                 // Adjust zoom factor based on pinch scale
-                _zoomFactor = (_baseZoomScale + (details.scale - 1.0) * 0.5).clamp(0.0, 1.0);
+                _zoomFactor = (_baseZoomScale + (details.scale - 1.0) * 0.5)
+                    .clamp(0.0, 1.0);
                 _applyZoom();
               });
             },
@@ -314,7 +326,9 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
             animation: _animationController,
             builder: (context, child) {
               return Positioned(
-                top: scanWindow.top + (scanWindow.height * _animationController.value),
+                top:
+                    scanWindow.top +
+                    (scanWindow.height * _animationController.value),
                 left: scanWindow.left + 10,
                 right: scanWindow.left + scanWindow.width - 10,
                 child: Container(
@@ -328,7 +342,11 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
                       ),
                     ],
                     gradient: const LinearGradient(
-                      colors: [Colors.transparent, Color(0xFF4F46E5), Colors.transparent],
+                      colors: [
+                        Colors.transparent,
+                        Color(0xFF4F46E5),
+                        Colors.transparent,
+                      ],
                     ),
                   ),
                 ),
@@ -356,25 +374,53 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
         decoration: BoxDecoration(
           color: (_heatmapResult!['color'] as Color).withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10)],
-          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 10,
+            ),
+          ],
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.3),
+            width: 2,
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LiveTranslatedText(_heatmapResult!['name'] ?? '', 
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            LiveTranslatedText(
+              _heatmapResult!['name'] ?? '',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 4),
-            LiveTranslatedText(_heatmapResult!['status'] ?? '', 
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+            LiveTranslatedText(
+              _heatmapResult!['status'] ?? '',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
             if (_heatmapResult!['price'] != null) ...[
               const SizedBox(height: 8),
-              LiveTranslatedText(_heatmapResult!['price'], 
-                  style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
+              LiveTranslatedText(
+                _heatmapResult!['price'],
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ],
             const SizedBox(height: 4),
-            LiveTranslatedText('SKU: ${_heatmapResult!['sku']}', 
-                style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            LiveTranslatedText(
+              'SKU: ${_heatmapResult!['sku']}',
+              style: const TextStyle(color: Colors.white70, fontSize: 10),
+            ),
           ],
         ),
       ),
@@ -387,7 +433,10 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
       left: 0,
       right: 0,
       child: Container(
-        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 10, bottom: 20),
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + 10,
+          bottom: 20,
+        ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -430,12 +479,24 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Icon(Icons.zoom_out_rounded, color: Colors.white54, size: 16),
+              const Icon(
+                Icons.zoom_out_rounded,
+                color: Colors.white54,
+                size: 16,
+              ),
               LiveTranslatedText(
                 '${(_zoomFactor * 3 + 1).toStringAsFixed(1)}x',
-                style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const Icon(Icons.zoom_in_rounded, color: Colors.white54, size: 16),
+              const Icon(
+                Icons.zoom_in_rounded,
+                color: Colors.white54,
+                size: 16,
+              ),
             ],
           ),
           Slider(
@@ -483,7 +544,10 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
             Expanded(
               child: LiveTranslatedText(
                 _recentPaymentAlert!,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -517,16 +581,25 @@ class _QrScannerPageState extends State<QrScannerPage> with SingleTickerProvider
             onPressed: () => cameraController.toggleTorch(),
           ),
           _ActionButton(
-            icon: Icon(Icons.insights_rounded, color: _heatmapEnabled ? Colors.orange : Colors.white),
+            icon: Icon(
+              Icons.insights_rounded,
+              color: _heatmapEnabled ? Colors.orange : Colors.white,
+            ),
             onPressed: () {
               setState(() {
                 _heatmapEnabled = !_heatmapEnabled;
                 _heatmapResult = null;
               });
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: LiveTranslatedText(_heatmapEnabled ? '🔥 Heatmap Velocity Mode ON' : '📷 Scanner Mode ON'),
-                duration: const Duration(seconds: 1),
-              ));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: LiveTranslatedText(
+                    _heatmapEnabled
+                        ? '🔥 Heatmap Velocity Mode ON'
+                        : '📷 Scanner Mode ON',
+                  ),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
             },
           ),
           const SizedBox(width: 20),
@@ -574,17 +647,17 @@ class ScannerOverlayPainter extends CustomPainter {
   final Rect scanWindow;
   final double borderRadius;
 
-  ScannerOverlayPainter({
-    required this.scanWindow,
-    this.borderRadius = 12,
-  });
+  ScannerOverlayPainter({required this.scanWindow, this.borderRadius = 12});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final backgroundPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-    
+    final backgroundPath = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
     final cutoutPath = Path()
-      ..addRRect(RRect.fromRectAndRadius(scanWindow, Radius.circular(borderRadius)));
+      ..addRRect(
+        RRect.fromRectAndRadius(scanWindow, Radius.circular(borderRadius)),
+      );
 
     final backgroundPaint = Paint()
       ..color = Colors.black.withValues(alpha: 0.6)
@@ -605,10 +678,16 @@ class ScannerOverlayPainter extends CustomPainter {
       ..strokeWidth = 3.0;
 
     final borderLength = borderRadius * 2;
-    
+
     // Top Left
     canvas.drawArc(
-      Rect.fromCircle(center: Offset(scanWindow.left + borderRadius, scanWindow.top + borderRadius), radius: borderRadius),
+      Rect.fromCircle(
+        center: Offset(
+          scanWindow.left + borderRadius,
+          scanWindow.top + borderRadius,
+        ),
+        radius: borderRadius,
+      ),
       3.14,
       1.57,
       false,
@@ -627,7 +706,13 @@ class ScannerOverlayPainter extends CustomPainter {
 
     // Top Right
     canvas.drawArc(
-      Rect.fromCircle(center: Offset(scanWindow.right - borderRadius, scanWindow.top + borderRadius), radius: borderRadius),
+      Rect.fromCircle(
+        center: Offset(
+          scanWindow.right - borderRadius,
+          scanWindow.top + borderRadius,
+        ),
+        radius: borderRadius,
+      ),
       -1.57,
       1.57,
       false,
@@ -646,7 +731,13 @@ class ScannerOverlayPainter extends CustomPainter {
 
     // Bottom Left
     canvas.drawArc(
-      Rect.fromCircle(center: Offset(scanWindow.left + borderRadius, scanWindow.bottom - borderRadius), radius: borderRadius),
+      Rect.fromCircle(
+        center: Offset(
+          scanWindow.left + borderRadius,
+          scanWindow.bottom - borderRadius,
+        ),
+        radius: borderRadius,
+      ),
       1.57,
       1.57,
       false,
@@ -665,7 +756,13 @@ class ScannerOverlayPainter extends CustomPainter {
 
     // Bottom Right
     canvas.drawArc(
-      Rect.fromCircle(center: Offset(scanWindow.right - borderRadius, scanWindow.bottom - borderRadius), radius: borderRadius),
+      Rect.fromCircle(
+        center: Offset(
+          scanWindow.right - borderRadius,
+          scanWindow.bottom - borderRadius,
+        ),
+        radius: borderRadius,
+      ),
       0,
       1.57,
       false,

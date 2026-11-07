@@ -46,30 +46,36 @@ void main() {
       expect(restored.fingerprint, event.fingerprint);
     });
 
-    test('history displays source time but keeps processing time for cooldowns', () async {
-      SharedPreferences.setMockInitialValues({'user_id': 72});
+    test(
+      'history displays source time but keeps processing time for cooldowns',
+      () async {
+        SharedPreferences.setMockInitialValues({'user_id': 72});
 
-      final sourceTime = DateTime(2026, 10, 26, 16, 22);
-      final processedTime = DateTime(2026, 10, 26, 18, 15);
-      final event = PaymentEvent(
-        amount: 5,
-        timestamp: processedTime,
-        sourceTimestamp: sourceTime,
-        app: PaymentApp.phonePe,
-        referenceId: '404446326411',
-        rawText: 'Money received ₹5',
-        decision: PaymentDecision.confirmed,
-        verificationStatus: PaymentVerificationStatus.merchantConfirmed,
-        direction: PaymentTransactionDirection.incomingCredit,
-      );
+        final sourceTime = DateTime(2026, 10, 26, 16, 22);
+        final processedTime = DateTime(2026, 10, 26, 18, 15);
+        final event = PaymentEvent(
+          amount: 5,
+          timestamp: processedTime,
+          sourceTimestamp: sourceTime,
+          app: PaymentApp.phonePe,
+          referenceId: '404446326411',
+          rawText: 'Money received ₹5',
+          decision: PaymentDecision.confirmed,
+          verificationStatus: PaymentVerificationStatus.merchantConfirmed,
+          direction: PaymentTransactionDirection.incomingCredit,
+        );
 
-      expect(await OnlinePaymentHistoryService.recordIncomingPayment(event), isTrue);
+        expect(
+          await OnlinePaymentHistoryService.recordIncomingPayment(event),
+          isTrue,
+        );
 
-      final rows = await OnlinePaymentHistoryService.load();
-      expect(rows, hasLength(1));
-      expect(rows.single['timestamp'], sourceTime.toIso8601String());
-      expect(rows.single['detected_at'], processedTime.toIso8601String());
-      expect(rows.single['reference_id'], '404446326411');
-    });
+        final rows = await OnlinePaymentHistoryService.load();
+        expect(rows, hasLength(1));
+        expect(rows.single['timestamp'], sourceTime.toIso8601String());
+        expect(rows.single['detected_at'], processedTime.toIso8601String());
+        expect(rows.single['reference_id'], '404446326411');
+      },
+    );
   });
 }

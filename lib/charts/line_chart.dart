@@ -61,7 +61,7 @@ class RevenueLineChart extends StatelessWidget {
 
     final Map<dynamic, double> dataMap;
     final List<String> labels;
-    
+
     // Dynamically choose data source based on filter
     if (currentFilterLabel.toLowerCase().contains('week')) {
       dataMap = engine.salesByWeekCache;
@@ -109,10 +109,14 @@ class RevenueLineChart extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.03)
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.2),
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.2),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -139,15 +143,20 @@ class RevenueLineChart extends StatelessWidget {
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Color(0xFF00E5FF).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.timeline,
-                                size: 14, color: Color(0xFF00E5FF)),
+                            const Icon(
+                              Icons.timeline,
+                              size: 14,
+                              color: Color(0xFF00E5FF),
+                            ),
                             const SizedBox(width: 6),
                             LiveTranslatedText(
                               AppLocalizations.of(context).last7Days,
@@ -170,8 +179,13 @@ class RevenueLineChart extends StatelessWidget {
                         lineTouchData: LineTouchData(
                           enabled: true,
                           touchTooltipData: LineTouchTooltipData(
-                            tooltipBgColor: isDark ? const Color(0xFF151515) : Colors.white,
-                            tooltipPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            tooltipBgColor: isDark
+                                ? const Color(0xFF151515)
+                                : Colors.white,
+                            tooltipPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             tooltipMargin: 8,
                             tooltipRoundedRadius: 8,
                             getTooltipItems: (spots) {
@@ -180,7 +194,9 @@ class RevenueLineChart extends StatelessWidget {
                                 return LineTooltipItem(
                                   '$label: ',
                                   TextStyle(
-                                    color: isDark ? Colors.white70 : Colors.grey[800],
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.grey[800],
                                     fontWeight: FontWeight.w700,
                                     fontSize: 10,
                                   ),
@@ -215,7 +231,9 @@ class RevenueLineChart extends StatelessWidget {
                               show: true,
                               gradient: LinearGradient(
                                 colors: gradientColors
-                                    .map((color) => color.withValues(alpha: 0.1))
+                                    .map(
+                                      (color) => color.withValues(alpha: 0.1),
+                                    )
                                     .toList(),
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
@@ -236,7 +254,7 @@ class RevenueLineChart extends StatelessWidget {
                         ],
                         titlesData: FlTitlesData(
                           bottomTitles: AxisTitles(
-                            sideTitles: SideTitles( 
+                            sideTitles: SideTitles(
                               showTitles: true,
                               getTitlesWidget: (value, meta) {
                                 final index = value.toInt();
@@ -259,16 +277,18 @@ class RevenueLineChart extends StatelessWidget {
                             ),
                           ),
                           leftTitles: AxisTitles(
-                            sideTitles: SideTitles( 
+                            sideTitles: SideTitles(
                               showTitles: true,
                               getTitlesWidget: (value, meta) {
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: LiveTranslatedText(
-                                    '\u20b9${(value >= 1000 ? (value/1000).toStringAsFixed(1)+'k' : value.toInt().toString())}',
+                                    '\u20b9${(value >= 1000 ? (value / 1000).toStringAsFixed(1) + 'k' : value.toInt().toString())}',
                                     style: TextStyle(
                                       fontSize: 9,
-                                      color: isDark ? Colors.white60 : Colors.grey[600],
+                                      color: isDark
+                                          ? Colors.white60
+                                          : Colors.grey[600],
                                       fontWeight: FontWeight.w500,
                                     ),
                                     textAlign: TextAlign.right,
@@ -279,16 +299,20 @@ class RevenueLineChart extends StatelessWidget {
                             ),
                           ),
                           rightTitles: AxisTitles(
-                              sideTitles: SideTitles( showTitles: false)),
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
                           topTitles: AxisTitles(
-                              sideTitles: SideTitles( showTitles: false)),
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
                         ),
                         borderData: FlBorderData(show: false),
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
                           getDrawingHorizontalLine: (value) => FlLine(
-                            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey[100]!.withValues(alpha: 0.8),
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : Colors.grey[100]!.withValues(alpha: 0.8),
                             strokeWidth: 1,
                             dashArray: [3, 3],
                           ),
@@ -326,10 +350,7 @@ class RevenueLineChart extends StatelessWidget {
                       const Spacer(),
                       LiveTranslatedText(
                         '${_calculateTrend(entries).abs().toStringAsFixed(1)}% ${AppLocalizations.of(context).avgChange}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
                   ),

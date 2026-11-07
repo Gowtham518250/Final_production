@@ -27,12 +27,13 @@
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class STTAccuracyConfig {
-  final String   localeId;
-  final Duration listenFor;       // max recording window
-  final Duration pauseFor;        // silence-before-stop threshold
-  final stt.ListenMode listenMode;// dictation = continuous; search = short burst
-  final bool     partialResults;  // always true for live feedback
-  final int      sampleRateHz;    // hint to OS (Android only, best-effort)
+  final String localeId;
+  final Duration listenFor; // max recording window
+  final Duration pauseFor; // silence-before-stop threshold
+  final stt.ListenMode
+  listenMode; // dictation = continuous; search = short burst
+  final bool partialResults; // always true for live feedback
+  final int sampleRateHz; // hint to OS (Android only, best-effort)
 
   const STTAccuracyConfig({
     required this.localeId,
@@ -48,93 +49,93 @@ class STTAccuracyConfig {
 const _configs = <String, STTAccuracyConfig>{
   // English: shorter pause OK — cleaner phonemes, fewer homophones in Indian context
   'en-IN': STTAccuracyConfig(
-    localeId:     'en-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(seconds: 4),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'en-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(seconds: 4),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Hindi: longer pause — schwa deletion causes mid-word micro-pauses
   // Hinglish speakers also insert English words mid-sentence
   'hi-IN': STTAccuracyConfig(
-    localeId:     'hi-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 5500), // 5.5s — Hinglish needs more time
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'hi-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 5500), // 5.5s — Hinglish needs more time
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Tamil: very long pause needed — Tamil has gemination (double consonants)
   // that STT sometimes interprets as silence
   'ta-IN': STTAccuracyConfig(
-    localeId:     'ta-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(seconds: 6),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'ta-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(seconds: 6),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Telugu: moderate pause — script is highly phonetic so STT usually gets it right
   'te-IN': STTAccuracyConfig(
-    localeId:     'te-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 5000),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'te-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 5000),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Kannada: similar to Telugu, slightly more pause for retroflex consonants
   'kn-IN': STTAccuracyConfig(
-    localeId:     'kn-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 5200),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'kn-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 5200),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Malayalam: longest pause — complex conjuncts + chillu letters cause hesitation
   'ml-IN': STTAccuracyConfig(
-    localeId:     'ml-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(seconds: 6),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'ml-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(seconds: 6),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Marathi: similar to Hindi (Devanagari) but schwa deletion pattern differs
   'mr-IN': STTAccuracyConfig(
-    localeId:     'mr-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 5000),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'mr-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 5000),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Bengali: moderate — Bengali STT on Android is well-trained, fewer corrections needed
   'bn-IN': STTAccuracyConfig(
-    localeId:     'bn-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 4500),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'bn-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 4500),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Gujarati: moderate pause
   'gu-IN': STTAccuracyConfig(
-    localeId:     'gu-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 4500),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'gu-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 4500),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 
   // Punjabi: similar to Hindi, slightly shorter pause
   'pa-IN': STTAccuracyConfig(
-    localeId:     'pa-IN',
-    listenFor:    Duration(seconds: 60),
-    pauseFor:     Duration(milliseconds: 4800),
-    listenMode:   stt.ListenMode.dictation,
+    localeId: 'pa-IN',
+    listenFor: Duration(seconds: 60),
+    pauseFor: Duration(milliseconds: 4800),
+    listenMode: stt.ListenMode.dictation,
     sampleRateHz: 16000,
   ),
 };

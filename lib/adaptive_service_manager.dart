@@ -45,7 +45,8 @@ class AdaptiveServiceManager {
     try {
       SyncService.dispose();
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ AdaptiveServiceManager.stopAllServices failed: $e');
+      if (kDebugMode)
+        debugPrint('⚠️ AdaptiveServiceManager.stopAllServices failed: $e');
     } finally {
       _initialized = false;
     }

@@ -26,9 +26,9 @@ final _log = Logger(
 
 class QueueItem {
   final Future<void> Function() task;
-  final AnnouncementPriority    priority;
-  final String                  ttsText;
-  final int                     timeoutSec;
+  final AnnouncementPriority priority;
+  final String ttsText;
+  final int timeoutSec;
   final Future<void> Function()? onTimeout;
   final void Function(bool success)? onResult;
   final DateTime? expiresAt;
@@ -64,15 +64,17 @@ class QueueItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class QueueManager {
-  final List<QueueItem> _queue    = [];
-  bool                  _draining = false;
-  bool                  _speaking = false;
+  final List<QueueItem> _queue = [];
+  bool _draining = false;
+  bool _speaking = false;
 
   bool get isBusy => _draining || _speaking;
 
   void enqueue(QueueItem item) {
     _queue.add(item);
-    _log.d('Enqueued [${item.priority.name}] "${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"');
+    _log.d(
+      'Enqueued [${item.priority.name}] "${item.ttsText.substring(0, item.ttsText.length.clamp(0, 40))}"',
+    );
     _drainLoop();
   }
 
@@ -121,14 +123,22 @@ class QueueManager {
               try {
                 await item.onTimeout?.call();
               } catch (error, stackTrace) {
-                _log.e('Timeout cleanup failed', error: error, stackTrace: stackTrace);
+                _log.e(
+                  'Timeout cleanup failed',
+                  error: error,
+                  stackTrace: stackTrace,
+                );
               }
             },
           );
           if (timedOut) break;
           success = true;
         } catch (error, stackTrace) {
-          _log.e('Task attempt $attempt/3 failed', error: error, stackTrace: stackTrace);
+          _log.e(
+            'Task attempt $attempt/3 failed',
+            error: error,
+            stackTrace: stackTrace,
+          );
           // Speech is not idempotent: a late failure may happen after audio
           // became audible. Do not replay the same payment in that case.
           if (attemptClock.elapsedMilliseconds >= 400) break;

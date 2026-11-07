@@ -36,7 +36,10 @@ class SessionLogoutService {
   /// the user is stuck on the same screen (or behind a loading dialog that
   /// never dismisses). Each step is now isolated so logout always completes
   /// and the caller can always navigate to the login screen.
-  static Future<void> _step(String label, Future<void> Function() action) async {
+  static Future<void> _step(
+    String label,
+    Future<void> Function() action,
+  ) async {
     try {
       await action();
     } catch (e) {
@@ -52,7 +55,9 @@ class SessionLogoutService {
           const Duration(seconds: 8),
           onTimeout: () {
             if (kDebugMode) {
-              debugPrint('⏱️ Logout server request timed out; continuing local logout');
+              debugPrint(
+                '⏱️ Logout server request timed out; continuing local logout',
+              );
             }
           },
         ),
@@ -65,7 +70,9 @@ class SessionLogoutService {
         const Duration(seconds: 3),
         onTimeout: () {
           if (kDebugMode) {
-            debugPrint('⏱️ Online orders listener stop timed out; continuing logout');
+            debugPrint(
+              '⏱️ Online orders listener stop timed out; continuing logout',
+            );
           }
         },
       ),
@@ -83,30 +90,66 @@ class SessionLogoutService {
     // account's unsynced business data. Isolation does not require deletion.
     await _step('close user boxes', () => LocalStorageService.closeUserBoxes());
     // Reset sync queue box reference to ensure new user gets their own queue
-    await _step('reset sync queue box', () => SyncQueueManager.resetBoxReference());
+    await _step(
+      'reset sync queue box',
+      () => SyncQueueManager.resetBoxReference(),
+    );
 
     // 🔒 SECURITY: Clear all scoped SharedPreferences data for current user
-    await _step('clear scoped prefs', () => ScopedSharedPreferences.clearCurrentUserScopedData());
-    await _step('clear legacy unscoped keys', () => ScopedSharedPreferences.clearLegacyUnscopedKeys());
+    await _step(
+      'clear scoped prefs',
+      () => ScopedSharedPreferences.clearCurrentUserScopedData(),
+    );
+    await _step(
+      'clear legacy unscoped keys',
+      () => ScopedSharedPreferences.clearLegacyUnscopedKeys(),
+    );
 
     // Use UserDataClearService which now preserves all business data in scoped boxes
-    await _step('clear user data', () => UserDataClearService.clearAllUserData());
-    await _step('clear secure token storage', () => SecureTokenStorage.clearAll());
-    await _step('clear payment data', () => SecurePreferencesService.clearAllPaymentData());
-    await _step('clear session tokens', () => SessionManagementService.clearTokens());
+    await _step(
+      'clear user data',
+      () => UserDataClearService.clearAllUserData(),
+    );
+    await _step(
+      'clear secure token storage',
+      () => SecureTokenStorage.clearAll(),
+    );
+    await _step(
+      'clear payment data',
+      () => SecurePreferencesService.clearAllPaymentData(),
+    );
+    await _step(
+      'clear session tokens',
+      () => SessionManagementService.clearTokens(),
+    );
     await _step(
       'reset api auth runtime state',
       () => ApiClient.resetAuthRuntimeState(),
     );
     // DO NOT clear sync queue! (it's user-scoped and will be reloaded for new user)
     // await SyncQueueManager.clearQueue();
-    await _step('clear account data cache', () => AccountDataSyncService.clearAllCache());
+    await _step(
+      'clear account data cache',
+      () => AccountDataSyncService.clearAllCache(),
+    );
     await _step('google sign-out', () => GoogleAuthService.signOut());
-    await _step('clear master pin', () => SecurityService.clearMasterPinOnLogout());
+    await _step(
+      'clear master pin',
+      () => SecurityService.clearMasterPinOnLogout(),
+    );
     await _step('clear pds state', () => PdsStateStore.clearAll());
-    await _step('clear sale in-flight', () async => SaleService.clearInFlight());
-    await _step('clear payment detection', () async => PaymentDetectionSystem.clearOnLogout());
-    await _step('reset customer api client', () async => CustomerAPIClient.reset());
+    await _step(
+      'clear sale in-flight',
+      () async => SaleService.clearInFlight(),
+    );
+    await _step(
+      'clear payment detection',
+      () async => PaymentDetectionSystem.clearOnLogout(),
+    );
+    await _step(
+      'reset customer api client',
+      () async => CustomerAPIClient.reset(),
+    );
     await _step('reset app state', () async => AppStateReset.resetAll());
     // DO NOT clear sales boxes! (they're scoped per user)
     // await LocalStorageService.clearOrphanSalesBoxes();
@@ -114,7 +157,9 @@ class SessionLogoutService {
   }
 
   /// Owner logout — use from every dashboard/settings logout button.
-  static Future<void> performOwnerLogout({bool processQueueFirst = false}) async {
+  static Future<void> performOwnerLogout({
+    bool processQueueFirst = false,
+  }) async {
     if (_inProgress) {
       if (kDebugMode) debugPrint('⚠️ Logout already in progress');
       return;
@@ -128,7 +173,9 @@ class SessionLogoutService {
         const Duration(seconds: 20),
         onTimeout: () {
           if (kDebugMode) {
-            debugPrint('⏱️ Owner logout cleanup exceeded 20s; continuing to reset logout state');
+            debugPrint(
+              '⏱️ Owner logout cleanup exceeded 20s; continuing to reset logout state',
+            );
           }
         },
       );
@@ -167,7 +214,10 @@ class SessionLogoutService {
     await prefs.setString('customer_phone', customerPhone);
     await prefs.setString('customer_email', email);
 
-    if (kDebugMode) debugPrint('✅ Customer mode — owner session cleared (business data preserved)');
+    if (kDebugMode)
+      debugPrint(
+        '✅ Customer mode — owner session cleared (business data preserved)',
+      );
   }
 
   /// Leaving customer flow back to owner login.

@@ -54,7 +54,8 @@ class _FirstSaleCoachOverlayState extends State<FirstSaleCoachOverlay>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final reduce = AppMotion.reduced(context) || LowMemoryPerformance.useReducedMotion;
+    final reduce =
+        AppMotion.reduced(context) || LowMemoryPerformance.useReducedMotion;
     if (reduce) {
       _pulse.stop();
       _pulse.value = 0.35;
@@ -206,9 +207,7 @@ class _FirstSaleCoachOverlayState extends State<FirstSaleCoachOverlay>
                     ? hole.bottom + 56
                     : null,
                 bottom: hole == null || hole.center.dy >= size.height * 0.45
-                    ? (hole == null
-                        ? 24
-                        : size.height - hole.top + 12)
+                    ? (hole == null ? 24 : size.height - hole.top + 12)
                     : null,
                 child: _CoachCard(
                   title: step.title,
@@ -235,9 +234,7 @@ class _CoachHoleClipper extends CustomClipper<Path> {
   Path getClip(Size size) {
     final path = Path()..addRect(Offset.zero & size);
     if (hole != null) {
-      path.addRRect(
-        RRect.fromRectAndRadius(hole!, const Radius.circular(16)),
-      );
+      path.addRRect(RRect.fromRectAndRadius(hole!, const Radius.circular(16)));
       path.fillType = PathFillType.evenOdd;
     }
     return path;
@@ -362,4 +359,3 @@ class _CoachCard extends StatelessWidget {
     );
   }
 }
-

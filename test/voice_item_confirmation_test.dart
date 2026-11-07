@@ -4,29 +4,32 @@ import 'package:retail_mind/voice_item_confirmation.dart';
 import 'package:retail_mind/voice_nlp_engine.dart';
 
 void main() {
-  test('low-confidence lines are not auto-confirmed without a catalog match', () {
-    expect(
-      VoiceItemConfirmation.shouldAutoConfirm(
-        confidence: 0.4,
-        catalogMatched: false,
-      ),
-      isFalse,
-    );
-    expect(
-      VoiceItemConfirmation.shouldAutoConfirm(
-        confidence: 0.7,
-        catalogMatched: false,
-      ),
-      isTrue,
-    );
-    expect(
-      VoiceItemConfirmation.shouldAutoConfirm(
-        confidence: 0.2,
-        catalogMatched: true,
-      ),
-      isTrue,
-    );
-  });
+  test(
+    'low-confidence lines are not auto-confirmed without a catalog match',
+    () {
+      expect(
+        VoiceItemConfirmation.shouldAutoConfirm(
+          confidence: 0.4,
+          catalogMatched: false,
+        ),
+        isFalse,
+      );
+      expect(
+        VoiceItemConfirmation.shouldAutoConfirm(
+          confidence: 0.7,
+          catalogMatched: false,
+        ),
+        isTrue,
+      );
+      expect(
+        VoiceItemConfirmation.shouldAutoConfirm(
+          confidence: 0.2,
+          catalogMatched: true,
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('ambiguous name-plus-number speech stays unconfirmed for review', () {
     expect(
@@ -63,17 +66,20 @@ void main() {
     expect(item.isConfirmed, isFalse);
   });
 
-  test('explicit quantity and price can auto-confirm when confidence is high', () {
-    final parsed = VoiceNlpEngineV2.parse(
-      '2 kg rice 50',
-      'en',
-      catalog: [
-        {'name': 'Rice', 'price': '50'},
-      ],
-    );
-    expect(parsed, isNotEmpty);
-    expect(parsed.first.quantityPriceAmbiguous, isFalse);
-    expect(parsed.first.qty, 2);
-    expect(parsed.first.price, 50);
-  });
+  test(
+    'explicit quantity and price can auto-confirm when confidence is high',
+    () {
+      final parsed = VoiceNlpEngineV2.parse(
+        '2 kg rice 50',
+        'en',
+        catalog: [
+          {'name': 'Rice', 'price': '50'},
+        ],
+      );
+      expect(parsed, isNotEmpty);
+      expect(parsed.first.quantityPriceAmbiguous, isFalse);
+      expect(parsed.first.qty, 2);
+      expect(parsed.first.price, 50);
+    },
+  );
 }

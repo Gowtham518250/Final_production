@@ -78,10 +78,7 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
     String status,
     List<Map<String, dynamic>> orders,
   ) async {
-    await prefs.setString(
-      _ordersCacheKey(shopId, status),
-      jsonEncode(orders),
-    );
+    await prefs.setString(_ordersCacheKey(shopId, status), jsonEncode(orders));
   }
 
   Future<void> _loadShopIdAndOrders() async {
@@ -164,7 +161,10 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
     }
   }
 
-  Future<void> _updateOrderStatus(Map<String, dynamic> order, String action) async {
+  Future<void> _updateOrderStatus(
+    Map<String, dynamic> order,
+    String action,
+  ) async {
     final orderId = order['order_id']?.toString() ?? '0';
 
     // Optimistic local update: move the order between lists immediately so the
@@ -173,7 +173,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
     setState(() {
       _pendingOrders.removeWhere((o) => o['order_id']?.toString() == orderId);
       _acceptedOrders.removeWhere((o) => o['order_id']?.toString() == orderId);
-      _dispatchedOrders.removeWhere((o) => o['order_id']?.toString() == orderId);
+      _dispatchedOrders.removeWhere(
+        (o) => o['order_id']?.toString() == orderId,
+      );
 
       if (action == 'ACCEPT') {
         _acceptedOrders.insert(0, {...order, 'status': 'ACCEPTED'});
@@ -204,7 +206,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
       // manual retry instead of losing the action entirely.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText('Order $action saved locally but not confirmed by server yet — tap to retry.'),
+          content: LiveTranslatedText(
+            'Order $action saved locally but not confirmed by server yet — tap to retry.',
+          ),
           action: SnackBarAction(
             label: 'RETRY',
             onPressed: () => _updateOrderStatus(order, action),
@@ -253,13 +257,18 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
   @override
   Widget build(BuildContext context) {
     if (_shopId.isEmpty || _shopId == '0') {
-      return const Scaffold(body: Center(child: LiveTranslatedText('Invalid Shop Profile')));
+      return const Scaffold(
+        body: Center(child: LiveTranslatedText('Invalid Shop Profile')),
+      );
     }
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const LiveTranslatedText('Online Orders', style: TextStyle(color: Colors.black87)),
+        title: const LiveTranslatedText(
+          'Online Orders',
+          style: TextStyle(color: Colors.black87),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
@@ -304,7 +313,8 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
   Widget _buildOrderList({
     required List<Map<String, dynamic>> orders,
     required String emptyText,
-    required String? nextAction, // 'ACCEPT' | 'DISPATCH' | 'DELIVER' | null (no next stage from here)
+    required String?
+    nextAction, // 'ACCEPT' | 'DISPATCH' | 'DELIVER' | null (no next stage from here)
   }) {
     return RefreshIndicator(
       onRefresh: _fetchAllOrders,
@@ -312,7 +322,12 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
           ? ListView(
               children: [
                 const SizedBox(height: 100),
-                Center(child: LiveTranslatedText(emptyText, style: const TextStyle(color: Colors.black54))),
+                Center(
+                  child: LiveTranslatedText(
+                    emptyText,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ),
               ],
             )
           : ListView.builder(
@@ -332,55 +347,100 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          LiveTranslatedText('Order #$orderId',
-                              style: const TextStyle(
-                                  color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)),
+                          LiveTranslatedText(
+                            'Order #$orderId',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
                           if (syncing)
-                            const Badge(label: LiveTranslatedText('SYNCING'), backgroundColor: Colors.orange)
+                            const Badge(
+                              label: LiveTranslatedText('SYNCING'),
+                              backgroundColor: Colors.orange,
+                            )
                           else if (nextAction == 'ACCEPT')
-                            const Badge(label: LiveTranslatedText('NEW'), backgroundColor: Colors.redAccent)
+                            const Badge(
+                              label: LiveTranslatedText('NEW'),
+                              backgroundColor: Colors.redAccent,
+                            )
                           else if (nextAction == 'DISPATCH')
-                            const Badge(label: LiveTranslatedText('ACCEPTED'), backgroundColor: Colors.green)
+                            const Badge(
+                              label: LiveTranslatedText('ACCEPTED'),
+                              backgroundColor: Colors.green,
+                            )
                           else
-                            const Badge(label: LiveTranslatedText('DISPATCHED'), backgroundColor: Colors.blue),
+                            const Badge(
+                              label: LiveTranslatedText('DISPATCHED'),
+                              backgroundColor: Colors.blue,
+                            ),
                         ],
                       ),
                       const Divider(color: Colors.black12, height: 24),
                       // FIX: backend never sends 'customer_email' -- it sends
                       // customer_name + customer_phone. This previously
                       // always rendered "Customer: null".
-                      LiveTranslatedText('Customer: ${order['customer_name'] ?? 'Guest'}',
-                          style: const TextStyle(color: Colors.black87, fontSize: 16)),
+                      LiveTranslatedText(
+                        'Customer: ${order['customer_name'] ?? 'Guest'}',
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 16,
+                        ),
+                      ),
                       if ((order['customer_phone'] ?? '').toString().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: LiveTranslatedText(order['customer_phone'].toString(),
-                              style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                          child: LiveTranslatedText(
+                            order['customer_phone'].toString(),
+                            style: const TextStyle(
+                              color: Colors.black54,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
-                      if ((order['delivery_address'] ?? '').toString().isNotEmpty)
+                      if ((order['delivery_address'] ?? '')
+                          .toString()
+                          .isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: LiveTranslatedText('Deliver to: ${order['delivery_address']}',
-                              style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                          child: LiveTranslatedText(
+                            'Deliver to: ${order['delivery_address']}',
+                            style: const TextStyle(
+                              color: Colors.black54,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       const SizedBox(height: 16),
-                      const LiveTranslatedText('Items Requested:', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                      const LiveTranslatedText(
+                        'Items Requested:',
+                        style: TextStyle(color: Colors.black54, fontSize: 14),
+                      ),
                       const SizedBox(height: 8),
                       ...items.map((item) {
                         // FIX: backend field is 'unit_price', not 'price' -- previously always 0/blank.
                         final qty = item['quantity'] ?? 1;
-                        final unitPrice = (item['unit_price'] is num) ? (item['unit_price'] as num) : 0;
-                        final qtyNum = (qty is num) ? qty : (num.tryParse(qty.toString()) ?? 1);
+                        final unitPrice = (item['unit_price'] is num)
+                            ? (item['unit_price'] as num)
+                            : 0;
+                        final qtyNum = (qty is num)
+                            ? qty
+                            : (num.tryParse(qty.toString()) ?? 1);
                         final lineTotal = unitPrice * qtyNum;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 4.0),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              LiveTranslatedText('${qty}x ${item['product_name'] ?? 'Item'}',
-                                  style: const TextStyle(color: Colors.black87)),
-                              LiveTranslatedText('Rs ${lineTotal.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Colors.black87)),
+                              LiveTranslatedText(
+                                '${qty}x ${item['product_name'] ?? 'Item'}',
+                                style: const TextStyle(color: Colors.black87),
+                              ),
+                              LiveTranslatedText(
+                                'Rs ${lineTotal.toStringAsFixed(2)}',
+                                style: const TextStyle(color: Colors.black87),
+                              ),
                             ],
                           ),
                         );
@@ -389,10 +449,21 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const LiveTranslatedText('Total Value', style: TextStyle(color: Colors.black54, fontSize: 16)),
-                          LiveTranslatedText('Rs ${order['total_amount']}',
-                              style: const TextStyle(
-                                  color: Colors.green, fontSize: 20, fontWeight: FontWeight.bold)),
+                          const LiveTranslatedText(
+                            'Total Value',
+                            style: TextStyle(
+                              color: Colors.black54,
+                              fontSize: 16,
+                            ),
+                          ),
+                          LiveTranslatedText(
+                            'Rs ${order['total_amount']}',
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       if (nextAction == 'ACCEPT') ...[
@@ -401,10 +472,14 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: syncing ? null : () => _updateOrderStatus(order, 'REJECT'),
+                                onPressed: syncing
+                                    ? null
+                                    : () => _updateOrderStatus(order, 'REJECT'),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: Colors.redAccent,
-                                  side: const BorderSide(color: Colors.redAccent),
+                                  side: const BorderSide(
+                                    color: Colors.redAccent,
+                                  ),
                                 ),
                                 child: const LiveTranslatedText('Reject'),
                               ),
@@ -412,7 +487,9 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                             const SizedBox(width: 16),
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: syncing ? null : () => _updateOrderStatus(order, 'ACCEPT'),
+                                onPressed: syncing
+                                    ? null
+                                    : () => _updateOrderStatus(order, 'ACCEPT'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
@@ -427,10 +504,20 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: syncing ? null : () => _updateOrderStatus(order, 'DISPATCH'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                            icon: const Icon(Icons.local_shipping_outlined, size: 18),
-                            label: const LiveTranslatedText('Mark as Dispatched'),
+                            onPressed: syncing
+                                ? null
+                                : () => _updateOrderStatus(order, 'DISPATCH'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(
+                              Icons.local_shipping_outlined,
+                              size: 18,
+                            ),
+                            label: const LiveTranslatedText(
+                              'Mark as Dispatched',
+                            ),
                           ),
                         ),
                       ] else if (nextAction == 'DELIVER') ...[
@@ -438,15 +525,28 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: syncing ? null : () => _updateOrderStatus(order, 'DELIVER'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                            icon: const Icon(Icons.check_circle_outline, size: 18),
-                            label: const LiveTranslatedText('Mark as Delivered'),
+                            onPressed: syncing
+                                ? null
+                                : () => _updateOrderStatus(order, 'DELIVER'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(
+                              Icons.check_circle_outline,
+                              size: 18,
+                            ),
+                            label: const LiveTranslatedText(
+                              'Mark as Delivered',
+                            ),
                           ),
                         ),
                       ] else if (syncing) ...[
                         const SizedBox(height: 12),
-                        const LiveTranslatedText('Confirming with server…', style: TextStyle(color: Colors.orange, fontSize: 12)),
+                        const LiveTranslatedText(
+                          'Confirming with server…',
+                          style: TextStyle(color: Colors.orange, fontSize: 12),
+                        ),
                       ],
                     ],
                   ),

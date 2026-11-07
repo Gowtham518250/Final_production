@@ -3,6 +3,89 @@ import 'invoice_dedup_helper.dart';
 /// Keeps transaction event timestamps timezone-aware when building UI view
 /// models, and reconciles local sale/server invoice mirrors using all stable IDs.
 class TransactionReconciliationHelper {
+  /// Build the display rows for the exact canonical, date-valid bill set used
+  /// by lifetime analytics. Category callbacks must partition each row once.
+  static List<Map<String, dynamic>> buildCanonicalSalesTransactions({
+    required List<Map<String, dynamic>> sales,
+    required DateTime Function(Map<String, dynamic>) businessDateOf,
+    required DateTime? Function(Map<String, dynamic>) eventTimeOf,
+    required bool Function(Map<String, dynamic>) isKhataSale,
+    required bool Function(Map<String, dynamic>) isOnlineSale,
+  }) {
+    return sales.map((sale) {
+      final businessDate = businessDateOf(sale);
+      final eventTime = eventTimeOf(sale);
+      final id =
+          sale['sale_id'] ??
+          sale['invoice_number'] ??
+          sale['id'] ??
+          sale['transaction_key'];
+      final paymentMethod = (sale['payment_method'] ?? '').toString();
+      final type = isKhataSale(sale)
+          ? 'Khata Sale'
+          : isOnlineSale(sale)
+          ? 'Online Sale'
+          : 'Cash Sale';
+      final eventTimestamp = serializeEventTime(eventTime);
+      final date =
+          eventTimestamp ??
+          '${businessDate.year.toString().padLeft(4, '0')}-'
+              '${businessDate.month.toString().padLeft(2, '0')}-'
+              '${businessDate.day.toString().padLeft(2, '0')}';
+      final items = sale['items'] ?? sale['line_items'] ?? const [];
+      final amount = _amount(sale['total_amount'] ?? sale['total']);
+
+      return <String, dynamic>{
+        'id': id,
+        'amount': amount,
+        'date': date,
+        'event_timestamp': eventTimestamp,
+        'business_date':
+            '${businessDate.year.toString().padLeft(4, '0')}-'
+            '${businessDate.month.toString().padLeft(2, '0')}-'
+            '${businessDate.day.toString().padLeft(2, '0')}',
+        'customer': sale['customer_name'] ?? 'Walk-in Customer',
+        'customer_phone': sale['customer_phone'],
+        'items': items,
+        'raw': sale,
+        'type': type,
+        if (type == 'Online Sale' && paymentMethod.trim().isNotEmpty)
+          'payment_method': paymentMethod,
+      };
+    }).toList();
+  }
+
+  static double _amount(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  /// Parse an event timestamp for UI display in the device's local timezone.
+  /// Date-only values remain local calendar dates; timezone-free event times
+  /// are UTC, matching the app's serialized event timestamp convention.
+  static DateTime? parseEventTime(dynamic rawValue) {
+    if (rawValue == null) return null;
+    final value = rawValue.toString().trim();
+    if (value.isEmpty || value == 'null') return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return null;
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return parsed;
+    final hasExplicitZone =
+        value.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(value);
+    return hasExplicitZone
+        ? parsed.toLocal()
+        : DateTime.parse('${value}Z').toLocal();
+  }
+
+  /// Combine local and remote rows before deduplicating, so loading a remote
+  /// ledger never discards transactions already collected from local sales.
+  static List<Map<String, dynamic>> mergeAndDedupe(
+    List<Map<String, dynamic>> localTransactions,
+    List<Map<String, dynamic>> remoteTransactions,
+  ) {
+    return dedupe([...localTransactions, ...remoteTransactions]);
+  }
+
   /// Convert an already-localized DateTime back to an unambiguous UTC ISO
   /// timestamp before putting it into a string-backed view model.
   static String? serializeEventTime(DateTime? eventTime) {
@@ -43,6 +126,7 @@ class TransactionReconciliationHelper {
       }
       return current;
     }
+
     void union(int a, int b) {
       final left = root(a);
       final right = root(b);
@@ -87,11 +171,7 @@ class TransactionReconciliationHelper {
           }
           raw[entry.key] = value;
         }
-        merged = <String, dynamic>{
-          ...merged,
-          ...incoming,
-          'raw': raw,
-        };
+        merged = <String, dynamic>{...merged, ...incoming, 'raw': raw};
       }
       result.add(merged);
     }

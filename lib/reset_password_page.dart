@@ -18,7 +18,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController otpController = TextEditingController();
   final TextEditingController newPasswordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
 
   bool isLoading = false;
   bool otpSent = false;
@@ -88,7 +89,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     final newPass = newPasswordController.text;
     final confirmPass = confirmPasswordController.text;
 
-    if (email.isEmpty || otp.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
+    if (email.isEmpty ||
+        otp.isEmpty ||
+        newPass.isEmpty ||
+        confirmPass.isEmpty) {
       setState(() => errorMessage = 'All fields are required');
       return;
     }
@@ -102,8 +106,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         !RegExp(r'[A-Z]').hasMatch(newPass) ||
         !RegExp(r'[a-z]').hasMatch(newPass) ||
         !RegExp(r'\d').hasMatch(newPass)) {
-      setState(() => errorMessage =
-          'Password must be at least 8 characters and contain uppercase, lowercase, and a number.');
+      setState(
+        () => errorMessage =
+            'Password must be at least 8 characters and contain uppercase, lowercase, and a number.',
+      );
       return;
     }
 
@@ -122,22 +128,18 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       if (verifyResult['success'] != true) {
         setState(() {
           errorMessage =
-              verifyResult['message']?.toString() ??
-              'Invalid or expired OTP.';
+              verifyResult['message']?.toString() ?? 'Invalid or expired OTP.';
         });
         return;
       }
 
       // OTP is generated and verified locally first. The backend then
       // performs the actual password write and re-validates the OTP.
-      final response = await ApiClient.postJson(
-        '/auth/verify-reset-otp',
-        {
-          'email': email,
-          'otp': otp,
-          'password': newPass,
-        },
-      );
+      final response = await ApiClient.postJson('/auth/verify-reset-otp', {
+        'email': email,
+        'otp': otp,
+        'password': newPass,
+      });
 
       if (!mounted) return;
 
@@ -152,10 +154,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         await Future.delayed(const Duration(seconds: 1));
 
         if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/login',
-            (route) => false,
-          );
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil('/login', (route) => false);
         }
       } else {
         Map<String, dynamic> data = {};
@@ -202,13 +203,17 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             const SizedBox(height: 20),
             LiveTranslatedText(
               'Forgot Password?',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             LiveTranslatedText(
               'Enter your email to receive a password reset code',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -256,7 +261,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 decoration: InputDecoration(
                   label: LiveTranslatedText('Email Address'),
                   prefixIcon: const Icon(Icons.email),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   enabled: !isLoading,
                 ),
                 keyboardType: TextInputType.emailAddress,
@@ -265,11 +272,13 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               ElevatedButton.icon(
                 onPressed: isLoading ? null : sendResetOTP,
                 icon: const Icon(Icons.send),
-                label: isLoading ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ) : const LiveTranslatedText('Send Reset Code'),
+                label: isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const LiveTranslatedText('Send Reset Code'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -284,7 +293,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 decoration: InputDecoration(
                   label: LiveTranslatedText('Email Address'),
                   prefixIcon: const Icon(Icons.email),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   enabled: false,
                 ),
                 readOnly: true,
@@ -297,7 +308,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 decoration: InputDecoration(
                   label: LiveTranslatedText('Enter Reset Code (OTP)'),
                   prefixIcon: const Icon(Icons.code),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   enabled: !isLoading,
                 ),
                 keyboardType: TextInputType.number,
@@ -312,10 +325,15 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   label: LiveTranslatedText('New Password'),
                   prefixIcon: const Icon(Icons.lock),
                   suffixIcon: IconButton(
-                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showPassword = !showPassword),
+                    icon: Icon(
+                      showPassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => showPassword = !showPassword),
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   enabled: !isLoading,
                 ),
               ),
@@ -329,10 +347,15 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   label: LiveTranslatedText('Confirm Password'),
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    icon: Icon(showPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => showPassword = !showPassword),
+                    icon: Icon(
+                      showPassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setState(() => showPassword = !showPassword),
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   enabled: !isLoading,
                 ),
               ),
@@ -341,11 +364,13 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               // Reset Button
               ElevatedButton.icon(
                 onPressed: isLoading ? null : resetPassword,
-                icon: isLoading ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ) : const Icon(Icons.check),
+                icon: isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check),
                 label: const LiveTranslatedText('Reset Password'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -355,14 +380,16 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
               // Request new OTP
               TextButton(
-                onPressed: isLoading ? null : () => setState(() {
-                  otpSent = false;
-                  otpController.clear();
-                  newPasswordController.clear();
-                  confirmPasswordController.clear();
-                  errorMessage = '';
-                  successMessage = '';
-                }),
+                onPressed: isLoading
+                    ? null
+                    : () => setState(() {
+                        otpSent = false;
+                        otpController.clear();
+                        newPasswordController.clear();
+                        confirmPasswordController.clear();
+                        errorMessage = '';
+                        successMessage = '';
+                      }),
                 child: const LiveTranslatedText('Request a new code?'),
               ),
             ],

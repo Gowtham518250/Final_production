@@ -12,9 +12,9 @@ class CartService {
   static Future<List<Map<String, dynamic>>> getCartItems() async {
     final prefs = await SharedPreferences.getInstance();
     final cartJson = prefs.getString(_cartKey);
-    
+
     if (cartJson == null) return [];
-    
+
     try {
       final List<dynamic> decoded = json.decode(cartJson);
       return decoded.cast<Map<String, dynamic>>();
@@ -33,12 +33,15 @@ class CartService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Add item to cart
-  static Future<void> addToCart(Map<String, dynamic> product, {int quantity = 1}) async {
+  static Future<void> addToCart(
+    Map<String, dynamic> product, {
+    int quantity = 1,
+  }) async {
     final cartItems = await getCartItems();
-    
+
     final productId = (product['id'] ?? product['product_id']).toString();
-    final existingIndex = cartItems.indexWhere((item) => 
-      (item['product_id'] ?? item['id']).toString() == productId
+    final existingIndex = cartItems.indexWhere(
+      (item) => (item['product_id'] ?? item['id']).toString() == productId,
     );
 
     if (existingIndex != -1) {
@@ -64,9 +67,9 @@ class CartService {
   /// 🔧 FLIPKART-LEVEL: Update item quantity
   static Future<void> updateQuantity(String productId, int quantity) async {
     final cartItems = await getCartItems();
-    
-    final index = cartItems.indexWhere((item) => 
-      (item['product_id'] ?? item['id']).toString() == productId
+
+    final index = cartItems.indexWhere(
+      (item) => (item['product_id'] ?? item['id']).toString() == productId,
     );
 
     if (index != -1) {
@@ -82,8 +85,8 @@ class CartService {
   /// 🔧 FLIPKART-LEVEL: Remove item from cart
   static Future<void> removeFromCart(String productId) async {
     final cartItems = await getCartItems();
-    cartItems.removeWhere((item) => 
-      (item['product_id'] ?? item['id']).toString() == productId
+    cartItems.removeWhere(
+      (item) => (item['product_id'] ?? item['id']).toString() == productId,
     );
     await saveCartItems(cartItems);
   }
@@ -99,13 +102,17 @@ class CartService {
   static Future<double> getCartTotal() async {
     final cartItems = await getCartItems();
     double total = 0.0;
-    
+
     for (var item in cartItems) {
       final price = item['price'] ?? 0;
       final quantity = item['quantity'] ?? 1;
-      total += (price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0.0) * quantity;
+      total +=
+          (price is num
+              ? price.toDouble()
+              : double.tryParse(price.toString()) ?? 0.0) *
+          quantity;
     }
-    
+
     return total;
   }
 
@@ -113,19 +120,19 @@ class CartService {
   static Future<int> getCartItemCount() async {
     final cartItems = await getCartItems();
     int count = 0;
-    
+
     for (var item in cartItems) {
       count += (item['quantity'] ?? 1) as int;
     }
-    
+
     return count;
   }
 
   /// 🔧 FLIPKART-LEVEL: Check if product is in cart
   static Future<bool> isInCart(String productId) async {
     final cartItems = await getCartItems();
-    return cartItems.any((item) => 
-      (item['product_id'] ?? item['id']).toString() == productId
+    return cartItems.any(
+      (item) => (item['product_id'] ?? item['id']).toString() == productId,
     );
   }
 
@@ -143,11 +150,11 @@ class CartService {
   static Future<Map<String, dynamic>> validateCartStock() async {
     final cartItems = await getCartItems();
     final outOfStockItems = <Map<String, dynamic>>[];
-    
+
     for (var item in cartItems) {
       final requestedQty = item['quantity'] ?? 1;
       final availableStock = item['stock'] ?? 0;
-      
+
       if (requestedQty > availableStock) {
         outOfStockItems.add({
           'product_id': item['product_id'],
@@ -157,15 +164,15 @@ class CartService {
         });
       }
     }
-    
-    return {
-      'valid': outOfStockItems.isEmpty,
-      'out_of_stock': outOfStockItems,
-    };
+
+    return {'valid': outOfStockItems.isEmpty, 'out_of_stock': outOfStockItems};
   }
 
   /// 🔧 FLIPKART-LEVEL: Apply coupon code
-  static Future<Map<String, dynamic>> applyCoupon(String couponCode, double cartTotal) async {
+  static Future<Map<String, dynamic>> applyCoupon(
+    String couponCode,
+    double cartTotal,
+  ) async {
     // This would typically call an API to validate the coupon
     // For now, implementing basic coupon logic
     final coupons = {
@@ -219,7 +226,7 @@ class CartService {
       // For now, just update the sync timestamp
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_cartSyncKey, DateTime.now().toIso8601String());
-      
+
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Error syncing cart: $e');
@@ -231,7 +238,7 @@ class CartService {
   static Future<void> mergeCarts(List<Map<String, dynamic>> serverCart) async {
     final localCart = await getCartItems();
     final mergedCart = <Map<String, dynamic>>[];
-    
+
     // Create a map of server cart items for easy lookup
     final serverCartMap = <String, Map<String, dynamic>>{};
     for (var item in serverCart) {
@@ -242,13 +249,13 @@ class CartService {
     // Merge local cart with server cart
     for (var localItem in localCart) {
       final productId = (localItem['product_id'] ?? localItem['id']).toString();
-      
+
       if (serverCartMap.containsKey(productId)) {
         // Item exists in both carts, use the higher quantity
         final serverItem = serverCartMap[productId]!;
         final localQty = localItem['quantity'] ?? 1;
         final serverQty = serverItem['quantity'] ?? 1;
-        
+
         mergedCart.add({
           ...serverItem,
           'quantity': localQty > serverQty ? localQty : serverQty,

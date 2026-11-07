@@ -41,10 +41,7 @@ void main() {
     });
 
     test('does not request fallback for an empty source', () {
-      expect(
-        TranslationFallbackPolicy.needsRemoteFallback('', ''),
-        isFalse,
-      );
+      expect(TranslationFallbackPolicy.needsRemoteFallback('', ''), isFalse);
     });
   });
 }

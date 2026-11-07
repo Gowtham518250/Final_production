@@ -13,7 +13,10 @@ class StockAlertService {
     required int productId,
   }) async {
     try {
-      if (kDebugMode) debugPrint('📦 Checking stock after sale: $productName (-$quantitySold units)');
+      if (kDebugMode)
+        debugPrint(
+          '📦 Checking stock after sale: $productName (-$quantitySold units)',
+        );
 
       // Fetch current stock from backend
       final response = await ApiClient.getJson(
@@ -22,12 +25,13 @@ class StockAlertService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final currentStock = double.tryParse(
+        final currentStock =
+            double.tryParse(
               (data['current_stock'] ?? data['stock'] ?? 0).toString(),
-            ) ?? 0.0;
-        final minStock = double.tryParse(
-              (data['min_stock'] ?? 10).toString(),
-            ) ?? 10.0;
+            ) ??
+            0.0;
+        final minStock =
+            double.tryParse((data['min_stock'] ?? 10).toString()) ?? 10.0;
 
         if (kDebugMode) {
           debugPrint('📊 Current stock: $currentStock, Min: $minStock');
@@ -82,7 +86,8 @@ class StockAlertService {
       minStock: minStock,
     );
 
-    if (kDebugMode) debugPrint('🚨 Low stock alert: $productName ($currentStock/$minStock)');
+    if (kDebugMode)
+      debugPrint('🚨 Low stock alert: $productName ($currentStock/$minStock)');
   }
 
   /// Get all products with low stock
@@ -95,7 +100,7 @@ class StockAlertService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> lowStockList = data['low_stock_products'] ?? [];
-        
+
         return List<Map<String, dynamic>>.from(lowStockList);
       }
       return [];
@@ -106,7 +111,9 @@ class StockAlertService {
   }
 
   /// Get stock level for specific product
-  static Future<Map<String, dynamic>> getProductStockLevel(int productId) async {
+  static Future<Map<String, dynamic>> getProductStockLevel(
+    int productId,
+  ) async {
     try {
       final response = await ApiClient.getJson(
         '${ApiClient.inventoryPrefix}/products/$productId',
@@ -114,18 +121,20 @@ class StockAlertService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final currentStock = double.tryParse(
+        final currentStock =
+            double.tryParse(
               (data['current_stock'] ?? data['stock'] ?? 0).toString(),
-            ) ?? 0.0;
-        final minStock = double.tryParse(
-              (data['min_stock'] ?? 10).toString(),
-            ) ?? 10.0;
+            ) ??
+            0.0;
+        final minStock =
+            double.tryParse((data['min_stock'] ?? 10).toString()) ?? 10.0;
         return {
           'success': true,
           'productName': data['product_name'] ?? 'Unknown',
           'currentStock': currentStock,
           'minStock': minStock,
-          'maxStock': double.tryParse((data['max_stock'] ?? 100).toString()) ?? 100.0,
+          'maxStock':
+              double.tryParse((data['max_stock'] ?? 100).toString()) ?? 100.0,
           'isLow': currentStock <= minStock,
           'isOutOfStock': currentStock <= 0,
         };
@@ -138,13 +147,14 @@ class StockAlertService {
   }
 
   /// Get alert history (local storage)
-  static Future<List<Map<String, dynamic>>> getAlertHistory({int limit = 50}) async {
+  static Future<List<Map<String, dynamic>>> getAlertHistory({
+    int limit = 50,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final alertsJson = prefs.getStringList('stock_alerts') ?? [];
 
-      return alertsJson
-          .reversed
+      return alertsJson.reversed
           .take(limit)
           .map((alert) => Map<String, dynamic>.from(json.decode(alert)))
           .toList();
@@ -163,7 +173,7 @@ class StockAlertService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       final alert = {
         'productId': productId,
         'productName': productName,
@@ -196,16 +206,13 @@ class StockAlertService {
   }) async {
     try {
       // Send to backend for email notification
-      await ApiClient.postJson(
-        '${ApiClient.inventoryPrefix}/alerts/trigger',
-        {
-          'product_id': productId,
-          'product_name': productName,
-          'current_stock': currentStock,
-          'min_stock': minStock,
-          'alert_type': 'LOW_STOCK',
-        },
-      );
+      await ApiClient.postJson('${ApiClient.inventoryPrefix}/alerts/trigger', {
+        'product_id': productId,
+        'product_name': productName,
+        'current_stock': currentStock,
+        'min_stock': minStock,
+        'alert_type': 'LOW_STOCK',
+      });
       if (kDebugMode) debugPrint('✉️ Backend notified for email alert');
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Backend notification failed: $e');
@@ -241,4 +248,3 @@ class StockAlertService {
     }
   }
 }
-

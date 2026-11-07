@@ -36,8 +36,10 @@ const _slides = [
     titleEnglish: 'Welcome to Your Shop',
     subtitleTelugu: 'AI Shop Pro — మీ వ్యాపారం, మీ నియంత్రణ',
     subtitleEnglish: 'AI Shop Pro — Your Business, Your Control',
-    descTelugu: 'భారతీయ చిన్న వ్యాపారుల కోసం ప్రత్యేకంగా తయారైన యాప్. అన్నీ ఒకే చోట.',
-    descEnglish: 'Built specially for Indian small shop owners. Everything in one place.',
+    descTelugu:
+        'భారతీయ చిన్న వ్యాపారుల కోసం ప్రత్యేకంగా తయారైన యాప్. అన్నీ ఒకే చోట.',
+    descEnglish:
+        'Built specially for Indian small shop owners. Everything in one place.',
     icon: Icons.shopping_bag_rounded,
     accent: Color(0xFF6366F1),
     gradient: [Color(0xFF312E81), Color(0xFF4F46E5)],
@@ -47,8 +49,10 @@ const _slides = [
     titleEnglish: 'Hear Your UPI Payments',
     subtitleTelugu: 'Paytm, PhonePe, GPay — అన్నీ వినిపిస్తాయి',
     subtitleEnglish: 'Paytm, PhonePe, GPay — All Detected Automatically',
-    descTelugu: 'కస్టమర్ పేమెంట్ చేసిన వెంటనే మీ ఫోన్ చెప్తుంది "రూపాయలు వచ్చాయి". Soundbox కొనుక్కోవాల్సిన అవసరం లేదు!',
-    descEnglish: 'Your phone announces every payment instantly. No need to buy a Soundbox device!',
+    descTelugu:
+        'కస్టమర్ పేమెంట్ చేసిన వెంటనే మీ ఫోన్ చెప్తుంది "రూపాయలు వచ్చాయి". Soundbox కొనుక్కోవాల్సిన అవసరం లేదు!',
+    descEnglish:
+        'Your phone announces every payment instantly. No need to buy a Soundbox device!',
     icon: Icons.volume_up_rounded,
     accent: Color(0xFF10B981),
     gradient: [Color(0xFF064E3B), Color(0xFF059669)],
@@ -58,8 +62,10 @@ const _slides = [
     titleEnglish: 'Billing Made Super Easy',
     subtitleTelugu: '10 సెకన్లలో బిల్లు తయారు',
     subtitleEnglish: 'Make a Bill in Under 10 Seconds',
-    descTelugu: 'బార్కోడ్ స్కాన్ చేయండి లేదా పేరు టైప్ చేయండి. బిల్లు రెడీ. WhatsApp కి పంపించండి.',
-    descEnglish: 'Scan barcode or type item name. Bill is ready. Share on WhatsApp instantly.',
+    descTelugu:
+        'బార్కోడ్ స్కాన్ చేయండి లేదా పేరు టైప్ చేయండి. బిల్లు రెడీ. WhatsApp కి పంపించండి.',
+    descEnglish:
+        'Scan barcode or type item name. Bill is ready. Share on WhatsApp instantly.',
     icon: Icons.receipt_long_rounded,
     accent: Color(0xFFF59E0B),
     gradient: [Color(0xFF78350F), Color(0xFFD97706)],
@@ -69,8 +75,10 @@ const _slides = [
     titleEnglish: 'Track Credit Easily',
     subtitleTelugu: 'ఎవరు ఎంత అప్పు చేశారో తెలుసుకోండి',
     subtitleEnglish: 'Know Who Owes You and How Much',
-    descTelugu: 'కస్టమర్ల అప్పు రికార్డ్ చేయండి. వారికి WhatsApp రిమైండర్ పంపించండి. డబ్బు సేకరించండి.',
-    descEnglish: 'Record customer dues. Send WhatsApp reminders. Collect your money.',
+    descTelugu:
+        'కస్టమర్ల అప్పు రికార్డ్ చేయండి. వారికి WhatsApp రిమైండర్ పంపించండి. డబ్బు సేకరించండి.',
+    descEnglish:
+        'Record customer dues. Send WhatsApp reminders. Collect your money.',
     icon: Icons.account_balance_wallet_rounded,
     accent: Color(0xFF8B5CF6),
     gradient: [Color(0xFF3B0764), Color(0xFF7C3AED)],
@@ -242,7 +250,9 @@ class _OnboardingPageState extends State<OnboardingPage>
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.white60,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                   ),
                   child: LiveTranslatedText(
                     'Skip',
@@ -330,8 +340,9 @@ class _SlideContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final isTelugu = Localizations.localeOf(context).languageCode == 'te';
     final displayTitle = isTelugu ? slide.titleTelugu : slide.titleEnglish;
-    final displaySubtitle =
-        isTelugu ? slide.subtitleTelugu : slide.subtitleEnglish;
+    final displaySubtitle = isTelugu
+        ? slide.subtitleTelugu
+        : slide.subtitleEnglish;
     final displayDescription = isTelugu ? slide.descTelugu : slide.descEnglish;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -382,13 +393,19 @@ class _SlideContent extends StatelessWidget {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: slide.accent.withValues(alpha: 0.6 * glow),
+                                color: slide.accent.withValues(
+                                  alpha: 0.6 * glow,
+                                ),
                                 blurRadius: 30,
                                 spreadRadius: 2,
                               ),
                             ],
                           ),
-                          child: Icon(slide.icon, size: 36, color: Colors.white),
+                          child: Icon(
+                            slide.icon,
+                            size: 36,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -402,10 +419,13 @@ class _SlideContent extends StatelessWidget {
 
           // Telugu Title (Primary — big, bold)
           SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.25),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(parent: fadeTween, curve: Curves.easeOut)),
+            position:
+                Tween<Offset>(
+                  begin: const Offset(0, 0.25),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(parent: fadeTween, curve: Curves.easeOut),
+                ),
             child: FadeTransition(
               opacity: fadeTween,
               child: ShaderMask(
@@ -624,35 +644,46 @@ class _AuroraPainter extends CustomPainter {
     );
 
     // Draw 3 morphing blobs
-    _drawBlob(canvas, size,
-        cx: size.width * (0.2 + 0.15 * math.sin(t * math.pi * 2)),
-        cy: size.height * (0.25 + 0.08 * math.cos(t * math.pi * 2)),
-        radius: size.width * 0.45,
-        color: palette[0].withValues(alpha: 0.22));
+    _drawBlob(
+      canvas,
+      size,
+      cx: size.width * (0.2 + 0.15 * math.sin(t * math.pi * 2)),
+      cy: size.height * (0.25 + 0.08 * math.cos(t * math.pi * 2)),
+      radius: size.width * 0.45,
+      color: palette[0].withValues(alpha: 0.22),
+    );
 
-    _drawBlob(canvas, size,
-        cx: size.width * (0.75 + 0.1 * math.cos(t * math.pi * 2 + 1)),
-        cy: size.height * (0.55 + 0.1 * math.sin(t * math.pi * 2 + 1)),
-        radius: size.width * 0.40,
-        color: palette[1].withValues(alpha: 0.18));
+    _drawBlob(
+      canvas,
+      size,
+      cx: size.width * (0.75 + 0.1 * math.cos(t * math.pi * 2 + 1)),
+      cy: size.height * (0.55 + 0.1 * math.sin(t * math.pi * 2 + 1)),
+      radius: size.width * 0.40,
+      color: palette[1].withValues(alpha: 0.18),
+    );
 
-    _drawBlob(canvas, size,
-        cx: size.width * (0.5 + 0.12 * math.sin(t * math.pi * 2 + 2)),
-        cy: size.height * (0.78 + 0.06 * math.cos(t * math.pi * 2 + 2)),
-        radius: size.width * 0.35,
-        color: palette[0].withValues(alpha: 0.14));
+    _drawBlob(
+      canvas,
+      size,
+      cx: size.width * (0.5 + 0.12 * math.sin(t * math.pi * 2 + 2)),
+      cy: size.height * (0.78 + 0.06 * math.cos(t * math.pi * 2 + 2)),
+      radius: size.width * 0.35,
+      color: palette[0].withValues(alpha: 0.14),
+    );
   }
 
-  void _drawBlob(Canvas canvas, Size size,
-      {required double cx,
-      required double cy,
-      required double radius,
-      required Color color}) {
+  void _drawBlob(
+    Canvas canvas,
+    Size size, {
+    required double cx,
+    required double cy,
+    required double radius,
+    required Color color,
+  }) {
     final paint = Paint()
       ..shader = RadialGradient(
         colors: [color, Colors.transparent],
-      ).createShader(Rect.fromCircle(
-          center: Offset(cx, cy), radius: radius))
+      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: radius))
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 60);
     canvas.drawCircle(Offset(cx, cy), radius, paint);
   }
@@ -688,8 +719,7 @@ class _ParticlePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final p in particles) {
       final dy = (t * p.speed + p.phase / (math.pi * 2)) % 1.0;
-      final x = p.x * size.width +
-          math.sin((t + p.phase) * math.pi * 2) * 18;
+      final x = p.x * size.width + math.sin((t + p.phase) * math.pi * 2) * 18;
       final y = size.height - dy * size.height * 1.1;
 
       final alpha = (0.15 + 0.35 * math.sin((t + p.phase) * math.pi));

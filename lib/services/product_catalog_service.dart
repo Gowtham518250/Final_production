@@ -69,7 +69,11 @@ class ProductCatalogService {
       'subcategories': [
         {'id': 'equipment', 'name': 'Sports Equipment', 'icon': 'sports'},
         {'id': 'fitness', 'name': 'Fitness', 'icon': 'fitness_center'},
-        {'id': 'clothing', 'name': 'Sports Clothing', 'icon': 'sports_martial_arts'},
+        {
+          'id': 'clothing',
+          'name': 'Sports Clothing',
+          'icon': 'sports_martial_arts',
+        },
         {'id': 'accessories', 'name': 'Sports Accessories', 'icon': 'watch'},
       ],
     },
@@ -79,7 +83,7 @@ class ProductCatalogService {
   static Future<List<Map<String, dynamic>>> getCategories() async {
     final prefs = await SharedPreferences.getInstance();
     final categoriesJson = prefs.getString('product_categories');
-    
+
     if (categoriesJson != null) {
       try {
         final List<dynamic> decoded = json.decode(categoriesJson);
@@ -88,20 +92,24 @@ class ProductCatalogService {
         if (kDebugMode) debugPrint('Error loading categories: $e');
       }
     }
-    
+
     // Return default categories if none saved
     return _defaultCategories;
   }
 
   /// 🔧 FLIPKART-LEVEL: Save categories
-  static Future<void> saveCategories(List<Map<String, dynamic>> categories) async {
+  static Future<void> saveCategories(
+    List<Map<String, dynamic>> categories,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final categoriesJson = json.encode(categories);
     await prefs.setString('product_categories', categoriesJson);
   }
 
   /// 🔧 FLIPKART-LEVEL: Get category by ID
-  static Future<Map<String, dynamic>?> getCategoryById(String categoryId) async {
+  static Future<Map<String, dynamic>?> getCategoryById(
+    String categoryId,
+  ) async {
     final categories = await getCategories();
     for (var category in categories) {
       if (category['id'] == categoryId) {
@@ -112,7 +120,9 @@ class ProductCatalogService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Get subcategory by ID
-  static Future<Map<String, dynamic>?> getSubcategoryById(String subcategoryId) async {
+  static Future<Map<String, dynamic>?> getSubcategoryById(
+    String subcategoryId,
+  ) async {
     final categories = await getCategories();
     for (var category in categories) {
       final subcategories = category['subcategories'] as List<dynamic>?;
@@ -135,7 +145,10 @@ class ProductCatalogService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Add subcategory to a category
-  static Future<void> addSubcategory(String categoryId, Map<String, dynamic> subcategory) async {
+  static Future<void> addSubcategory(
+    String categoryId,
+    Map<String, dynamic> subcategory,
+  ) async {
     final categories = await getCategories();
     for (var category in categories) {
       if (category['id'] == categoryId) {
@@ -156,7 +169,10 @@ class ProductCatalogService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Delete subcategory
-  static Future<void> deleteSubcategory(String categoryId, String subcategoryId) async {
+  static Future<void> deleteSubcategory(
+    String categoryId,
+    String subcategoryId,
+  ) async {
     final categories = await getCategories();
     for (var category in categories) {
       if (category['id'] == categoryId) {
@@ -172,10 +188,14 @@ class ProductCatalogService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Assign product to category
-  static Future<void> assignProductToCategory(String productId, String categoryId, String subcategoryId) async {
+  static Future<void> assignProductToCategory(
+    String productId,
+    String categoryId,
+    String subcategoryId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final assignmentsJson = prefs.getString('product_category_assignments');
-    
+
     Map<String, dynamic> assignments = {};
     if (assignmentsJson != null) {
       try {
@@ -191,14 +211,20 @@ class ProductCatalogService {
       'assigned_at': DateTime.now().toIso8601String(),
     };
 
-    await prefs.setString('product_category_assignments', json.encode(assignments));
+    await prefs.setString(
+      'product_category_assignments',
+      json.encode(assignments),
+    );
   }
 
   /// 🔧 FLIPKART-LEVEL: Get products by category
-  static Future<List<String>> getProductsByCategory(String categoryId, {String? subcategoryId}) async {
+  static Future<List<String>> getProductsByCategory(
+    String categoryId, {
+    String? subcategoryId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final assignmentsJson = prefs.getString('product_category_assignments');
-    
+
     if (assignmentsJson == null) return [];
 
     try {
@@ -208,7 +234,8 @@ class ProductCatalogService {
       for (var entry in assignments.entries) {
         final assignment = entry.value as Map<String, dynamic>;
         if (assignment['category_id'] == categoryId) {
-          if (subcategoryId == null || assignment['subcategory_id'] == subcategoryId) {
+          if (subcategoryId == null ||
+              assignment['subcategory_id'] == subcategoryId) {
             productIds.add(entry.key);
           }
         }
@@ -222,16 +249,18 @@ class ProductCatalogService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Get category for a product
-  static Future<Map<String, dynamic>?> getProductCategory(String productId) async {
+  static Future<Map<String, dynamic>?> getProductCategory(
+    String productId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final assignmentsJson = prefs.getString('product_category_assignments');
-    
+
     if (assignmentsJson == null) return null;
 
     try {
       final assignments = json.decode(assignmentsJson) as Map<String, dynamic>;
       final assignment = assignments[productId] as Map<String, dynamic>?;
-      
+
       if (assignment != null) {
         final categoryId = assignment['category_id'] as String?;
         if (categoryId != null) {
@@ -246,10 +275,12 @@ class ProductCatalogService {
   }
 
   /// 🔧 FLIPKART-LEVEL: Search categories by name
-  static Future<List<Map<String, dynamic>>> searchCategories(String query) async {
+  static Future<List<Map<String, dynamic>>> searchCategories(
+    String query,
+  ) async {
     final categories = await getCategories();
     final lowerQuery = query.toLowerCase();
-    
+
     return categories.where((category) {
       final name = (category['name'] as String).toLowerCase();
       return name.contains(lowerQuery);

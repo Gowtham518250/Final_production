@@ -42,10 +42,7 @@ void main() {
     });
 
     test('zero total with zero paid does not crash', () {
-      expect(
-        () => SaleService.paymentStatusFor(0, 0),
-        returnsNormally,
-      );
+      expect(() => SaleService.paymentStatusFor(0, 0), returnsNormally);
     });
 
     test('large total remains numerically stable', () {
@@ -94,24 +91,15 @@ void main() {
     });
 
     test('negative paid value does not crash the status function', () {
-      expect(
-        () => SaleService.paymentStatusFor(-1, 100),
-        returnsNormally,
-      );
+      expect(() => SaleService.paymentStatusFor(-1, 100), returnsNormally);
     });
 
     test('negative total does not crash the status function', () {
-      expect(
-        () => SaleService.paymentStatusFor(0, -100),
-        returnsNormally,
-      );
+      expect(() => SaleService.paymentStatusFor(0, -100), returnsNormally);
     });
 
     test('very small decimal total does not crash', () {
-      expect(
-        () => SaleService.paymentStatusFor(0.001, 0.01),
-        returnsNormally,
-      );
+      expect(() => SaleService.paymentStatusFor(0.001, 0.01), returnsNormally);
     });
 
     test('very large decimal values do not crash', () {
@@ -131,10 +119,7 @@ void main() {
       ]) {
         expect(
           allowed.contains(
-            SaleService.paymentStatusFor(
-              pair[0] as double,
-              pair[1] as double,
-            ),
+            SaleService.paymentStatusFor(pair[0] as double, pair[1] as double),
           ),
           isTrue,
         );

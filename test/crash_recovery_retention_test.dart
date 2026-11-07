@@ -21,7 +21,8 @@ void main() {
   });
 
   test('retains recovery entries that could not be recovered', () async {
-    await CrashRecoveryService.instance.recoverIncompleteTransactionsForTesting();
+    await CrashRecoveryService.instance
+        .recoverIncompleteTransactionsForTesting();
 
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('incomplete_transactions');
@@ -33,12 +34,16 @@ void main() {
     expect(entries.single['data']['operation_id'], 'keep-this-record');
   });
 
-  test('removes the recovery key only when there is nothing left to retry', () async {
-    SharedPreferences.setMockInitialValues({'incomplete_transactions': '[]'});
+  test(
+    'removes the recovery key only when there is nothing left to retry',
+    () async {
+      SharedPreferences.setMockInitialValues({'incomplete_transactions': '[]'});
 
-    await CrashRecoveryService.instance.recoverIncompleteTransactionsForTesting();
+      await CrashRecoveryService.instance
+          .recoverIncompleteTransactionsForTesting();
 
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('incomplete_transactions'), isNull);
-  });
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('incomplete_transactions'), isNull);
+    },
+  );
 }

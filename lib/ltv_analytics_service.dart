@@ -11,12 +11,12 @@ class LTVAnalyticsService {
   static Future<Map<String, dynamic>> getOrCreateCohort() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id') ?? prefs.getInt('userId');
-    
+
     if (userId == null) return {};
 
     final cohortKey = 'cohort_${userId}_metadata';
     final existing = prefs.getString(cohortKey);
-    
+
     if (existing != null) {
       return json.decode(existing);
     }
@@ -40,7 +40,7 @@ class LTVAnalyticsService {
   static Future<double> calculateShopLTV(int userId) async {
     try {
       final sales = await LocalStorageService.loadSales();
-      
+
       double totalRevenue = 0;
       for (var sale in sales) {
         // Only count completed/paid sales
@@ -65,7 +65,7 @@ class LTVAnalyticsService {
       final prefs = await SharedPreferences.getInstance();
       final cohortKey = 'cohort_${userId}_metadata';
       final cohortJson = prefs.getString(cohortKey);
-      
+
       if (cohortJson == null) {
         return {
           'day_1': false,
@@ -77,9 +77,9 @@ class LTVAnalyticsService {
 
       final cohort = json.decode(cohortJson);
       final signupDate = DateTime.parse(cohort['signup_date']);
-      
+
       final sales = await LocalStorageService.loadSales();
-      
+
       // Get dates when sales occurred
       final activeDates = <DateTime>{};
       for (var sale in sales) {
@@ -100,29 +100,34 @@ class LTVAnalyticsService {
         'day_60': _isActiveOnDay(activeDates, signupDate, 60),
       };
     } catch (e) {
-      return {
-        'day_1': false,
-        'day_7': false,
-        'day_30': false,
-        'day_60': false,
-      };
+      return {'day_1': false, 'day_7': false, 'day_30': false, 'day_60': false};
     }
   }
 
   /// Check if user was active on a specific day
-  static bool _isActiveOnDay(Set<DateTime> activeDates, DateTime signupDate, int dayOffset) {
+  static bool _isActiveOnDay(
+    Set<DateTime> activeDates,
+    DateTime signupDate,
+    int dayOffset,
+  ) {
     final targetDate = signupDate.add(Duration(days: dayOffset));
-    final dayStart = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    final dayStart = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+    );
     final dayEnd = dayStart.add(const Duration(days: 1));
 
-    return activeDates.any((date) => date.isAfter(dayStart) && date.isBefore(dayEnd));
+    return activeDates.any(
+      (date) => date.isAfter(dayStart) && date.isBefore(dayEnd),
+    );
   }
 
   /// 📊 Detect Churn Risk (no activity for 7+ days)
   static Future<bool> isChurnRisk() async {
     try {
       final sales = await LocalStorageService.loadSales();
-      
+
       if (sales.isEmpty) return true; // No sales = high churn risk
 
       // Get last sale date
@@ -176,7 +181,7 @@ class LTVAnalyticsService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
-      
+
       if (userId <= 0) return {};
 
       final ltv = await calculateShopLTV(userId);
@@ -212,15 +217,22 @@ class LTVAnalyticsService {
     int score = 0;
 
     // LTV score (0-25)
-    if (ltv > 50000) score += 25;
-    else if (ltv > 20000) score += 20;
-    else if (ltv > 5000) score += 15;
-    else if (ltv > 0) score += 10;
+    if (ltv > 50000)
+      score += 25;
+    else if (ltv > 20000)
+      score += 20;
+    else if (ltv > 5000)
+      score += 15;
+    else if (ltv > 0)
+      score += 10;
 
     // LTV:CAC score (0-25)
-    if (ltvCacRatio > 5) score += 25;
-    else if (ltvCacRatio > 3) score += 20;
-    else if (ltvCacRatio > 1) score += 15;
+    if (ltvCacRatio > 5)
+      score += 25;
+    else if (ltvCacRatio > 3)
+      score += 20;
+    else if (ltvCacRatio > 1)
+      score += 15;
 
     // Retention score (0-25)
     final retentionDays = [
@@ -233,9 +245,12 @@ class LTVAnalyticsService {
     score += (retentionDays * 6);
 
     // Activity score (0-25)
-    if (retention['day_60'] == true) score += 25;
-    else if (retention['day_30'] == true) score += 20;
-    else if (retention['day_7'] == true) score += 15;
+    if (retention['day_60'] == true)
+      score += 25;
+    else if (retention['day_30'] == true)
+      score += 20;
+    else if (retention['day_7'] == true)
+      score += 15;
 
     if (score > 100) score = 100;
 
@@ -251,9 +266,9 @@ class LTVAnalyticsService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys();
-      
+
       final cohorts = <Map<String, dynamic>>[];
-      
+
       // Find all cohort metadata entries
       for (final key in allKeys) {
         if (key.startsWith('cohort_') && key.endsWith('_metadata')) {

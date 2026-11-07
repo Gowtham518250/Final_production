@@ -14,7 +14,8 @@ class SmartPaymentMatcherPage extends StatefulWidget {
   const SmartPaymentMatcherPage({Key? key}) : super(key: key);
 
   @override
-  State<SmartPaymentMatcherPage> createState() => _SmartPaymentMatcherPageState();
+  State<SmartPaymentMatcherPage> createState() =>
+      _SmartPaymentMatcherPageState();
 }
 
 class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
@@ -50,7 +51,10 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
       onError: (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: LiveTranslatedText('Error: $error'), backgroundColor: Colors.red),
+            SnackBar(
+              content: LiveTranslatedText('Error: $error'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       },
@@ -72,7 +76,10 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
     }
   }
 
-  void _handlePaymentDetected(Transaction payment, PaymentConfidence confidence) {
+  void _handlePaymentDetected(
+    Transaction payment,
+    PaymentConfidence confidence,
+  ) {
     PaymentConfirmationDialog.show(
       context,
       payment,
@@ -102,9 +109,7 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: LiveTranslatedText(
-              'Payment was not recorded: $error',
-            ),
+            content: LiveTranslatedText('Payment was not recorded: $error'),
             backgroundColor: Colors.red,
           ),
         );
@@ -332,7 +337,10 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
                       'Solution: Popup shows both options + phone matching\n' +
                           'User taps to confirm which customer it is\n' +
                           'System saves to audit trail for learning',
-                      style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ],
                 ),
@@ -369,7 +377,9 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Center(
-                    child: LiveTranslatedText('No audit entries yet. Simulate payments above.'),
+                    child: LiveTranslatedText(
+                      'No audit entries yet. Simulate payments above.',
+                    ),
                   ),
                 )
               else
@@ -378,7 +388,9 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
                   final status = entry['status'] ?? 'UNKNOWN';
                   final statusColor = status == 'AUTO_CONFIRMED'
                       ? Colors.green
-                      : (status == 'NEEDS_CONFIRMATION' ? Colors.orange : Colors.red);
+                      : (status == 'NEEDS_CONFIRMATION'
+                            ? Colors.orange
+                            : Colors.red);
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -404,7 +416,10 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: statusColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(4),
@@ -429,10 +444,14 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          if (entry['sale_id'] != null && entry['sale_id'].toString().isNotEmpty)
+                          if (entry['sale_id'] != null &&
+                              entry['sale_id'].toString().isNotEmpty)
                             LiveTranslatedText(
                               'Matched Sale: ${entry['sale_id']}',
-                              style: const TextStyle(fontSize: 10, color: Colors.blue),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue,
+                              ),
                             ),
                         ],
                       ),
@@ -471,10 +490,7 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
           const SizedBox(height: 4),
           LiveTranslatedText(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
         ],
@@ -498,10 +514,7 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
             title,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          LiveTranslatedText(
-            subtitle,
-            style: const TextStyle(fontSize: 11),
-          ),
+          LiveTranslatedText(subtitle, style: const TextStyle(fontSize: 11)),
         ],
       ),
       style: ElevatedButton.styleFrom(
@@ -526,16 +539,10 @@ class _SmartPaymentMatcherPageState extends State<SmartPaymentMatcherPage> {
         children: [
           LiveTranslatedText(
             title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
           const SizedBox(height: 6),
-          LiveTranslatedText(
-            content,
-            style: const TextStyle(fontSize: 12),
-          ),
+          LiveTranslatedText(content, style: const TextStyle(fontSize: 12)),
         ],
       ),
     );

@@ -23,41 +23,41 @@ class BackgroundSyncWorker {
 
   static const Duration _syncInterval = Duration(minutes: 5);
   static const Duration _highPriorityInterval = Duration(minutes: 1);
-  
+
   BackgroundSyncWorker._();
-  
+
   static BackgroundSyncWorker get instance {
     _instance ??= BackgroundSyncWorker._();
     return _instance!;
   }
-  
+
   /// Start the background sync worker
   Future<void> start() async {
     if (_isRunning) {
       if (kDebugMode) debugPrint('🔄 Background sync worker already running');
       return;
     }
-    
+
     _isRunning = true;
-    
+
     if (kDebugMode) debugPrint('🚀 Starting background sync worker');
-    
+
     // Initial sync
     await _performSync();
-    
+
     // Start periodic sync
     _syncTimer = Timer.periodic(_syncInterval, (_) async {
       await _performSync();
     });
-    
+
     // Start high-priority sync timer
     _startHighPrioritySync();
   }
-  
+
   /// Stop the background sync worker
   void stop() {
     if (!_isRunning) return;
-    
+
     _isRunning = false;
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -66,7 +66,7 @@ class BackgroundSyncWorker {
 
     if (kDebugMode) debugPrint('🛑 Background sync worker stopped');
   }
-  
+
   /// Start high-priority sync timer
   void _startHighPrioritySync() {
     _highPriorityTimer?.cancel();
@@ -74,61 +74,62 @@ class BackgroundSyncWorker {
       if (_isRunning) await _syncHighPriorityOperations();
     });
   }
-  
+
   /// Perform sync operation
   Future<void> _performSync() async {
     if (_isProcessing) {
       if (kDebugMode) debugPrint('⏳ Sync already in progress, skipping');
       return;
     }
-    
+
     _isProcessing = true;
-    
+
     try {
       // Check network connectivity
       final connectivityResult = await Connectivity().checkConnectivity();
       final hasNetwork = connectivityResult != ConnectivityResult.none;
-      
+
       if (!hasNetwork) {
         if (kDebugMode) debugPrint('🌐 No network connection, skipping sync');
         return;
       }
-      
+
       // Check if user is authenticated
       final isAuthenticated = await SessionManagementService.isTokenValid();
       if (!isAuthenticated) {
         if (kDebugMode) debugPrint('🔒 User not authenticated, skipping sync');
         return;
       }
-      
+
       // SyncService owns the canonical durable outbox and already dispatches it
       // on demand / on its throttled pulse. This worker only adapts legacy items.
       // Get legacy queue stats
       final stats = await OperationQueueService.instance.getQueueStats();
-      
+
       if (stats.pendingOperations == 0) {
         if (kDebugMode) debugPrint('✅ No pending operations to sync');
         return;
       }
-      
+
       if (kDebugMode) {
-        debugPrint('🔄 Starting sync: ${stats.pendingOperations} pending operations');
+        debugPrint(
+          '🔄 Starting sync: ${stats.pendingOperations} pending operations',
+        );
         debugPrint('   High priority: ${stats.highPriorityPending}');
       }
-      
+
       // Process operations
       await _processOperations();
-      
+
       // Clean up old operations
       await OperationQueueService.instance.cleanupOldOperations();
-      
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Sync error: $e');
     } finally {
       _isProcessing = false;
     }
   }
-  
+
   /// Process legacy high-priority work only when there is something pending.
   /// Canonical queued writes belong exclusively to SyncService.
   Future<void> _syncHighPriorityOperations() async {
@@ -156,11 +157,12 @@ class BackgroundSyncWorker {
       _isHighPriorityProcessing = false;
     }
   }
+
   /// 🔒 DATA VALIDATION: Validate operation data before sending to backend
   Future<ValidationResult> _validateOperationData(Operation operation) async {
     try {
       final data = operation.payload;
-      
+
       // Validate based on operation type
       switch (operation.type.toOperationString()) {
         case 'create_sale':
@@ -180,7 +182,10 @@ class BackgroundSyncWorker {
               );
             }
           }
-          return ValidationResult(isValid: true, message: 'Customer data valid');
+          return ValidationResult(
+            isValid: true,
+            message: 'Customer data valid',
+          );
         case 'update_stock':
           // Validate inventory data
           if (data['current_stock'] != null) {
@@ -194,9 +199,15 @@ class BackgroundSyncWorker {
               );
             }
           }
-          return ValidationResult(isValid: true, message: 'Inventory data valid');
+          return ValidationResult(
+            isValid: true,
+            message: 'Inventory data valid',
+          );
         default:
-          return ValidationResult(isValid: true, message: 'Data validation passed');
+          return ValidationResult(
+            isValid: true,
+            message: 'Data validation passed',
+          );
       }
     } catch (e) {
       return ValidationResult(
@@ -217,8 +228,7 @@ class BackgroundSyncWorker {
 
     final retries = int.tryParse(raw['retries']?.toString() ?? '') ?? 0;
     final nextRetries = retries + 1;
-    final backoffSeconds =
-        (1 << nextRetries.clamp(0, 6)).clamp(2, 120);
+    final backoffSeconds = (1 << nextRetries.clamp(0, 6)).clamp(2, 120);
 
     final updated = Map<String, dynamic>.from(raw)
       ..['status'] = nextRetries >= 10 ? 'FAILED' : 'PENDING'
@@ -234,45 +244,51 @@ class BackgroundSyncWorker {
 
     await SyncQueueManager.update(actionId, updated);
   }
+
   /// Process operations from the queue
   Future<void> _processOperations({OperationPriority? priorityOnly}) async {
     int processedCount = 0;
     int successCount = 0;
     int duplicateCount = 0;
     int errorCount = 0;
-    
+
     while (true) {
       // Get next operation
       final operation = await OperationQueueService.instance.getNextOperation();
-      
+
       if (operation == null) break;
       if (!await OperationQueueService.instance.isOwnedByCurrentSession(
         operation,
       )) {
         continue;
       }
-      
+
       // Skip if not matching priority filter
       if (priorityOnly != null && operation.priority != priorityOnly) {
         break;
       }
-      
+
       // Mark as in progress
-      await OperationQueueService.instance.markInProgress(operation.operationId);
-      
+      await OperationQueueService.instance.markInProgress(
+        operation.operationId,
+      );
+
       try {
         // 🔒 DATA VALIDATION: Validate operation data before sending to backend
         final validation = await _validateOperationData(operation);
         if (!validation.isValid) {
-          if (kDebugMode) debugPrint('⚠️ Operation data validation failed: ${validation.message}');
+          if (kDebugMode)
+            debugPrint(
+              '⚠️ Operation data validation failed: ${validation.message}',
+            );
           await OperationQueueService.instance.markFailed(
             operation.operationId,
-            error: 'Data validation failed: ${validation.message}'
+            error: 'Data validation failed: ${validation.message}',
           );
           errorCount++;
           continue;
         }
-        
+
         // Send to backend
         if (!await OperationQueueService.instance.isOwnedByCurrentSession(
           operation,
@@ -280,12 +296,14 @@ class BackgroundSyncWorker {
           continue;
         }
         final success = await _sendOperationToBackend(operation);
-        
+
         if (success) {
           // Mark as completed
-          await OperationQueueService.instance.markCompleted(operation.operationId);
+          await OperationQueueService.instance.markCompleted(
+            operation.operationId,
+          );
           successCount++;
-          
+
           if (kDebugMode) {
             debugPrint('✅ Operation completed: ${operation.operationId}');
           }
@@ -293,38 +311,39 @@ class BackgroundSyncWorker {
           // Mark as failed
           await OperationQueueService.instance.markFailed(
             operation.operationId,
-            error: 'Backend returned failure'
+            error: 'Backend returned failure',
           );
           errorCount++;
         }
-        
       } catch (e) {
         // Mark as failed
         await OperationQueueService.instance.markFailed(
           operation.operationId,
-          error: e.toString()
+          error: e.toString(),
         );
         errorCount++;
-        
+
         if (kDebugMode) {
           debugPrint('❌ Operation failed: ${operation.operationId} - $e');
         }
       }
-      
+
       processedCount++;
-      
+
       // Safety limit to prevent infinite loops
       if (processedCount >= 50) {
         if (kDebugMode) debugPrint('⚠️ Reached operation processing limit');
         break;
       }
     }
-    
+
     if (kDebugMode) {
-      debugPrint('📊 Sync complete: $processedCount processed, $successCount success, $duplicateCount duplicate, $errorCount errors');
+      debugPrint(
+        '📊 Sync complete: $processedCount processed, $successCount success, $duplicateCount duplicate, $errorCount errors',
+      );
     }
   }
-  
+
   /// Send operation to backend
   Future<bool> _sendOperationToBackend(Operation operation) async {
     try {
@@ -337,28 +356,30 @@ class BackgroundSyncWorker {
         'user_id': operation.userId,
         'timestamp': operation.createdTime.toIso8601String(),
       });
-      
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = _parseResponse(response.body);
-        
+
         // Check if operation was duplicate
         if (data['status'] == 'duplicate') {
-          if (kDebugMode) debugPrint('♻️ Duplicate operation skipped: ${operation.operationId}');
+          if (kDebugMode)
+            debugPrint(
+              '♻️ Duplicate operation skipped: ${operation.operationId}',
+            );
           return true; // Consider duplicate as success
         }
-        
+
         return data['status'] == 'success';
       } else {
         if (kDebugMode) debugPrint('❌ Backend error: ${response.statusCode}');
         return false;
       }
-      
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Network error sending operation: $e');
       return false;
     }
   }
-  
+
   /// Parse response JSON
   dynamic _parseResponse(String responseBody) {
     try {
@@ -373,25 +394,25 @@ class BackgroundSyncWorker {
       return {'status': 'error'};
     }
   }
-  
+
   /// Force immediate sync (manual trigger)
   Future<void> forceSync() async {
     if (kDebugMode) debugPrint('🔄 Force sync triggered');
-    
+
     // Cancel any existing sync
     if (_isProcessing) {
       await Future.delayed(Duration(seconds: 1));
     }
-    
+
     await _performSync();
   }
-  
+
   /// Get sync status
   Future<SyncStatus> getSyncStatus() async {
     final stats = await OperationQueueService.instance.getQueueStats();
     final connectivityResult = await Connectivity().checkConnectivity();
     final hasNetwork = connectivityResult != ConnectivityResult.none;
-    
+
     return SyncStatus(
       isRunning: _isRunning,
       isProcessing: _isProcessing,
@@ -415,7 +436,7 @@ class SyncStatus {
   final int failedOperations;
   final DateTime? lastSyncTime;
   final QueueHealth queueHealth;
-  
+
   SyncStatus({
     required this.isRunning,
     required this.isProcessing,
@@ -426,7 +447,7 @@ class SyncStatus {
     this.lastSyncTime,
     required this.queueHealth,
   });
-  
+
   /// Get overall sync health
   SyncHealth get overallHealth {
     if (!hasNetwork) return SyncHealth.offline;
@@ -436,7 +457,7 @@ class SyncStatus {
     if (pendingOperations == 0) return SyncHealth.excellent;
     return SyncHealth.good;
   }
-  
+
   /// Get status message
   String get statusMessage {
     switch (overallHealth) {
@@ -455,10 +476,4 @@ class SyncStatus {
 }
 
 /// Overall sync health
-enum SyncHealth {
-  excellent,
-  good,
-  warning,
-  critical,
-  offline,
-}
+enum SyncHealth { excellent, good, warning, critical, offline }

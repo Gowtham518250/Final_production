@@ -39,39 +39,42 @@ void main() {
       expect(rows.single.label, 'Rice · ₹50.00');
     });
 
-    test('merges the same chart-visible product and price across different catalog IDs', () {
-      final rows = ProductPriceAnalytics.aggregateSales([
-        {
-          'sale_id': 'local-bill',
-          'items': [
-            {
-              'product_id': 12,
-              'product_name': 'Rice',
-              'quantity': 1,
-              'unit_price': 50,
-              'line_total': 50,
-            },
-          ],
-        },
-        {
-          'sale_id': 'cloud-bill',
-          'items': [
-            {
-              'product_id': 9012,
-              'product_name': '  rice  ',
-              'quantity': 2,
-              'unit_price': 50,
-              'line_total': 100,
-            },
-          ],
-        },
-      ]);
+    test(
+      'merges the same chart-visible product and price across different catalog IDs',
+      () {
+        final rows = ProductPriceAnalytics.aggregateSales([
+          {
+            'sale_id': 'local-bill',
+            'items': [
+              {
+                'product_id': 12,
+                'product_name': 'Rice',
+                'quantity': 1,
+                'unit_price': 50,
+                'line_total': 50,
+              },
+            ],
+          },
+          {
+            'sale_id': 'cloud-bill',
+            'items': [
+              {
+                'product_id': 9012,
+                'product_name': '  rice  ',
+                'quantity': 2,
+                'unit_price': 50,
+                'line_total': 100,
+              },
+            ],
+          },
+        ]);
 
-      expect(rows, hasLength(1));
-      expect(rows.single.label, 'Rice · ₹50.00');
-      expect(rows.single.quantity, 3.0);
-      expect(rows.single.revenue, 150.0);
-    });
+        expect(rows, hasLength(1));
+        expect(rows.single.label, 'Rice · ₹50.00');
+        expect(rows.single.quantity, 3.0);
+        expect(rows.single.revenue, 150.0);
+      },
+    );
 
     test('shows the same product as separate entries at different prices', () {
       final rows = ProductPriceAnalytics.aggregateSales([
@@ -97,8 +100,10 @@ void main() {
 
       expect(rows, hasLength(2));
       expect(rows.map((row) => row.unitPrice).toSet(), equals({50.0, 60.0}));
-      expect(rows.map((row) => row.label).toSet(),
-          equals({'Rice · ₹50.00', 'Rice · ₹60.00'}));
+      expect(
+        rows.map((row) => row.label).toSet(),
+        equals({'Rice · ₹50.00', 'Rice · ₹60.00'}),
+      );
     });
 
     test('keeps different catalog products separate at the same price', () {
@@ -127,27 +132,24 @@ void main() {
       expect(rows.map((row) => row.key).toSet(), hasLength(2));
     });
 
-    test('supports flattened legacy sales rows and normalized name identity', () {
-      final rows = ProductPriceAnalytics.aggregateSales([
-        {
-          'product_name': '  Rice  ',
-          'quantity': 1,
-          'price': 50,
-          'line_total': 50,
-        },
-        {
-          'product_name': 'rice',
-          'qty': 2,
-          'unit_price': 50,
-          'total': 100,
-        },
-      ]);
+    test(
+      'supports flattened legacy sales rows and normalized name identity',
+      () {
+        final rows = ProductPriceAnalytics.aggregateSales([
+          {
+            'product_name': '  Rice  ',
+            'quantity': 1,
+            'price': 50,
+            'line_total': 50,
+          },
+          {'product_name': 'rice', 'qty': 2, 'unit_price': 50, 'total': 100},
+        ]);
 
-      expect(rows, hasLength(1));
-      expect(rows.single.quantity, 3.0);
-      expect(rows.single.revenue, 150.0);
-    });
-
+        expect(rows, hasLength(1));
+        expect(rows.single.quantity, 3.0);
+        expect(rows.single.revenue, 150.0);
+      },
+    );
 
     test('preserves non-Latin product names when grouping by price', () {
       final rows = ProductPriceAnalytics.aggregateSales([
@@ -175,14 +177,9 @@ void main() {
       expect(rows.single.revenue, 150.0);
     });
 
-
     test('derives selling price from legacy flattened invoice totals', () {
       final rows = ProductPriceAnalytics.aggregateSales([
-        {
-          'product_name': 'Rice',
-          'quantity': 3,
-          'total_amount': 150,
-        },
+        {'product_name': 'Rice', 'quantity': 3, 'total_amount': 150},
       ]);
 
       expect(rows, hasLength(1));

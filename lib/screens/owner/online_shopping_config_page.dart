@@ -14,7 +14,8 @@ class OnlineShoppingConfigPage extends StatefulWidget {
   const OnlineShoppingConfigPage({super.key});
 
   @override
-  State<OnlineShoppingConfigPage> createState() => _OnlineShoppingConfigPageState();
+  State<OnlineShoppingConfigPage> createState() =>
+      _OnlineShoppingConfigPageState();
 }
 
 class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
@@ -93,16 +94,21 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
         }
         if (permission == LocationPermission.denied ||
             permission == LocationPermission.deniedForever) {
-          throw Exception('Location permission is required to publish the shop.');
+          throw Exception(
+            'Location permission is required to publish the shop.',
+          );
         }
-        final position = await Geolocator.getCurrentPosition()
-            .timeout(const Duration(seconds: 15));
+        final position = await Geolocator.getCurrentPosition().timeout(
+          const Duration(seconds: 15),
+        );
         latitude = position.latitude;
         longitude = position.longitude;
       }
       final current = await OnlineStoreService.getOnlineSettings();
       if (current['success'] != true) {
-        throw Exception(current['error'] ?? 'Could not read current store settings.');
+        throw Exception(
+          current['error'] ?? 'Could not read current store settings.',
+        );
       }
       final result = await OnlineStoreService.setOnlineSettings({
         'is_online_store_enabled': value,
@@ -117,14 +123,18 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
         if (longitude != null) 'longitude': longitude,
       }).timeout(const Duration(seconds: 20));
       if (result['success'] != true) {
-        throw Exception(result['error'] ?? 'Failed to update online-store status.');
+        throw Exception(
+          result['error'] ?? 'Failed to update online-store status.',
+        );
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText(value
-              ? 'Shop is now live and visible to customers.'
-              : 'Shop is now offline.'),
+          content: LiveTranslatedText(
+            value
+                ? 'Shop is now live and visible to customers.'
+                : 'Shop is now offline.',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -132,7 +142,10 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
       if (!mounted) return;
       setState(() => _isOnline = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText('Failed to update online store: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: LiveTranslatedText('Failed to update online store: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isUpdatingOnlineStatus = false);
@@ -173,7 +186,7 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
       name = parts[0].replaceAll(RegExp(r'[0-9]'), '').trim();
       final priceMatch = RegExp(r'\d+').firstMatch(parts[1]);
       if (priceMatch != null) price = double.parse(priceMatch.group(0)!);
-      
+
       final qtyMatch = RegExp(r'\d+').firstMatch(parts[0]);
       if (qtyMatch != null) stock = int.parse(qtyMatch.group(0)!);
     }
@@ -181,10 +194,19 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
     _showAddItemDialog(name: name, price: price, stock: stock);
   }
 
-  void _showAddItemDialog({String name = '', double price = 0.0, int stock = 0, String imageUrl = ''}) {
+  void _showAddItemDialog({
+    String name = '',
+    double price = 0.0,
+    int stock = 0,
+    String imageUrl = '',
+  }) {
     final nameCtrl = TextEditingController(text: name);
-    final priceCtrl = TextEditingController(text: price > 0 ? price.toString() : '');
-    final stockCtrl = TextEditingController(text: stock > 0 ? stock.toString() : '');
+    final priceCtrl = TextEditingController(
+      text: price > 0 ? price.toString() : '',
+    );
+    final stockCtrl = TextEditingController(
+      text: stock > 0 ? stock.toString() : '',
+    );
     final imageCtrl = TextEditingController(text: imageUrl);
 
     showDialog(
@@ -195,9 +217,26 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(label: LiveTranslatedText('Item Name'))),
-              TextField(controller: priceCtrl, decoration: const InputDecoration(label: LiveTranslatedText('Price')), keyboardType: TextInputType.number),
-              TextField(controller: stockCtrl, decoration: const InputDecoration(label: LiveTranslatedText('Stock Qty')), keyboardType: TextInputType.number),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  label: LiveTranslatedText('Item Name'),
+                ),
+              ),
+              TextField(
+                controller: priceCtrl,
+                decoration: const InputDecoration(
+                  label: LiveTranslatedText('Price'),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: stockCtrl,
+                decoration: const InputDecoration(
+                  label: LiveTranslatedText('Stock Qty'),
+                ),
+                keyboardType: TextInputType.number,
+              ),
               TextField(
                 controller: imageCtrl,
                 decoration: const InputDecoration(
@@ -209,10 +248,16 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
               ElevatedButton.icon(
                 onPressed: () async {
                   final picker = ImagePicker();
-                  final file = await picker.pickImage(source: ImageSource.gallery);
+                  final file = await picker.pickImage(
+                    source: ImageSource.gallery,
+                  );
                   if (file != null && mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: LiveTranslatedText('Paste image URL above after uploading photo elsewhere.')),
+                      const SnackBar(
+                        content: LiveTranslatedText(
+                          'Paste image URL above after uploading photo elsewhere.',
+                        ),
+                      ),
                     );
                   }
                 },
@@ -223,7 +268,10 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const LiveTranslatedText('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const LiveTranslatedText('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -243,10 +291,14 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
                   'user_id': int.tryParse(_shopId) ?? 0,
                   'shop_id': _shopId,
                 });
-                
+
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: LiveTranslatedText('Saved — visible to customers when in stock')),
+                    const SnackBar(
+                      content: LiveTranslatedText(
+                        'Saved — visible to customers when in stock',
+                      ),
+                    ),
                   );
                 }
                 _loadShopData();
@@ -270,7 +322,10 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const LiveTranslatedText('Online Shopping Setup', style: TextStyle(color: Colors.black87)),
+        title: const LiveTranslatedText(
+          'Online Shopping Setup',
+          style: TextStyle(color: Colors.black87),
+        ),
         backgroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.black87),
         elevation: 1,
@@ -279,95 +334,148 @@ class _OnlineShoppingConfigPageState extends State<OnlineShoppingConfigPage> {
         onPressed: _isListening ? _stopListening : _startListening,
         backgroundColor: _isListening ? Colors.red : AppColors.primary,
         icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
-        label: LiveTranslatedText(_isListening ? 'Listening...' : 'Voice Add Stock'),
+        label: LiveTranslatedText(
+          _isListening ? 'Listening...' : 'Voice Add Stock',
+        ),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Colors.black))
-        : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                elevation: 0,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const LiveTranslatedText('Enable Online Store', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          LiveTranslatedText(
-                            _isOnline ? 'Customers can see your shop on the map.' : 'Your shop is currently hidden.',
-                            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.black))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  elevation: 0,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const LiveTranslatedText(
+                              'Enable Online Store',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            LiveTranslatedText(
+                              _isOnline
+                                  ? 'Customers can see your shop on the map.'
+                                  : 'Your shop is currently hidden.',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Switch(
+                          value: _isOnline,
+                          onChanged: _isUpdatingOnlineStatus
+                              ? null
+                              : _toggleOnlineStatus,
+                          activeColor: AppColors.primary,
+                        ),
+                        if (_isUpdatingOnlineStatus) ...[
+                          const SizedBox(width: 8),
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         ],
-                      ),
-                      Switch(
-                        value: _isOnline,
-                        onChanged: _isUpdatingOnlineStatus ? null : _toggleOnlineStatus,
-                        activeColor: AppColors.primary,
-                      ),
-                      if (_isUpdatingOnlineStatus) ...[
-                        const SizedBox(width: 8),
-                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const LiveTranslatedText('Online Inventory', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle, color: AppColors.primary),
-                    onPressed: _showAddItemDialog,
-                  )
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (_inventory.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Center(child: LiveTranslatedText('No items in online inventory. Add some using the Voice button!')),
-                )
-              else
-                ..._inventory.map((item) {
-                  final img = (item['image_url'] ?? item['imageUrl'] ?? '').toString();
-                  final name = item['product_name'] ?? item['name'] ?? 'Unknown';
-                  final stock = item['stock'] ?? item['quantity'] ?? 0;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: img.isNotEmpty
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(img, width: 48, height: 48, fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const CircleAvatar(
-                                        backgroundColor: AppColors.primary,
-                                        child: Icon(Icons.image, color: Colors.white, size: 20),
-                                      )),
-                            )
-                          : const CircleAvatar(
-                              backgroundColor: AppColors.primary,
-                              child: Icon(Icons.image, color: Colors.white),
-                            ),
-                      title: LiveTranslatedText(name.toString()),
-                      subtitle: LiveTranslatedText(stock == 0 ? 'Out of stock (hidden online)' : 'Stock: $stock'),
-                      trailing: LiveTranslatedText(
-                        'Rs ${item['price'] ?? 0}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const LiveTranslatedText(
+                      'Online Inventory',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  );
-                }),
-            ],
-          ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: AppColors.primary,
+                      ),
+                      onPressed: _showAddItemDialog,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_inventory.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(
+                      child: LiveTranslatedText(
+                        'No items in online inventory. Add some using the Voice button!',
+                      ),
+                    ),
+                  )
+                else
+                  ..._inventory.map((item) {
+                    final img = (item['image_url'] ?? item['imageUrl'] ?? '')
+                        .toString();
+                    final name =
+                        item['product_name'] ?? item['name'] ?? 'Unknown';
+                    final stock = item['stock'] ?? item['quantity'] ?? 0;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: img.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  img,
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const CircleAvatar(
+                                        backgroundColor: AppColors.primary,
+                                        child: Icon(
+                                          Icons.image,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      ),
+                                ),
+                              )
+                            : const CircleAvatar(
+                                backgroundColor: AppColors.primary,
+                                child: Icon(Icons.image, color: Colors.white),
+                              ),
+                        title: LiveTranslatedText(name.toString()),
+                        subtitle: LiveTranslatedText(
+                          stock == 0
+                              ? 'Out of stock (hidden online)'
+                              : 'Stock: $stock',
+                        ),
+                        trailing: LiveTranslatedText(
+                          'Rs ${item['price'] ?? 0}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
     );
   }
 }

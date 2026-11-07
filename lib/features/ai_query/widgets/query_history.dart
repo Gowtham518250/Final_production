@@ -21,7 +21,8 @@ class QueryHistoryView extends StatelessWidget {
 
   String _formatDate(DateTime value) {
     final local = value.toLocal();
-    final date = '${local.day.toString().padLeft(2, '0')}/'
+    final date =
+        '${local.day.toString().padLeft(2, '0')}/'
         '${local.month.toString().padLeft(2, '0')}/'
         '${local.year}';
     final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
@@ -61,17 +62,17 @@ class QueryHistoryView extends StatelessWidget {
               ),
               LiveTranslatedText(
                 '${history.length} saved',
-                style: GoogleFonts.inter(
-                  fontSize: 10.5,
-                  color: Colors.white54,
-                ),
+                style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white54),
               ),
               const SizedBox(width: 8),
               TextButton(
                 onPressed: onClearAll,
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.white54,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -90,10 +91,8 @@ class QueryHistoryView extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: history.length,
-            separatorBuilder: (_, _) => Divider(
-              color: Colors.white.withValues(alpha: 0.06),
-              height: 1,
-            ),
+            separatorBuilder: (_, _) =>
+                Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
             itemBuilder: (context, index) {
               final item = history[index];
               return InkWell(
@@ -108,7 +107,9 @@ class QueryHistoryView extends StatelessWidget {
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.14),
+                          color: const Color(
+                            0xFF6366F1,
+                          ).withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(11),
                         ),
                         child: const Icon(

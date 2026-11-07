@@ -37,6 +37,7 @@ enum ConfidenceTier { high, medium, low, rejected }
 class PaymentEvent {
   // ── Core Fields ─────────────────────────────────────────────────────────────
   final double amount;
+
   /// Time attached to the source notification/SMS, when available.
   /// Keep this separate from [timestamp], which records when Retail Mind
   /// processed the event and is used for live deduplication windows.
@@ -46,6 +47,7 @@ class PaymentEvent {
   /// through background/foreground isolates so replayed notifications can be
   /// idempotent even when those isolates have separate in-memory caches.
   final String? sourceEventKey;
+
   /// True when the native Android fallback already announced this source event.
   final bool nativeAnnouncementHandled;
   final DateTime timestamp;
@@ -143,14 +145,20 @@ class PaymentEvent {
   /// Normalized reference used for transaction identity. Formatting characters
   /// and casing vary by source, so e.g. "utr-12 34" and "UTR1234" are equal.
   String? get normalizedReferenceId {
-    final normalized = (referenceId ?? '')
-        .trim()
-        .toUpperCase()
-        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final normalized = (referenceId ?? '').trim().toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
     // Short placeholders are too weak to be a reliable transaction reference.
     if (normalized.length < 4 ||
-        const {'NA', 'NAN', 'NONE', 'NULL', 'UNKNOWN', 'NOTAVAILABLE'}
-            .contains(normalized)) {
+        const {
+          'NA',
+          'NAN',
+          'NONE',
+          'NULL',
+          'UNKNOWN',
+          'NOTAVAILABLE',
+        }.contains(normalized)) {
       return null;
     }
     return normalized;
@@ -207,8 +215,7 @@ class PaymentEvent {
     final key = sourceEventKey?.trim();
     if (key == null || key.isEmpty) return null;
     final parts = key.split('|');
-    if (parts.length >= 4 &&
-        int.tryParse(parts[parts.length - 2]) != null) {
+    if (parts.length >= 4 && int.tryParse(parts[parts.length - 2]) != null) {
       return parts.take(parts.length - 1).join('|');
     }
     return key;
@@ -230,8 +237,7 @@ class PaymentEvent {
     final key = sourceEventKey?.trim();
     if (key == null || key.isEmpty) return null;
     final parts = key.split('|');
-    if (parts.length < 4 ||
-        int.tryParse(parts[parts.length - 2]) == null) {
+    if (parts.length < 4 || int.tryParse(parts[parts.length - 2]) == null) {
       return null;
     }
     final slot = parts.take(parts.length - 2).join('|');
@@ -354,8 +360,8 @@ class PaymentEvent {
         this.direction == PaymentTransactionDirection.unknown
         ? _transactionDirection(rawText)
         : (this.direction == PaymentTransactionDirection.incomingCredit
-            ? 'credit'
-            : 'debit');
+              ? 'credit'
+              : 'debit');
     final payload =
         '${amount.toStringAsFixed(2)}_${_appFamily(app)}_${transactionDirection}_'
         '${dateBucket}_$fiveMinuteSlot';
@@ -426,7 +432,8 @@ class PaymentEvent {
       timestamp: timestamp ?? this.timestamp,
       sourceTimestamp: sourceTimestamp ?? this.sourceTimestamp,
       sourceEventKey: sourceEventKey ?? this.sourceEventKey,
-      nativeAnnouncementHandled: nativeAnnouncementHandled ?? this.nativeAnnouncementHandled,
+      nativeAnnouncementHandled:
+          nativeAnnouncementHandled ?? this.nativeAnnouncementHandled,
       app: app ?? this.app,
       payerName: payerName ?? this.payerName,
       referenceId: referenceId ?? this.referenceId,

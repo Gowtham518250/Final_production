@@ -22,7 +22,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _paymentMethodController;
   late Animation<double> _expandAnimation;
-  
+
   @override
   void initState() {
     super.initState();
@@ -31,7 +31,10 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
       vsync: this,
     );
     _expandAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _paymentMethodController, curve: Curves.easeInOut),
+      CurvedAnimation(
+        parent: _paymentMethodController,
+        curve: Curves.easeInOut,
+      ),
     );
   }
 
@@ -44,7 +47,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SalesEntryProvider>();
-    
+
     return Focus(
       onKey: _handleKeyPress,
       child: Scaffold(
@@ -95,19 +98,19 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: AppSpacing.md),
-              
+
               // Payment method selection (prominent)
               _buildPaymentMethodSelector(provider),
-              
+
               const SizedBox(height: AppSpacing.lg),
-              
+
               // Partial payment input
               _buildPartialPaymentInput(provider),
-              
+
               const SizedBox(height: AppSpacing.xl),
-              
+
               // Main action buttons
               _buildActionButtons(provider),
             ],
@@ -154,7 +157,11 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
     final number = provider.draftBillNumber;
     if (number == null || number.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not allocate a bill number. Please try again.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Could not allocate a bill number. Please try again.',
+          ),
+        ),
       );
       return;
     }
@@ -168,7 +175,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
     final provider = context.read<SalesEntryProvider>();
     if (provider.isSaving) return;
     final success = await provider.submitSale();
-    
+
     if (success && mounted) {
       HapticFeedback.heavyImpact();
       Navigator.pop(context);
@@ -200,7 +207,11 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
               children: [
                 Row(
                   children: [
-                    Icon(Icons.payment_rounded, size: 28, color: const Color(0xFF6366F1)),
+                    Icon(
+                      Icons.payment_rounded,
+                      size: 28,
+                      color: const Color(0xFF6366F1),
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     LiveTranslatedText(
                       'Payment Method',
@@ -213,7 +224,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
-                
+
                 // Payment options with icons prominently displayed
                 Column(
                   children: [
@@ -280,11 +291,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 32,
-              color: iconColor,
-            ),
+            Icon(icon, size: 32, color: iconColor),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
@@ -298,8 +305,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                       color: isSelected ? iconColor : const Color(0xFF1E293B),
                     ),
                   ),
-                  if (isSelected)
-                    const SizedBox(height: 4),
+                  if (isSelected) const SizedBox(height: 4),
                   if (isSelected)
                     LiveTranslatedText(
                       'Selected',
@@ -339,7 +345,11 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
         children: [
           Row(
             children: [
-              Icon(Icons.wallet_rounded, size: 28, color: const Color(0xFF6366F1)),
+              Icon(
+                Icons.wallet_rounded,
+                size: 28,
+                color: const Color(0xFF6366F1),
+              ),
               const SizedBox(width: AppSpacing.sm),
               LiveTranslatedText(
                 'Partial Payment',
@@ -358,7 +368,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          
+
           Row(
             children: [
               Expanded(
@@ -385,10 +395,15 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                         ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                        ),
                         child: Row(
                           children: [
-                            const Icon(Icons.currency_rupee, color: Color(0xFF6366F1)),
+                            const Icon(
+                              Icons.currency_rupee,
+                              color: Color(0xFF6366F1),
+                            ),
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
                               child: TextFormField(
@@ -486,7 +501,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
-        
+
         // BOTTOM ROW: Payment Methods (with icons prominently displayed)
         Row(
           children: [
@@ -528,7 +543,8 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                   if (!context.mounted) return;
                   final message = saved
                       ? 'Credit sale saved. Outstanding balance is tracked in Khata; cloud sync will retry when online.'
-                      : (provider.lastCreditError ?? 'Credit sale could not be saved.');
+                      : (provider.lastCreditError ??
+                            'Credit sale could not be saved.');
                   ScaffoldMessenger.of(context)
                     ..hideCurrentSnackBar()
                     ..showSnackBar(
@@ -545,7 +561,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
             ),
           ],
         ),
-        
+
         // Keyboard shortcuts reminder
         const SizedBox(height: AppSpacing.md),
         Container(
@@ -593,10 +609,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
           height: AccessibilityHelper.minTouchTargetSize + 12,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                backgroundColor,
-                backgroundColor.withValues(alpha: 0.8),
-              ],
+              colors: [backgroundColor, backgroundColor.withValues(alpha: 0.8)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -680,10 +693,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: color.withValues(alpha: 0.3),
-              width: 2,
-            ),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 2),
             boxShadow: [
               BoxShadow(
                 color: color.withValues(alpha: 0.1),
@@ -720,11 +730,19 @@ class KeyboardShortcutsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shortcuts = [
-      {'shortcut': 'Ctrl+G', 'action': 'Generate Bill', 'icon': Icons.receipt_long},
+      {
+        'shortcut': 'Ctrl+G',
+        'action': 'Generate Bill',
+        'icon': Icons.receipt_long,
+      },
       {'shortcut': 'Ctrl+S', 'action': 'Save Sale', 'icon': Icons.save},
       {'shortcut': 'Ctrl+P', 'action': 'Print Invoice', 'icon': Icons.print},
       {'shortcut': 'Ctrl+N', 'action': 'New Sale', 'icon': Icons.add},
-      {'shortcut': 'Esc', 'action': 'Cancel / Go Back', 'icon': Icons.arrow_back},
+      {
+        'shortcut': 'Esc',
+        'action': 'Cancel / Go Back',
+        'icon': Icons.arrow_back,
+      },
       {'shortcut': 'F1', 'action': 'Help', 'icon': Icons.help},
     ];
 
@@ -772,7 +790,10 @@ class KeyboardShortcutsDialog extends StatelessWidget {
                 item['action']?.toString() ?? '',
                 style: GoogleFonts.poppins(fontSize: 14),
               ),
-              trailing: Icon(item['icon'] as IconData, color: const Color(0xFF64748B)),
+              trailing: Icon(
+                item['icon'] as IconData,
+                color: const Color(0xFF64748B),
+              ),
             );
           },
         ),

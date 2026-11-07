@@ -2,24 +2,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/growth_marketing_helpers.dart';
 
 void main() {
-  test('English copy uses only the supplied offer and real product details', () {
-    final caption = GrowthAdCopy.caption(
-      shopName: 'Green Basket',
-      goal: 'new_product',
-      language: 'en',
-      productName: 'Rice',
-      price: 55,
-      offer: '',
-      offerCode: 'RM123456',
-    );
+  test(
+    'English copy uses only the supplied offer and real product details',
+    () {
+      final caption = GrowthAdCopy.caption(
+        shopName: 'Green Basket',
+        goal: 'new_product',
+        language: 'en',
+        productName: 'Rice',
+        price: 55,
+        offer: '',
+        offerCode: 'RM123456',
+      );
 
-    expect(caption, contains('Green Basket'));
-    expect(caption, contains('Rice'));
-    expect(caption, contains('₹55'));
-    expect(caption, isNot(contains('RM123456')));
-    expect(caption, isNot(contains('%')));
-    expect(caption, isNot(contains('discount')));
-  });
+      expect(caption, contains('Green Basket'));
+      expect(caption, contains('Rice'));
+      expect(caption, contains('₹55'));
+      expect(caption, isNot(contains('RM123456')));
+      expect(caption, isNot(contains('%')));
+      expect(caption, isNot(contains('discount')));
+    },
+  );
 
   test('Telugu and Hindi copy use their selected language', () {
     final telugu = GrowthAdCopy.caption(
@@ -41,10 +44,16 @@ void main() {
     expect(hindi, isNot(contains('RM123456')));
   });
 
-  test('discount percentage is calculated from verified original and offer prices', () {
-    expect(GrowthMarketingPricing.discountPercent(1000, 800), 20);
-    expect(GrowthMarketingPricing.discountPercent(999, 799), closeTo(20.02002002, 0.000001));
-  });
+  test(
+    'discount percentage is calculated from verified original and offer prices',
+    () {
+      expect(GrowthMarketingPricing.discountPercent(1000, 800), 20);
+      expect(
+        GrowthMarketingPricing.discountPercent(999, 799),
+        closeTo(20.02002002, 0.000001),
+      );
+    },
+  );
 
   test('invalid discounts are not represented as percentages', () {
     expect(GrowthMarketingPricing.discountPercent(0, 0), isNull);
@@ -59,15 +68,13 @@ void main() {
   });
 
   test('creative planner selects the nearest upcoming festival', () {
-    final festival = GrowthCreativePlanner.nextFestival(
-      {
-        'festivals': [
-          {'name': 'Later event', 'days_until': 12},
-          {'festival_name': 'Diwali', 'days_until': 3},
-          {'name': 'Past event', 'days_until': -1},
-        ],
-      },
-    );
+    final festival = GrowthCreativePlanner.nextFestival({
+      'festivals': [
+        {'name': 'Later event', 'days_until': 12},
+        {'festival_name': 'Diwali', 'days_until': 3},
+        {'name': 'Past event', 'days_until': -1},
+      ],
+    });
 
     expect(festival?['name'], 'Diwali');
     expect(festival?['_days_until'], 3);

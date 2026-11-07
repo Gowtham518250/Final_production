@@ -33,16 +33,20 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
-    _fadeAnimation = Tween<double>(begin: 0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
     _controller.forward();
 
@@ -56,11 +60,8 @@ class _SplashScreenState extends State<SplashScreen>
             transitionDuration: const Duration(milliseconds: 500),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: child,
-              );
-            },
+                  return FadeTransition(opacity: animation, child: child);
+                },
           ),
         );
       }
@@ -85,10 +86,7 @@ class _SplashScreenState extends State<SplashScreen>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0F2447),
-                  Color(0xFF1B3A6B),
-                ],
+                colors: [Color(0xFF0F2447), Color(0xFF1B3A6B)],
               ),
             ),
           ),
@@ -139,7 +137,10 @@ class _SplashScreenState extends State<SplashScreen>
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 2),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          width: 2,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.white.withValues(alpha: 0.1),
@@ -154,7 +155,11 @@ class _SplashScreenState extends State<SplashScreen>
                           cacheWidth: 384,
                           cacheHeight: 384,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.storefront_rounded, color: Colors.white, size: 48),
+                          errorBuilder: (_, __, ___) => const Icon(
+                            Icons.storefront_rounded,
+                            color: Colors.white,
+                            size: 48,
+                          ),
                         ),
                       ),
                     ),
@@ -207,7 +212,9 @@ class _SplashScreenState extends State<SplashScreen>
                     height: 3,
                     child: LinearProgressIndicator(
                       backgroundColor: Colors.white.withValues(alpha: 0.15),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Colors.white,
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -266,11 +273,8 @@ class _MinimalSplashScreenState extends State<MinimalSplashScreen>
             transitionDuration: const Duration(milliseconds: 600),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: child,
-              );
-            },
+                  return FadeTransition(opacity: animation, child: child);
+                },
           ),
         );
       }

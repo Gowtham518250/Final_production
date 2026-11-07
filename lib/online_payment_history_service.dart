@@ -509,7 +509,9 @@ class OnlinePaymentHistoryService {
     // Reference aliases may resolve to an existing canonical row whose key
     // was created from another source's fingerprint.
     if (reference != null) {
-      for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
+      for (final key in prefs.getKeys().where(
+        (key) => key.startsWith(prefix),
+      )) {
         final entry = _decodeEntry(prefs.getString(key));
         if (entry == null || _isAlias(entry)) continue;
         if ((entry['reference_id'] ?? '').toString().trim() == reference) {
@@ -519,8 +521,7 @@ class OnlinePaymentHistoryService {
     }
 
     for (final candidateKey in keys) {
-      final canonicalKey =
-          await _resolveCanonicalKey(prefs, candidateKey);
+      final canonicalKey = await _resolveCanonicalKey(prefs, candidateKey);
       if (canonicalKey == null) continue;
       final entry = _decodeEntry(prefs.getString(canonicalKey));
       if (entry == null || _isAlias(entry)) continue;

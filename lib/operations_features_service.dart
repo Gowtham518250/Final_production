@@ -7,7 +7,6 @@ import 'api_client.dart';
 import 'package:flutter/material.dart';
 
 class DeliveryTrackingService {
-  
   /// Create delivery order
   static Future<int?> createDelivery({
     required int customerId,
@@ -24,7 +23,7 @@ class DeliveryTrackingService {
         'delivery_date': deliveryDate,
         'special_instructions': specialInstructions,
       });
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['delivery_id'];
@@ -35,7 +34,7 @@ class DeliveryTrackingService {
       return null;
     }
   }
-  
+
   /// Update delivery status
   static Future<bool> updateDeliveryStatus({
     required int deliveryId,
@@ -45,23 +44,20 @@ class DeliveryTrackingService {
     try {
       final response = await ApiClient.postJson(
         '/api/delivery/$deliveryId/update-status',
-        {
-          'status': status,
-          'notes': notes,
-        }
+        {'status': status, 'notes': notes},
       );
-      
+
       return response.statusCode == 200;
     } catch (e) {
       return false;
     }
   }
-  
+
   /// Get today's deliveries
   static Future<List<Map<String, dynamic>>> getTodayDeliveries() async {
     try {
       final response = await ApiClient.getJson('/api/delivery/today');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['deliveries'] ?? []);
@@ -71,12 +67,14 @@ class DeliveryTrackingService {
       return [];
     }
   }
-  
+
   /// Get delivery status
   static Future<Map<String, dynamic>?> getDeliveryStatus(int deliveryId) async {
     try {
-      final response = await ApiClient.getJson('/api/delivery/$deliveryId/status');
-      
+      final response = await ApiClient.getJson(
+        '/api/delivery/$deliveryId/status',
+      );
+
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -87,20 +85,18 @@ class DeliveryTrackingService {
   }
 }
 
-
 /// Feature 11: Multi-Staff Billing Counters
 /// Each worker: 4-digit PIN, counter number
 /// Dashboard: per-staff sales breakdown
 
 class BillingCounterService {
-  
   /// Authenticate staff with PIN
   static Future<Map<String, dynamic>?> authenticateCounter(String pin) async {
     try {
       final response = await ApiClient.postJson('/api/counter/authenticate', {
         'billing_pin': pin,
       });
-      
+
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -109,7 +105,7 @@ class BillingCounterService {
       return null;
     }
   }
-  
+
   /// Tag sale to counter/staff
   static Future<bool> tagSaleToCounter({
     required int invoiceId,
@@ -124,18 +120,18 @@ class BillingCounterService {
         'counter_number': counterNumber,
         'sale_amount': saleAmount,
       });
-      
+
       return response.statusCode == 200;
     } catch (e) {
       return false;
     }
   }
-  
+
   /// Get counter sales breakdown for today
   static Future<List<Map<String, dynamic>>> getCountersSummary() async {
     try {
       final response = await ApiClient.getJson('/api/counter/summary-today');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['counters'] ?? []);
@@ -145,12 +141,16 @@ class BillingCounterService {
       return [];
     }
   }
-  
+
   /// Get specific counter daily sales
-  static Future<Map<String, dynamic>?> getCounterDailySales(int counterId) async {
+  static Future<Map<String, dynamic>?> getCounterDailySales(
+    int counterId,
+  ) async {
     try {
-      final response = await ApiClient.getJson('/api/counter/$counterId/daily-sales');
-      
+      final response = await ApiClient.getJson(
+        '/api/counter/$counterId/daily-sales',
+      );
+
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -161,38 +161,36 @@ class BillingCounterService {
   }
 }
 
-
 /// Feature 15: Profit Margin Per Product
 /// Show margin % (green/amber/red) on product card
 /// Dashboard: "top margin products"
 
 class ProfitMarginService {
-  
   /// Calculate margin for product
   static double calculateMargin(double sellingPrice, double costPrice) {
     if (costPrice <= 0) return 0;
     return ((sellingPrice - costPrice) / costPrice) * 100;
   }
-  
+
   /// Get margin color (green/amber/red)
   static Color getMarginColor(double marginPercent) {
     if (marginPercent >= 40) return Colors.green;
     if (marginPercent >= 20) return Colors.orange;
     return Colors.red;
   }
-  
+
   /// Get margin badge text
   static String getMarginBadge(double marginPercent) {
     if (marginPercent >= 40) return '💚 High';
     if (marginPercent >= 20) return '⚠️ Medium';
     return '❌ Low';
   }
-  
+
   /// Get top margin products from dashboard
   static Future<List<Map<String, dynamic>>> getTopMarginProducts() async {
     try {
       final response = await ApiClient.getJson('/api/products/top-margin');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['products'] ?? []);

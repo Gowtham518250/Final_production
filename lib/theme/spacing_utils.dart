@@ -7,11 +7,11 @@ class AppSpacing {
   static const double unit = 4.0;
 
   // Spacing scale
-  static const double xs = unit;      // 4px
-  static const double sm = unit * 2;  // 8px
-  static const double md = unit * 4;  // 16px
-  static const double lg = unit * 6;  // 24px
-  static const double xl = unit * 8;  // 32px
+  static const double xs = unit; // 4px
+  static const double sm = unit * 2; // 8px
+  static const double md = unit * 4; // 16px
+  static const double lg = unit * 6; // 24px
+  static const double xl = unit * 8; // 32px
   static const double xxl = unit * 10; // 40px
   static const double xxxl = unit * 12; // 48px
 
@@ -23,14 +23,26 @@ class AppSpacing {
   static const EdgeInsets paddingXl = EdgeInsets.all(xl);
 
   // Horizontal padding
-  static const EdgeInsets paddingHorizontalSm = EdgeInsets.symmetric(horizontal: sm);
-  static const EdgeInsets paddingHorizontalMd = EdgeInsets.symmetric(horizontal: md);
-  static const EdgeInsets paddingHorizontalLg = EdgeInsets.symmetric(horizontal: lg);
+  static const EdgeInsets paddingHorizontalSm = EdgeInsets.symmetric(
+    horizontal: sm,
+  );
+  static const EdgeInsets paddingHorizontalMd = EdgeInsets.symmetric(
+    horizontal: md,
+  );
+  static const EdgeInsets paddingHorizontalLg = EdgeInsets.symmetric(
+    horizontal: lg,
+  );
 
   // Vertical padding
-  static const EdgeInsets paddingVerticalSm = EdgeInsets.symmetric(vertical: sm);
-  static const EdgeInsets paddingVerticalMd = EdgeInsets.symmetric(vertical: md);
-  static const EdgeInsets paddingVerticalLg = EdgeInsets.symmetric(vertical: lg);
+  static const EdgeInsets paddingVerticalSm = EdgeInsets.symmetric(
+    vertical: sm,
+  );
+  static const EdgeInsets paddingVerticalMd = EdgeInsets.symmetric(
+    vertical: md,
+  );
+  static const EdgeInsets paddingVerticalLg = EdgeInsets.symmetric(
+    vertical: lg,
+  );
 
   // Card padding
   static const EdgeInsets cardPaddingMd = EdgeInsets.all(md);
@@ -76,20 +88,22 @@ class SpacedRow extends StatelessWidget {
 
   List<Widget> _buildChildren() {
     if (children.isEmpty) return [];
-    
-    return children.asMap().entries.map((entry) {
-      final index = entry.key;
-      final child = entry.value;
-      
-      if (index == children.length - 1) {
-        return [child];
-      }
-      
-      return [
-        child,
-        SizedBox(width: spacing),
-      ];
-    }).expand((element) => element).toList();
+
+    return children
+        .asMap()
+        .entries
+        .map((entry) {
+          final index = entry.key;
+          final child = entry.value;
+
+          if (index == children.length - 1) {
+            return [child];
+          }
+
+          return [child, SizedBox(width: spacing)];
+        })
+        .expand((element) => element)
+        .toList();
   }
 }
 
@@ -119,20 +133,22 @@ class SpacedColumn extends StatelessWidget {
 
   List<Widget> _buildChildren() {
     if (children.isEmpty) return [];
-    
-    return children.asMap().entries.map((entry) {
-      final index = entry.key;
-      final child = entry.value;
-      
-      if (index == children.length - 1) {
-        return [child];
-      }
-      
-      return [
-        child,
-        SizedBox(height: spacing),
-      ];
-    }).expand((element) => element).toList();
+
+    return children
+        .asMap()
+        .entries
+        .map((entry) {
+          final index = entry.key;
+          final child = entry.value;
+
+          if (index == children.length - 1) {
+            return [child];
+          }
+
+          return [child, SizedBox(height: spacing)];
+        })
+        .expand((element) => element)
+        .toList();
   }
 }
 
@@ -191,10 +207,7 @@ class SafeAreaWrapper extends StatelessWidget {
       bottom: bottom,
       left: left,
       right: right,
-      child: Padding(
-        padding: padding,
-        child: child,
-      ),
+      child: Padding(padding: padding, child: child),
     );
   }
 }
@@ -212,9 +225,6 @@ class ScreenPadding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: padding,
-      child: child,
-    );
+    return Padding(padding: padding, child: child);
   }
 }

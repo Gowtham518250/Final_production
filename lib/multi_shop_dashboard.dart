@@ -152,7 +152,9 @@ class _MultiShopDashboardWidgetState extends State<MultiShopDashboardWidget> {
     if (!allowed || !mounted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Shop selection was blocked.')),
+          const SnackBar(
+            content: LiveTranslatedText('Shop selection was blocked.'),
+          ),
         );
       }
       return;
@@ -241,7 +243,10 @@ class _MultiShopDashboardWidgetState extends State<MultiShopDashboardWidget> {
           ),
         ),
         const SizedBox(height: 4),
-        LiveTranslatedText(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        LiveTranslatedText(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
       ],
     );
   }
@@ -276,8 +281,10 @@ class _MultiShopDashboardWidgetState extends State<MultiShopDashboardWidget> {
                     ),
                   ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.orange[200],
                       borderRadius: BorderRadius.circular(20),
@@ -302,10 +309,7 @@ class _MultiShopDashboardWidgetState extends State<MultiShopDashboardWidget> {
                     Expanded(
                       child: LiveTranslatedText(
                         shop.address!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -369,10 +373,7 @@ String buildConsolidatedEveningReport(
 ) {
   return WhatsAppMessageService.buildConsolidatedShopReport(
     shops: shopGroup.shops
-        .map((shop) => {
-              'name': shop.name,
-              'sales': shop.todaysSales ?? 0,
-            })
+        .map((shop) => {'name': shop.name, 'sales': shop.todaysSales ?? 0})
         .toList(),
     totalSales: shopGroup.totalSales,
     language: language,

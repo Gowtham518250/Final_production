@@ -11,6 +11,8 @@ import 'secure_token_storage.dart';
 import 'api_client.dart';
 import 'local_storage_service.dart';
 import 'sales_dedup_helper.dart';
+import 'sales_restore_service.dart';
+import 'analytics_engine.dart';
 import 'transaction_reconciliation_helper.dart';
 import 'invoices_page.dart';
 import 'khata_page.dart';
@@ -33,10 +35,14 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
   late TabController _tabController;
   bool _isLoading = false;
   String _errorMessage = '';
+  bool _salesHistoryComplete = false;
+  double _salesSummaryAmount = 0;
+  int _salesSummaryCount = 0;
 
   List<Map<String, dynamic>> _allTransactions = [];
   List<Map<String, dynamic>> _cashTransactions = [];
   List<Map<String, dynamic>> _onlineTransactions = [];
+  List<Map<String, dynamic>> _khataBillTransactions = [];
   List<Map<String, dynamic>> _khataTransactions = [];
   List<Map<String, dynamic>> _invoiceTransactions = [];
   List<Map<String, dynamic>> _paidCustomers = [];
@@ -66,7 +72,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
     if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return null;
     final parsed = DateTime.tryParse(value);
     if (parsed == null) return null;
-    final explicitZone = value.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(value);
+    final explicitZone =
+        value.endsWith('Z') || RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(value);
     if (explicitZone) return parsed.toLocal();
     return DateTime.parse('${value}Z').toLocal();
   }
@@ -76,36 +83,60 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
     final value = raw.toString().trim();
     final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
     if (match == null) return _eventTime(value);
-    return DateTime(int.parse(match.group(1)!), int.parse(match.group(2)!), int.parse(match.group(3)!));
+    return DateTime(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+    );
   }
 
   DateTime? _transactionEventDate(Map<String, dynamic> item) {
-    for (final key in const ['event_timestamp','sale_timestamp','created_at','createdAt','timestamp','updated_at','updatedAt','date']) {
+    for (final key in const [
+      'event_timestamp',
+      'sale_timestamp',
+      'created_at',
+      'createdAt',
+      'timestamp',
+      'updated_at',
+      'updatedAt',
+      'date',
+    ]) {
       final parsed = _eventTime(item[key]);
       if (parsed != null) return parsed;
     }
-    return _businessDate(item['business_date'] ?? item['sale_date'] ?? item['invoice_date'] ?? item['date']);
+    return _businessDate(
+      item['business_date'] ??
+          item['sale_date'] ??
+          item['invoice_date'] ??
+          item['date'],
+    );
   }
 
   bool _isKhataSale(Map<String, dynamic> sale) {
-    final values = [sale['transaction_kind'], sale['type'], sale['notes'], sale['description'], sale['sale_type']]
-        .where((v) => v != null).map((v) => v.toString().toLowerCase()).join(' ');
-    return values.contains('khata') || values.contains('borrow') ||
-        values.contains('udhar') || values.contains('udhaar') ||
+    final values = [
+      sale['transaction_kind'],
+      sale['type'],
+      sale['notes'],
+      sale['description'],
+      sale['sale_type'],
+    ].where((v) => v != null).map((v) => v.toString().toLowerCase()).join(' ');
+    return values.contains('khata') ||
+        values.contains('borrow') ||
+        values.contains('udhar') ||
+        values.contains('udhaar') ||
         values.contains('credit sale');
   }
 
   bool _isOnlinePayment(String? method) {
     final value = (method ?? '').toLowerCase();
-    return value.contains('upi') || value.contains('online') ||
-        value.contains('gpay') || value.contains('phonepe') ||
-        value.contains('paytm') || value.contains('card') ||
-        value.contains('bank') || value.contains('transfer');
-  }
-
-  String _normalisedPaymentMethod(dynamic value) {
-    final text = value?.toString().trim() ?? '';
-    return text.isEmpty ? 'Cash' : text;
+    return value.contains('upi') ||
+        value.contains('online') ||
+        value.contains('gpay') ||
+        value.contains('phonepe') ||
+        value.contains('paytm') ||
+        value.contains('card') ||
+        value.contains('bank') ||
+        value.contains('transfer');
   }
 
   Future<void> _loadAllTransactions() async {
@@ -119,73 +150,43 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
       final token = await SecureTokenStorage.getToken() ?? '';
 
+      final salesHistoryComplete =
+          await SalesRestoreService.ensureFullHistoryRestored();
       // Option B: dedupe before showing transactions
       await SalesDedupHelper.cleanupAndPersist();
       final sales = await LocalStorageService.loadSales();
+      final salesAnalytics = AnalyticsEngine()..recalculateAnalytics(sales, 0);
+      _salesHistoryComplete = salesHistoryComplete;
+      _salesSummaryAmount = salesAnalytics.lifetimeRevenue;
+      _salesSummaryCount = salesAnalytics.lifetimeSalesCache.length;
       _rawSales = sales.whereType<Map<String, dynamic>>().toList();
-      // Load cash transactions (manual entry)
-      _cashTransactions = [];
-      // Load online transactions (manual entry or detected)
-      _onlineTransactions = [];
-      
-      // Process local sales and separate by payment method
-      for (final rawSale in sales) {
-        if (rawSale is! Map) continue;
-        final sale = Map<String, dynamic>.from(rawSale);
-
-        final paymentMethod = _normalisedPaymentMethod(sale['payment_method']);
-        final amount = double.tryParse((sale['total_amount'] ?? sale['total'] ?? '0').toString()) ?? 0;
-        final eventDate = _transactionEventDate(sale);
-        final businessDate = _businessDate(sale['business_date'] ?? sale['sale_date'] ?? sale['invoice_date'] ?? sale['date']);
-        // eventDate is already in local time. Serialize it as UTC (with Z)
-        // before storing it in the transaction view-model, otherwise the card
-        // parser treats this local, zone-less string as UTC and shifts it
-        // forward by 5h30 in India — sometimes onto the next calendar day.
-        final eventTimestamp = TransactionReconciliationHelper.serializeEventTime(eventDate);
-        final saleDate = eventTimestamp ??
-            (businessDate == null ? null : DateFormat('yyyy-MM-dd').format(businessDate));
-        final customerName = sale['customer_name'] ?? 'Walk-in Customer';
-        final customerPhone = sale['customer_phone'];
-        final saleId = sale['sale_id'] ?? sale['invoice_number'] ?? sale['id'];
-        if (saleDate == null || saleDate.toString().trim().isEmpty || saleId == null || saleId.toString().trim().isEmpty) {
-          continue;
-        }
-        
-        final transaction = {
-          'id': saleId,
-          'amount': amount,
-          'date': saleDate,
-          'event_timestamp': eventTimestamp,
-          'business_date': businessDate == null ? null : DateFormat('yyyy-MM-dd').format(businessDate),
-          'customer': customerName,
-          'customer_phone': customerPhone,
-          'items': sale['items'] ?? [],
-          'raw': sale,
-        };
-
-        // Categorize Khata independently from cash/online payment method.
-        if (_isKhataSale(sale)) {
-          _khataTransactions.add({
-            ...transaction,
-            'type': 'Khata Sale',
-          });
-        } else if (_isOnlinePayment(paymentMethod)) {
-          _onlineTransactions.add({
-            ...transaction,
-            'type': 'Online Payment (Manual)',
-            'detection_status': 'MANUAL_ENTRY', // User entered as online
-          });
-        } else {
-          // Default to cash for all others
-          _cashTransactions.add({
-            ...transaction,
-            'type': 'Cash Sale',
-          });
-        }
-      }
+      final canonicalSales =
+          TransactionReconciliationHelper.buildCanonicalSalesTransactions(
+            sales: salesAnalytics.lifetimeSalesCache,
+            businessDateOf: salesAnalytics.getLocalDate,
+            eventTimeOf: _transactionEventDate,
+            isKhataSale: _isKhataSale,
+            isOnlineSale: (sale) =>
+                AnalyticsEngine.isOnlineSale(sale) ||
+                _isOnlinePayment(sale['payment_method']?.toString()),
+          );
+      _allTransactions = canonicalSales;
+      _cashTransactions = canonicalSales
+          .where((sale) => sale['type'] == 'Cash Sale')
+          .toList();
+      _onlineTransactions = canonicalSales
+          .where((sale) => sale['type'] == 'Online Sale')
+          .toList();
+      _khataBillTransactions = canonicalSales
+          .where((sale) => sale['type'] == 'Khata Sale')
+          .toList();
+      // Local Khata bill rows remain visible alongside remote ledger payments.
+      _khataTransactions = List<Map<String, dynamic>>.from(
+        _khataBillTransactions,
+      );
 
       // Load khata ledger transactions
-      _khataTransactions = [];
+      final remoteKhataTransactions = <Map<String, dynamic>>[];
       try {
         if (token.isNotEmpty && userId > 0) {
           final khataResp = await ApiClient.getJson(
@@ -197,11 +198,15 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
             final data = json.decode(khataResp.body);
             if (data['history'] is List) {
               for (var item in data['history']) {
-                _khataTransactions.add({
+                remoteKhataTransactions.add({
                   'id': item['id'] ?? item['transaction_id'],
                   'type': item['transaction_type'] ?? 'Khata',
-                  'amount': double.tryParse(item['amount']?.toString() ?? '0') ?? 0,
-                  'date': item['business_date'] ?? item['timestamp'] ?? item['date'],
+                  'amount':
+                      double.tryParse(item['amount']?.toString() ?? '0') ?? 0,
+                  'date':
+                      item['business_date'] ??
+                      item['timestamp'] ??
+                      item['date'],
                   'customer_phone': item['customer_phone'],
                   'description': item['description'],
                   'raw': item,
@@ -213,6 +218,10 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       } catch (e) {
         debugPrint('⚠️ Failed to load khata transactions: $e');
       }
+      _khataTransactions = TransactionReconciliationHelper.mergeAndDedupe(
+        _khataTransactions,
+        remoteKhataTransactions,
+      );
 
       // Load invoices
       _invoiceTransactions = [];
@@ -227,30 +236,44 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
             final data = json.decode(invoicesResp.body);
             final invoiceRows = data is List
                 ? data
-                : (data is Map && data['invoices'] is List ? data['invoices'] : const []);
+                : (data is Map && data['invoices'] is List
+                      ? data['invoices']
+                      : const []);
             if (invoiceRows is List) {
               for (var invoice in invoiceRows) {
-                final invoiceDate = invoice['created_at'] ??
+                final invoiceDate =
+                    invoice['created_at'] ??
                     invoice['sale_timestamp'] ??
                     invoice['business_date'] ??
                     invoice['invoice_date'] ??
                     invoice['created_date'];
-                final invoiceId = invoice['number'] ?? invoice['invoice_number'] ?? invoice['id'];
+                final invoiceId =
+                    invoice['number'] ??
+                    invoice['invoice_number'] ??
+                    invoice['id'];
                 if (invoiceDate == null || invoiceId == null) continue;
                 _invoiceTransactions.add({
                   'id': invoiceId,
                   'type': 'Invoice',
-                  'amount': double.tryParse(invoice['total_amount']?.toString() ?? '0') ?? 0,
+                  'amount':
+                      double.tryParse(
+                        invoice['total_amount']?.toString() ?? '0',
+                      ) ??
+                      0,
                   'date': invoiceDate,
-                  'event_timestamp': invoice['created_at'] ?? invoice['sale_timestamp'],
-                  'business_date': invoice['business_date'] ?? invoice['invoice_date'],
+                  'event_timestamp':
+                      invoice['created_at'] ?? invoice['sale_timestamp'],
+                  'business_date':
+                      invoice['business_date'] ?? invoice['invoice_date'],
                   'customer': invoice['customer_name'] ?? 'Unknown',
                   'customer_phone': invoice['customer_phone'],
                   'status': invoice['payment_status'] ?? 'Pending',
                   // The API InvoiceResponse exposes line_items, not items.
                   // Read both shapes so real invoices don't render as "0 items".
-                  'items_count': ((invoice['line_items'] ?? invoice['items']) is List)
-                      ? ((invoice['line_items'] ?? invoice['items']) as List).length
+                  'items_count':
+                      ((invoice['line_items'] ?? invoice['items']) is List)
+                      ? ((invoice['line_items'] ?? invoice['items']) as List)
+                            .length
                       : 0,
                   'raw': invoice,
                 });
@@ -266,31 +289,33 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       // not only the display ID. A local row may use SALE_<timestamp> while
       // its server invoice uses BILL-0001; both carry the shared invoice number.
       // This keeps counts and total amount from double-counting the same sale.
-      _cashTransactions = TransactionReconciliationHelper.dedupe(_cashTransactions);
-      _onlineTransactions = TransactionReconciliationHelper.dedupe(_onlineTransactions);
-      _khataTransactions = TransactionReconciliationHelper.dedupe(_khataTransactions);
-      _invoiceTransactions = TransactionReconciliationHelper.dedupe(_invoiceTransactions);
-      _allTransactions = TransactionReconciliationHelper.dedupe([
-        ..._cashTransactions,
-        ..._onlineTransactions,
-        ..._khataTransactions,
-        ..._invoiceTransactions,
-      ]);
+      _khataTransactions = TransactionReconciliationHelper.dedupe(
+        _khataTransactions,
+      );
+      _invoiceTransactions = TransactionReconciliationHelper.dedupe(
+        _invoiceTransactions,
+      );
 
-      _paidCustomers = _invoiceTransactions.where((invoice) {
-        final status = invoice['status']?.toString().toUpperCase() ?? '';
-        return status == 'PAID';
-      }).map((invoice) {
-        return {
-          'id': invoice['id'],
-          'customer': invoice['customer'] ?? 'Unknown Customer',
-          'customer_phone': invoice['customer_phone'] ?? '',
-          'amount': invoice['amount'] ?? 0.0,
-          'date': invoice['paid_date'] ?? invoice['invoice_date'] ?? invoice['date'],
-          'invoice_number': invoice['id'],
-          'status': 'PAID',
-        };
-      }).toList();
+      _paidCustomers = _invoiceTransactions
+          .where((invoice) {
+            final status = invoice['status']?.toString().toUpperCase() ?? '';
+            return status == 'PAID';
+          })
+          .map((invoice) {
+            return {
+              'id': invoice['id'],
+              'customer': invoice['customer'] ?? 'Unknown Customer',
+              'customer_phone': invoice['customer_phone'] ?? '',
+              'amount': invoice['amount'] ?? 0.0,
+              'date':
+                  invoice['paid_date'] ??
+                  invoice['invoice_date'] ??
+                  invoice['date'],
+              'invoice_number': invoice['id'],
+              'status': 'PAID',
+            };
+          })
+          .toList();
 
       // Sort by real event time; date-only business dates are a fallback.
       _allTransactions.sort((a, b) {
@@ -353,8 +378,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
             Tab(text: '📋 All (${_allTransactions.length})'),
             Tab(text: '💵 Cash (${_cashTransactions.length})'),
             Tab(text: '💳 Online (${_onlineTransactions.length})'),
-            Tab(text: '📔 Khata (${_khataTransactions.length})'),
-            Tab(text: '🧾 Invoice (${_invoiceTransactions.length})'),
+            Tab(text: '📔 Khata Ledger (${_khataTransactions.length})'),
+            Tab(text: '🧾 Invoice Records (${_invoiceTransactions.length})'),
             Tab(text: '✅ Paid Customers (${_paidCustomers.length})'),
           ],
         ),
@@ -362,43 +387,52 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage.isNotEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  LiveTranslatedText(_errorMessage),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _loadAllTransactions,
+                    icon: const Icon(Icons.refresh),
+                    label: const LiveTranslatedText('Retry'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                _buildSummaryHeader(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
                     children: [
-                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                      const SizedBox(height: 16),
-                      LiveTranslatedText(_errorMessage),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _loadAllTransactions,
-                        icon: const Icon(Icons.refresh),
-                        label: const LiveTranslatedText('Retry'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF59E0B),
-                        ),
+                      _buildTransactionList(
+                        _allTransactions,
+                        'All Transactions',
                       ),
+                      _buildTransactionList(
+                        _cashTransactions,
+                        'Cash Transactions',
+                      ),
+                      _buildTransactionList(
+                        _onlineTransactions,
+                        'Online Transactions',
+                      ),
+                      _buildTransactionList(_khataTransactions, 'Khata Ledger'),
+                      _buildTransactionList(_invoiceTransactions, 'Invoices'),
+                      _buildPaidCustomersList(),
                     ],
                   ),
-                )
-              : Column(
-                  children: [
-                    _buildSummaryHeader(),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildTransactionList(_allTransactions, 'All Transactions'),
-                          _buildTransactionList(_cashTransactions, 'Cash Transactions'),
-                          _buildTransactionList(_onlineTransactions, 'Online Transactions'),
-                          _buildTransactionList(_khataTransactions, 'Khata Ledger'),
-                          _buildTransactionList(_invoiceTransactions, 'Invoices'),
-                          _buildPaidCustomersList(),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
+              ],
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: _loadAllTransactions,
         backgroundColor: const Color(0xFFF59E0B),
@@ -409,7 +443,12 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
 
   Widget _buildPaidCustomersList() {
     if (_paidCustomers.isEmpty) {
-      return const Center(child: LiveTranslatedText('No paid customers', style: TextStyle(color: Colors.white70)));
+      return const Center(
+        child: LiveTranslatedText(
+          'No paid customers',
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
@@ -417,15 +456,35 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       itemBuilder: (context, index) {
         final c = _paidCustomers[index];
         final date = DateTime.tryParse(c['date']?.toString() ?? '')?.toLocal();
-        final dateText = date == null ? 'Unknown date' : DateFormat('dd MMM yyyy, hh:mm a').format(date);
+        final dateText = date == null
+            ? 'Unknown date'
+            : DateFormat('dd MMM yyyy, hh:mm a').format(date);
         return Card(
           color: Colors.grey[900],
           child: ListTile(
-            leading: const CircleAvatar(backgroundColor: Color(0xFF10B981), child: Icon(Icons.person, color: Colors.white)),
-            title: LiveTranslatedText(c['customer']?.toString() ?? 'Unknown Customer', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            subtitle: LiveTranslatedText('${c['customer_phone'] ?? 'No phone'}\nInvoice: ${c['invoice_number'] ?? '-'}\nPaid: $dateText', style: const TextStyle(color: Colors.white70)),
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFF10B981),
+              child: Icon(Icons.person, color: Colors.white),
+            ),
+            title: LiveTranslatedText(
+              c['customer']?.toString() ?? 'Unknown Customer',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: LiveTranslatedText(
+              '${c['customer_phone'] ?? 'No phone'}\nInvoice: ${c['invoice_number'] ?? '-'}\nPaid: $dateText',
+              style: const TextStyle(color: Colors.white70),
+            ),
             isThreeLine: true,
-            trailing: LiveTranslatedText('₹${(c['amount'] as num?)?.toStringAsFixed(2) ?? '0.00'}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+            trailing: LiveTranslatedText(
+              '₹${(c['amount'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+              style: const TextStyle(
+                color: Color(0xFF10B981),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         );
       },
@@ -433,11 +492,6 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
   }
 
   Widget _buildSummaryHeader() {
-    final totalAmount = _allTransactions.fold<double>(
-      0,
-      (sum, txn) => sum + (txn['amount'] as double? ?? 0),
-    );
-
     return Container(
       color: const Color(0xFF111827),
       padding: const EdgeInsets.all(16),
@@ -455,19 +509,35 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
           const SizedBox(height: 12),
           Row(
             children: [
-              _summaryCard('Total', '${_allTransactions.length}', Colors.blue),
+              _summaryCard(
+                'Active bills',
+                _salesHistoryComplete ? '$_salesSummaryCount' : '—',
+                Colors.blue,
+              ),
               const SizedBox(width: 10),
               _summaryCard('Cash', '${_cashTransactions.length}', Colors.green),
               const SizedBox(width: 10),
-              _summaryCard('Online', '${_onlineTransactions.length}', Colors.purple),
+              _summaryCard(
+                'Online',
+                '${_onlineTransactions.length}',
+                Colors.purple,
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              _summaryCard('Khata', '${_khataTransactions.length}', Colors.orange),
+              _summaryCard(
+                'Khata bills',
+                '${_khataBillTransactions.length}',
+                Colors.orange,
+              ),
               const SizedBox(width: 10),
-              _summaryCard('Invoice', '${_invoiceTransactions.length}', Colors.cyan),
+              _summaryCard(
+                'Invoice records',
+                '${_invoiceTransactions.length}',
+                Colors.cyan,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Container(
@@ -481,10 +551,15 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                     children: [
                       LiveTranslatedText(
                         'Total Amount',
-                        style: TextStyle(color: Colors.amber[600], fontSize: 11),
+                        style: TextStyle(
+                          color: Colors.amber[600],
+                          fontSize: 11,
+                        ),
                       ),
                       LiveTranslatedText(
-                        '₹${totalAmount.toStringAsFixed(0)}',
+                        _salesHistoryComplete
+                            ? '₹${_salesSummaryAmount.toStringAsFixed(0)}'
+                            : 'Sync required',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -497,6 +572,31 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
               ),
             ],
           ),
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LiveTranslatedText(
+              'Cash + Online + Khata bills = Active bills. Invoice records can overlap.',
+              style: TextStyle(color: Colors.white70, fontSize: 10),
+            ),
+          ),
+          if (!_salesHistoryComplete)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: LiveTranslatedText(
+                      'Sales totals are hidden until full history sync succeeds.',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadAllTransactions,
+                    child: const LiveTranslatedText('Retry sync'),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -532,17 +632,24 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
   }
 
   Widget _buildTransactionList(
-      List<Map<String, dynamic>> transactions, String emptyLabel) {
+    List<Map<String, dynamic>> transactions,
+    String emptyLabel,
+  ) {
     if (transactions.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined,
-                size: 64, color: Colors.grey[400]),
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
             const SizedBox(height: 16),
-            LiveTranslatedText('No $emptyLabel',
-                style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+            LiveTranslatedText(
+              'No $emptyLabel',
+              style: TextStyle(color: Colors.grey[500], fontSize: 16),
+            ),
           ],
         ),
       );
@@ -572,7 +679,9 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
     if (type.contains('cash')) {
       icon = Icons.payments;
       badgeColor = Colors.green;
-    } else if (type.contains('online') || type.contains('upi') || type.contains('card')) {
+    } else if (type.contains('online') ||
+        type.contains('upi') ||
+        type.contains('card')) {
       icon = Icons.credit_card;
       badgeColor = Colors.purple;
     } else if (type.contains('khata')) {
@@ -585,7 +694,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
 
     // For invoices, make them tappable/interactive
     bool isInvoice = type.contains('invoice');
-    
+
     return GestureDetector(
       onTap: isInvoice ? () => _handleInvoiceTap(txn) : null,
       child: Card(
@@ -628,9 +737,14 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                             // Detection status badge for online payments
                             if (detectionStatus == 'APP_DETECTED')
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                  color: const Color(
+                                    0xFF10B981,
+                                  ).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                                 child: const LiveTranslatedText(
@@ -666,7 +780,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               // Customer Phone - prominently displayed for all types
               if (customerPhone != null && customerPhone.toString().isNotEmpty)
                 Container(
@@ -674,7 +788,9 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                   decoration: BoxDecoration(
                     color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.blue.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -695,10 +811,10 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                 ),
               if (customerPhone != null && customerPhone.toString().isNotEmpty)
                 const SizedBox(height: 8),
-              
+
               // Other transaction details
               _buildTransactionDetails(txn),
-              
+
               // Action buttons for invoices
               if (isInvoice) ...[
                 const SizedBox(height: 12),
@@ -721,16 +837,34 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       }
       if (txn['items'] != null && (txn['items'] as List).isNotEmpty) {
         final items = txn['items'] as List;
-        final names = items.map((e) {
-          if (e is! Map) return '';
-          final raw = (e['product_name'] ?? e['product'] ?? e['name'] ?? e['description'] ?? '').toString().trim();
-          if (raw.isEmpty || raw.toLowerCase() == 'product' || raw.startsWith('sale_')) return '';
-          return raw;
-        }).where((n) => n.isNotEmpty).toSet().join(', ');
+        final names = items
+            .map((e) {
+              if (e is! Map) return '';
+              final raw =
+                  (e['product_name'] ??
+                          e['product'] ??
+                          e['name'] ??
+                          e['description'] ??
+                          '')
+                      .toString()
+                      .trim();
+              if (raw.isEmpty ||
+                  raw.toLowerCase() == 'product' ||
+                  raw.startsWith('sale_'))
+                return '';
+              return raw;
+            })
+            .where((n) => n.isNotEmpty)
+            .toSet()
+            .join(', ');
         final itemCount = items.length;
-        details.add(_detailRow('Items', names.isEmpty ? '$itemCount item(s)' : names));
+        details.add(
+          _detailRow('Items', names.isEmpty ? '$itemCount item(s)' : names),
+        );
       }
-    } else if (type.contains('online') || type.contains('upi') || type.contains('card')) {
+    } else if (type.contains('online') ||
+        type.contains('upi') ||
+        type.contains('card')) {
       if (txn['customer'] != null) {
         details.add(_detailRow('Customer', txn['customer'].toString()));
       }
@@ -746,12 +880,17 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         details.add(_detailRow('Customer', txn['customer'].toString()));
       }
       if (txn['status'] != null) {
-        final statusColor = txn['status'] == 'Paid' ? Colors.green : Colors.orange;
+        final statusColor = txn['status'] == 'Paid'
+            ? Colors.green
+            : Colors.orange;
         details.add(
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const LiveTranslatedText('Status', style: TextStyle(color: Colors.grey)),
+              const LiveTranslatedText(
+                'Status',
+                style: TextStyle(color: Colors.grey),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -841,7 +980,10 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
                   const SizedBox(width: 6),
                   const LiveTranslatedText(
                     'Paid',
-                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -868,7 +1010,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
     final status = txn['status']?.toString().toUpperCase() ?? 'DRAFT';
     if (status == 'PAID') return; // Already paid
 
-    final invoiceNum = txn.containsKey('invoice_number') 
+    final invoiceNum = txn.containsKey('invoice_number')
         ? txn['invoice_number']?.toString() ?? txn['id']?.toString() ?? ''
         : txn['id']?.toString() ?? '';
 
@@ -880,11 +1022,19 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         title: const LiveTranslatedText('Mark as Paid?'),
         content: LiveTranslatedText('Mark invoice $invoiceNum as PAID?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LiveTranslatedText('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const LiveTranslatedText('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-            child: const LiveTranslatedText('Confirm', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+            ),
+            child: const LiveTranslatedText(
+              'Confirm',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -901,15 +1051,22 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
     if (invoiceNum.isEmpty) return;
 
     try {
-      final total = double.tryParse(
-            (inv['total_amount'] ?? inv['total'] ?? inv['amount'] ?? 0).toString(),
+      final total =
+          double.tryParse(
+            (inv['total_amount'] ?? inv['total'] ?? inv['amount'] ?? 0)
+                .toString(),
           ) ??
           0.0;
-      final alreadyPaid = double.tryParse((inv['paid_amount'] ?? 0).toString()) ?? 0.0;
-      final amountToApply = (total - alreadyPaid).clamp(0.0, double.infinity).toDouble();
+      final alreadyPaid =
+          double.tryParse((inv['paid_amount'] ?? 0).toString()) ?? 0.0;
+      final amountToApply = (total - alreadyPaid)
+          .clamp(0.0, double.infinity)
+          .toDouble();
       if (amountToApply <= 0.01) return;
 
-      final customerPhone = (inv['customer_phone'] ?? inv['phone'] ?? '').toString().trim();
+      final customerPhone = (inv['customer_phone'] ?? inv['phone'] ?? '')
+          .toString()
+          .trim();
       final paidDate = DateTime.now().toUtc().toIso8601String();
 
       // Resolve the canonical numeric server invoice ID. We must settle the
@@ -929,7 +1086,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
             final decoded = jsonDecode(listResponse.body);
             if (decoded is List) {
               for (final raw in decoded) {
-                if (raw is Map && raw['invoice_number']?.toString() == invoiceNum) {
+                if (raw is Map &&
+                    raw['invoice_number']?.toString() == invoiceNum) {
                   invoiceId = int.tryParse(raw['id']?.toString() ?? '');
                   break;
                 }
@@ -937,7 +1095,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
             }
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Could not resolve invoice ID online: $e');
+          if (kDebugMode)
+            debugPrint('⚠️ Could not resolve invoice ID online: $e');
         }
       }
 
@@ -953,7 +1112,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         final localId = local['id']?.toString();
         if (localNum == invoiceNum ||
             (invoiceId != null && localId == invoiceId.toString())) {
-          final localTotal = double.tryParse(
+          final localTotal =
+              double.tryParse(
                 (local['total_amount'] ?? local['total'] ?? total).toString(),
               ) ??
               total;
@@ -973,10 +1133,13 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         if (history[i] is! Map) continue;
         final sale = Map<String, dynamic>.from(history[i] as Map);
         final saleId =
-            (sale['sale_id'] ?? sale['id'] ?? sale['invoice_number'] ?? '').toString();
+            (sale['sale_id'] ?? sale['id'] ?? sale['invoice_number'] ?? '')
+                .toString();
         if (saleId == invoiceNum ||
-            (invoiceId != null && sale['invoice_id']?.toString() == invoiceId.toString())) {
-          final saleTotal = double.tryParse(
+            (invoiceId != null &&
+                sale['invoice_id']?.toString() == invoiceId.toString())) {
+          final saleTotal =
+              double.tryParse(
                 (sale['total_amount'] ?? sale['total'] ?? total).toString(),
               ) ??
               total;
@@ -994,7 +1157,9 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
         if (invoiceId != null && invoiceId > 0) 'invoice_id': invoiceId,
         if (customerPhone.isNotEmpty) 'customer_phone': customerPhone,
         'amount': amountToApply,
-        'payment_method': (inv['payment_method'] ?? 'CASH').toString().toUpperCase(),
+        'payment_method': (inv['payment_method'] ?? 'CASH')
+            .toString()
+            .toUpperCase(),
         'notes': 'Invoice $invoiceNum marked paid from Transactions',
         'idempotency_key': 'PAID_${invoiceId ?? invoiceNum}',
       };
@@ -1007,7 +1172,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
             paymentPayload,
             headers: {'Authorization': 'Bearer $token'},
           ).timeout(const Duration(seconds: 10));
-          backendConfirmed = response.statusCode >= 200 && response.statusCode < 300;
+          backendConfirmed =
+              response.statusCode >= 200 && response.statusCode < 300;
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Backend payment sync deferred: $e');
         }
@@ -1047,7 +1213,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
 
   /// 🔄 Mark invoice as unpaid (revert from paid)
   Future<void> _markInvoiceAsUnpaid(Map<String, dynamic> inv) async {
-    final invoiceNum = inv.containsKey('invoice_number') 
+    final invoiceNum = inv.containsKey('invoice_number')
         ? inv['invoice_number']?.toString() ?? inv['id']?.toString() ?? ''
         : inv['id']?.toString() ?? '';
 
@@ -1057,13 +1223,21 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const LiveTranslatedText('Mark as Unpaid?'),
-        content: LiveTranslatedText('Revert invoice $invoiceNum back to UNPAID status?'),
+        content: LiveTranslatedText(
+          'Revert invoice $invoiceNum back to UNPAID status?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LiveTranslatedText('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const LiveTranslatedText('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: const LiveTranslatedText('Confirm', style: TextStyle(color: Colors.white)),
+            child: const LiveTranslatedText(
+              'Confirm',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1078,7 +1252,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       // 1. Update local invoices
       final localInvs = await LocalStorageService.loadLocalInvoices();
       for (var i = 0; i < localInvs.length; i++) {
-        if (localInvs[i]['invoice_number']?.toString() == invoiceNum || 
+        if (localInvs[i]['invoice_number']?.toString() == invoiceNum ||
             localInvs[i]['id']?.toString() == invoiceNum) {
           localInvs[i]['payment_status'] = 'UNPAID';
           localInvs[i]['status'] = 'UNPAID';
@@ -1091,7 +1265,12 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       // 2. Revert sales history
       final List<dynamic> history = await LocalStorageService.loadSales();
       for (var i = 0; i < history.length; i++) {
-        final sId = (history[i]['sale_id'] ?? history[i]['id'] ?? history[i]['invoice_number'] ?? '').toString();
+        final sId =
+            (history[i]['sale_id'] ??
+                    history[i]['id'] ??
+                    history[i]['invoice_number'] ??
+                    '')
+                .toString();
         if (sId == invoiceNum) {
           history[i]['payment_status'] = 'UNPAID';
           history[i]['status'] = 'UNPAID';
@@ -1104,7 +1283,8 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
       // 3. Restore khata balance
       if (customerPhone.isNotEmpty && amount > 0) {
         final khataBalances = await LocalStorageService.loadKhataBalances();
-        khataBalances[customerPhone] = (khataBalances[customerPhone] ?? 0) + amount;
+        khataBalances[customerPhone] =
+            (khataBalances[customerPhone] ?? 0) + amount;
         await LocalStorageService.saveKhataBalances(khataBalances);
       }
 
@@ -1136,7 +1316,7 @@ class _AllTransactionsPageState extends State<AllTransactionsPage>
           ),
         );
       }
-      
+
       await _loadAllTransactions();
       InvoicesPage.refreshInvoices();
       KhataPage.refreshKhata();

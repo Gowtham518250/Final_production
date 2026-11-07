@@ -8,7 +8,7 @@ class VoiceFeedbackLearningService {
   static const String _feedbackKey = 'voice_billing_feedback';
   static const String _userCorrectionsKey = 'voice_user_corrections';
   static const String _accuracyMetricsKey = 'voice_accuracy_metrics';
-  
+
   /// Record user correction for misinterpreted voice
   static Future<void> recordCorrection({
     required String originalTranscript,
@@ -19,7 +19,7 @@ class VoiceFeedbackLearningService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final corrections = prefs.getStringList(_userCorrectionsKey) ?? [];
-      
+
       final correctionEntry = json.encode({
         'timestamp': DateTime.now().toIso8601String(),
         'original_transcript': originalTranscript,
@@ -27,14 +27,14 @@ class VoiceFeedbackLearningService {
         'language': languageCode,
         'original_confidence': originalConfidence,
       });
-      
+
       corrections.add(correctionEntry);
-      
+
       // Keep only last 1000 corrections to prevent unbounded growth
       if (corrections.length > 1000) {
         corrections.removeRange(0, corrections.length - 1000);
       }
-      
+
       await prefs.setStringList(_userCorrectionsKey, corrections);
 
       // This is device-local history only. Never apply it automatically to billing;
@@ -47,10 +47,12 @@ class VoiceFeedbackLearningService {
       if (kDebugMode) debugPrint('⚠️ Failed to record correction: $e');
     }
   }
-  
+
   /// Get common misinterpretations for a language
   /// Returns Map<mispronouncedWord, correctWord>
-  static Future<Map<String, String>> getCommonCorrections(String languageCode) async {
+  static Future<Map<String, String>> getCommonCorrections(
+    String languageCode,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final corrections = prefs.getStringList(_userCorrectionsKey) ?? [];
@@ -65,7 +67,8 @@ class VoiceFeedbackLearningService {
         final corrected = _normalizeLearningPhrase(
           (data['corrected_name'] ?? '').toString(),
         );
-        if (original.isEmpty || corrected.isEmpty || original == corrected) continue;
+        if (original.isEmpty || corrected.isEmpty || original == corrected)
+          continue;
         final votes = phraseVotes.putIfAbsent(original, () => <String, int>{});
         votes[corrected] = (votes[corrected] ?? 0) + 1;
       }
@@ -100,7 +103,7 @@ class VoiceFeedbackLearningService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final metrics = prefs.getStringList(_accuracyMetricsKey) ?? [];
-      
+
       final metricEntry = json.encode({
         'timestamp': DateTime.now().toIso8601String(),
         'language': languageCode,
@@ -122,31 +125,33 @@ class VoiceFeedbackLearningService {
         'items_total': itemsTotal,
         'accuracy': itemsTotal > 0 ? itemsCorrect / itemsTotal : 0.0,
       });
-      
+
       metrics.add(metricEntry);
-      
+
       // Keep only last 500 metrics
       if (metrics.length > 500) {
         metrics.removeRange(0, metrics.length - 500);
       }
-      
+
       await prefs.setStringList(_accuracyMetricsKey, metrics);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to record metrics: $e');
     }
   }
-  
+
   /// Get accuracy metrics for a language
-  static Future<Map<String, dynamic>> getAccuracyMetrics(String languageCode) async {
+  static Future<Map<String, dynamic>> getAccuracyMetrics(
+    String languageCode,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final metrics = prefs.getStringList(_accuracyMetricsKey) ?? [];
-      
+
       final languageMetrics = metrics.where((entry) {
         final data = json.decode(entry);
         return data['language'] == languageCode;
       }).toList();
-      
+
       if (languageMetrics.isEmpty) {
         return {
           'total_records': 0,
@@ -156,13 +161,13 @@ class VoiceFeedbackLearningService {
           'cloud_usage': 0.0,
         };
       }
-      
+
       double totalSTTConfidence = 0.0;
       int sttConfidenceCount = 0;
       double totalNLPConfidence = 0.0;
       double totalAccuracy = 0.0;
       int cloudUsage = 0;
-      
+
       for (final entry in languageMetrics) {
         final data = json.decode(entry);
         final sttValue = data['stt_confidence'];
@@ -183,9 +188,9 @@ class VoiceFeedbackLearningService {
         }
         if (data['used_cloud_stt'] == true) cloudUsage++;
       }
-      
+
       final count = languageMetrics.length;
-      
+
       return {
         'total_records': count,
         // Legacy records reused NLP confidence as STT confidence. Exclude
@@ -202,21 +207,18 @@ class VoiceFeedbackLearningService {
       return {};
     }
   }
-  
+
   /// Clear all learning data (for testing/reset)
   static Future<void> clearLearningData() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_userCorrectionsKey);
     await prefs.remove(_accuracyMetricsKey);
-    
+
     if (kDebugMode) debugPrint('🗑️ Cleared voice learning data');
   }
-  
+
   static String _normalizeLearningPhrase(String value) {
-    return value
-        .toLowerCase()
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ');
+    return value.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   // Treat letters/digits in Latin and common Indic blocks as word characters.
@@ -252,9 +254,10 @@ class VoiceFeedbackLearningService {
       final found = lowerSource.indexOf(needle, searchFrom);
       if (found < 0) break;
       final end = found + needle.length;
-      final leftBoundary = found == 0 ||
-          !_isLearningWordCodeUnit(source.codeUnitAt(found - 1));
-      final rightBoundary = end >= source.length ||
+      final leftBoundary =
+          found == 0 || !_isLearningWordCodeUnit(source.codeUnitAt(found - 1));
+      final rightBoundary =
+          end >= source.length ||
           !_isLearningWordCodeUnit(source.codeUnitAt(end));
 
       if (leftBoundary && rightBoundary && found >= appendFrom) {
@@ -303,7 +306,7 @@ class VoiceFeedbackLearningService {
       final prefs = await SharedPreferences.getInstance();
       final corrections = prefs.getStringList(_userCorrectionsKey) ?? [];
       final metrics = prefs.getStringList(_accuracyMetricsKey) ?? [];
-      
+
       // Count corrections by language
       final Map<String, int> correctionsByLang = {};
       for (final entry in corrections) {
@@ -311,7 +314,7 @@ class VoiceFeedbackLearningService {
         final lang = data['language'] as String? ?? 'unknown';
         correctionsByLang[lang] = (correctionsByLang[lang] ?? 0) + 1;
       }
-      
+
       // Count metrics by language
       final Map<String, int> metricsByLang = {};
       for (final entry in metrics) {
@@ -319,7 +322,7 @@ class VoiceFeedbackLearningService {
         final lang = data['language'] as String? ?? 'unknown';
         metricsByLang[lang] = (metricsByLang[lang] ?? 0) + 1;
       }
-      
+
       return {
         'total_corrections': corrections.length,
         'total_metrics': metrics.length,

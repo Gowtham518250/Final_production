@@ -13,8 +13,8 @@ class SchemesPage extends StatefulWidget {
 
 class _SchemesPageState extends State<SchemesPage> {
   // Modern SaaS Colors - synced with visual_widgets.dart
-  static const Color _primary = AppColors.primary;  // #635BFF
-  
+  static const Color _primary = AppColors.primary; // #635BFF
+
   List<Map<String, dynamic>> _schemes = [];
   bool _loading = true;
   String _selectedType = SchemeEngine.PERCENT_OFF;
@@ -38,7 +38,10 @@ class _SchemesPageState extends State<SchemesPage> {
     await _loadSchemes();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('✅ Scheme deleted'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: LiveTranslatedText('✅ Scheme deleted'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -48,9 +51,7 @@ class _SchemesPageState extends State<SchemesPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CreateSchemeBottomSheet(
-        onSchemeCreated: _loadSchemes,
-      ),
+      builder: (_) => CreateSchemeBottomSheet(onSchemeCreated: _loadSchemes),
     );
   }
 
@@ -65,48 +66,65 @@ class _SchemesPageState extends State<SchemesPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _schemes.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(40),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: _primary.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.local_offer_rounded, size: 60, color: _primary),
-                        ),
-                        const SizedBox(height: 24),
-                        LiveTranslatedText('No Offers Yet',
-                            style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        LiveTranslatedText('Create your first offer to boost sales!',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600])),
-                        const SizedBox(height: 32),
-                        ElevatedButton.icon(
-                          onPressed: _showCreateSchemeDialog,
-                          icon: const Icon(Icons.add),
-                          label: const LiveTranslatedText('Create Offer'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                          ),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.local_offer_rounded,
+                        size: 60,
+                        color: _primary,
+                      ),
                     ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _schemes.length,
-                  itemBuilder: (_, idx) => _buildSchemeCard(_schemes[idx]),
+                    const SizedBox(height: 24),
+                    LiveTranslatedText(
+                      'No Offers Yet',
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    LiveTranslatedText(
+                      'Create your first offer to boost sales!',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: _showCreateSchemeDialog,
+                      icon: const Icon(Icons.add),
+                      label: const LiveTranslatedText('Create Offer'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _schemes.length,
+              itemBuilder: (_, idx) => _buildSchemeCard(_schemes[idx]),
+            ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: _primary,
         foregroundColor: Colors.white,
@@ -145,8 +163,14 @@ class _SchemesPageState extends State<SchemesPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: active ? _primary.withValues(alpha: 0.3) : Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
+        border: Border.all(
+          color: active
+              ? _primary.withValues(alpha: 0.3)
+              : Colors.grey.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -160,16 +184,33 @@ class _SchemesPageState extends State<SchemesPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      LiveTranslatedText(name, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700)),
+                      LiveTranslatedText(
+                        name,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      LiveTranslatedText(subtitle, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600])),
+                      LiveTranslatedText(
+                        subtitle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: active ? _primary.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
+                    color: active
+                        ? _primary.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: LiveTranslatedText(
@@ -215,12 +256,13 @@ class CreateSchemeBottomSheet extends StatefulWidget {
   const CreateSchemeBottomSheet({super.key, required this.onSchemeCreated});
 
   @override
-  State<CreateSchemeBottomSheet> createState() => _CreateSchemeBottomSheetState();
+  State<CreateSchemeBottomSheet> createState() =>
+      _CreateSchemeBottomSheetState();
 }
 
 class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
   static const Color _primary = Color(0xFF6366F1);
-  
+
   String _type = SchemeEngine.PERCENT_OFF;
   final _nameCtrl = TextEditingController();
   final _value1Ctrl = TextEditingController();
@@ -275,7 +317,9 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
       }
 
       scheme['valid_from'] = DateTime.now().toIso8601String();
-      scheme['valid_upto'] = DateTime.now().add(const Duration(days: 30)).toIso8601String();
+      scheme['valid_upto'] = DateTime.now()
+          .add(const Duration(days: 30))
+          .toIso8601String();
 
       await SchemeEngine.saveScheme(scheme);
 
@@ -283,13 +327,19 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
         Navigator.pop(context);
         widget.onSchemeCreated();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('✅ Scheme created!'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: LiveTranslatedText('✅ Scheme created!'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -314,36 +364,79 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
           children: [
             Row(
               children: [
-                Container(width: 4, height: 28, color: _primary, margin: const EdgeInsets.only(right: 12)),
-                LiveTranslatedText('Create New Offer',
-                    style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
+                Container(
+                  width: 4,
+                  height: 28,
+                  color: _primary,
+                  margin: const EdgeInsets.only(right: 12),
+                ),
+                LiveTranslatedText(
+                  'Create New Offer',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const Spacer(),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
             const SizedBox(height: 24),
-            LiveTranslatedText('Offer Name', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+            LiveTranslatedText(
+              'Offer Name',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _nameCtrl,
               decoration: InputDecoration(
                 hint: LiveTranslatedText('e.g., Flash Sale, Bulk Discount'),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            LiveTranslatedText('Offer Type', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[700])),
+            LiveTranslatedText(
+              'Offer Type',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _type,
               decoration: InputDecoration(
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               items: [
-                DropdownMenuItem(value: SchemeEngine.PERCENT_OFF, child: const LiveTranslatedText('% Off on Min Order')),
-                DropdownMenuItem(value: SchemeEngine.FLAT_OFF, child: const LiveTranslatedText('Flat ₹ Off on Min Order')),
-                DropdownMenuItem(value: SchemeEngine.BOGO, child: const LiveTranslatedText('Buy X Get 1 Free')),
-                DropdownMenuItem(value: SchemeEngine.MIN_QTY_FREE, child: const LiveTranslatedText('Buy X Get ₹ Off')),
+                DropdownMenuItem(
+                  value: SchemeEngine.PERCENT_OFF,
+                  child: const LiveTranslatedText('% Off on Min Order'),
+                ),
+                DropdownMenuItem(
+                  value: SchemeEngine.FLAT_OFF,
+                  child: const LiveTranslatedText('Flat ₹ Off on Min Order'),
+                ),
+                DropdownMenuItem(
+                  value: SchemeEngine.BOGO,
+                  child: const LiveTranslatedText('Buy X Get 1 Free'),
+                ),
+                DropdownMenuItem(
+                  value: SchemeEngine.MIN_QTY_FREE,
+                  child: const LiveTranslatedText('Buy X Get ₹ Off'),
+                ),
               ],
               onChanged: (v) => setState(() {
                 _type = v ?? SchemeEngine.PERCENT_OFF;
@@ -363,8 +456,13 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 onPressed: _createScheme,
-                child: LiveTranslatedText('Create Offer',
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600)),
+                child: LiveTranslatedText(
+                  'Create Offer',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
@@ -378,22 +476,42 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText('Discount %', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Discount %',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value1Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 10 for 10%')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 10 for 10%'),
+            ),
           ),
           const SizedBox(height: 16),
-          LiveTranslatedText('Minimum Order Amount', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Minimum Order Amount',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value2Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 500')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 500'),
+            ),
           ),
         ],
       );
@@ -401,22 +519,42 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText('Flat Discount Amount (₹)', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Flat Discount Amount (₹)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value1Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 100')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 100'),
+            ),
           ),
           const SizedBox(height: 16),
-          LiveTranslatedText('Minimum Order Amount', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Minimum Order Amount',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value2Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 500')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 500'),
+            ),
           ),
         ],
       );
@@ -424,22 +562,42 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText('Trigger Quantity', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Trigger Quantity',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value1Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('Buy how many items to get 1 free?')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('Buy how many items to get 1 free?'),
+            ),
           ),
           const SizedBox(height: 16),
-          LiveTranslatedText('Free Item Price (₹)', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Free Item Price (₹)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value2Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 200')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 200'),
+            ),
           ),
         ],
       );
@@ -447,22 +605,42 @@ class _CreateSchemeBottomSheetState extends State<CreateSchemeBottomSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText('Minimum Quantity', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Minimum Quantity',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value1Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 10')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 10'),
+            ),
           ),
           const SizedBox(height: 16),
-          LiveTranslatedText('Discount Per Unit (₹)', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+          LiveTranslatedText(
+            'Discount Per Unit (₹)',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _value2Ctrl,
             keyboardType: TextInputType.number,
-            decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hint: LiveTranslatedText('e.g., 50')),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hint: LiveTranslatedText('e.g., 50'),
+            ),
           ),
         ],
       );

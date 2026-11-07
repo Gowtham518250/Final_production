@@ -14,7 +14,8 @@ class CustomerMarketplacePage extends StatefulWidget {
   const CustomerMarketplacePage({super.key});
 
   @override
-  State<CustomerMarketplacePage> createState() => _CustomerMarketplacePageState();
+  State<CustomerMarketplacePage> createState() =>
+      _CustomerMarketplacePageState();
 }
 
 class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
@@ -56,7 +57,8 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
     });
 
     try {
-      final uri = '/store/marketplace/search?q=${Uri.encodeQueryComponent(query)}'
+      final uri =
+          '/store/marketplace/search?q=${Uri.encodeQueryComponent(query)}'
           '&mode=$_mode&limit=40';
       final response = await ApiClient.getJson(uri);
       if (response.statusCode != 200) {
@@ -66,12 +68,16 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
       final data = jsonDecode(response.body);
       final shops = data is Map && data['shops'] is List
           ? List<Map<String, dynamic>>.from(
-              (data['shops'] as List).whereType<Map>().map(Map<String, dynamic>.from),
+              (data['shops'] as List).whereType<Map>().map(
+                Map<String, dynamic>.from,
+              ),
             )
           : <Map<String, dynamic>>[];
       final products = data is Map && data['products'] is List
           ? List<Map<String, dynamic>>.from(
-              (data['products'] as List).whereType<Map>().map(Map<String, dynamic>.from),
+              (data['products'] as List).whereType<Map>().map(
+                Map<String, dynamic>.from,
+              ),
             )
           : <Map<String, dynamic>>[];
 
@@ -92,7 +98,10 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () => _runSearch(value));
+    _debounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _runSearch(value),
+    );
   }
 
   Future<void> _askAi() async {
@@ -110,18 +119,25 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
         '/store/ai/recommend?q=${Uri.encodeQueryComponent(query)}&limit=10',
       );
       final raw = response.statusCode == 200 ? jsonDecode(response.body) : null;
-      final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final data = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{};
 
       if (response.statusCode != 200) {
-        throw Exception(data['detail']?.toString() ?? 'Shopping assistant is unavailable.');
+        throw Exception(
+          data['detail']?.toString() ?? 'Shopping assistant is unavailable.',
+        );
       }
 
       if (!mounted) return;
       setState(() {
-        _aiResponse = data['response']?.toString() ?? 'Here are the matching shops.';
+        _aiResponse =
+            data['response']?.toString() ?? 'Here are the matching shops.';
         _recommendations = data['recommendations'] is List
             ? List<Map<String, dynamic>>.from(
-                (data['recommendations'] as List).whereType<Map>().map(Map<String, dynamic>.from),
+                (data['recommendations'] as List).whereType<Map>().map(
+                  Map<String, dynamic>.from,
+                ),
               )
             : [];
         _aiLoading = false;
@@ -142,7 +158,15 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
 
   String _shopFullAddress(Map<String, dynamic> shop) {
     final parts = <String>[
-      for (final key in const ['address_line1', 'address_line2', 'address', 'location', 'city', 'state', 'postal_code'])
+      for (final key in const [
+        'address_line1',
+        'address_line2',
+        'address',
+        'location',
+        'city',
+        'state',
+        'postal_code',
+      ])
         if ((shop[key]?.toString().trim() ?? '').isNotEmpty)
           shop[key].toString().trim(),
     ];
@@ -151,28 +175,37 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
   }
 
   Future<void> _openShopDirections(Map<String, dynamic> shop) async {
-    final lat = double.tryParse((shop['latitude'] ?? shop['shop_latitude'] ?? '').toString());
-    final lng = double.tryParse((shop['longitude'] ?? shop['shop_longitude'] ?? '').toString());
+    final lat = double.tryParse(
+      (shop['latitude'] ?? shop['shop_latitude'] ?? '').toString(),
+    );
+    final lng = double.tryParse(
+      (shop['longitude'] ?? shop['shop_longitude'] ?? '').toString(),
+    );
     final address = _shopFullAddress(shop);
     if ((lat == null || lng == null) && address.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('This shop has not added a map location yet.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'This shop has not added a map location yet.',
+          ),
+        ),
       );
       return;
     }
 
-    final destination = lat != null && lng != null
-        ? '$lat,$lng'
-        : address;
+    final destination = lat != null && lng != null ? '$lat,$lng' : address;
     final uri = Uri.https('www.google.com', '/maps/dir/', {
       'api': '1',
       'destination': destination,
       'travelmode': 'driving',
     });
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not open maps on this device.')),
+        const SnackBar(
+          content: LiveTranslatedText('Could not open maps on this device.'),
+        ),
       );
     }
   }
@@ -183,7 +216,9 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
     final uri = Uri(scheme: 'tel', path: phone);
     if (!await launchUrl(uri) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not start the phone call.')),
+        const SnackBar(
+          content: LiveTranslatedText('Could not start the phone call.'),
+        ),
       );
     }
   }
@@ -197,9 +232,12 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
       path: email,
       queryParameters: {'subject': 'Enquiry about $shopName'},
     );
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not open your email app.')),
+        const SnackBar(
+          content: LiveTranslatedText('Could not open your email app.'),
+        ),
       );
     }
   }
@@ -211,10 +249,13 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
       value = 'https://$value';
     }
     final uri = Uri.tryParse(value);
-    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Could not open the shop website.')),
+        const SnackBar(
+          content: LiveTranslatedText('Could not open the shop website.'),
+        ),
       );
     }
   }
@@ -233,7 +274,10 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
         ),
         if (count > 0) ...[
           const SizedBox(width: 3),
-          LiveTranslatedText('($count)', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          LiveTranslatedText(
+            '($count)',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
         ],
       ],
     );
@@ -246,17 +290,28 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
         : 'Shop';
     final address = _shopFullAddress(shop);
     final tagline = shop['tagline']?.toString().trim() ?? '';
-    final description = shop['shop_description']?.toString().trim().isNotEmpty == true
+    final description =
+        shop['shop_description']?.toString().trim().isNotEmpty == true
         ? shop['shop_description'].toString().trim()
         : (shop['description']?.toString().trim() ?? '');
     final phone = shop['phone']?.toString().trim() ?? '';
     final email = shop['email']?.toString().trim() ?? '';
     final website = shop['website']?.toString().trim() ?? '';
     final categories = shop['categories'] is List
-        ? (shop['categories'] as List).map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList()
-        : (shop['categories']?.toString().split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList() ?? <String>[]);
+        ? (shop['categories'] as List)
+              .map((e) => e.toString())
+              .where((e) => e.trim().isNotEmpty)
+              .toList()
+        : (shop['categories']
+                  ?.toString()
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList() ??
+              <String>[]);
     final logoUrl = shop['logo_url']?.toString().trim() ?? '';
-    final hasCoordinates = double.tryParse((shop['latitude'] ?? '').toString()) != null &&
+    final hasCoordinates =
+        double.tryParse((shop['latitude'] ?? '').toString()) != null &&
         double.tryParse((shop['longitude'] ?? '').toString()) != null;
 
     return Material(
@@ -272,7 +327,11 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: const Color(0xFFE5E7EB)),
             boxShadow: const [
-              BoxShadow(color: Color(0x0D0F172A), blurRadius: 20, offset: Offset(0, 8)),
+              BoxShadow(
+                color: Color(0x0D0F172A),
+                blurRadius: 20,
+                offset: Offset(0, 8),
+              ),
             ],
           ),
           child: Column(
@@ -283,10 +342,15 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                   CircleAvatar(
                     radius: 27,
                     backgroundColor: AppColors.brandLight,
-                    backgroundImage: logoUrl.startsWith('http') ? NetworkImage(logoUrl) : null,
+                    backgroundImage: logoUrl.startsWith('http')
+                        ? NetworkImage(logoUrl)
+                        : null,
                     child: logoUrl.startsWith('http')
                         ? null
-                        : const Icon(Icons.storefront_rounded, color: AppColors.brand),
+                        : const Icon(
+                            Icons.storefront_rounded,
+                            color: AppColors.brand,
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -297,14 +361,20 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const SizedBox(height: 3),
                         LiveTranslatedText(
                           shop['shop_type']?.toString() ?? 'General',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ],
                     ),
@@ -314,28 +384,54 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
               ),
               if (tagline.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                LiveTranslatedText(tagline, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                LiveTranslatedText(
+                  tagline,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
               ],
               if (description.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                LiveTranslatedText(description, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 12, height: 1.35)),
+                LiveTranslatedText(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
               ],
               if (categories.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: categories.take(3).map((category) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandLight,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: LiveTranslatedText(category, style: const TextStyle(
-                      color: AppColors.brand, fontSize: 10, fontWeight: FontWeight.w700)),
-                  )).toList(),
+                  children: categories
+                      .take(3)
+                      .map(
+                        (category) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandLight,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: LiveTranslatedText(
+                            category,
+                            style: const TextStyle(
+                              color: AppColors.brand,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
               if (address.isNotEmpty) ...[
@@ -343,20 +439,45 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.location_on_outlined, size: 17, color: AppColors.brand),
+                    const Icon(
+                      Icons.location_on_outlined,
+                      size: 17,
+                      color: AppColors.brand,
+                    ),
                     const SizedBox(width: 6),
-                    Expanded(child: LiveTranslatedText(address, maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.3))),
+                    Expanded(
+                      child: LiveTranslatedText(
+                        address,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ] else ...[
                 const SizedBox(height: 12),
-                Row(children: [
-                  Icon(Icons.location_off_outlined, size: 16, color: Colors.grey.shade500),
-                  const SizedBox(width: 6),
-                  LiveTranslatedText('Location not provided', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                ]),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_off_outlined,
+                      size: 16,
+                      color: Colors.grey.shade500,
+                    ),
+                    const SizedBox(width: 6),
+                    LiveTranslatedText(
+                      'Location not provided',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
               ],
               const SizedBox(height: 12),
               Wrap(
@@ -371,7 +492,10 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.brand,
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
                       ),
                     ),
                   if (phone.isNotEmpty)
@@ -382,7 +506,10 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.brand,
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
                       ),
                     ),
                   if (email.isNotEmpty)
@@ -393,7 +520,10 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.brand,
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
                       ),
                     ),
                   if (website.isNotEmpty)
@@ -404,17 +534,29 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.brand,
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
                       ),
                     ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFECFDF5),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: const LiveTranslatedText('Online shopping enabled',
-                      style: TextStyle(color: Color(0xFF047857), fontSize: 10, fontWeight: FontWeight.w800)),
+                    child: const LiveTranslatedText(
+                      'Online shopping enabled',
+                      style: TextStyle(
+                        color: Color(0xFF047857),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -423,7 +565,10 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: () => _openShop(id),
-                  icon: const Icon(Icons.store_mall_directory_outlined, size: 16),
+                  icon: const Icon(
+                    Icons.store_mall_directory_outlined,
+                    size: 16,
+                  ),
                   label: const LiveTranslatedText('Visit shop'),
                 ),
               ),
@@ -439,7 +584,8 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
     final name = product['product_name']?.toString() ?? 'Product';
     final shop = product['shop_name']?.toString() ?? 'Shop';
     final price = double.tryParse(product['price']?.toString() ?? '0') ?? 0;
-    final stock = int.tryParse(product['stock_available']?.toString() ?? '0') ?? 0;
+    final stock =
+        int.tryParse(product['stock_available']?.toString() ?? '0') ?? 0;
 
     return InkWell(
       onTap: () => _openShop(shopId),
@@ -460,24 +606,53 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                 color: AppColors.brandLight,
                 borderRadius: BorderRadius.circular(15),
               ),
-              child: const Icon(Icons.inventory_2_outlined, color: AppColors.brand),
+              child: const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.brand,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LiveTranslatedText(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  LiveTranslatedText(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 4),
-                  LiveTranslatedText(shop, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  LiveTranslatedText(
+                    shop,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
                   const SizedBox(height: 7),
-                  Row(children: [
-                    _rating(product),
-                    const Spacer(),
-                    LiveTranslatedText('₹${price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.brand)),
-                  ]),
+                  Row(
+                    children: [
+                      _rating(product),
+                      const Spacer(),
+                      LiveTranslatedText(
+                        '₹${price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.brand,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 5),
-                  LiveTranslatedText('${stock} in stock', style: TextStyle(fontSize: 11, color: stock > 0 ? Colors.green.shade700 : Colors.red.shade700)),
+                  LiveTranslatedText(
+                    '${stock} in stock',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: stock > 0
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -506,24 +681,49 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
           CircleAvatar(
             radius: 18,
             backgroundColor: AppColors.brandLight,
-            child: LiveTranslatedText('${index + 1}', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.brand)),
+            child: LiveTranslatedText(
+              '${index + 1}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                color: AppColors.brand,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                LiveTranslatedText(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                LiveTranslatedText(shop, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                LiveTranslatedText(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                LiveTranslatedText(
+                  shop,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              LiveTranslatedText('₹${price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.brand)),
+              LiveTranslatedText(
+                '₹${price.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.brand,
+                ),
+              ),
               _rating(item),
-              TextButton(onPressed: () => _openShop(shopId), child: const LiveTranslatedText('Open shop')),
+              TextButton(
+                onPressed: () => _openShop(shopId),
+                child: const LiveTranslatedText('Open shop'),
+              ),
             ],
           ),
         ],
@@ -538,14 +738,18 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
-        title: const LiveTranslatedText('RetailShop Marketplace', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const LiveTranslatedText(
+          'RetailShop Marketplace',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         actions: [
           IconButton(
             tooltip: 'AI Shopping',
-            onPressed: () => Navigator.pushNamed(context, '/customer-ai-shopping'),
+            onPressed: () =>
+                Navigator.pushNamed(context, '/customer-ai-shopping'),
             icon: const Icon(Icons.auto_awesome_rounded),
           ),
           IconButton(
@@ -573,11 +777,21 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const LiveTranslatedText('Find the right shop or the right price.', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900, height: 1.05)),
+                  const LiveTranslatedText(
+                    'Find the right shop or the right price.',
+                    style: TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                      height: 1.05,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   LiveTranslatedText(
                     'Search shop names to open their storefront, or search products to compare offers across every shop that enabled Online Shopping.',
-                    style: TextStyle(color: Colors.blueGrey.shade700, height: 1.45),
+                    style: TextStyle(
+                      color: Colors.blueGrey.shade700,
+                      height: 1.45,
+                    ),
                   ),
                   const SizedBox(height: 18),
                   TextField(
@@ -586,16 +800,27 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search_rounded),
-                      hint: LiveTranslatedText('Search shops, products, brands…'),
+                      hint: LiveTranslatedText(
+                        'Search shops, products, brands…',
+                      ),
                       filled: true,
                       fillColor: Colors.white,
                       suffixIcon: _loading
                           ? const Padding(
                               padding: EdgeInsets.all(13),
-                              child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
                             )
                           : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -630,51 +855,125 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: const [BoxShadow(color: Color(0x221E1B4B), blurRadius: 20, offset: Offset(0, 10))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x221E1B4B),
+                    blurRadius: 20,
+                    offset: Offset(0, 10),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    const Icon(Icons.auto_awesome_rounded, color: Colors.amberAccent),
-                    const SizedBox(width: 8),
-                    const Expanded(child: LiveTranslatedText('Shopping assistant', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900))),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
-                      child: const LiveTranslatedText('TOP 10', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800)),
-                    ),
-                  ]),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Colors.amberAccent,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: LiveTranslatedText(
+                          'Shopping assistant',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const LiveTranslatedText(
+                          'TOP 10',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
-                  const LiveTranslatedText('Ask for cheap, highly rated, budget or price-limited products. The assistant searches every online-enabled shop.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  const LiveTranslatedText(
+                    'Ask for cheap, highly rated, budget or price-limited products. The assistant searches every online-enabled shop.',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      height: 1.45,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: _aiController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hint: LiveTranslatedText('e.g. Find low price rice or best rated atta'),
+                      hint: LiveTranslatedText(
+                        'e.g. Find low price rice or best rated atta',
+                      ),
                       hintStyle: const TextStyle(color: Colors.white54),
-                      prefixIcon: const Icon(Icons.psychology_alt_outlined, color: Colors.white70),
+                      prefixIcon: const Icon(
+                        Icons.psychology_alt_outlined,
+                        color: Colors.white70,
+                      ),
                       suffixIcon: IconButton(
                         onPressed: _aiLoading ? null : _askAi,
                         icon: _aiLoading
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                              ),
                       ),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.08),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
                     ),
                     onSubmitted: (_) => _askAi(),
                   ),
                   if (_aiResponse.isNotEmpty) ...[
                     const SizedBox(height: 14),
-                    LiveTranslatedText(_aiResponse, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, height: 1.4)),
+                    LiveTranslatedText(
+                      _aiResponse,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        height: 1.4,
+                      ),
+                    ),
                   ],
                   if (_recommendations.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    ..._recommendations.asMap().entries.map((entry) => _recommendationCard(entry.value, entry.key)),
+                    ..._recommendations.asMap().entries.map(
+                      (entry) => _recommendationCard(entry.value, entry.key),
+                    ),
                   ],
                 ],
               ),
@@ -688,21 +987,44 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFFED7AA)),
                 ),
-                child: Row(children: [
-                  const Icon(Icons.wifi_off_rounded, color: Color(0xFFC2410C)),
-                  const SizedBox(width: 10),
-                  Expanded(child: LiveTranslatedText(_error, style: const TextStyle(color: Color(0xFF9A3412))),
-                  ),
-                  TextButton(onPressed: () => _runSearch(_query), child: const LiveTranslatedText('Retry')),
-                ]),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.wifi_off_rounded,
+                      color: Color(0xFFC2410C),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: LiveTranslatedText(
+                        _error,
+                        style: const TextStyle(color: Color(0xFF9A3412)),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _runSearch(_query),
+                      child: const LiveTranslatedText('Retry'),
+                    ),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 22),
             if (_shops.isNotEmpty) ...[
               Row(
                 children: [
-                  const Expanded(child: LiveTranslatedText('Online shops', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900))),
-                  LiveTranslatedText('${_shops.length} found', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                  const Expanded(
+                    child: LiveTranslatedText(
+                      'Online shops',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  LiveTranslatedText(
+                    '${_shops.length} found',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -710,17 +1032,27 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.map_outlined, size: 18, color: AppColors.brand),
+                    const Icon(
+                      Icons.map_outlined,
+                      size: 18,
+                      color: AppColors.brand,
+                    ),
                     const SizedBox(width: 7),
                     const Expanded(
                       child: LiveTranslatedText(
                         'Shop locations',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                     LiveTranslatedText(
                       '${ShopLocationsMap.shopsWithCoordinates(_shops).length} mapped',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                 ),
@@ -736,8 +1068,8 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                   final columns = constraints.maxWidth >= 1100
                       ? 3
                       : constraints.maxWidth >= 680
-                          ? 2
-                          : 1;
+                      ? 2
+                      : 1;
                   final cardWidth = columns == 1
                       ? constraints.maxWidth
                       : (constraints.maxWidth - (12 * (columns - 1))) / columns;
@@ -745,10 +1077,12 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
                     spacing: 12,
                     runSpacing: 12,
                     children: _shops
-                        .map((shop) => SizedBox(
-                              width: cardWidth,
-                              child: _shopCard(shop),
-                            ))
+                        .map(
+                          (shop) => SizedBox(
+                            width: cardWidth,
+                            child: _shopCard(shop),
+                          ),
+                        )
                         .toList(growable: false),
                   );
                 },
@@ -756,11 +1090,17 @@ class _CustomerMarketplacePageState extends State<CustomerMarketplacePage> {
             ],
             if (_products.isNotEmpty) ...[
               const SizedBox(height: 28),
-              const LiveTranslatedText('Products across shops', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+              const LiveTranslatedText(
+                'Products across shops',
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 12),
               ..._products.map(_productCard),
             ],
-            if (!_loading && _error.isEmpty && _shops.isEmpty && _products.isEmpty) ...[
+            if (!_loading &&
+                _error.isEmpty &&
+                _shops.isEmpty &&
+                _products.isEmpty) ...[
               const SizedBox(height: 50),
               const Center(
                 child: LiveTranslatedText(

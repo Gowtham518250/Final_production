@@ -48,7 +48,7 @@ class TutorialService {
   static Future<void> resetAllTutorials() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_onboardingKey, false);
-    
+
     // Clear all tutorial flags
     final keys = prefs.getKeys();
     for (var key in keys) {
@@ -146,12 +146,7 @@ class TutorialService {
     final tutorials = getAllTutorials();
     return tutorials.firstWhere(
       (t) => t.id == feature,
-      orElse: () => Tutorial(
-        id: '',
-        title: '',
-        description: '',
-        steps: [],
-      ),
+      orElse: () => Tutorial(id: '', title: '', description: '', steps: []),
     );
   }
 
@@ -161,7 +156,8 @@ class TutorialService {
       Tutorial(
         id: 'csv_export',
         title: 'Exporting Sales to CSV',
-        description: 'Save your sales data in CSV format for spreadsheet analysis',
+        description:
+            'Save your sales data in CSV format for spreadsheet analysis',
         steps: [
           TutorialStep(
             'Navigate to Dashboard',
@@ -242,7 +238,8 @@ class TutorialService {
       Tutorial(
         id: 'voice_notes',
         title: 'Recording Voice Notes',
-        description: 'Quick voice memos for personal reminders (up to 1 minute)',
+        description:
+            'Quick voice memos for personal reminders (up to 1 minute)',
         steps: [
           TutorialStep(
             'Open Voice Notes',
@@ -256,14 +253,8 @@ class TutorialService {
             'Speak Your Note',
             'Note: Limited to 1 minute per recording',
           ),
-          TutorialStep(
-            'Stop Recording',
-            'Tap the stop button when done',
-          ),
-          TutorialStep(
-            'Save Note',
-            'Save or discard your voice note',
-          ),
+          TutorialStep('Stop Recording', 'Tap the stop button when done'),
+          TutorialStep('Save Note', 'Save or discard your voice note'),
         ],
       ),
       Tutorial(
@@ -298,10 +289,7 @@ class TutorialService {
         title: 'Managing Inventory',
         description: 'Track your products and stock levels',
         steps: [
-          TutorialStep(
-            'Open Inventory',
-            'Navigate to the Inventory section',
-          ),
+          TutorialStep('Open Inventory', 'Navigate to the Inventory section'),
           TutorialStep(
             'Add Products',
             'Click "Add Product" to create new items',
@@ -310,14 +298,8 @@ class TutorialService {
             'Upload CSV',
             'Or upload a CSV file with multiple products',
           ),
-          TutorialStep(
-            'Track Quantity',
-            'Monitor stock levels automatically',
-          ),
-          TutorialStep(
-            'Set Alerts',
-            'Get notifications when stock is low',
-          ),
+          TutorialStep('Track Quantity', 'Monitor stock levels automatically'),
+          TutorialStep('Set Alerts', 'Get notifications when stock is low'),
         ],
       ),
     ];

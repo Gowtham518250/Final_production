@@ -34,9 +34,7 @@ void main() {
         '123456789012',
       );
       expect(
-        PaymentDetectionService.debugExtractReferenceId(
-          'Ref No 987654321098',
-        ),
+        PaymentDetectionService.debugExtractReferenceId('Ref No 987654321098'),
         '987654321098',
       );
     });
@@ -60,111 +58,122 @@ void main() {
       expect(event.packageName, 'com.example.payment');
     });
 
-    test('replayed native notification event key is suppressed after payload extras change', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      service.clearBill();
-      service.setBillExpected(10);
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
-      const nativeKey = 'com.phonepe.app|7|1792939200000|payload-sha';
+    test(
+      'replayed native notification event key is suppressed after payload extras change',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        service.setBillExpected(10);
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
+        const nativeKey = 'com.phonepe.app|7|1792939200000|payload-sha';
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          id: 7,
-          eventKey: nativeKey,
-          title: 'PhonePe',
-          content: 'You received ₹5 from Rahul',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            id: 7,
+            eventKey: nativeKey,
+            title: 'PhonePe',
+            content: 'You received ₹5 from Rahul',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      // Native event identity stays stable for the same posted notification,
-      // even if a delivery path attaches extra textLines not part of that key.
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          id: 7,
-          eventKey: nativeKey,
-          title: 'PhonePe',
-          content: 'You received ₹5 from Rahul',
-          textLines: 'Delivery replay marker',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        // Native event identity stays stable for the same posted notification,
+        // even if a delivery path attaches extra textLines not part of that key.
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            id: 7,
+            eventKey: nativeKey,
+            title: 'PhonePe',
+            content: 'You received ₹5 from Rahul',
+            textLines: 'Delivery replay marker',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(events, hasLength(1));
-      await subscription.cancel();
-      service.clearBill();
-      service.debugResetTransientDetectionState();
-    });
+        expect(events, hasLength(1));
+        await subscription.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+      },
+    );
   });
 
   group('Native announcement idempotency marker', () {
-    test('native announcement marker survives even when event key is missing', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      service.clearBill();
-      service.setBillExpected(10);
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
+    test(
+      'native announcement marker survives even when event key is missing',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        service.setBillExpected(10);
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          id: 77,
-          title: 'PhonePe',
-          content: 'You received ₹5 from Rahul',
-          nativeAnnouncementHandled: true,
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 160));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            id: 77,
+            title: 'PhonePe',
+            content: 'You received ₹5 from Rahul',
+            nativeAnnouncementHandled: true,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 160));
 
-      expect(events, isNotEmpty);
-      expect(events.any((event) => event.nativeAnnouncementHandled), isTrue);
+        expect(events, isNotEmpty);
+        expect(events.any((event) => event.nativeAnnouncementHandled), isTrue);
 
-      await subscription.cancel();
-      service.clearBill();
-      service.debugResetTransientDetectionState();
-    });
+        await subscription.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+      },
+    );
   });
 
   group('SMS source identity and safe matching', () {
-    test('identical bank SMS text from distinct source rows remains two candidates', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      service.clearBill();
-      service.setBillExpected(50);
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
-      final firstTime = DateTime.now();
-      const body = 'Your account is credited with Rs.5';
+    test(
+      'identical bank SMS text from distinct source rows remains two candidates',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        service.setBillExpected(50);
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
+        final firstTime = DateTime.now();
+        const body = 'Your account is credited with Rs.5';
 
-      service.debugHandleSms(
-        'VM-PHONEPE',
-        body,
-        receivedAt: firstTime,
-        sourceEventKey: 'sms|id_101|${firstTime.millisecondsSinceEpoch}|body-hash-a',
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+        service.debugHandleSms(
+          'VM-PHONEPE',
+          body,
+          receivedAt: firstTime,
+          sourceEventKey:
+              'sms|id_101|${firstTime.millisecondsSinceEpoch}|body-hash-a',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 60));
 
-      final secondTime = firstTime.add(const Duration(seconds: 2));
-      service.debugHandleSms(
-        'VM-PHONEPE',
-        body,
-        receivedAt: secondTime,
-        sourceEventKey: 'sms|id_102|${secondTime.millisecondsSinceEpoch}|body-hash-b',
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 180));
+        final secondTime = firstTime.add(const Duration(seconds: 2));
+        service.debugHandleSms(
+          'VM-PHONEPE',
+          body,
+          receivedAt: secondTime,
+          sourceEventKey:
+              'sms|id_102|${secondTime.millisecondsSinceEpoch}|body-hash-b',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 180));
 
-      expect(events, hasLength(2));
-      expect(events.map((event) => event.amount), everyElement(5));
+        expect(events, hasLength(2));
+        expect(events.map((event) => event.amount), everyElement(5));
 
-      await subscription.cancel();
-      service.clearBill();
-      service.debugResetTransientDetectionState();
-    });
+        await subscription.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+      },
+    );
 
     test('replay of the same SMS source identity is processed once', () async {
       final service = PaymentDetectionService();
@@ -202,15 +211,17 @@ void main() {
     test('amount and time alone never choose a pending payment', () {
       final now = DateTime.now();
       final buffer = PendingPaymentBuffer();
-      buffer.add(PaymentEvent(
-        id: 'pending-no-payer',
-        amount: 5,
-        timestamp: now,
-        app: PaymentApp.phonePe,
-        payerName: 'Rahul',
-        rawText: 'Payment received ₹5',
-        direction: PaymentTransactionDirection.incomingCredit,
-      ));
+      buffer.add(
+        PaymentEvent(
+          id: 'pending-no-payer',
+          amount: 5,
+          timestamp: now,
+          app: PaymentApp.phonePe,
+          payerName: 'Rahul',
+          rawText: 'Payment received ₹5',
+          direction: PaymentTransactionDirection.incomingCredit,
+        ),
+      );
 
       final match = buffer.matchSms(
         amount: 5,
@@ -228,15 +239,17 @@ void main() {
       final now = DateTime.now();
       final buffer = PendingPaymentBuffer();
       for (final candidate in const ['pending-a', 'pending-b']) {
-        buffer.add(PaymentEvent(
-          id: candidate,
-          amount: 5,
-          timestamp: now,
-          app: PaymentApp.phonePe,
-          payerName: 'Rahul',
-          rawText: 'Payment received ₹5',
-          direction: PaymentTransactionDirection.incomingCredit,
-        ));
+        buffer.add(
+          PaymentEvent(
+            id: candidate,
+            amount: 5,
+            timestamp: now,
+            app: PaymentApp.phonePe,
+            payerName: 'Rahul',
+            rawText: 'Payment received ₹5',
+            direction: PaymentTransactionDirection.incomingCredit,
+          ),
+        );
       }
 
       final match = buffer.matchSms(
@@ -254,15 +267,17 @@ void main() {
     test('one unique payer amount time candidate can be corroborated', () {
       final now = DateTime.now();
       final buffer = PendingPaymentBuffer();
-      buffer.add(PaymentEvent(
-        id: 'pending-unique',
-        amount: 5,
-        timestamp: now,
-        app: PaymentApp.phonePe,
-        payerName: 'Rahul',
-        rawText: 'Payment received ₹5',
-        direction: PaymentTransactionDirection.incomingCredit,
-      ));
+      buffer.add(
+        PaymentEvent(
+          id: 'pending-unique',
+          amount: 5,
+          timestamp: now,
+          app: PaymentApp.phonePe,
+          payerName: 'Rahul',
+          rawText: 'Payment received ₹5',
+          direction: PaymentTransactionDirection.incomingCredit,
+        ),
+      );
 
       final match = buffer.matchSms(
         amount: 5,
@@ -329,42 +344,45 @@ void main() {
       },
     );
 
-    test('expanded bank SMS notification text is detected as a credit', () async {
-      final service = PaymentDetectionService();
-      service.clearBill();
-      service.setBillExpected(10);
+    test(
+      'expanded bank SMS notification text is detected as a credit',
+      () async {
+        final service = PaymentDetectionService();
+        service.clearBill();
+        service.setBillExpected(10);
 
-      final received = expectLater(
-        service.onPaymentDetected,
-        emits(
-          isA<PaymentEvent>()
-              .having((payment) => payment.amount, 'amount', 8)
-              .having(
-                (payment) => payment.direction,
-                'direction',
-                PaymentTransactionDirection.incomingCredit,
-              )
-              .having(
-                (payment) => payment.decision,
-                'decision',
-                PaymentDecision.confirmed,
-              ),
-        ),
-      );
+        final received = expectLater(
+          service.onPaymentDetected,
+          emits(
+            isA<PaymentEvent>()
+                .having((payment) => payment.amount, 'amount', 8)
+                .having(
+                  (payment) => payment.direction,
+                  'direction',
+                  PaymentTransactionDirection.incomingCredit,
+                )
+                .having(
+                  (payment) => payment.decision,
+                  'decision',
+                  PaymentDecision.confirmed,
+                ),
+          ),
+        );
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.google.android.apps.messaging',
-          title: 'VM-APGB-T',
-          content: 'Dear Customer, An amount of Rs.8/- is ...',
-          bigText:
-              'Dear Customer, An amount of Rs.8/- is credited to A/c XXXX4222',
-        ),
-      );
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.google.android.apps.messaging',
+            title: 'VM-APGB-T',
+            content: 'Dear Customer, An amount of Rs.8/- is ...',
+            bigText:
+                'Dear Customer, An amount of Rs.8/- is credited to A/c XXXX4222',
+          ),
+        );
 
-      await received;
-      service.clearBill();
-    });
+        await received;
+        service.clearBill();
+      },
+    );
 
     test(
       'Truecaller bank SMS notification is accepted once and deduplicated',
@@ -420,7 +438,8 @@ void main() {
         ServiceNotificationEvent(
           packageName: 'com.phonepe.app',
           title: 'PhonePe',
-          content: 'Payment received ₹5 credited to your account. UTR 123456789012',
+          content:
+              'Payment received ₹5 credited to your account. UTR 123456789012',
         ),
       );
       await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -597,66 +616,79 @@ void main() {
       await subscription.cancel();
     });
 
-    test('PhonePe payment echoed by Truecaller on same account emits only once', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
+    test(
+      'PhonePe payment echoed by Truecaller on same account emits only once',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            title: 'PhonePe',
+            content:
+                'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 80));
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.truecaller',
-          title: 'APGB',
-          content: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.truecaller',
+            title: 'APGB',
+            content:
+                'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 120));
 
-      expect(events, hasLength(1));
-      expect(events.single.amount, 5);
-      expect(events.single.accountSuffix, '4222');
+        expect(events, hasLength(1));
+        expect(events.single.amount, 5);
+        expect(events.single.accountSuffix, '4222');
 
-      await subscription.cancel();
-    });
+        await subscription.cancel();
+      },
+    );
 
-    test('same amount from Truecaller to a different account is not deduplicated', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
+    test(
+      'same amount from Truecaller to a different account is not deduplicated',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            title: 'PhonePe',
+            content:
+                'UPI payment ₹5 received from Rahul, credited to A/c XXXX4222',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 80));
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.truecaller',
-          title: 'APGB',
-          content: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 1234',
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.truecaller',
+            title: 'APGB',
+            content:
+                'Verified Business + ₹5 UPI transfer from Apgbank to Account 1234',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 120));
 
-      expect(events, hasLength(2));
-      expect(events.map((event) => event.accountSuffix).toSet(), {'4222', '1234'});
+        expect(events, hasLength(2));
+        expect(events.map((event) => event.accountSuffix).toSet(), {
+          '4222',
+          '1234',
+        });
 
-      await subscription.cancel();
-    });
+        await subscription.cancel();
+      },
+    );
 
     test('bare APGB Truecaller title is not misrouted as bank SMS', () {
       expect(
@@ -675,99 +707,108 @@ void main() {
       );
     });
 
-    test('unregistered bank app credit without UTR becomes a review candidate', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final received = expectLater(
-        service.onPaymentDetected,
-        emits(
-          isA<PaymentEvent>()
-              .having((payment) => payment.amount, 'amount', 25)
-              .having(
-                (payment) => payment.direction,
-                'direction',
-                PaymentTransactionDirection.incomingCredit,
-              )
-              .having(
-                (payment) => payment.decision,
-                'decision',
-                PaymentDecision.likely,
-              ),
-        ),
-      );
+    test(
+      'unregistered bank app credit without UTR becomes a review candidate',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final received = expectLater(
+          service.onPaymentDetected,
+          emits(
+            isA<PaymentEvent>()
+                .having((payment) => payment.amount, 'amount', 25)
+                .having(
+                  (payment) => payment.direction,
+                  'direction',
+                  PaymentTransactionDirection.incomingCredit,
+                )
+                .having(
+                  (payment) => payment.decision,
+                  'decision',
+                  PaymentDecision.likely,
+                ),
+          ),
+        );
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.example.otherbank',
-          title: 'Other Bank',
-          content: '₹25 credited to Account XXXX6789',
-        ),
-      );
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.example.otherbank',
+            title: 'Other Bank',
+            content: '₹25 credited to Account XXXX6789',
+          ),
+        );
 
-      await received;
-    });
+        await received;
+      },
+    );
 
-    test('well-formed DLT sender from an unlisted bank can emit a review candidate', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final received = expectLater(
-        service.onPaymentDetected,
-        emits(
-          isA<PaymentEvent>()
-              .having((payment) => payment.amount, 'amount', 500)
-              .having(
-                (payment) => payment.direction,
-                'direction',
-                PaymentTransactionDirection.incomingCredit,
-              )
-              .having(
-                (payment) => payment.decision,
-                'decision',
-                PaymentDecision.likely,
-              ),
-        ),
-      );
+    test(
+      'well-formed DLT sender from an unlisted bank can emit a review candidate',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final received = expectLater(
+          service.onPaymentDetected,
+          emits(
+            isA<PaymentEvent>()
+                .having((payment) => payment.amount, 'amount', 500)
+                .having(
+                  (payment) => payment.direction,
+                  'direction',
+                  PaymentTransactionDirection.incomingCredit,
+                )
+                .having(
+                  (payment) => payment.decision,
+                  'decision',
+                  PaymentDecision.likely,
+                ),
+          ),
+        );
 
-      service.handleSms(
-        'VM-XYZBNK',
-        'Dear Customer, INR 500 credited to A/c XXXX1234. '
-        'UTR 123456789012',
-      );
+        service.handleSms(
+          'VM-XYZBNK',
+          'Dear Customer, INR 500 credited to A/c XXXX1234. '
+              'UTR 123456789012',
+        );
 
-      await received;
-    });
+        await received;
+      },
+    );
 
-    test('unregistered bank debit notification is surfaced as a debit candidate', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final received = expectLater(
-        service.onPaymentDetected,
-        emits(
-          isA<PaymentEvent>()
-              .having(
-                (payment) => payment.direction,
-                'direction',
-                PaymentTransactionDirection.outgoingDebit,
-              )
-              .having(
-                (payment) => payment.decision,
-                'decision',
-                PaymentDecision.likely,
-              )
-              .having((payment) => payment.amount, 'amount', 500),
-        ),
-      );
+    test(
+      'unregistered bank debit notification is surfaced as a debit candidate',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final received = expectLater(
+          service.onPaymentDetected,
+          emits(
+            isA<PaymentEvent>()
+                .having(
+                  (payment) => payment.direction,
+                  'direction',
+                  PaymentTransactionDirection.outgoingDebit,
+                )
+                .having(
+                  (payment) => payment.decision,
+                  'decision',
+                  PaymentDecision.likely,
+                )
+                .having((payment) => payment.amount, 'amount', 500),
+          ),
+        );
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.unregistered.bank.mobile',
-          title: 'Bank Alert',
-          content: 'INR 500 debited from account XXXX8844',
-        ),
-      );
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.unregistered.bank.mobile',
+            title: 'Bank Alert',
+            content: 'INR 500 debited from account XXXX8844',
+          ),
+        );
 
-      await received;
-    });
+        await received;
+      },
+    );
 
     test(
       'Truecaller transfer notification emits a partial review event',
@@ -1455,80 +1496,88 @@ void main() {
       shortfall: event.isPartialPayment ? event.remainingAmount : null,
     );
 
-    test('same no-reference partial payment text is not spoken twice after 10 minutes', () async {
-      final queue = PriorityVoiceQueue();
-      final spoken = <String>[];
-      queue.onSpeak = spoken.add;
-      final firstTime = DateTime(2026, 10, 26, 12, 0);
+    test(
+      'same no-reference partial payment text is not spoken twice after 10 minutes',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+        final firstTime = DateTime(2026, 10, 26, 12, 0);
 
-      final first = PaymentEvent(
-        id: 'partial-credit-first',
-        amount: 5,
-        timestamp: firstTime,
-        app: PaymentApp.phonePe,
-        rawText: 'Payment of ₹5 received from Rahul via PhonePe',
-        detectionSource: 'notification',
-        direction: PaymentTransactionDirection.incomingCredit,
-        decision: PaymentDecision.likely,
-        isPartialPayment: true,
-        remainingAmount: 5,
-      );
-      final replay = PaymentEvent(
-        id: 'partial-credit-reposted',
-        amount: 5,
-        timestamp: firstTime.add(const Duration(minutes: 10)),
-        app: PaymentApp.phonePe,
-        rawText: 'Payment of ₹5 received from Rahul via PhonePe',
-        detectionSource: 'notification',
-        direction: PaymentTransactionDirection.incomingCredit,
-        decision: PaymentDecision.likely,
-        isPartialPayment: true,
-        remainingAmount: 5,
-      );
+        final first = PaymentEvent(
+          id: 'partial-credit-first',
+          amount: 5,
+          timestamp: firstTime,
+          app: PaymentApp.phonePe,
+          rawText: 'Payment of ₹5 received from Rahul via PhonePe',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+          isPartialPayment: true,
+          remainingAmount: 5,
+        );
+        final replay = PaymentEvent(
+          id: 'partial-credit-reposted',
+          amount: 5,
+          timestamp: firstTime.add(const Duration(minutes: 10)),
+          app: PaymentApp.phonePe,
+          rawText: 'Payment of ₹5 received from Rahul via PhonePe',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+          isPartialPayment: true,
+          remainingAmount: 5,
+        );
 
-      queue.enqueue(first, stateFor(first));
-      queue.enqueue(replay, stateFor(replay));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      queue.dispose();
+        queue.enqueue(first, stateFor(first));
+        queue.enqueue(replay, stateFor(replay));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        queue.dispose();
 
-      expect(spoken, hasLength(1));
-    });
+        expect(spoken, hasLength(1));
+      },
+    );
 
-    test('different no-reference message remains eligible as a separate payment', () async {
-      final queue = PriorityVoiceQueue();
-      final spoken = <String>[];
-      queue.onSpeak = spoken.add;
-      final firstTime = DateTime(2026, 10, 26, 12, 0);
+    test(
+      'different no-reference message remains eligible as a separate payment',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+        final firstTime = DateTime(2026, 10, 26, 12, 0);
 
-      final first = PaymentEvent(
-        id: 'partial-credit-first',
-        amount: 5,
-        timestamp: firstTime,
-        app: PaymentApp.phonePe,
-        rawText: 'Payment of ₹5 received from Rahul via PhonePe',
-        detectionSource: 'notification',
-        direction: PaymentTransactionDirection.incomingCredit,
-        decision: PaymentDecision.likely,
-      );
-      final separate = PaymentEvent(
-        id: 'partial-credit-second',
-        amount: 5,
-        timestamp: firstTime.add(const Duration(minutes: 10)),
-        app: PaymentApp.phonePe,
-        rawText: 'Payment of ₹5 received from Priya via PhonePe',
-        detectionSource: 'notification',
-        direction: PaymentTransactionDirection.incomingCredit,
-        decision: PaymentDecision.likely,
-      );
+        final first = PaymentEvent(
+          id: 'partial-credit-first',
+          amount: 5,
+          timestamp: firstTime,
+          app: PaymentApp.phonePe,
+          rawText: 'Payment of ₹5 received from Rahul via PhonePe',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
+        final separate = PaymentEvent(
+          id: 'partial-credit-second',
+          amount: 5,
+          timestamp: firstTime.add(const Duration(minutes: 10)),
+          app: PaymentApp.phonePe,
+          rawText: 'Payment of ₹5 received from Priya via PhonePe',
+          detectionSource: 'notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
 
-      queue.enqueue(first, stateFor(first));
-      queue.enqueue(separate, stateFor(separate));
-      // The queue intentionally spaces announcements by voiceMinGap (2s).
-      await Future<void>.delayed(PdsConfig.voiceMinGap + const Duration(milliseconds: 150));
-      queue.dispose();
+        queue.enqueue(first, stateFor(first));
+        queue.enqueue(separate, stateFor(separate));
+        // The queue intentionally spaces announcements by voiceMinGap (2s).
+        await Future<void>.delayed(
+          PdsConfig.voiceMinGap + const Duration(milliseconds: 150),
+        );
+        queue.dispose();
 
-      expect(spoken, hasLength(2));
-    });
+        expect(spoken, hasLength(2));
+      },
+    );
   });
 
   group('Payment voice direction', () {
@@ -1790,386 +1839,525 @@ void main() {
       },
     );
 
-  test('recognized PhonePe DLT sender credit stays pending for merchant review', () async {
-    final service = PaymentDetectionService();
-    service.clearBill();
-    service.setBillExpected(10);
+    test(
+      'recognized PhonePe DLT sender credit stays pending for merchant review',
+      () async {
+        final service = PaymentDetectionService();
+        service.clearBill();
+        service.setBillExpected(10);
 
-    final received = expectLater(
-      service.onPaymentDetected,
-      emits(
-        isA<PaymentEvent>()
-            .having((payment) => payment.amount, 'amount', 5)
-            .having(
-              (payment) => payment.direction,
-              'direction',
-              PaymentTransactionDirection.incomingCredit,
-            )
-            .having(
-              (payment) => payment.decision,
-              'decision',
-              PaymentDecision.likely,
-            ),
-      ),
+        final received = expectLater(
+          service.onPaymentDetected,
+          emits(
+            isA<PaymentEvent>()
+                .having((payment) => payment.amount, 'amount', 5)
+                .having(
+                  (payment) => payment.direction,
+                  'direction',
+                  PaymentTransactionDirection.incomingCredit,
+                )
+                .having(
+                  (payment) => payment.decision,
+                  'decision',
+                  PaymentDecision.likely,
+                ),
+          ),
+        );
+
+        service.handleSms(
+          'VM-PHONEPE',
+          'Your UPI credit of Rs.5 was received in your account',
+        );
+        await received;
+        service.clearBill();
+      },
     );
 
-    service.handleSms(
-      'VM-PHONEPE',
-      'Your UPI credit of Rs.5 was received in your account',
-    );
-    await received;
-    service.clearBill();
-  });
-
-  test('short trusted PhonePe notification is a review candidate, not an auto-credit', () async {
-    final service = PaymentDetectionService();
-    service.debugResetTransientDetectionState();
-    service.clearBill();
-    service.setBillExpected(10);
-
-    final received = expectLater(
-      service.onPaymentDetected,
-      emits(
-        isA<PaymentEvent>()
-            .having((payment) => payment.amount, 'amount', 5)
-            .having(
-              (payment) => payment.direction,
-              'direction',
-              PaymentTransactionDirection.incomingCredit,
-            )
-            .having(
-              (payment) => payment.decision,
-              'decision',
-              PaymentDecision.likely,
-            )
-            .having(
-              (payment) => payment.isMerchantConfirmed,
-              'merchantConfirmed',
-              isFalse,
-            ),
-      ),
-    );
-
-    service.debugHandleNotification(
-      ServiceNotificationEvent(
-        packageName: 'com.phonepe.app',
-        title: 'PhonePe',
-        content: 'UPI credit ₹5 received',
-      ),
-    );
-    await received;
-    service.clearBill();
-  });
-
-
-  test('does not suppress same-amount cross-channel payments to different accounts', () async {
-    final queue = PriorityVoiceQueue();
-    final spoken = <String>[];
-    queue.onSpeak = spoken.add;
-
-    final now = DateTime.now();
-    final first = PaymentEvent(
-      id: 'phonepe-account-1111',
-      amount: 500,
-      timestamp: now,
-      app: PaymentApp.phonePe,
-      rawText: '₹500 credited to account 1111',
-      accountSuffix: '1111',
-      detectionSource: 'notification',
-      direction: PaymentTransactionDirection.incomingCredit,
-      decision: PaymentDecision.likely,
-    );
-    final second = PaymentEvent(
-      id: 'truecaller-account-2222',
-      amount: 500,
-      timestamp: now.add(const Duration(seconds: 2)),
-      app: PaymentApp.bankApp,
-      rawText: 'UPI transfer to account 2222 +₹500',
-      accountSuffix: '2222',
-      detectionSource: 'truecaller_notification',
-      direction: PaymentTransactionDirection.incomingCredit,
-      decision: PaymentDecision.likely,
-    );
-
-    PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
-      id: event.id,
-      decision: event.decision,
-      amount: event.amount,
-      isFailed: false,
-      detectedAt: event.timestamp,
-      rawText: event.rawText,
-      direction: event.direction,
-    );
-
-    queue.enqueue(first, stateFor(first));
-    queue.enqueue(second, stateFor(second));
-    await Future<void>.delayed(PdsConfig.voiceMinGap + const Duration(milliseconds: 150));
-    queue.dispose();
-
-    expect(spoken, hasLength(2));
-  });
-
-  test('suppresses a PhonePe credit replayed by Truecaller ten minutes later', () async {
-    final queue = PriorityVoiceQueue();
-    final spoken = <String>[];
-    queue.onSpeak = spoken.add;
-    final firstTime = DateTime(2026, 10, 1, 14, 30);
-
-    final phonePe = PaymentEvent(
-      id: 'phonepe-credit',
-      amount: 5,
-      timestamp: firstTime,
-      app: PaymentApp.phonePe,
-      rawText: 'You received ₹5 from Rahul to account 4222',
-      accountSuffix: '4222',
-      detectionSource: 'notification',
-      direction: PaymentTransactionDirection.incomingCredit,
-      decision: PaymentDecision.likely,
-    );
-    final truecaller = PaymentEvent(
-      id: 'truecaller-credit',
-      amount: 5,
-      timestamp: firstTime.add(const Duration(minutes: 10)),
-      app: PaymentApp.bankApp,
-      rawText: 'UPI transfer from Apgbank to Account 4222 +₹5',
-      accountSuffix: '4222',
-      detectionSource: 'truecaller_notification',
-      direction: PaymentTransactionDirection.incomingCredit,
-      decision: PaymentDecision.likely,
-    );
-
-    PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
-      id: event.id,
-      decision: event.decision,
-      amount: event.amount,
-      isFailed: false,
-      detectedAt: event.timestamp,
-      rawText: event.rawText,
-      direction: event.direction,
-    );
-
-    queue.enqueue(phonePe, stateFor(phonePe));
-    queue.enqueue(truecaller, stateFor(truecaller));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    queue.dispose();
-
-    expect(spoken, hasLength(1));
-    expect(spoken.single, contains('Payment received'));
-  });
-
-  test(
-    'pre-classified duplicate is stopped before payment stream and voice',
-    () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final spoken = <String>[];
-      final wasVoiceEnabled = PdsConfig.isVoiceEnabled;
-      PdsConfig.isVoiceEnabled = true;
-      service.onSpeak = spoken.add;
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
-      addTearDown(() {
-        PdsConfig.isVoiceEnabled = wasVoiceEnabled;
+    test(
+      'short trusted PhonePe notification is a review candidate, not an auto-credit',
+      () async {
+        final service = PaymentDetectionService();
         service.debugResetTransientDetectionState();
-      });
+        service.clearBill();
+        service.setBillExpected(10);
 
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'duplicate-two-rupee-payment',
-          amount: 2,
-          timestamp: DateTime.now(),
+        final received = expectLater(
+          service.onPaymentDetected,
+          emits(
+            isA<PaymentEvent>()
+                .having((payment) => payment.amount, 'amount', 5)
+                .having(
+                  (payment) => payment.direction,
+                  'direction',
+                  PaymentTransactionDirection.incomingCredit,
+                )
+                .having(
+                  (payment) => payment.decision,
+                  'decision',
+                  PaymentDecision.likely,
+                )
+                .having(
+                  (payment) => payment.isMerchantConfirmed,
+                  'merchantConfirmed',
+                  isFalse,
+                ),
+          ),
+        );
+
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            title: 'PhonePe',
+            content: 'UPI credit ₹5 received',
+          ),
+        );
+        await received;
+        service.clearBill();
+      },
+    );
+
+    test(
+      'does not suppress same-amount cross-channel payments to different accounts',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+
+        final now = DateTime.now();
+        final first = PaymentEvent(
+          id: 'phonepe-account-1111',
+          amount: 500,
+          timestamp: now,
           app: PaymentApp.phonePe,
-          rawText: 'You received ₹2 from a customer',
+          rawText: '₹500 credited to account 1111',
+          accountSuffix: '1111',
           detectionSource: 'notification',
           direction: PaymentTransactionDirection.incomingCredit,
           decision: PaymentDecision.likely,
-          isDuplicate: true,
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-
-      expect(events, isEmpty);
-      expect(spoken, isEmpty);
-      await subscription.cancel();
-    },
-  );
-
-  test('duplicate and reference-conflict events are not announced', () async {
-    final queue = PriorityVoiceQueue();
-    final spoken = <String>[];
-    queue.onSpeak = spoken.add;
-    final event = PaymentEvent(
-      id: 'duplicate-credit',
-      amount: 5,
-      timestamp: DateTime(2026, 10, 1, 14, 30),
-      app: PaymentApp.phonePe,
-      rawText: 'You received ₹5 from Rahul',
-      direction: PaymentTransactionDirection.incomingCredit,
-      decision: PaymentDecision.likely,
-      isDuplicate: true,
-    );
-    final conflict = event.copyWith(
-      id: 'conflicting-credit',
-      isDuplicate: false,
-      hasReferenceConflict: true,
-    );
-
-    PaymentUiState stateFor(PaymentEvent payment) => PaymentUiState(
-      id: payment.id,
-      decision: payment.decision,
-      amount: payment.amount,
-      isFailed: false,
-      detectedAt: payment.timestamp,
-      rawText: payment.rawText,
-      direction: payment.direction,
-    );
-
-    queue.enqueue(event, stateFor(event));
-    queue.enqueue(conflict, stateFor(conflict));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    queue.dispose();
-
-    expect(spoken, isEmpty);
-  });
-
-    test('one transfer arriving as notification and SMS emits one event', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
-      final timestamp = DateTime.now();
-
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'apgb-notification-credit',
-          amount: 5,
-          timestamp: timestamp,
+        );
+        final second = PaymentEvent(
+          id: 'truecaller-account-2222',
+          amount: 500,
+          timestamp: now.add(const Duration(seconds: 2)),
           app: PaymentApp.bankApp,
+          rawText: 'UPI transfer to account 2222 +₹500',
+          accountSuffix: '2222',
+          detectionSource: 'truecaller_notification',
+          direction: PaymentTransactionDirection.incomingCredit,
+          decision: PaymentDecision.likely,
+        );
+
+        PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
+          id: event.id,
+          decision: event.decision,
+          amount: event.amount,
+          isFailed: false,
+          detectedAt: event.timestamp,
+          rawText: event.rawText,
+          direction: event.direction,
+        );
+
+        queue.enqueue(first, stateFor(first));
+        queue.enqueue(second, stateFor(second));
+        await Future<void>.delayed(
+          PdsConfig.voiceMinGap + const Duration(milliseconds: 150),
+        );
+        queue.dispose();
+
+        expect(spoken, hasLength(2));
+      },
+    );
+
+    test(
+      'suppresses a PhonePe credit replayed by Truecaller ten minutes later',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final spoken = <String>[];
+        queue.onSpeak = spoken.add;
+        final firstTime = DateTime(2026, 10, 1, 14, 30);
+
+        final phonePe = PaymentEvent(
+          id: 'phonepe-credit',
+          amount: 5,
+          timestamp: firstTime,
+          app: PaymentApp.phonePe,
+          rawText: 'You received ₹5 from Rahul to account 4222',
           accountSuffix: '4222',
-          rawText: 'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
           detectionSource: 'notification',
           direction: PaymentTransactionDirection.incomingCredit,
           decision: PaymentDecision.likely,
-        ),
-      );
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'apgb-sms-credit',
+        );
+        final truecaller = PaymentEvent(
+          id: 'truecaller-credit',
           amount: 5,
-          timestamp: timestamp.add(const Duration(seconds: 5)),
-          app: PaymentApp.bankSms,
+          timestamp: firstTime.add(const Duration(minutes: 10)),
+          app: PaymentApp.bankApp,
+          rawText: 'UPI transfer from Apgbank to Account 4222 +₹5',
           accountSuffix: '4222',
-          rawText: 'An amount of Rs.5 credited to A/c XXXX4222',
-          detectionSource: 'sms',
+          detectionSource: 'truecaller_notification',
           direction: PaymentTransactionDirection.incomingCredit,
           decision: PaymentDecision.likely,
-        ),
-      );
+        );
 
-      expect(events, hasLength(1));
-      expect(events.single.amount, 5);
-      expect(events.single.isMerchantConfirmed, isFalse);
-      await subscription.cancel();
-    });
+        PaymentUiState stateFor(PaymentEvent event) => PaymentUiState(
+          id: event.id,
+          decision: event.decision,
+          amount: event.amount,
+          isFailed: false,
+          detectedAt: event.timestamp,
+          rawText: event.rawText,
+          direction: event.direction,
+        );
 
-    test('different UTRs are not merged even when amount and account match', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final wasVoiceEnabled = PdsConfig.isVoiceEnabled;
-      PdsConfig.isVoiceEnabled = true;
-      addTearDown(() {
-        PdsConfig.isVoiceEnabled = wasVoiceEnabled;
+        queue.enqueue(phonePe, stateFor(phonePe));
+        queue.enqueue(truecaller, stateFor(truecaller));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        queue.dispose();
+
+        expect(spoken, hasLength(1));
+        expect(spoken.single, contains('Payment received'));
+      },
+    );
+
+    test(
+      'pre-classified duplicate is stopped before payment stream and voice',
+      () async {
+        final service = PaymentDetectionService();
         service.debugResetTransientDetectionState();
-      });
+        final spoken = <String>[];
+        final wasVoiceEnabled = PdsConfig.isVoiceEnabled;
+        PdsConfig.isVoiceEnabled = true;
+        service.onSpeak = spoken.add;
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
+        addTearDown(() {
+          PdsConfig.isVoiceEnabled = wasVoiceEnabled;
+          service.debugResetTransientDetectionState();
+        });
 
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'duplicate-two-rupee-payment',
+            amount: 2,
+            timestamp: DateTime.now(),
+            app: PaymentApp.phonePe,
+            rawText: 'You received ₹2 from a customer',
+            detectionSource: 'notification',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+            isDuplicate: true,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(events, isEmpty);
+        expect(spoken, isEmpty);
+        await subscription.cancel();
+      },
+    );
+
+    test('duplicate and reference-conflict events are not announced', () async {
+      final queue = PriorityVoiceQueue();
       final spoken = <String>[];
-      service.onSpeak = spoken.add;
-      final events = <PaymentEvent>[];
-      final bothEventsReceived = Completer<void>();
-      final subscription = service.onPaymentDetected.listen((event) {
-        events.add(event);
-        if (events.length >= 2 && !bothEventsReceived.isCompleted) {
-          bothEventsReceived.complete();
+      queue.onSpeak = spoken.add;
+      final event = PaymentEvent(
+        id: 'duplicate-credit',
+        amount: 5,
+        timestamp: DateTime(2026, 10, 1, 14, 30),
+        app: PaymentApp.phonePe,
+        rawText: 'You received ₹5 from Rahul',
+        direction: PaymentTransactionDirection.incomingCredit,
+        decision: PaymentDecision.likely,
+        isDuplicate: true,
+      );
+      final conflict = event.copyWith(
+        id: 'conflicting-credit',
+        isDuplicate: false,
+        hasReferenceConflict: true,
+      );
+
+      PaymentUiState stateFor(PaymentEvent payment) => PaymentUiState(
+        id: payment.id,
+        decision: payment.decision,
+        amount: payment.amount,
+        isFailed: false,
+        detectedAt: payment.timestamp,
+        rawText: payment.rawText,
+        direction: payment.direction,
+      );
+
+      queue.enqueue(event, stateFor(event));
+      queue.enqueue(conflict, stateFor(conflict));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      queue.dispose();
+
+      expect(spoken, isEmpty);
+    });
+
+    test(
+      'one transfer arriving as notification and SMS emits one event',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
+        final timestamp = DateTime.now();
+
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'apgb-notification-credit',
+            amount: 5,
+            timestamp: timestamp,
+            app: PaymentApp.bankApp,
+            accountSuffix: '4222',
+            rawText:
+                'Verified Business + ₹5 UPI transfer from Apgbank to Account 4222',
+            detectionSource: 'notification',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+          ),
+        );
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'apgb-sms-credit',
+            amount: 5,
+            timestamp: timestamp.add(const Duration(seconds: 5)),
+            app: PaymentApp.bankSms,
+            accountSuffix: '4222',
+            rawText: 'An amount of Rs.5 credited to A/c XXXX4222',
+            detectionSource: 'sms',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+          ),
+        );
+
+        expect(events, hasLength(1));
+        expect(events.single.amount, 5);
+        expect(events.single.isMerchantConfirmed, isFalse);
+        await subscription.cancel();
+      },
+    );
+
+    test(
+      'different UTRs are not merged even when amount and account match',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final wasVoiceEnabled = PdsConfig.isVoiceEnabled;
+        PdsConfig.isVoiceEnabled = true;
+        addTearDown(() {
+          PdsConfig.isVoiceEnabled = wasVoiceEnabled;
+          service.debugResetTransientDetectionState();
+        });
+
+        final spoken = <String>[];
+        service.onSpeak = spoken.add;
+        final events = <PaymentEvent>[];
+        final bothEventsReceived = Completer<void>();
+        final subscription = service.onPaymentDetected.listen((event) {
+          events.add(event);
+          if (events.length >= 2 && !bothEventsReceived.isCompleted) {
+            bothEventsReceived.complete();
+          }
+        });
+        final timestamp = DateTime.now();
+
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'transfer-utr-1',
+            amount: 5,
+            timestamp: timestamp,
+            app: PaymentApp.bankApp,
+            referenceId: '123456789012',
+            accountSuffix: '4222',
+            rawText: '₹5 credited to A/c XXXX4222 UTR 123456789012',
+            detectionSource: 'notification',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+          ),
+        );
+        await service.debugEmitForTesting(
+          PaymentEvent(
+            id: 'transfer-utr-2',
+            amount: 5,
+            timestamp: timestamp.add(const Duration(seconds: 5)),
+            app: PaymentApp.bankSms,
+            referenceId: '123456789013',
+            accountSuffix: '4222',
+            rawText: '₹5 credited to A/c XXXX4222 UTR 123456789013',
+            detectionSource: 'sms',
+            direction: PaymentTransactionDirection.incomingCredit,
+            decision: PaymentDecision.likely,
+          ),
+        );
+
+        // A broadcast StreamController delivers events asynchronously. Wait
+        // until both emitted events reach the listener before asserting history.
+        await bothEventsReceived.future.timeout(const Duration(seconds: 1));
+        // The voice queue applies a two-second gap to keep alerts intelligible.
+        await Future<void>.delayed(const Duration(milliseconds: 2250));
+
+        expect(events, hasLength(2));
+        expect(events.map((event) => event.normalizedReferenceId).toSet(), {
+          '123456789012',
+          '123456789013',
+        });
+        expect(spoken, hasLength(2));
+        await subscription.cancel();
+        service.debugResetTransientDetectionState();
+      },
+    );
+
+    test(
+      'refund, reversal, pending and collect-request alerts cannot classify as incoming sale payments',
+      () {
+        expect(
+          PaymentDetectionService.debugClassify(
+            'Refund of Rs.500 credited to your account',
+          ),
+          'fraud',
+        );
+        expect(
+          PaymentDetectionService.debugClassify(
+            '₹500 payment received but transaction reversed',
+          ),
+          'fraud',
+        );
+        expect(
+          PaymentDetectionService.debugClassify(
+            'Payment received ₹500, status pending',
+          ),
+          'fraud',
+        );
+        expect(
+          PaymentDetectionService.debugClassify(
+            'Collect request for ₹500. Please approve the request.',
+          ),
+          'fraud',
+        );
+        // The non-income guard must not break real debit direction detection.
+        expect(
+          PaymentDetectionService.debugClassify(
+            '₹200 debited from your account',
+          ),
+          'debit',
+        );
+      },
+    );
+
+    test(
+      'failed UPI PIN attempts are rejected while a later successful credit remains eligible',
+      () async {
+        expect(
+          PaymentDetectionService.debugClassify(
+            'Payment failed. Incorrect UPI PIN. ₹500 could not be transferred.',
+          ),
+          'fraud',
+        );
+        expect(
+          PaymentDetectionService.debugClassify(
+            'Payment received ₹500. UPI PIN was entered incorrectly.',
+          ),
+          'fraud',
+        );
+        expect(
+          PaymentDetectionService.debugClassify(
+            '₹500 credited to your account',
+          ),
+          'passed',
+        );
+
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        service.setBillExpected(1000);
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
+
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            title: 'PhonePe',
+            content: 'Payment received ₹500. Wrong UPI PIN entered.',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(events, isEmpty);
+
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            title: 'PhonePe',
+            content: 'You received ₹500 from Rahul',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(events, hasLength(1));
+        expect(events.single.amount, 500);
+
+        await subscription.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+      },
+    );
+
+    test(
+      'failed payment notifications are rejected before announcement or bill matching',
+      () async {
+        const failures = [
+          'Insufficient Balance. SBI Bank XXXX2997. No money has been debited as your account balance is insufficient for this payment.',
+          'Your account balance is not sufficient for this payment of ₹500.',
+          'Not enough funds for your UPI payment of ₹500.',
+          'UPI payment of ₹500 was declined by your bank.',
+          'Your transaction for Rs 500 was unsuccessful.',
+          'Payment timed out for INR 500.',
+          'The transfer of ₹500 was not completed.',
+          'Unable to process UPI payment of ₹500.',
+          '₹500 debit failed: transaction could not be completed.',
+          'Could not process your UPI payment of ₹500.',
+          'Your bank was unable to process this payment of ₹500.',
+          'Your UPI transfer didn\'t go through for ₹500.',
+          'Payment blocked for ₹500.',
+          'Payment cancelled for ₹500.',
+          '₹500 has not been debited. Please try again.',
+          '₹500 was not debited.',
+          'UPI payment received ₹500 but the transaction failed.',
+        ];
+        for (final failure in failures) {
+          expect(
+            PaymentDetectionService.debugClassify(failure),
+            'fraud',
+            reason: failure,
+          );
         }
-      });
-      final timestamp = DateTime.now();
 
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'transfer-utr-1',
-          amount: 5,
-          timestamp: timestamp,
-          app: PaymentApp.bankApp,
-          referenceId: '123456789012',
-          accountSuffix: '4222',
-          rawText: '₹5 credited to A/c XXXX4222 UTR 123456789012',
-          detectionSource: 'notification',
-          direction: PaymentTransactionDirection.incomingCredit,
-          decision: PaymentDecision.likely,
-        ),
-      );
-      await service.debugEmitForTesting(
-        PaymentEvent(
-          id: 'transfer-utr-2',
-          amount: 5,
-          timestamp: timestamp.add(const Duration(seconds: 5)),
-          app: PaymentApp.bankSms,
-          referenceId: '123456789013',
-          accountSuffix: '4222',
-          rawText: '₹5 credited to A/c XXXX4222 UTR 123456789013',
-          detectionSource: 'sms',
-          direction: PaymentTransactionDirection.incomingCredit,
-          decision: PaymentDecision.likely,
-        ),
-      );
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        service.clearBill();
+        service.setBillExpected(500);
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
 
-      // A broadcast StreamController delivers events asynchronously. Wait
-      // until both emitted events reach the listener before asserting history.
-      await bothEventsReceived.future.timeout(const Duration(seconds: 1));
-      // The voice queue applies a two-second gap to keep alerts intelligible.
-      await Future<void>.delayed(const Duration(milliseconds: 2250));
+        for (var index = 0; index < failures.length; index++) {
+          service.debugHandleNotification(
+            ServiceNotificationEvent(
+              packageName: 'com.sbi.imobile',
+              id: index,
+              title: 'Payment status',
+              content: failures[index],
+            ),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
 
-      expect(events, hasLength(2));
-      expect(
-        events.map((event) => event.normalizedReferenceId).toSet(),
-        {'123456789012', '123456789013'},
-      );
-      expect(spoken, hasLength(2));
-      await subscription.cancel();
-      service.debugResetTransientDetectionState();
-    });
+        expect(events, isEmpty);
+        expect(service.billContext.remainingAmount, 500);
 
-    test('refund, reversal, pending and collect-request alerts cannot classify as incoming sale payments', () {
-      expect(
-        PaymentDetectionService.debugClassify(
-          'Refund of Rs.500 credited to your account',
-        ),
-        'fraud',
-      );
-      expect(
-        PaymentDetectionService.debugClassify(
-          '₹500 payment received but transaction reversed',
-        ),
-        'fraud',
-      );
-      expect(
-        PaymentDetectionService.debugClassify(
-          'Payment received ₹500, status pending',
-        ),
-        'fraud',
-      );
-      expect(
-        PaymentDetectionService.debugClassify(
-          'Collect request for ₹500. Please approve the request.',
-        ),
-        'fraud',
-      );
-      // The non-income guard must not break real debit direction detection.
-      expect(
-        PaymentDetectionService.debugClassify('₹200 debited from your account'),
-        'debit',
-      );
-    });
+        await subscription.cancel();
+        service.clearBill();
+        service.debugResetTransientDetectionState();
+      },
+    );
 
     test('sale confirmation gate rejects refund-credit wording', () {
       final refundEvent = PaymentEvent(
@@ -2182,28 +2370,34 @@ void main() {
         decision: PaymentDecision.likely,
       );
 
-      expect(PaymentDetectionService.isSafeIncomingCredit(refundEvent), isFalse);
-    });
-
-    test('unknown app named like a UPI app cannot bypass reference/account anchor', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
-
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.fake.upi',
-          title: 'UPI Pay',
-          content: 'Payment received ₹5000 from Rahul',
-        ),
+      expect(
+        PaymentDetectionService.isSafeIncomingCredit(refundEvent),
+        isFalse,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-
-      expect(events, isEmpty);
-      await subscription.cancel();
-      service.debugResetTransientDetectionState();
     });
+
+    test(
+      'unknown app named like a UPI app cannot bypass reference/account anchor',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
+
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.fake.upi',
+            title: 'UPI Pay',
+            content: 'Payment received ₹5000 from Rahul',
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(events, isEmpty);
+        await subscription.cancel();
+        service.debugResetTransientDetectionState();
+      },
+    );
 
     test('likely credit uses a sound-box received phrase', () {
       final credit = VoiceBuilder.detectedDirectional(
@@ -2220,6 +2414,5 @@ void main() {
       expect(credit, contains('Payment received'));
       expect(debit, contains('may have been debited'));
     });
-
   });
 }

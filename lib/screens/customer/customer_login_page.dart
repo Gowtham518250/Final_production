@@ -21,7 +21,7 @@ class CustomerLoginPage extends StatefulWidget {
 class _CustomerLoginPageState extends State<CustomerLoginPage> {
   bool _isLogin = true;
   bool _isLoading = false;
-  
+
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -29,34 +29,44 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
 
   Future<void> _submit() async {
     setState(() => _isLoading = true);
-    
+
     try {
-      final endpoint = _isLogin ? '/store/customer/login' : '/store/customer/register';
-      
-      final body = _isLogin 
-        ? {
-            'email': _emailController.text.trim(),
-            'password': _passwordController.text,
-          }
-        : {
-            'name': _nameController.text.trim(),
-            'email': _emailController.text.trim(),
-            'phone': _phoneController.text.trim(),
-            'password': _passwordController.text,
-          };
+      final endpoint = _isLogin
+          ? '/store/customer/login'
+          : '/store/customer/register';
+
+      final body = _isLogin
+          ? {
+              'email': _emailController.text.trim(),
+              'password': _passwordController.text,
+            }
+          : {
+              'name': _nameController.text.trim(),
+              'email': _emailController.text.trim(),
+              'phone': _phoneController.text.trim(),
+              'password': _passwordController.text,
+            };
 
       // Both use JSON payload
       final response = await ApiClient.postJson(endpoint, body);
-      
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
         if (_isLogin) {
           final tokenValue = data['access_token'] ?? data['token'];
           final refreshTokenValue = data['refresh_token'];
-          final customerId = int.tryParse(data['customer_id']?.toString() ?? '');
-          if (tokenValue == null || tokenValue.toString().trim().isEmpty ||
-              customerId == null || customerId <= 0) {
-            throw Exception(AppLocalizations.of(context).translate('customerLoginInvalidSession'));
+          final customerId = int.tryParse(
+            data['customer_id']?.toString() ?? '',
+          );
+          if (tokenValue == null ||
+              tokenValue.toString().trim().isEmpty ||
+              customerId == null ||
+              customerId <= 0) {
+            throw Exception(
+              AppLocalizations.of(
+                context,
+              ).translate('customerLoginInvalidSession'),
+            );
           }
 
           // Switch through the shared isolation path before saving the
@@ -80,7 +90,10 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
           // Older customer dashboard/profile widgets still read this key.
           await prefs.setString('customer_token', tokenValue.toString());
           if (refreshTokenValue != null) {
-            await prefs.setString('refresh_token', refreshTokenValue.toString());
+            await prefs.setString(
+              'refresh_token',
+              refreshTokenValue.toString(),
+            );
           }
           await prefs.setString('user_id', customerId.toString());
           await prefs.setString('customer_id', customerId.toString());
@@ -93,34 +106,63 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
           // Restore this customer's own language rather than the previous
           // owner's device-level language on shared devices.
           await context.read<LanguageProvider>().activateAccountLanguage();
-          await prefs.setString('user_name', data['name'] ?? data['user_name'] ?? '');
-          await prefs.setString('customer_name', data['name'] ?? data['user_name'] ?? '');
-          await prefs.setString('user_email', data['email'] ?? _emailController.text.trim());
-          await prefs.setString('customer_email', data['email'] ?? _emailController.text.trim());
+          await prefs.setString(
+            'user_name',
+            data['name'] ?? data['user_name'] ?? '',
+          );
+          await prefs.setString(
+            'customer_name',
+            data['name'] ?? data['user_name'] ?? '',
+          );
+          await prefs.setString(
+            'user_email',
+            data['email'] ?? _emailController.text.trim(),
+          );
+          await prefs.setString(
+            'customer_email',
+            data['email'] ?? _emailController.text.trim(),
+          );
           if (data['phone'] != null) {
             await prefs.setString('customer_phone', data['phone'].toString());
           }
-          
+
           if (mounted) {
             Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (_) => const CustomerMarketplacePage())
+              context,
+              MaterialPageRoute(
+                builder: (_) => const CustomerMarketplacePage(),
+              ),
             );
           }
         } else {
           // Registered successfully, now login
           setState(() => _isLogin = true);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: LiveTranslatedText(AppLocalizations.of(context).translate('registrationSuccessLogin')), backgroundColor: Colors.green),
+            SnackBar(
+              content: LiveTranslatedText(
+                AppLocalizations.of(
+                  context,
+                ).translate('registrationSuccessLogin'),
+              ),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       } else {
-        throw Exception(json.decode(response.body)['detail'] ?? AppLocalizations.of(context).translate('authenticationFailed'));
+        throw Exception(
+          json.decode(response.body)['detail'] ??
+              AppLocalizations.of(context).translate('authenticationFailed'),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText(
+              e.toString().replaceAll('Exception: ', ''),
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -175,9 +217,9 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
         throw Exception(
           requestBody is Map
               ? (requestBody['detail'] ??
-                      requestBody['message'] ??
-                      'If this account exists, a reset code may be sent. Please check your email.')
-                  .toString()
+                        requestBody['message'] ??
+                        'If this account exists, a reset code may be sent. Please check your email.')
+                    .toString()
               : 'Unable to request a password reset right now.',
         );
       }
@@ -204,10 +246,8 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
               child: LiveTranslatedText(l.translate('cancel')),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                otpController.text.trim(),
-              ),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, otpController.text.trim()),
               child: LiveTranslatedText(l.translate('verify')),
             ),
           ],
@@ -229,7 +269,8 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
           verificationBody['reset_token'] == null) {
         throw Exception(
           verificationBody is Map
-              ? (verificationBody['detail'] ?? l.translate('invalidExpiredOtp')).toString()
+              ? (verificationBody['detail'] ?? l.translate('invalidExpiredOtp'))
+                    .toString()
               : l.translate('otpUnavailable'),
         );
       }
@@ -254,10 +295,8 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
               child: LiveTranslatedText(l.translate('cancel')),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                passwordController.text,
-              ),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, passwordController.text),
               child: LiveTranslatedText(l.translate('updatePassword')),
             ),
           ],
@@ -269,13 +308,10 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
         throw Exception(l.translate('passwordMinLength'));
       }
 
-      final reset = await ApiClient.postJson(
-        '/store/customer/reset-password',
-        {
-          'reset_token': verificationBody['reset_token'].toString(),
-          'new_password': newPassword,
-        },
-      );
+      final reset = await ApiClient.postJson('/store/customer/reset-password', {
+        'reset_token': verificationBody['reset_token'].toString(),
+        'new_password': newPassword,
+      });
       final resetBody = json.decode(reset.body);
       if (reset.statusCode != 200 ||
           resetBody is! Map ||
@@ -283,7 +319,7 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
         throw Exception(
           resetBody is Map
               ? (resetBody['detail'] ?? l.translate('passwordResetFailed'))
-                  .toString()
+                    .toString()
               : l.translate('passwordResetFailed'),
         );
       }
@@ -300,7 +336,9 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: LiveTranslatedText(e.toString().replaceFirst('Exception: ', '')),
+            content: LiveTranslatedText(
+              e.toString().replaceFirst('Exception: ', ''),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -320,15 +358,33 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.shopping_bag_rounded, size: 80, color: Colors.teal.shade600),
+                Icon(
+                  Icons.shopping_bag_rounded,
+                  size: 80,
+                  color: Colors.teal.shade600,
+                ),
                 const SizedBox(height: 16),
-                LiveTranslatedText('Retail Mind Market', style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal.shade900)),
-                LiveTranslatedText(_isLogin ? l.translate('welcomeBackShopper') : l.translate('createYourAccount'), style: GoogleFonts.poppins(color: Colors.teal.shade700)),
+                LiveTranslatedText(
+                  'Retail Mind Market',
+                  style: GoogleFonts.poppins(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade900,
+                  ),
+                ),
+                LiveTranslatedText(
+                  _isLogin
+                      ? l.translate('welcomeBackShopper')
+                      : l.translate('createYourAccount'),
+                  style: GoogleFonts.poppins(color: Colors.teal.shade700),
+                ),
                 const SizedBox(height: 40),
-                
+
                 Card(
                   elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
                     child: Column(
@@ -336,26 +392,38 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
                         if (!_isLogin) ...[
                           TextField(
                             controller: _nameController,
-                            decoration: InputDecoration(labelText: l.fullName, prefixIcon: const Icon(Icons.person_outline)),
+                            decoration: InputDecoration(
+                              labelText: l.fullName,
+                              prefixIcon: const Icon(Icons.person_outline),
+                            ),
                           ),
                           const SizedBox(height: 16),
                           TextField(
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
-                            decoration: InputDecoration(labelText: l.translate('phoneTenDigits'), prefixIcon: const Icon(Icons.phone_outlined)),
+                            decoration: InputDecoration(
+                              labelText: l.translate('phoneTenDigits'),
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                            ),
                           ),
                           const SizedBox(height: 16),
                         ],
                         TextField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(labelText: l.emailAddress, prefixIcon: const Icon(Icons.email_outlined)),
+                          decoration: InputDecoration(
+                            labelText: l.emailAddress,
+                            prefixIcon: const Icon(Icons.email_outlined),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
-                          decoration: InputDecoration(labelText: l.password, prefixIcon: const Icon(Icons.lock_outline)),
+                          decoration: InputDecoration(
+                            labelText: l.password,
+                            prefixIcon: const Icon(Icons.lock_outline),
+                          ),
                         ),
                         const SizedBox(height: 24),
                         SizedBox(
@@ -365,32 +433,56 @@ class _CustomerLoginPageState extends State<CustomerLoginPage> {
                               backgroundColor: Colors.teal.shade600,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onPressed: _isLoading ? null : _submit,
-                            child: _isLoading 
-                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
-                               : LiveTranslatedText(_isLogin ? l.login : l.register, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : LiveTranslatedText(
+                                    _isLogin ? l.login : l.register,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                         if (_isLogin)
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: _isLoading ? null : _showForgotPasswordFlow,
+                              onPressed: _isLoading
+                                  ? null
+                                  : _showForgotPasswordFlow,
                               child: LiveTranslatedText(l.forgotPassword),
                             ),
                           ),
                         const SizedBox(height: 16),
                         TextButton(
                           onPressed: () => setState(() => _isLogin = !_isLogin),
-                          child: LiveTranslatedText(_isLogin ? l.translate('needAccountRegister') : l.translate('alreadyHaveAccountLogin'), style: TextStyle(color: Colors.teal.shade700)),
+                          child: LiveTranslatedText(
+                            _isLogin
+                                ? l.translate('needAccountRegister')
+                                : l.translate('alreadyHaveAccountLogin'),
+                            style: TextStyle(color: Colors.teal.shade700),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: LiveTranslatedText(l.translate('backToHome'), style: TextStyle(color: Colors.grey.shade600)),
-                        )
+                          child: LiveTranslatedText(
+                            l.translate('backToHome'),
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ),
                       ],
                     ),
                   ),

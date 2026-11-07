@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/widgets/dashboard/dashboard_action_dock.dart';
 
 void main() {
-  testWidgets('fits all medium dashboard actions on one row when possible', (
+  testWidgets('keeps dashboard actions on one row when space allows', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(2000, 360));
@@ -57,7 +57,7 @@ void main() {
 
     expect(
       tester.getSize(find.byType(DashboardActionDock)).height,
-      lessThanOrEqualTo(72),
+      lessThanOrEqualTo(80),
     );
     for (final label in labels) {
       expect(find.text(label), findsOneWidget);
@@ -74,7 +74,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('dashboard-action-0'))).dx,
-      0,
+      8,
     );
 
     final firstButtonY = tester
@@ -91,7 +91,9 @@ void main() {
     expect(tapped, 'Online Orders');
   });
 
-  testWidgets('keeps one row scrollable on narrow screens', (tester) async {
+  testWidgets('keeps bottom actions in one horizontally scrollable row', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(320, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var tapped = '';
@@ -119,9 +121,103 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('dashboard-action-3'))).dy,
+      tester.getTopLeft(find.byKey(const ValueKey('dashboard-action-0'))).dy,
+    );
     await tester.ensureVisible(find.text('AI Analytics'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI Analytics'));
     expect(tapped, 'AI Analytics');
+  });
+
+  testWidgets('renders dashboard actions as distinct colored buttons', (
+    tester,
+  ) async {
+    const colors = [Color(0xFF2563EB), Color(0xFF0F766E), Color(0xFFD97706)];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: DashboardActionDock(
+            backgroundColor: Colors.white,
+            borderColor: Colors.grey,
+            items: [
+              for (var index = 0; index < colors.length; index++)
+                DashboardActionItem(
+                  icon: Icons.circle,
+                  label: 'Action $index',
+                  color: colors[index],
+                  onTap: () {},
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final color in colors) {
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Material &&
+              widget.color == color.withValues(alpha: 0.09),
+        ),
+        findsOneWidget,
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('fits all dashboard actions on wide screens', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1250, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var tapped = '';
+    const labels = [
+      'Sale',
+      'Language',
+      'Voice bill',
+      'Online orders',
+      'AI Ask',
+      'Khata',
+      'Help & Support',
+      'Gift cards',
+      'More',
+      'Logout',
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: DashboardActionDock(
+            backgroundColor: Colors.white,
+            borderColor: Colors.grey,
+            items: [
+              for (final label in labels)
+                DashboardActionItem(
+                  icon: Icons.circle,
+                  label: label,
+                  color: Colors.indigo,
+                  onTap: () => tapped = label,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final label in labels) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(
+      tester.getTopRight(find.byKey(const ValueKey('dashboard-action-9'))).dx,
+      lessThanOrEqualTo(1250),
+    );
+    expect(find.text('Logout'), findsOneWidget);
+    await tester.tap(find.text('Logout'));
+    expect(tapped, 'Logout');
+    expect(tester.takeException(), isNull);
   });
 }

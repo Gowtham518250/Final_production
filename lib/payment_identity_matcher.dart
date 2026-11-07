@@ -103,14 +103,18 @@ class EchoResolution {
     this.matchedId,
     this.claimChannel,
     this.ambiguous = false,
+    this.possibleMatch = false,
   });
 
-  const EchoResolution.none({bool ambiguous = false})
-    : this._(
-        isEcho: false,
-        reason: ambiguous ? 'ambiguous_candidates_kept_separate' : 'no_match',
-        ambiguous: ambiguous,
-      );
+  const EchoResolution.none({
+    bool ambiguous = false,
+    bool possibleMatch = false,
+  }) : this._(
+         isEcho: false,
+         reason: ambiguous ? 'ambiguous_candidates_kept_separate' : 'no_match',
+         ambiguous: ambiguous,
+         possibleMatch: possibleMatch,
+       );
 
   const EchoResolution.proof(String matchedId, String reason)
     : this._(isEcho: true, reason: reason, matchedId: matchedId);
@@ -134,6 +138,7 @@ class EchoResolution {
   /// with this channel, so one payment can absorb at most one echo per channel.
   final String? claimChannel;
   final bool ambiguous;
+  final bool possibleMatch;
 
   /// Single structured log line. Contains ids and reasons only.
   String describe(String currentId) => isEcho
@@ -147,6 +152,7 @@ class PaymentIdentityMatcher {
   /// Amount/direction alone is weak evidence. Keep the cross-channel window
   /// short so a genuine second same-value payment is not swallowed.
   static const Duration weakModalityWindow = Duration(seconds: 60);
+  static const String weakModalityReason = 'weak_modality_pair';
 
   /// Same notification slot, amount and direction can be an update/repost even
   /// without payer/account/reference fields. Conflicts still block this match.
@@ -310,7 +316,7 @@ class PaymentIdentityMatcher {
         !notificationAccountConflict &&
         !notificationPayerConflict) {
       return IdentityDecision(
-        IdentityVerdict.sameTransfer,
+        IdentityVerdict.candidateEcho,
         sameNotificationAccount || sameNotificationPayer
             ? 'same_notification_update'
             : 'same_notification_stream_amount',
@@ -340,7 +346,7 @@ class PaymentIdentityMatcher {
           current.text.isNotEmpty &&
           current.text == previous.text) {
         return const IdentityDecision(
-          IdentityVerdict.sameTransfer,
+          IdentityVerdict.candidateEcho,
           'same_channel_exact_replay',
         );
       }
@@ -438,7 +444,7 @@ class PaymentIdentityMatcher {
         isWeakModalityPair(current.origin, previous.origin)) {
       return const IdentityDecision(
         IdentityVerdict.candidateEcho,
-        'weak_modality_pair',
+        weakModalityReason,
       );
     }
 
@@ -448,10 +454,8 @@ class PaymentIdentityMatcher {
     );
   }
 
-  /// Compare [current] against recent signals and apply the safety rules that
-  /// pairwise comparison cannot: one-to-one claims per channel, and "more than
-  /// one plausible match means keep both" so a real second payment is never
-  /// swallowed.
+  /// Resolve proof-backed matches and unique cross-source matches with shared
+  /// payer/account evidence. Weak or ambiguous candidates remain separate.
   ///
   /// [claims] maps a previous signal id to the channels it has already
   /// absorbed an echo from.
@@ -462,9 +466,10 @@ class PaymentIdentityMatcher {
     Duration sameChannelReplayWindow = defaultReplayWindow,
     Duration weakWindow = weakModalityWindow,
   }) {
-    SignalIdentity? candidate;
-    String candidateReason = '';
+    var possibleMatch = false;
     var ambiguous = false;
+    String? candidateId;
+    String? candidateReason;
 
     for (final previous in recent) {
       final decision = compare(
@@ -480,23 +485,35 @@ class PaymentIdentityMatcher {
           continue;
         case IdentityVerdict.candidateEcho:
           if (claims[previous.id]?.contains(current.channel) ?? false) continue;
-          if (candidate != null && candidate.id != previous.id) {
+          possibleMatch = true;
+          if (candidateId != null && candidateId != previous.id) {
             ambiguous = true;
           } else {
-            candidate = previous;
+            candidateId = previous.id;
             candidateReason = decision.reason;
           }
       }
-      if (ambiguous) break;
     }
 
-    if (candidate != null && !ambiguous) {
+    const strongMatchReasons = {
+      'same_account',
+      'same_payer',
+      'utr_enrichment',
+      'same_notification_update',
+    };
+    if (!ambiguous &&
+        candidateId != null &&
+        strongMatchReasons.contains(candidateReason)) {
       return EchoResolution.echo(
-        candidate.id,
-        candidateReason,
+        candidateId,
+        candidateReason!,
         current.channel,
       );
     }
-    return EchoResolution.none(ambiguous: ambiguous);
+
+    return EchoResolution.none(
+      ambiguous: ambiguous,
+      possibleMatch: possibleMatch,
+    );
   }
 }

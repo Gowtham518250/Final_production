@@ -54,28 +54,21 @@ void main() {
 
   test('pending operations are isolated by user ID and role', () async {
     final box = Hive.box('sync_operations_v2');
-    await box.put('owner-41', operation(
-      id: 'owner-41',
-      userId: 41,
-      role: 'OWNER',
-    ).toJson());
-    await box.put('owner-72', operation(
-      id: 'owner-72',
-      userId: 72,
-      role: 'OWNER',
-    ).toJson());
-    await box.put('customer-41', operation(
-      id: 'customer-41',
-      userId: 41,
-      role: 'CUSTOMER',
-    ).toJson());
+    await box.put(
+      'owner-41',
+      operation(id: 'owner-41', userId: 41, role: 'OWNER').toJson(),
+    );
+    await box.put(
+      'owner-72',
+      operation(id: 'owner-72', userId: 72, role: 'OWNER').toJson(),
+    );
+    await box.put(
+      'customer-41',
+      operation(id: 'customer-41', userId: 41, role: 'CUSTOMER').toJson(),
+    );
     await box.put(
       'legacy-owner-41',
-      operation(
-        id: 'legacy-owner-41',
-        userId: 41,
-        role: '',
-      ).toJson()
+      operation(id: 'legacy-owner-41', userId: 41, role: '').toJson()
         ..remove('user_role'),
     );
 

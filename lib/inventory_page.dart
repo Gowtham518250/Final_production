@@ -1,24 +1,33 @@
 import 'live_translated_text.dart';
+
 import 'dart:async';
+
 import 'cache_consistency_service.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'api_client.dart';
 import 'app_localizations.dart';
+
 import 'package:provider/provider.dart';
+
 import 'language_provider.dart';
 import 'guided_voice_service.dart';
 import 'guided_field_controls.dart';
 import 'inventory_upload_page.dart';
 import 'qr_scanner_page.dart';
 import 'fmcg_barcode_service.dart';
+
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+
 import 'inventory_management_service.dart';
 import 'local_storage_service.dart';
 import 'inventory_stock_helper.dart';
@@ -29,7 +38,9 @@ import 'secure_token_storage.dart';
 import 'realtime_client.dart';
 import 'ai_negotiation_service.dart';
 import 'simple_loader.dart';
+
 import 'package:share_plus/share_plus.dart';
+
 import 'visual_widgets.dart';
 
 class InventoryPage extends StatefulWidget {
@@ -338,11 +349,13 @@ class _InventoryPageState extends State<InventoryPage>
       final Map<String, dynamic> localMap =
           await LocalStorageService.loadLocalProducts();
       final legacyPriceLearningKeys = localMap.entries
-          .where((entry) =>
-              entry.value is Map &&
-              InventoryStockHelper.isLegacySalesPriceLearningProduct(
-                Map<String, dynamic>.from(entry.value as Map),
-              ))
+          .where(
+            (entry) =>
+                entry.value is Map &&
+                InventoryStockHelper.isLegacySalesPriceLearningProduct(
+                  Map<String, dynamic>.from(entry.value as Map),
+                ),
+          )
           .map((entry) => entry.key)
           .toList(growable: false);
       for (final key in legacyPriceLearningKeys) {
@@ -580,12 +593,20 @@ class _InventoryPageState extends State<InventoryPage>
               mainAxisSize: MainAxisSize.min,
               children: matches.map((match) {
                 final raw = match['product'];
-                final product = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+                final product = raw is Map
+                    ? Map<String, dynamic>.from(raw)
+                    : <String, dynamic>{};
                 final types = (match['match_types'] as List? ?? const [])
                     .map((value) => value.toString().replaceAll('_', ' '))
                     .join(' + ');
-                final name = (product['product_name'] ?? product['name'] ?? 'Unnamed product').toString();
-                final barcode = (product['barcode'] ?? product['sku'] ?? 'Not set').toString();
+                final name =
+                    (product['product_name'] ??
+                            product['name'] ??
+                            'Unnamed product')
+                        .toString();
+                final barcode =
+                    (product['barcode'] ?? product['sku'] ?? 'Not set')
+                        .toString();
                 final stock = product['current_stock'] ?? product['stock'] ?? 0;
                 final unit = product['unit'] ?? 'pcs';
                 final price = product['unit_price'] ?? product['price'] ?? 0;
@@ -596,8 +617,25 @@ class _InventoryPageState extends State<InventoryPage>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(width: 118, child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.blueGrey))),
-                      Expanded(child: Text(value?.toString() ?? '-', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                      SizedBox(
+                        width: 118,
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          value?.toString() ?? '-',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -613,9 +651,22 @@ class _InventoryPageState extends State<InventoryPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(types, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.deepOrange)),
+                      Text(
+                        types,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
                       const SizedBox(height: 5),
-                      Text(name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       detail('Barcode / SKU', barcode),
                       detail('Selling price', '₹$price'),
                       detail('Available stock', '$stock $unit'),
@@ -628,7 +679,12 @@ class _InventoryPageState extends State<InventoryPage>
             ),
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -638,18 +694,24 @@ class _InventoryPageState extends State<InventoryPage>
     required String sku,
     int? excludeProductId,
   }) async {
-    final path = '${ApiClient.inventoryPrefix}/products/duplicate-check'
+    final path =
+        '${ApiClient.inventoryPrefix}/products/duplicate-check'
         '?product_name=${Uri.encodeQueryComponent(productName)}'
         '&sku=${Uri.encodeQueryComponent(sku)}'
         '${excludeProductId == null ? '' : '&exclude_product_id=$excludeProductId'}';
     try {
-      final response = await ApiClient.getJson(path).timeout(const Duration(seconds: 6));
+      final response = await ApiClient.getJson(
+        path,
+      ).timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map && decoded['exists'] == true) {
           final raw = decoded['matches'];
           final matches = raw is List
-              ? raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+              ? raw
+                    .whereType<Map>()
+                    .map((item) => Map<String, dynamic>.from(item))
+                    .toList()
               : <Map<String, dynamic>>[];
           if (matches.isNotEmpty) {
             await _showExistingProductMatches(matches);
@@ -659,7 +721,8 @@ class _InventoryPageState extends State<InventoryPage>
         return false;
       }
     } catch (error) {
-      if (kDebugMode) debugPrint('Product duplicate preflight unavailable: $error');
+      if (kDebugMode)
+        debugPrint('Product duplicate preflight unavailable: $error');
     }
 
     final localProducts = <dynamic>[..._products];
@@ -774,7 +837,8 @@ class _InventoryPageState extends State<InventoryPage>
       if (await _checkDuplicateProductAndShow(
         productName: productData['product_name'].toString(),
         sku: sku,
-      )) return;
+      ))
+        return;
 
       // Keep the local catalogue and sync outbox consistent. If the outbox
       // rejects the operation, roll back the optimistic local product.
@@ -787,7 +851,8 @@ class _InventoryPageState extends State<InventoryPage>
       local[sku] = productData;
       await LocalStorageService.saveLocalProducts(local);
 
-      final operationId = 'PRODUCT_CREATE_${_userId}_${DateTime.now().microsecondsSinceEpoch}';
+      final operationId =
+          'PRODUCT_CREATE_${_userId}_${DateTime.now().microsecondsSinceEpoch}';
       final queued = await SyncQueueManager.enqueue('create_local_product', {
         'operation_id': operationId,
         'user_id': _userId,
@@ -1122,6 +1187,19 @@ class _InventoryPageState extends State<InventoryPage>
         );
       }
     }
+  }
+
+  Widget _hearPhotoStepsButton() {
+    return OutlinedButton.icon(
+      onPressed: () => unawaited(
+        GuidedVoiceService.instance.speakStep(
+          'inventoryPhoto',
+          context.read<LanguageProvider>().locale.languageCode,
+        ),
+      ),
+      icon: const Icon(Icons.volume_up_rounded, size: 16),
+      label: const LiveTranslatedText('Hear photo steps'),
+    );
   }
 
   Future<void> _lookupProductImageForAdd(StateSetter updateDialog) async {
@@ -1998,22 +2076,7 @@ class _InventoryPageState extends State<InventoryPage>
                                           'Choose photo',
                                         ),
                                       ),
-                                      OutlinedButton.icon(
-                                        onPressed: () => unawaited(
-                                          GuidedVoiceService.instance.speakStep(
-                                            'inventoryPhoto',
-                                            context
-                                                .read<LanguageProvider>()
-                                                .locale
-                                                .languageCode,
-                                          ),
-                                        ),
-                                        icon: const Icon(
-                                          Icons.volume_up_rounded,
-                                          size: 16,
-                                        ),
-                                        label: const LiveTranslatedText('Hear photo steps'),
-                                      ),
+                                      _hearPhotoStepsButton(),
                                       OutlinedButton.icon(
                                         onPressed: _imageLookupLoading
                                             ? null
@@ -2210,9 +2273,7 @@ class _InventoryPageState extends State<InventoryPage>
     final l = AppLocalizations.of(context);
     final lowStock = _products.where((raw) {
       if (raw is! Map) return false;
-      return InventoryStockHelper.isLowStock(
-        Map<String, dynamic>.from(raw),
-      );
+      return InventoryStockHelper.isLowStock(Map<String, dynamic>.from(raw));
     }).length;
 
     return Scaffold(
@@ -3577,12 +3638,16 @@ class _InventoryPageState extends State<InventoryPage>
                               final barcode = barcodeC.text.trim();
                               final productSku = barcode.isNotEmpty
                                   ? barcode
-                                  : (p['sku'] ?? p['barcode'] ?? productName.toLowerCase()).toString();
+                                  : (p['sku'] ??
+                                            p['barcode'] ??
+                                            productName.toLowerCase())
+                                        .toString();
                               if (await _checkDuplicateProductAndShow(
                                 productName: productName,
                                 sku: productSku,
                                 excludeProductId: productId,
-                              )) return;
+                              ))
+                                return;
                               updated['id'] = productId;
                               updated['product_id'] ??= productId;
                               updated['product_name'] = productName;

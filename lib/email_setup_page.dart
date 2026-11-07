@@ -54,7 +54,10 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
       return;
     }
     if (password.length < 8) {
-      setState(() => _statusMessage = 'Enter your 16-character Gmail App Password (spaces are OK).');
+      setState(
+        () => _statusMessage =
+            'Enter your 16-character Gmail App Password (spaces are OK).',
+      );
       return;
     }
 
@@ -63,7 +66,10 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
       _statusMessage = null;
     });
 
-    final ok = await EmailSenderService.setCredentials(email: email, password: password);
+    final ok = await EmailSenderService.setCredentials(
+      email: email,
+      password: password,
+    );
     if (!mounted) return;
 
     setState(() {
@@ -76,7 +82,10 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
 
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText('Email saved for $email'), backgroundColor: const Color(0xFF10B981)),
+        SnackBar(
+          content: LiveTranslatedText('Email saved for $email'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
       );
     }
   }
@@ -93,17 +102,21 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
       _statusMessage = 'Sending test email…';
     });
 
-    final result = await EmailSenderService.testEmailConfiguration(recipientEmail: email);
+    final result = await EmailSenderService.testEmailConfiguration(
+      recipientEmail: email,
+    );
     if (!mounted) return;
 
     setState(() {
       _testing = false;
       if (result['success'] == true) {
-        _statusMessage = '✅ Test email sent successfully to $email. Check Inbox and Spam folders.';
+        _statusMessage =
+            '✅ Test email sent successfully to $email. Check Inbox and Spam folders.';
       } else {
         _statusMessage = '❌ Test failed: ${result['message']}';
         if (result['troubleshooting'] != null) {
-          _statusMessage = (_statusMessage ?? '') + '\n💡 ${result['troubleshooting']}';
+          _statusMessage =
+              (_statusMessage ?? '') + '\n💡 ${result['troubleshooting']}';
         }
       }
     });
@@ -112,14 +125,15 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: LiveTranslatedText('Email setup', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Email setup',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -129,10 +143,14 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: _configured ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
+                color: _configured
+                    ? const Color(0xFFECFDF5)
+                    : const Color(0xFFFFF7ED),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _configured ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                  color: _configured
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
                 ),
               ),
               child: LiveTranslatedText(
@@ -145,14 +163,21 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
             const SizedBox(height: 20),
             LiveTranslatedText(
               'How to get Gmail App Password',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
             ),
             const SizedBox(height: 8),
             LiveTranslatedText(
               '1. Google Account → Security → 2-Step Verification ON\n'
               '2. App passwords → Mail → Other → copy 16-character password\n'
               '3. Paste below (with or without spaces)',
-              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700], height: 1.5),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[700],
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -182,7 +207,9 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
                 _statusMessage!,
                 style: GoogleFonts.poppins(
                   fontSize: 13,
-                  color: _statusMessage!.startsWith('Test email sent') || _statusMessage!.startsWith('Saved')
+                  color:
+                      _statusMessage!.startsWith('Test email sent') ||
+                          _statusMessage!.startsWith('Saved')
                       ? const Color(0xFF10B981)
                       : const Color(0xFFDC2626),
                 ),
@@ -203,7 +230,9 @@ class _EmailSetupPageState extends State<EmailSetupPage> {
             const SizedBox(height: 10),
             OutlinedButton(
               onPressed: _testing || !_configured ? null : _test,
-              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
               child: LiveTranslatedText(
                 _testing ? 'Sending test…' : 'Send test OTP email',
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600),

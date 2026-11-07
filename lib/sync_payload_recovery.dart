@@ -179,9 +179,7 @@ Map<String, dynamic>? buildInvoicePayloadFromLocalSale(
     if (!lineTotal.isFinite || lineTotal < 0) return null;
     sumOfLines += lineTotal;
 
-    final productId = int.tryParse(
-      textValue(item['product_id'] ?? item['id']),
-    );
+    final productId = int.tryParse(textValue(item['product_id'] ?? item['id']));
     lineItems.add(<String, dynamic>{
       'product_id': productId != null && productId > 0 ? productId : null,
       'product_name': name,

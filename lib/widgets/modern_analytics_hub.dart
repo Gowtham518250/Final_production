@@ -57,7 +57,7 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
   /// Calculate all metrics from actual API data (analyticsSales)
   void _calculateMetrics() {
     final sales = widget.analyticsSales;
-    
+
     if (sales.isEmpty) {
       _totalRevenue = 0.0;
       _totalTransactions = 0;
@@ -78,17 +78,22 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
     _totalTransactions = sales.length;
 
     // Average Sale
-    _averageSale = _totalTransactions > 0 ? _totalRevenue / _totalTransactions : 0.0;
+    _averageSale = _totalTransactions > 0
+        ? _totalRevenue / _totalTransactions
+        : 0.0;
 
     // Unique Products
     final uniqueProductIds = <String>{};
     for (final sale in sales) {
-      final productId = (sale['product_id'] ?? 
-                        sale['barcode'] ?? 
-                        sale['product_name'] ?? 
-                        sale['product'] ?? 
-                        sale['item'] ?? 
-                        'Unknown').toString().trim();
+      final productId =
+          (sale['product_id'] ??
+                  sale['barcode'] ??
+                  sale['product_name'] ??
+                  sale['product'] ??
+                  sale['item'] ??
+                  'Unknown')
+              .toString()
+              .trim();
       if (productId.isNotEmpty) {
         uniqueProductIds.add(productId);
       }
@@ -98,10 +103,10 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
     // Top Product (by revenue)
     final productRevenue = <String, double>{};
     for (final sale in sales) {
-      final productName = (sale['product_name'] ?? 
-                          sale['product'] ?? 
-                          sale['item'] ?? 
-                          'Unknown').toString().trim();
+      final productName =
+          (sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unknown')
+              .toString()
+              .trim();
       final saleAmount = _toDouble(sale['total'] ?? sale['amount'] ?? 0);
       productRevenue.update(
         productName,
@@ -109,7 +114,7 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
         ifAbsent: () => saleAmount,
       );
     }
-    
+
     if (productRevenue.isNotEmpty) {
       _topProduct = productRevenue.entries
           .reduce((a, b) => a.value >= b.value ? a : b)
@@ -139,19 +144,27 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
       double yesterdayRevenue = 0.0;
 
       for (final sale in sales) {
-        final saleDate = _parseDate(sale['created_at'] ?? sale['sale_date'] ?? '');
-        final saleDateNormalized = DateTime(saleDate.year, saleDate.month, saleDate.day);
+        final saleDate = _parseDate(
+          sale['created_at'] ?? sale['sale_date'] ?? '',
+        );
+        final saleDateNormalized = DateTime(
+          saleDate.year,
+          saleDate.month,
+          saleDate.day,
+        );
         final saleAmount = _toDouble(sale['total'] ?? sale['amount'] ?? 0);
 
         if (saleDateNormalized == today) {
           todayRevenue += saleAmount;
-        } else if (saleDateNormalized == today.subtract(const Duration(days: 1))) {
+        } else if (saleDateNormalized ==
+            today.subtract(const Duration(days: 1))) {
           yesterdayRevenue += saleAmount;
         }
       }
 
       if (yesterdayRevenue > 0) {
-        _growthPercentage = ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100;
+        _growthPercentage =
+            ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100;
       } else {
         _growthPercentage = todayRevenue > 0 ? 100.0 : 0.0;
       }
@@ -163,19 +176,23 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
       double lastWeekRevenue = 0.0;
 
       for (final sale in sales) {
-        final saleDate = _parseDate(sale['created_at'] ?? sale['sale_date'] ?? '');
+        final saleDate = _parseDate(
+          sale['created_at'] ?? sale['sale_date'] ?? '',
+        );
         final saleAmount = _toDouble(sale['total'] ?? sale['amount'] ?? 0);
 
         if (saleDate.isAfter(thisWeekStart) || saleDate == thisWeekStart) {
           thisWeekRevenue += saleAmount;
-        } else if ((saleDate.isAfter(lastWeekStart) || saleDate == lastWeekStart) &&
-                   saleDate.isBefore(thisWeekStart)) {
+        } else if ((saleDate.isAfter(lastWeekStart) ||
+                saleDate == lastWeekStart) &&
+            saleDate.isBefore(thisWeekStart)) {
           lastWeekRevenue += saleAmount;
         }
       }
 
       if (lastWeekRevenue > 0) {
-        _growthPercentage = ((thisWeekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100;
+        _growthPercentage =
+            ((thisWeekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100;
       } else {
         _growthPercentage = thisWeekRevenue > 0 ? 100.0 : 0.0;
       }
@@ -191,18 +208,23 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
       double lastMonthRevenue = 0.0;
 
       for (final sale in sales) {
-        final saleDate = _parseDate(sale['created_at'] ?? sale['sale_date'] ?? '');
+        final saleDate = _parseDate(
+          sale['created_at'] ?? sale['sale_date'] ?? '',
+        );
         final saleAmount = _toDouble(sale['total'] ?? sale['amount'] ?? 0);
 
-        if ((saleDate.year == thisMonthStart.year && saleDate.month == thisMonthStart.month)) {
+        if ((saleDate.year == thisMonthStart.year &&
+            saleDate.month == thisMonthStart.month)) {
           thisMonthRevenue += saleAmount;
-        } else if ((saleDate.year == lastMonthStart.year && saleDate.month == lastMonthStart.month)) {
+        } else if ((saleDate.year == lastMonthStart.year &&
+            saleDate.month == lastMonthStart.month)) {
           lastMonthRevenue += saleAmount;
         }
       }
 
       if (lastMonthRevenue > 0) {
-        _growthPercentage = ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+        _growthPercentage =
+            ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
       } else {
         _growthPercentage = thisMonthRevenue > 0 ? 100.0 : 0.0;
       }
@@ -275,10 +297,7 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText(
-          'Analytics Hub',
-          style: AppTypography.titleLarge,
-        ),
+        LiveTranslatedText('Analytics Hub', style: AppTypography.titleLarge),
         const SizedBox(height: 8),
         LiveTranslatedText(
           'Real-time business insights and performance metrics',
@@ -312,10 +331,14 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : AppColors.surface,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.surface,
                         borderRadius: BorderRadius.circular(AppRadii.button),
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : AppColors.border,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.border,
                         ),
                         boxShadow: isSelected ? AppShadows.subtle : null,
                       ),
@@ -326,8 +349,8 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: isSelected
-                              ? AppColors.textInverse
-                              : AppColors.textPrimary,
+                                ? AppColors.textInverse
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -361,9 +384,9 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
               value: '₹${_formatNumber(_totalRevenue)}',
               icon: Icons.trending_up,
               iconColor: AppColors.primary,
-              change: _growthPercentage >= 0 
-                ? '+${_growthPercentage.toStringAsFixed(1)}%' 
-                : '${_growthPercentage.toStringAsFixed(1)}%',
+              change: _growthPercentage >= 0
+                  ? '+${_growthPercentage.toStringAsFixed(1)}%'
+                  : '${_growthPercentage.toStringAsFixed(1)}%',
             ),
             StatCard(
               label: 'Transactions',
@@ -413,10 +436,14 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : AppColors.surface,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.surface,
                         borderRadius: BorderRadius.circular(AppRadii.button),
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : AppColors.border,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.border,
                         ),
                       ),
                       child: Center(
@@ -426,8 +453,8 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: isSelected
-                              ? AppColors.textInverse
-                              : AppColors.textPrimary,
+                                ? AppColors.textInverse
+                                : AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -456,10 +483,7 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
 
     return SaasCard(
       padding: const EdgeInsets.all(24),
-      child: SizedBox(
-        height: 300,
-        child: _buildChartByType(),
-      ),
+      child: SizedBox(height: 300, child: _buildChartByType()),
     );
   }
 
@@ -505,9 +529,9 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
             ),
             _MetricItem(
               label: 'Growth',
-              value: _growthPercentage >= 0 
-                ? '+${_growthPercentage.toStringAsFixed(1)}%'
-                : '${_growthPercentage.toStringAsFixed(1)}%',
+              value: _growthPercentage >= 0
+                  ? '+${_growthPercentage.toStringAsFixed(1)}%'
+                  : '${_growthPercentage.toStringAsFixed(1)}%',
               subtext: 'vs previous period',
             ),
           ],
@@ -591,13 +615,15 @@ class _ModernAnalyticsHubState extends State<ModernAnalyticsHub> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: items
-              .asMap()
-              .entries
-              .map((entry) => _buildMetricItem(
-                entry.value,
-                isLast: entry.key == items.length - 1,
-              ))
-              .toList(),
+                .asMap()
+                .entries
+                .map(
+                  (entry) => _buildMetricItem(
+                    entry.value,
+                    isLast: entry.key == items.length - 1,
+                  ),
+                )
+                .toList(),
           ),
         ),
       ],
@@ -651,12 +677,12 @@ class BarChartWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final productRevenue = <String, double>{};
-    
+
     for (final sale in sales) {
-      final productName = (sale['product_name'] ?? 
-                          sale['product'] ?? 
-                          sale['item'] ?? 
-                          'Unknown').toString().trim();
+      final productName =
+          (sale['product_name'] ?? sale['product'] ?? sale['item'] ?? 'Unknown')
+              .toString()
+              .trim();
       final amount = _toDouble(sale['total'] ?? sale['amount'] ?? 0);
       productRevenue.update(
         productName,
@@ -665,19 +691,21 @@ class BarChartWidget extends StatelessWidget {
       );
     }
 
-    final topProducts = productRevenue.entries
-        .toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
+    final topProducts = productRevenue.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final topProductsList = topProducts.take(5).toList();
 
     if (topProductsList.isEmpty) {
       return Center(
-        child: LiveTranslatedText('No product data', style: AppTypography.bodySmall),
+        child: LiveTranslatedText(
+          'No product data',
+          style: AppTypography.bodySmall,
+        ),
       );
     }
 
     final maxValue = topProductsList.first.value;
-    
+
     return Column(
       children: [
         Expanded(
@@ -697,12 +725,17 @@ class BarChartWidget extends StatelessWidget {
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
                         color: AppColors.primary.withValues(alpha: 0.7),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(8),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     LiveTranslatedText(
-                      product.key.substring(0, (product.key.length < 8 ? product.key.length : 8)),
+                      product.key.substring(
+                        0,
+                        (product.key.length < 8 ? product.key.length : 8),
+                      ),
                       style: GoogleFonts.poppins(fontSize: 10),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -740,9 +773,11 @@ class LineChartWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dailyRevenue = <DateTime, double>{};
-    
+
     for (final sale in sales) {
-      final saleDate = _parseDate(sale['created_at'] ?? sale['sale_date'] ?? '');
+      final saleDate = _parseDate(
+        sale['created_at'] ?? sale['sale_date'] ?? '',
+      );
       final normalized = DateTime(saleDate.year, saleDate.month, saleDate.day);
       final amount = _toDouble(sale['total'] ?? sale['amount'] ?? 0);
       dailyRevenue.update(
@@ -752,19 +787,23 @@ class LineChartWidget extends StatelessWidget {
       );
     }
 
-    final sortedDays = dailyRevenue.entries
-        .toList()
-        ..sort((a, b) => a.key.compareTo(b.key));
+    final sortedDays = dailyRevenue.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
     final sortedDaysList = sortedDays.take(7).toList();
 
     if (sortedDaysList.isEmpty) {
       return Center(
-        child: LiveTranslatedText('No daily data', style: AppTypography.bodySmall),
+        child: LiveTranslatedText(
+          'No daily data',
+          style: AppTypography.bodySmall,
+        ),
       );
     }
 
-    final maxRevenue = sortedDaysList.map((e) => e.value).reduce((a, b) => a > b ? a : b);
-    
+    final maxRevenue = sortedDaysList
+        .map((e) => e.value)
+        .reduce((a, b) => a > b ? a : b);
+
     return Column(
       children: [
         Expanded(
@@ -793,7 +832,9 @@ class LineChartWidget extends StatelessWidget {
                               AppColors.primary.withValues(alpha: 0.4),
                             ],
                           ),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(6),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -809,10 +850,7 @@ class LineChartWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        LiveTranslatedText(
-          'Last 7 Days Revenue',
-          style: AppTypography.caption,
-        ),
+        LiveTranslatedText('Last 7 Days Revenue', style: AppTypography.caption),
       ],
     );
   }
@@ -849,13 +887,16 @@ class PieChartWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final productCount = <String, int>{};
-    
+
     for (final sale in sales) {
-      final String rawName = (sale['product_name'] ?? 
-                          sale['product'] ?? 
-                          sale['item'] ?? 
-                          sale['description'] ??
-                          'Unknown').toString().trim();
+      final String rawName =
+          (sale['product_name'] ??
+                  sale['product'] ??
+                  sale['item'] ??
+                  sale['description'] ??
+                  'Unknown')
+              .toString()
+              .trim();
       final String productName = AnalyticsEngine.formatProductName(rawName);
       productCount.update(
         productName,
@@ -864,18 +905,22 @@ class PieChartWidget extends StatelessWidget {
       );
     }
 
-    final topProducts = productCount.entries
-        .toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
+    final topProducts = productCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     final topProductsList = topProducts.take(5).toList();
 
     if (topProductsList.isEmpty) {
       return Center(
-        child: LiveTranslatedText('No product data', style: AppTypography.bodySmall),
+        child: LiveTranslatedText(
+          'No product data',
+          style: AppTypography.bodySmall,
+        ),
       );
     }
 
-    final total = topProductsList.fold<double>(0.0, (sum, e) => sum + e.value.toDouble()).toInt();
+    final total = topProductsList
+        .fold<double>(0.0, (sum, e) => sum + e.value.toDouble())
+        .toInt();
     final colors = [
       AppColors.primary,
       AppColors.success,
@@ -935,46 +980,41 @@ class PieChartWidget extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: List.generate(
-                    topProductsList.length,
-                    (index) {
-                      final product = topProductsList[index];
-                      final percentage = (product.value / total * 100).toStringAsFixed(1);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: colors[index % colors.length],
-                                shape: BoxShape.circle,
-                              ),
+                  children: List.generate(topProductsList.length, (index) {
+                    final product = topProductsList[index];
+                    final percentage = (product.value / total * 100)
+                        .toStringAsFixed(1);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: colors[index % colors.length],
+                              shape: BoxShape.circle,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: LiveTranslatedText(
-                                '${percentage}%',
-                                style: GoogleFonts.poppins(fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: LiveTranslatedText(
+                              '${percentage}%',
+                              style: GoogleFonts.poppins(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 8),
-        LiveTranslatedText(
-          'Product Mix',
-          style: AppTypography.caption,
-        ),
+        LiveTranslatedText('Product Mix', style: AppTypography.caption),
       ],
     );
   }
@@ -1004,7 +1044,8 @@ class RadarChartWidget extends StatelessWidget {
 
       final productIds = <String>{};
       for (final sale in sales) {
-        final id = (sale['product_id'] ?? sale['barcode'] ?? 'Unknown').toString();
+        final id = (sale['product_id'] ?? sale['barcode'] ?? 'Unknown')
+            .toString();
         if (id.isNotEmpty) productIds.add(id);
       }
       uniqueProducts = productIds.length;
@@ -1020,7 +1061,8 @@ class RadarChartWidget extends StatelessWidget {
             painter: RadarChartPainter(
               metrics: [
                 totalRevenue / maxValue,
-                totalTransactions / (totalTransactions > 0 ? totalTransactions : 100),
+                totalTransactions /
+                    (totalTransactions > 0 ? totalTransactions : 100),
                 avgSale / (avgSale > 0 ? avgSale * 2 : 100),
                 uniqueProducts / (uniqueProducts > 0 ? uniqueProducts : 10),
               ],
@@ -1030,10 +1072,7 @@ class RadarChartWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        LiveTranslatedText(
-          'Key Metrics Summary',
-          style: AppTypography.caption,
-        ),
+        LiveTranslatedText('Key Metrics Summary', style: AppTypography.caption),
       ],
     );
   }
@@ -1081,8 +1120,10 @@ class RadarChartPainter extends CustomPainter {
         final angle = (j / sides) * 2 * pi;
         final x = center.dx + r * cos(angle);
         final y = center.dy + r * sin(angle);
-        if (j == 0) path.moveTo(x, y);
-        else path.lineTo(x, y);
+        if (j == 0)
+          path.moveTo(x, y);
+        else
+          path.lineTo(x, y);
       }
       path.close();
       canvas.drawPath(path, gridPaint);
@@ -1095,8 +1136,10 @@ class RadarChartPainter extends CustomPainter {
       final r = radius * (metrics[i].clamp(0.0, 1.0));
       final x = center.dx + r * cos(angle);
       final y = center.dy + r * sin(angle);
-      if (i == 0) path.moveTo(x, y);
-      else path.lineTo(x, y);
+      if (i == 0)
+        path.moveTo(x, y);
+      else
+        path.lineTo(x, y);
     }
     path.close();
 

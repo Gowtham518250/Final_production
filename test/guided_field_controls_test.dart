@@ -67,7 +67,9 @@ void main() {
     expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
   });
 
-  testWidgets('guided field actions align to the trailing edge', (tester) async {
+  testWidgets('guided field actions align to the trailing edge', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final languageProvider = LanguageProvider();
     await languageProvider.initialized;

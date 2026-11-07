@@ -45,13 +45,15 @@ class _SyncVisibilityWidgetState extends State<SyncVisibilityWidget>
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
-    _rotationAnimation = Tween<double>(begin: 0.0, end: 2.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.linear),
-    );
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    
+    _rotationAnimation = Tween<double>(
+      begin: 0.0,
+      end: 2.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.linear));
+    _pulseAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
     if (widget.isSyncing) {
       _controller.repeat();
     }
@@ -81,15 +83,15 @@ class _SyncVisibilityWidgetState extends State<SyncVisibilityWidget>
     if (widget.isOffline) {
       return _buildOfflineIndicator();
     }
-    
+
     if (widget.conflictedItems > 0) {
       return _buildConflictIndicator();
     }
-    
+
     if (widget.isSyncing || widget.pendingChanges > 0) {
       return _buildSyncIndicator();
     }
-    
+
     return _buildSyncedIndicator();
   }
 
@@ -181,11 +183,7 @@ class _SyncVisibilityWidgetState extends State<SyncVisibilityWidget>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.check_circle,
-            size: 16,
-            color: Color(0xFF10B981),
-          ),
+          const Icon(Icons.check_circle, size: 16, color: Color(0xFF10B981)),
           const SizedBox(width: AppSpacing.sm),
           LiveTranslatedText(
             'Synced',
@@ -216,11 +214,7 @@ class _SyncVisibilityWidgetState extends State<SyncVisibilityWidget>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.wifi_off,
-            size: 16,
-            color: Color(0xFFF59E0B),
-          ),
+          const Icon(Icons.wifi_off, size: 16, color: Color(0xFFF59E0B)),
           const SizedBox(width: AppSpacing.sm),
           LiveTranslatedText(
             'Offline',
@@ -251,11 +245,7 @@ class _SyncVisibilityWidgetState extends State<SyncVisibilityWidget>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.error,
-            size: 16,
-            color: Color(0xFFEF4444),
-          ),
+          const Icon(Icons.error, size: 16, color: Color(0xFFEF4444)),
           const SizedBox(width: AppSpacing.sm),
           LiveTranslatedText(
             '${widget.conflictedItems} conflicts',
@@ -456,7 +446,7 @@ class ConflictResolutionDialog extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          
+
           // Local version
           Container(
             padding: const EdgeInsets.all(AppSpacing.sm),
@@ -472,7 +462,11 @@ class ConflictResolutionDialog extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.phone_android, size: 12, color: const Color(0xFF10B981)),
+                    Icon(
+                      Icons.phone_android,
+                      size: 12,
+                      color: const Color(0xFF10B981),
+                    ),
                     const SizedBox(width: 4),
                     LiveTranslatedText(
                       'Local (Your Device)',
@@ -493,7 +487,7 @@ class ConflictResolutionDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          
+
           // Server version
           Container(
             padding: const EdgeInsets.all(AppSpacing.sm),
@@ -530,7 +524,7 @@ class ConflictResolutionDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          
+
           // Resolution buttons
           Row(
             children: [
@@ -643,7 +637,11 @@ class OfflineModeBanner extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                Icon(Icons.queue, color: Colors.white.withValues(alpha: 0.8), size: 14),
+                Icon(
+                  Icons.queue,
+                  color: Colors.white.withValues(alpha: 0.8),
+                  size: 14,
+                ),
                 const SizedBox(width: 4),
                 LiveTranslatedText(
                   '$queuedActions actions queued for sync',
@@ -703,11 +701,7 @@ class SyncStatusBar extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
-              Icon(
-                Icons.cloud_done,
-                size: 14,
-                color: const Color(0xFF10B981),
-              ),
+              Icon(Icons.cloud_done, size: 14, color: const Color(0xFF10B981)),
             const SizedBox(width: AppSpacing.sm),
             LiveTranslatedText(
               isSyncing

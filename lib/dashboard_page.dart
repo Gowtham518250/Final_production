@@ -618,6 +618,9 @@ class _DashboardPageState extends State<DashboardPage>
     // Defer all heavy loads to after the first frame renders
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // Resolve the cached store state immediately so its switch does not
+      // remain disabled while the other deferred dashboard tasks run.
+      unawaited(_loadOnlineStoreStatus());
 
       // Keep the initial wave limited to tasks needed for the first dashboard.
       // Network-heavy maintenance work is started later and one operation at a
@@ -1775,9 +1778,6 @@ class _DashboardPageState extends State<DashboardPage>
     // Connect realtime, then perform optional refreshes serially to cap startup
     // CPU, image/data decoding, and network contention.
     await runSafely('realtime connection', _connectRealtime);
-    if (!mounted) return;
-
-    await runSafely('online store status', _loadOnlineStoreStatus);
     if (!mounted) return;
 
     try {
@@ -4694,6 +4694,25 @@ class _DashboardPageState extends State<DashboardPage>
       }
       final rawItems = tx['items'] ?? tx['line_items'] ?? const [];
       final List<dynamic> items = rawItems is List ? rawItems : const [];
+      double? invoiceTotal;
+      for (final field in const [
+        'invoice_total',
+        'total_amount',
+        'grand_total',
+        'final_amount',
+        'totalAmount',
+        'total',
+      ]) {
+        final value = tx[field];
+        if (value == null) continue;
+        final parsed = double.tryParse(value.toString());
+        if (parsed == null) continue;
+        invoiceTotal ??= parsed;
+        if (parsed > 0) {
+          invoiceTotal = parsed;
+          break;
+        }
+      }
       final date =
           tx['business_date'] ??
           tx['sale_date'] ??
@@ -4766,8 +4785,7 @@ class _DashboardPageState extends State<DashboardPage>
               tx['quantity']?.toString() ?? tx['qty']?.toString() ?? '1',
             ) ??
             1;
-        final double t =
-            double.tryParse(tx['total']?.toString() ?? '0') ?? (p * q);
+        final double t = invoiceTotal ?? (p * q);
 
         final String prodName =
             (tx['product_name'] ??
@@ -4813,7 +4831,7 @@ class _DashboardPageState extends State<DashboardPage>
       }
       final String? dueDate = tx['due_date'];
       final String? status = tx['payment_status'];
-      final double total = double.tryParse(tx['total']?.toString() ?? '0') ?? 0;
+      final double total = invoiceTotal ?? 0;
       final double paid =
           double.tryParse(tx['paid_amount']?.toString() ?? '0') ?? 0;
 
@@ -5068,7 +5086,7 @@ class _DashboardPageState extends State<DashboardPage>
       final List<dynamic> history = await LocalStorageService.loadSales();
       final reconciledHistory = await _reconcileLocalInvoicePayments(history);
       final historyComplete = await SalesRestoreService.isFullHistoryRestored();
-      if (reconciledHistory.isEmpty && !historyComplete && mounted) {
+      if (!historyComplete && mounted) {
         setState(() => _salesHistoryHydrating = true);
       }
       List<Map<String, dynamic>> localSalesFlattened = [];
@@ -5128,17 +5146,21 @@ class _DashboardPageState extends State<DashboardPage>
         if (!_salesReconciliationInProgress) {
           _salesReconciliationInProgress = true;
           unawaited(() async {
+            var historyIsComplete = historyComplete;
             try {
               // A non-empty local cache is not necessarily complete (the
               // invoices list endpoint returns one bounded page). Restore the
               // canonical full history once per owner before relying on it.
               var changed = false;
-              if (!await SalesRestoreService.isFullHistoryRestored() &&
-                  !_emptySalesRestoreInProgress) {
+              historyIsComplete =
+                  await SalesRestoreService.isFullHistoryRestored();
+              if (!historyIsComplete && !_emptySalesRestoreInProgress) {
                 _emptySalesRestoreInProgress = true;
                 try {
                   changed =
                       await SalesRestoreService.ensureFullHistoryRestored();
+                  historyIsComplete =
+                      await SalesRestoreService.isFullHistoryRestored();
                 } finally {
                   _emptySalesRestoreInProgress = false;
                 }
@@ -5172,8 +5194,8 @@ class _DashboardPageState extends State<DashboardPage>
                 debugPrint('⚠️ Background dashboard reconciliation failed: $e');
               }
             } finally {
-              if (mounted && _salesHistoryHydrating) {
-                setState(() => _salesHistoryHydrating = false);
+              if (mounted) {
+                setState(() => _salesHistoryHydrating = !historyIsComplete);
               }
               _salesReconciliationInProgress = false;
             }
@@ -13492,56 +13514,9 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  double _calculateTotalSales() {
-    final Map<String, double> invoiceTotals = {};
+  double _calculateTotalSales() => engine.lifetimeRevenue;
 
-    for (final sale in sales) {
-      try {
-        final invoiceKey =
-            sale['invoice_number']?.toString() ??
-            sale['sale_id']?.toString() ??
-            sale['_bill_id']?.toString() ??
-            sale['id']?.toString() ??
-            sale['created_at']?.toString() ??
-            '';
-        if (invoiceKey.isEmpty) continue;
-
-        if (!invoiceTotals.containsKey(invoiceKey)) {
-          final raw =
-              sale['invoice_total'] ??
-              sale['total'] ??
-              sale['grand_total'] ??
-              sale['final_amount'] ??
-              sale['totalAmount'] ??
-              0;
-          invoiceTotals[invoiceKey] = raw is num
-              ? raw.toDouble()
-              : double.tryParse(raw.toString()) ?? 0.0;
-        }
-      } catch (_) {}
-    }
-
-    return invoiceTotals.values.fold(0.0, (sum, v) => sum + v);
-  }
-
-  int _calculateTotalOrders() {
-    final Set<String> invoiceKeys = {};
-
-    for (final sale in sales) {
-      try {
-        final invoiceKey =
-            sale['invoice_number']?.toString() ??
-            sale['sale_id']?.toString() ??
-            sale['_bill_id']?.toString() ??
-            sale['id']?.toString() ??
-            sale['created_at']?.toString() ??
-            '';
-        if (invoiceKey.isNotEmpty) invoiceKeys.add(invoiceKey);
-      } catch (_) {}
-    }
-
-    return invoiceKeys.length;
-  }
+  int _calculateTotalOrders() => engine.lifetimeTransactions;
 
   int _calculateTotalOnlineOrders() {
     return OnlineOrderService.countDistinctOnlineOrdersFromSales(sales);
@@ -15590,7 +15565,7 @@ class _DashboardPageState extends State<DashboardPage>
             },
           ),
           _buildSidebarItem(
-            Icons.people_rounded,
+            Icons.groups_rounded,
             AppLocalizations.of(context).customers,
             false,
             () {
@@ -15598,15 +15573,10 @@ class _DashboardPageState extends State<DashboardPage>
               setState(() => _isSidebarOpen = false);
             },
           ),
-          _buildSidebarItem(
-            Icons.receipt_long_rounded,
-            AppLocalizations.of(context).invoices,
-            false,
-            () {
-              Navigator.pushNamed(context, '/invoices');
-              setState(() => _isSidebarOpen = false);
-            },
-          ),
+          _buildSidebarItem(Icons.menu_book_rounded, 'Khata', false, () {
+            Navigator.pushNamed(context, '/invoices');
+            setState(() => _isSidebarOpen = false);
+          }),
           _buildSidebarItem(
             Icons.account_balance_wallet_rounded,
             AppLocalizations.of(context).expenses ?? 'Expenses',
@@ -15632,7 +15602,7 @@ class _DashboardPageState extends State<DashboardPage>
             },
           ),
           _buildSidebarItem(
-            Icons.how_to_reg_rounded,
+            Icons.fact_check_rounded,
             AppLocalizations.of(context).attendance,
             false,
             () {
@@ -15649,7 +15619,7 @@ class _DashboardPageState extends State<DashboardPage>
               setState(() => _isSidebarOpen = false);
             },
           ),
-          _buildSidebarItem(Icons.receipt_rounded, 'Transactions', false, () {
+          _buildSidebarItem(Icons.history_rounded, 'Transactions', false, () {
             Navigator.pushNamed(context, '/transactions');
             setState(() => _isSidebarOpen = false);
           }),
@@ -16390,429 +16360,474 @@ class _DashboardPageState extends State<DashboardPage>
     final navigationSurface = isDarkMode
         ? const Color(0xFF121A2B)
         : Colors.white;
+    final dashboardActions = [
+      DashboardActionItem(
+        icon: Icons.add_shopping_cart_rounded,
+        label: 'Sale',
+        color: const Color(0xFF4F46E5),
+        primary: true,
+        onTap: () => _openSalesEntryFromCoach(),
+      ),
+      DashboardActionItem(
+        icon: Icons.translate_rounded,
+        label: 'Language',
+        color: const Color(0xFF2563EB),
+        onTap: _showLanguageDialog,
+      ),
+      DashboardActionItem(
+        icon: Icons.mic_none_rounded,
+        label: 'Voice bill',
+        color: const Color(0xFF0F766E),
+        targetKey: _voiceBillCoachKey,
+        onTap: () => _openSalesEntryFromCoach(openVoice: true),
+      ),
+      DashboardActionItem(
+        icon: Icons.local_shipping_outlined,
+        label: 'Online orders',
+        color: const Color(0xFFD97706),
+        badgeCount: _onlinePendingOrders,
+        onTap: () => Navigator.pushNamed(context, '/online-orders'),
+      ),
+      DashboardActionItem(
+        icon: Icons.chat_bubble_outline_rounded,
+        label: 'AI Ask',
+        color: const Color(0xFF7C3AED),
+        onTap: () => Navigator.pushNamed(context, '/query'),
+      ),
+      DashboardActionItem(
+        icon: Icons.receipt_long_outlined,
+        label: 'Khata',
+        color: const Color(0xFFEA580C),
+        onTap: () => Navigator.pushNamed(context, '/invoices'),
+      ),
+      DashboardActionItem(
+        icon: Icons.headset_mic_outlined,
+        label: 'Help & Support',
+        color: const Color(0xFF0891B2),
+        onTap: () => Navigator.pushNamed(context, '/chatbot-help'),
+      ),
+      DashboardActionItem(
+        icon: Icons.redeem_rounded,
+        label: 'Gift cards',
+        color: const Color(0xFFDB2777),
+        onTap: () => Navigator.pushNamed(context, '/gift-card'),
+      ),
+      DashboardActionItem(
+        icon: Icons.more_horiz_rounded,
+        label: 'More',
+        color: const Color(0xFF475569),
+        onTap: () => Navigator.pushNamed(context, '/more'),
+      ),
+      DashboardActionItem(
+        icon: Icons.logout_rounded,
+        label: 'Logout',
+        color: const Color(0xFFDC2626),
+        onTap: () => _performLogout(context),
+      ),
+    ];
+    final bottomNavigationBar = DashboardActionDock(
+      backgroundColor: navigationSurface,
+      borderColor: appColors.outlineVariant.withValues(alpha: 0.7),
+      items: dashboardActions,
+    );
 
     return Stack(
       children: [
         Scaffold(
-      backgroundColor: surfaceColor,
-      bottomNavigationBar: DashboardActionDock(
-        backgroundColor: navigationSurface,
-        borderColor: appColors.outlineVariant.withValues(alpha: 0.7),
-        items: [
-          DashboardActionItem(
-            icon: Icons.add_shopping_cart,
-            label: 'New Bill',
-            color: const Color(0xFF4F46E5),
-            primary: true,
-            targetKey: _newBillCoachKey,
-            onTap: () => _openSalesEntryFromCoach(),
-          ),
-          DashboardActionItem(
-            icon: Icons.mic_rounded,
-            label: 'Voice bill',
-            color: const Color(0xFF0F766E),
-            targetKey: _voiceBillCoachKey,
-            onTap: () => _openSalesEntryFromCoach(openVoice: true),
-          ),
-          DashboardActionItem(
-            icon: Icons.menu_book_rounded,
-            label: 'Khata',
-            color: const Color(0xFFD97706),
-            onTap: () => Navigator.pushNamed(context, '/invoices'),
-          ),
-          DashboardActionItem(
-            icon: Icons.grid_view_rounded,
-            label: 'More',
-            color: const Color(0xFF475569),
-            badgeCount: _onlinePendingOrders,
-            onTap: () => Navigator.pushNamed(context, '/more'),
-          ),
-        ],
-      ),
-      body: ErrorBoundary(
-        onError: (error, stack) {
-          if (kDebugMode) debugPrint('🔴 Dashboard Error: $error\n$stack');
-        },
-        child: AppBackground(
-          child: RefreshIndicator(
-            onRefresh: _loadSales,
-            color: AppColors.primary,
-            backgroundColor: Colors.black,
-            displacement: 40,
-            edgeOffset: 20,
-            child: ListView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
-              children: [
-                // 0. GREETING HEADER
-                _buildGreetingHeader(),
+          backgroundColor: surfaceColor,
+          bottomNavigationBar: bottomNavigationBar,
+          body: ErrorBoundary(
+            onError: (error, stack) {
+              if (kDebugMode) debugPrint('🔴 Dashboard Error: $error\n$stack');
+            },
+            child: AppBackground(
+              child: RefreshIndicator(
+                onRefresh: _loadSales,
+                color: AppColors.primary,
+                backgroundColor: Colors.black,
+                displacement: 40,
+                edgeOffset: 20,
+                child: ListView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
+                  children: [
+                    _buildGreetingHeader(),
 
-                // Put the owner's daily results and actions before setup and
-                // reporting content so the most time-sensitive work is visible
-                // near the top of the dashboard.
-                _buildLowStockBanner(),
-                if (!_isStaffMode) _buildPendingOnlineOrdersNotice(),
-                if (_pendingInvoices.isNotEmpty) _buildPendingInvoices(),
-                if (!_isStaffMode) _buildModernPerformanceOverview(),
+                    // Put the owner's daily results and actions before setup and
+                    // reporting content so the most time-sensitive work is visible
+                    // near the top of the dashboard.
+                    _buildLowStockBanner(),
+                    if (!_isStaffMode) _buildPendingOnlineOrdersNotice(),
+                    if (_pendingInvoices.isNotEmpty) _buildPendingInvoices(),
+                    if (!_isStaffMode) _buildModernPerformanceOverview(),
 
-                // Keep the local payment detection history easy to reach.
-                Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  elevation: 0,
-                  color: const Color(0xFFE8F5E9),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Color(0xFFA5D6A7)),
-                  ),
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Color(0xFFC8E6C9),
-                      child: Icon(
-                        Icons.account_balance_wallet_outlined,
-                        color: Color(0xFF2E7D32),
+                    // Keep the local payment detection history easy to reach.
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      elevation: 0,
+                      color: const Color(0xFFE8F5E9),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: Color(0xFFA5D6A7)),
                       ),
-                    ),
-                    title: const LiveTranslatedText(
-                      'Online Payment History',
-                      style: TextStyle(
-                        color: Color(0xFF1B5E20),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: const LiveTranslatedText(
-                      'View detected and confirmed incoming payments',
-                      style: TextStyle(color: Color(0xFF2E7D32)),
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
-                      color: Color(0xFF2E7D32),
-                    ),
-                    onTap: () =>
-                        Navigator.pushNamed(context, '/online-payment-history'),
-                  ),
-                ),
-
-                // 0.0001 ONLINE SHOPPING CTA
-                // Keep this immediately below the dashboard summary so owners
-                // can discover and enable marketplace ordering without digging
-                // through Shop Modules.
-                if (!_isStaffMode) ...[
-                  _buildOnlineStoreStatusCard(),
-                  const SizedBox(height: 10),
-                  _buildGrowMyShopCard(),
-                  const SizedBox(height: 16),
-                ],
-
-                // 0.001 PAYMENT DETECTION SETUP — keep this visible and highlighted
-                // until the OS reports that every required permission is enabled.
-                if (!_isStaffMode && _isPermissionsMissing)
-                  _buildPermissionWarning(),
-
-                // 0.002 PAYMENT DETECTION HEALTH — shown once permissions are
-                // granted. Previously, once the permission banner disappeared,
-                // a merchant had no way to know if detection quietly stopped
-                // working (OS killed the background service, channel went
-                // stale, etc.) — it just silently failed forever. This surfaces
-                // the watchdog heartbeat that already existed internally but
-                // was never rendered anywhere.
-                if (!_isStaffMode &&
-                    !_isPermissionsMissing &&
-                    _paymentPermissionCheckComplete)
-                  _buildDetectionHealthIndicator(),
-
-                // 0.01 FIRST LOGIN PROFILE PROMPT
-                if (shopName.isEmpty ||
-                    shopName == 'My Shop' ||
-                    shopName == 'AI Shop Pro') ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFBFDBFE)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFDBEAFE),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.person_add_alt_1,
-                            color: Color(0xFF2563EB),
-                            size: 24,
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFC8E6C9),
+                          child: Icon(
+                            Icons.account_balance_wallet_outlined,
+                            color: Color(0xFF2E7D32),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              LiveTranslatedText(
-                                'Complete Customer Profile',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF1E3A8A),
-                                ),
+                        title: const LiveTranslatedText(
+                          'Online Payment History',
+                          style: TextStyle(
+                            color: Color(0xFF1B5E20),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        subtitle: const LiveTranslatedText(
+                          'View detected and confirmed incoming payments',
+                          style: TextStyle(color: Color(0xFF2E7D32)),
+                        ),
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: Color(0xFF2E7D32),
+                        ),
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/online-payment-history',
+                        ),
+                      ),
+                    ),
+
+                    // 0.0001 ONLINE SHOPPING CTA
+                    // Keep this immediately below the dashboard summary so owners
+                    // can discover and enable marketplace ordering without digging
+                    // through Shop Modules.
+                    if (!_isStaffMode) ...[
+                      _buildOnlineStoreStatusCard(),
+                      const SizedBox(height: 10),
+                      _buildGrowMyShopCard(),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // 0.001 PAYMENT DETECTION SETUP — keep this visible and highlighted
+                    // until the OS reports that every required permission is enabled.
+                    if (!_isStaffMode && _isPermissionsMissing)
+                      _buildPermissionWarning(),
+
+                    // 0.002 PAYMENT DETECTION HEALTH — shown once permissions are
+                    // granted. Previously, once the permission banner disappeared,
+                    // a merchant had no way to know if detection quietly stopped
+                    // working (OS killed the background service, channel went
+                    // stale, etc.) — it just silently failed forever. This surfaces
+                    // the watchdog heartbeat that already existed internally but
+                    // was never rendered anywhere.
+                    if (!_isStaffMode &&
+                        !_isPermissionsMissing &&
+                        _paymentPermissionCheckComplete)
+                      _buildDetectionHealthIndicator(),
+
+                    // 0.01 FIRST LOGIN PROFILE PROMPT
+                    if (shopName.isEmpty ||
+                        shopName == 'My Shop' ||
+                        shopName == 'AI Shop Pro') ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFDBEAFE),
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(height: 4),
-                              LiveTranslatedText(
-                                'Please fill your profile details to get started.',
+                              child: const Icon(
+                                Icons.person_add_alt_1,
+                                color: Color(0xFF2563EB),
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  LiveTranslatedText(
+                                    'Complete Customer Profile',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF1E3A8A),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  LiveTranslatedText(
+                                    'Please fill your profile details to get started.',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: const Color(0xFF3B82F6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pushNamed(
+                                context,
+                                '/shop-profile',
+                              ).then((_) => _refreshShopProfileAfterEdit()),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                elevation: 0,
+                              ),
+                              child: LiveTranslatedText(
+                                'Fill Now',
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
-                                  color: const Color(0xFF3B82F6),
+                                  fontWeight: FontWeight.w600,
                                 ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // 0.05 UNSYNCED SALES WARNING — the only real defense against
+                    // OS-level "Clear app data" wiping local-only sales: make sure
+                    // the shop owner can SEE there's something at risk before they
+                    // ever go near phone settings, rather than finding out after.
+                    if (_unsyncedBillsCount > 0) ...[
+                      const SizedBox(height: 12),
+                      _buildUnsyncedSalesWarning(),
+                    ],
+
+                    if (_analyticsIntegrityErrorCount > 0) ...[
+                      const SizedBox(height: 12),
+                      _buildAnalyticsIntegrityWarning(),
+                    ],
+
+                    // 0.0 Daily Health Score (single owner signal)
+                    if (!_isStaffMode) _buildDailyHealthScoreCard(),
+
+                    // Today's business summary was removed to keep the dashboard lean.
+                    if (!_isStaffMode) _buildMarketingBanner(),
+
+                    // 0.4 ASK RETAIL MIND (AI NATURAL LANGUAGE QUERY)
+                    if (!_isStaffMode) ...[
+                      const SizedBox(height: 12),
+                      DashboardAiQueryCard(
+                        onTap: () => Navigator.pushNamed(context, '/query'),
+                      ),
+                    ],
+
+                    // 0.5 LIVE SALES TICKER
+                    _buildLiveSalesTicker(),
+
+                    // 1. GETTING STARTED (Only for new users with no sales)
+                    if (sales.isEmpty) ...[
+                      _buildGettingStartedSection(),
+                      const SizedBox(height: 32),
+                    ],
+
+                    // 3. SHOP SETUP ALERT (Only if not setup AND has sales - otherwise redundant with getting started)
+                    if (!_isShopSetup && sales.isNotEmpty)
+                      GestureDetector(
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/shop-profile',
+                        ).then((_) => _refreshShopProfileAfterEdit()),
+                        child: Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 24),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF6366F1,
+                                ).withValues(alpha: 0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.storefront_rounded,
+                                  semanticLabel: 'Storefront Rounded',
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    LiveTranslatedText(
+                                      AppLocalizations.of(context).shopDetails,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    LiveTranslatedText(
+                                      AppLocalizations.of(
+                                        context,
+                                      ).allContactIncluded,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.85,
+                                        ),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                semanticLabel: 'Arrow Forward Ios Rounded',
+                                color: Colors.white,
+                                size: 16,
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pushNamed(
-                            context,
-                            '/shop-profile',
-                          ).then((_) => _refreshShopProfileAfterEdit()),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            elevation: 0,
-                          ),
-                          child: LiveTranslatedText(
-                            'Fill Now',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                // 0.05 UNSYNCED SALES WARNING — the only real defense against
-                // OS-level "Clear app data" wiping local-only sales: make sure
-                // the shop owner can SEE there's something at risk before they
-                // ever go near phone settings, rather than finding out after.
-                if (_unsyncedBillsCount > 0) ...[
-                  const SizedBox(height: 12),
-                  _buildUnsyncedSalesWarning(),
-                ],
-
-                if (_analyticsIntegrityErrorCount > 0) ...[
-                  const SizedBox(height: 12),
-                  _buildAnalyticsIntegrityWarning(),
-                ],
-
-                // 0.0 Daily Health Score (single owner signal)
-                if (!_isStaffMode) _buildDailyHealthScoreCard(),
-
-                // Today's business summary was removed to keep the dashboard lean.
-                if (!_isStaffMode) _buildMarketingBanner(),
-
-                // 0.4 ASK RETAIL MIND (AI NATURAL LANGUAGE QUERY)
-                if (!_isStaffMode) ...[
-                  const SizedBox(height: 12),
-                  DashboardAiQueryCard(
-                    onTap: () => Navigator.pushNamed(context, '/query'),
-                  ),
-                ],
-
-                // 0.5 LIVE SALES TICKER
-                _buildLiveSalesTicker(),
-
-                // 1. GETTING STARTED (Only for new users with no sales)
-                if (sales.isEmpty) ...[
-                  _buildGettingStartedSection(),
-                  const SizedBox(height: 32),
-                ],
-
-                // 3. SHOP SETUP ALERT (Only if not setup AND has sales - otherwise redundant with getting started)
-                if (!_isShopSetup && sales.isNotEmpty)
-                  GestureDetector(
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      '/shop-profile',
-                    ).then((_) => _refreshShopProfileAfterEdit()),
-                    child: Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 24),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(
-                              0xFF6366F1,
-                            ).withValues(alpha: 0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
+
+                    // 4. SUMMARY METRICS (KPI Strip)
+                    if (sales.isNotEmpty && !_isStaffMode) ...[
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 160,
+                              child: KpiGlassCard(
+                                label: AppLocalizations.of(context).sales,
+                                value: '₹${_formatCompactNumber(totalSales)}',
+                                subtitle: _currentFilterLabel.isEmpty
+                                    ? 'All time'
+                                    : _currentFilterLabel,
+                                icon: Icons.payments,
+                                color: AppColors.primary,
+                                trendPercent: _dailyGrowth,
+                                onTap: () =>
+                                    _scrollToCharts(1), // Open Line Chart
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.storefront_rounded,
-                              semanticLabel: 'Storefront Rounded',
-                              color: Colors.white,
-                              size: 24,
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 160,
+                              child: KpiGlassCard(
+                                label: AppLocalizations.of(
+                                  context,
+                                ).transactions,
+                                value: totalTransactions.toString(),
+                                subtitle: AppLocalizations.of(context).bills,
+                                icon: Icons.receipt_long,
+                                color: AppColors.secondary,
+                                onTap: () =>
+                                    _scrollToCharts(0), // Open Bar Chart
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                LiveTranslatedText(
-                                  AppLocalizations.of(context).shopDetails,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                LiveTranslatedText(
-                                  AppLocalizations.of(
-                                    context,
-                                  ).allContactIncluded,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 160,
+                              child: KpiGlassCard(
+                                label: AppLocalizations.of(context).avgOrder,
+                                value: '₹${_formatCompactNumber(averageSale)}',
+                                subtitle: AppLocalizations.of(context).avgOrder,
+                                icon: Icons.insights,
+                                color: AppColors.accent,
+                                onTap: () =>
+                                    _scrollToCharts(2), // Open Pie Chart
+                              ),
                             ),
-                          ),
-                          const Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            semanticLabel: 'Arrow Forward Ios Rounded',
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: _buildEnhancedTimeFilter(),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildChartSelector(),
+                      const SizedBox(height: 16),
+                      _buildActiveChart(),
+                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
+                      _buildMonthlyProductChart(),
+                      const SizedBox(height: 24),
+                    ],
 
-                // 4. SUMMARY METRICS (KPI Strip)
-                if (sales.isNotEmpty && !_isStaffMode) ...[
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 160,
-                          child: KpiGlassCard(
-                            label: AppLocalizations.of(context).sales,
-                            value: '₹${_formatCompactNumber(totalSales)}',
-                            subtitle: _currentFilterLabel.isEmpty
-                                ? 'All time'
-                                : _currentFilterLabel,
-                            icon: Icons.payments,
-                            color: AppColors.primary,
-                            trendPercent: _dailyGrowth,
-                            onTap: () => _scrollToCharts(1), // Open Line Chart
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          width: 160,
-                          child: KpiGlassCard(
-                            label: AppLocalizations.of(context).transactions,
-                            value: totalTransactions.toString(),
-                            subtitle: AppLocalizations.of(context).bills,
-                            icon: Icons.receipt_long,
-                            color: AppColors.secondary,
-                            onTap: () => _scrollToCharts(0), // Open Bar Chart
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          width: 160,
-                          child: KpiGlassCard(
-                            label: AppLocalizations.of(context).avgOrder,
-                            value: '₹${_formatCompactNumber(averageSale)}',
-                            subtitle: AppLocalizations.of(context).avgOrder,
-                            icon: Icons.insights,
-                            color: AppColors.accent,
-                            onTap: () => _scrollToCharts(2), // Open Pie Chart
-                          ),
-                        ),
+                    const SizedBox(height: 8),
+                    // 5. SHOP MODULES
+                    if (!_isStaffMode) ...[
+                      ShopModulesSection(onModuleClosed: _loadSales),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // 6. OPERATIONS & REPORTS
+                    if (!_isStaffMode) ...[
+                      OperationsReportsSection(
+                        onShareDailyReport: _shareDailyReport,
+                        onWorkerManagementClosed: _loadSales,
+                      ),
+                      const SizedBox(height: 16),
+                      const PrinterMonetizationBanner(),
+                      if (!kIsWeb) ...[
+                        const SizedBox(height: 14),
+                        const CompactQuickActions(),
+                        const SizedBox(height: 16),
+
+                        // 7. RECENT BILLS
+                        _buildEnhancedRecentTransactions(),
+                        const SizedBox(height: 16),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: _buildEnhancedTimeFilter(),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildChartSelector(),
-                  const SizedBox(height: 16),
-                  _buildActiveChart(),
-                  const SizedBox(height: 8),
-                  const SizedBox(height: 12),
-                  _buildMonthlyProductChart(),
-                  const SizedBox(height: 24),
-                ],
-
-                const SizedBox(height: 8),
-                // 5. SHOP MODULES
-                if (!_isStaffMode) ...[
-                  ShopModulesSection(onModuleClosed: _loadSales),
-                  const SizedBox(height: 24),
-                ],
-
-                // 6. OPERATIONS & REPORTS
-                if (!_isStaffMode) ...[
-                  OperationsReportsSection(
-                    onShareDailyReport: _shareDailyReport,
-                    onWorkerManagementClosed: _loadSales,
-                  ),
-                  const SizedBox(height: 16),
-                  const PrinterMonetizationBanner(),
-                  if (!kIsWeb) ...[
-                    const SizedBox(height: 14),
-                    const CompactQuickActions(),
-                    const SizedBox(height: 16),
-
-                    // 7. RECENT BILLS
-                    _buildEnhancedRecentTransactions(),
-                    const SizedBox(height: 16),
+                    ],
                   ],
-                ],
-              ],
-            ),
-          ),
-        ), // closes AppBackground
-      ), // closes ErrorBoundary
-    ),
+                ),
+              ),
+            ), // closes AppBackground
+          ), // closes ErrorBoundary
+        ),
         if (_showFirstSaleCoach)
           FirstSaleCoachOverlay(
             steps: [

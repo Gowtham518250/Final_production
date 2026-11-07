@@ -4,14 +4,15 @@ import 'package:retail_mind/payment_identity_matcher.dart';
 
 final _at = DateTime(2026, 11, 1, 12);
 
-SignalIdentity _signal(String id, String origin, {int seconds = 0}) => SignalIdentity(
-  id: id,
-  amount: 500,
-  direction: 'credit',
-  channel: '$origin|${origin == 'sms' ? 'bankSms' : 'phonePe'}',
-  origin: origin,
-  at: _at.add(Duration(seconds: seconds)),
-);
+SignalIdentity _signal(String id, String origin, {int seconds = 0}) =>
+    SignalIdentity(
+      id: id,
+      amount: 500,
+      direction: 'credit',
+      channel: '$origin|${origin == 'sms' ? 'bankSms' : 'phonePe'}',
+      origin: origin,
+      at: _at.add(Duration(seconds: seconds)),
+    );
 
 void main() {
   test('zero bill-aware window preserves a possible second installment', () {
@@ -23,22 +24,22 @@ void main() {
     expect(result.isEcho, isFalse);
   });
 
-  test('covered bill window still merges a late SMS echo', () {
+  test('covered bill window marks a late SMS as possible, never proven', () {
     final result = PaymentIdentityMatcher.resolve(
       _signal('sms1', 'sms', seconds: 300),
       [_signal('notification1', 'notification')],
       weakWindow: BillContext.coveredBillEchoWindow,
     );
-    expect(result.isEcho, isTrue);
+    expect(result.isEcho, isFalse);
+    expect(result.possibleMatch, isTrue);
   });
 
-  test('default window preserves previous behavior', () {
-    expect(
-      PaymentIdentityMatcher.resolve(
-        _signal('sms1', 'sms', seconds: 20),
-        [_signal('notification1', 'notification')],
-      ).isEcho,
-      isTrue,
+  test('default weak window does not suppress without shared identity', () {
+    final result = PaymentIdentityMatcher.resolve(
+      _signal('sms1', 'sms', seconds: 20),
+      [_signal('notification1', 'notification')],
     );
+    expect(result.isEcho, isFalse);
+    expect(result.possibleMatch, isTrue);
   });
 }

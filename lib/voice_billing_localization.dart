@@ -221,27 +221,32 @@ abstract final class VoiceBillingLocalization {
       'Understanding your order': 'Understanding your order…',
     },
     'te': {
-      'Words appear here as you speak': 'మీరు మాట్లాడినట్టు ఇక్కడ అక్షరాలు కనిపిస్తాయి…',
+      'Words appear here as you speak':
+          'మీరు మాట్లాడినట్టు ఇక్కడ అక్షరాలు కనిపిస్తాయి…',
       'Translating into your language': 'మీ భాషలో',
       'Understanding your order': 'మీ ఆర్డర్‌ను అర్థం చేసుకుంటున్నాం…',
     },
     'hi': {
-      'Words appear here as you speak': 'जैसे आप बोलेंगे, शब्द यहाँ लिखे जाएँगे…',
+      'Words appear here as you speak':
+          'जैसे आप बोलेंगे, शब्द यहाँ लिखे जाएँगे…',
       'Translating into your language': 'आपकी भाषा में',
       'Understanding your order': 'आपका ऑर्डर समझ रहे हैं…',
     },
     'ta': {
-      'Words appear here as you speak': 'நீங்கள் பேசும்போது சொற்கள் இங்கே தோன்றும்…',
+      'Words appear here as you speak':
+          'நீங்கள் பேசும்போது சொற்கள் இங்கே தோன்றும்…',
       'Translating into your language': 'உங்கள் மொழியில்',
       'Understanding your order': 'உங்கள் ஆர்டரைப் புரிந்துகொள்கிறோம்…',
     },
     'kn': {
-      'Words appear here as you speak': 'ನೀವು ಮಾತನಾಡಿದಂತೆ ಪದಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ…',
+      'Words appear here as you speak':
+          'ನೀವು ಮಾತನಾಡಿದಂತೆ ಪದಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ…',
       'Translating into your language': 'ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ',
       'Understanding your order': 'ನಿಮ್ಮ ಆರ್ಡರ್ ಅರ್ಥಮಾಡಿಕೊಳ್ಳಲಾಗುತ್ತಿದೆ…',
     },
     'ml': {
-      'Words appear here as you speak': 'നിങ്ങൾ സംസാരിക്കുമ്പോൾ വാക്കുകൾ ഇവിടെ വരും…',
+      'Words appear here as you speak':
+          'നിങ്ങൾ സംസാരിക്കുമ്പോൾ വാക്കുകൾ ഇവിടെ വരും…',
       'Translating into your language': 'നിങ്ങളുടെ ഭാഷയിൽ',
       'Understanding your order': 'നിങ്ങളുടെ ഓർഡർ മനസ്സിലാക്കുന്നു…',
     },
@@ -251,7 +256,8 @@ abstract final class VoiceBillingLocalization {
       'Understanding your order': 'तुमचा ऑर्डर समजत आहे…',
     },
     'bn': {
-      'Words appear here as you speak': 'আপনি বলার সঙ্গে সঙ্গে শব্দ এখানে লেখা হবে…',
+      'Words appear here as you speak':
+          'আপনি বলার সঙ্গে সঙ্গে শব্দ এখানে লেখা হবে…',
       'Translating into your language': 'আপনার ভাষায়',
       'Understanding your order': 'আপনার অর্ডার বোঝা হচ্ছে…',
     },
@@ -261,7 +267,8 @@ abstract final class VoiceBillingLocalization {
       'Understanding your order': 'તમારો ઓર્ડર સમજાઈ રહ્યો છે…',
     },
     'pa': {
-      'Words appear here as you speak': 'ਜਿਵੇਂ ਤੁਸੀਂ ਬੋਲੋਗੇ, ਸ਼ਬਦ ਇੱਥੇ ਲਿਖੇ ਜਾਣਗੇ…',
+      'Words appear here as you speak':
+          'ਜਿਵੇਂ ਤੁਸੀਂ ਬੋਲੋਗੇ, ਸ਼ਬਦ ਇੱਥੇ ਲਿਖੇ ਜਾਣਗੇ…',
       'Translating into your language': 'ਤੁਹਾਡੀ ਭਾਸ਼ਾ ਵਿੱਚ',
       'Understanding your order': 'ਤੁਹਾਡਾ ਆਰਡਰ ਸਮਝਿਆ ਜਾ ਰਿਹਾ ਹੈ…',
     },

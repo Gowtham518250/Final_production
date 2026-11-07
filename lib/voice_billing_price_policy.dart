@@ -16,6 +16,29 @@ class VoiceBillingPricePolicy {
   static bool isSpokenSource(String? source) =>
       _spokenSources.contains(_normalizeSource(source));
 
+  static bool canMergeLines({
+    required String currentName,
+    required String currentUnit,
+    required double currentPrice,
+    required String incomingName,
+    required String incomingUnit,
+    required double incomingPrice,
+  }) {
+    if (currentName.trim().toLowerCase() != incomingName.trim().toLowerCase() ||
+        currentUnit.trim().toLowerCase() != incomingUnit.trim().toLowerCase() ||
+        !currentPrice.isFinite ||
+        !incomingPrice.isFinite ||
+        currentPrice < 0 ||
+        incomingPrice < 0) {
+      return false;
+    }
+
+    if (currentPrice == 0 || incomingPrice == 0) {
+      return currentPrice == 0 && incomingPrice == 0;
+    }
+    return (currentPrice - incomingPrice).abs() < 0.01;
+  }
+
   static double? positivePrice(Object? value) {
     final parsed = value is num
         ? value.toDouble()

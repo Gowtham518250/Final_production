@@ -13,13 +13,13 @@ class CacheConsistencyService {
 
   static Future<String> _scope() async {
     final prefs = await SharedPreferences.getInstance();
-    final role = (prefs.getString('user_type') ??
-            prefs.getString('role') ??
-            'OWNER')
-        .trim()
-        .toUpperCase();
+    final role =
+        (prefs.getString('user_type') ?? prefs.getString('role') ?? 'OWNER')
+            .trim()
+            .toUpperCase();
     final intUserId = prefs.getInt('user_id') ?? prefs.getInt('userId');
-    final userId = intUserId?.toString() ??
+    final userId =
+        intUserId?.toString() ??
         prefs.getString('user_id') ??
         prefs.getString('userId') ??
         'anonymous';
@@ -47,10 +47,7 @@ class CacheConsistencyService {
     }
   }
 
-  static Future<void> _write(
-    String dataset,
-    Map<String, dynamic> value,
-  ) async {
+  static Future<void> _write(String dataset, Map<String, dynamic> value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(await _key(dataset), jsonEncode(value));
   }
@@ -66,8 +63,9 @@ class CacheConsistencyService {
     final now = DateTime.now().toUtc();
     final current = await metadata(dataset);
     current['last_remote_refresh_at'] = now.toIso8601String();
-    current['last_remote_updated_at'] =
-        (serverUpdatedAt ?? now).toUtc().toIso8601String();
+    current['last_remote_updated_at'] = (serverUpdatedAt ?? now)
+        .toUtc()
+        .toIso8601String();
     final pending = (current['pending_mutations'] as num?)?.toInt() ?? 0;
     current['dirty'] = pending > 0;
     if (recordCount != null) current['record_count'] = recordCount;
@@ -84,8 +82,9 @@ class CacheConsistencyService {
         ((current['pending_mutations'] as num?)?.toInt() ?? 0) + 1;
     current['local_revision'] =
         ((current['local_revision'] as num?)?.toInt() ?? 0) + 1;
-    current['last_local_mutation_at'] =
-        DateTime.now().toUtc().toIso8601String();
+    current['last_local_mutation_at'] = DateTime.now()
+        .toUtc()
+        .toIso8601String();
     if (operationId != null && operationId.isNotEmpty) {
       current['last_operation_id'] = operationId;
     }
@@ -139,7 +138,8 @@ class CacheConsistencyService {
   /// Only sync metadata is inspected. A business status of PENDING, UNPAID,
   /// or PARTIAL is not evidence that a row has an unacknowledged local write.
   static bool isPending(Map<String, dynamic> record) {
-    final raw = record['sync_status'] ??
+    final raw =
+        record['sync_status'] ??
         record['syncState'] ??
         record['sync_state'] ??
         record['queue_status'];
@@ -368,12 +368,12 @@ class CacheConsistencyService {
       conflictState = localPending && remotePending
           ? 'both_pending_local_preferred'
           : localPending
-              ? 'local_pending'
-              : 'remote_pending';
+          ? 'local_pending'
+          : 'remote_pending';
     } else {
       final localAcknowledged =
           local['sync_status']?.toString().trim().toLowerCase() == 'synced' ||
-              local['is_synced'] == true;
+          local['is_synced'] == true;
       // A timestamped remote row wins when it is at least as new. When the
       // server omits timestamps, a successful remote row may replace an
       // unversioned cache row, or an acknowledged local row. A timestamped,
@@ -383,8 +383,7 @@ class CacheConsistencyService {
           : localUpdated == null || localAcknowledged;
       winner = remoteWins ? remote : local;
       fallback = remoteWins ? local : remote;
-      conflictState =
-          remoteWins ? 'remote_wins' : 'local_wins_conservative';
+      conflictState = remoteWins ? 'remote_wins' : 'local_wins_conservative';
     }
 
     final merged = _mergeMissing(winner, fallback);
@@ -429,8 +428,10 @@ class CacheConsistencyService {
     }
 
     String orderKey(String number) {
-      final match = RegExp(r'^(ONL-\d+)(?:-|$)', caseSensitive: false)
-          .firstMatch(number.trim());
+      final match = RegExp(
+        r'^(ONL-\d+)(?:-|$)',
+        caseSensitive: false,
+      ).firstMatch(number.trim());
       return match?.group(1)?.toUpperCase() ?? '';
     }
 
@@ -444,8 +445,9 @@ class CacheConsistencyService {
         record['type'],
       ].whereType<Object>().join(' ').toUpperCase();
       if (RegExp(r'ONLINE[ _-]?ORDER').hasMatch(metadata)) return true;
-      return (record['notes']?.toString().toUpperCase() ?? '')
-          .contains('ONLINE ORDER #');
+      return (record['notes']?.toString().toUpperCase() ?? '').contains(
+        'ONLINE ORDER #',
+      );
     }
 
     final remoteNumbers = <String>{};
@@ -573,8 +575,8 @@ class CacheConsistencyService {
       final raw = lineItems is List && lineItems.isNotEmpty
           ? lineItems
           : items is List
-              ? items
-              : lineItems;
+          ? items
+          : lineItems;
       if (raw is List && raw.isNotEmpty) {
         final incoming = raw
             .whereType<Map>()
@@ -598,14 +600,15 @@ class CacheConsistencyService {
         continue;
       }
 
-      final name = (row['product_name'] ??
-              row['product'] ??
-              row['item'] ??
-              row['description'] ??
-              row['name'] ??
-              '')
-          .toString()
-          .trim();
+      final name =
+          (row['product_name'] ??
+                  row['product'] ??
+                  row['item'] ??
+                  row['description'] ??
+                  row['name'] ??
+                  '')
+              .toString()
+              .trim();
       if (name.isEmpty && _normalized(row['product_id']).isEmpty) continue;
       flattened.add(<String, dynamic>{
         ...row,
@@ -640,7 +643,9 @@ class CacheConsistencyService {
     List<Map<String, dynamic>> local,
     List<Map<String, dynamic>> remote,
   ) {
-    final result = local.map((line) => Map<String, dynamic>.from(line)).toList();
+    final result = local
+        .map((line) => Map<String, dynamic>.from(line))
+        .toList();
     final matchedLocal = <int>{};
     for (final incoming in remote) {
       var matchIndex = -1;
@@ -769,8 +774,9 @@ class CacheConsistencyService {
     }
     if (highestPaid > 0) {
       final total = _salesNumber(result['total_amount'] ?? result['total']);
-      result['paid_amount'] =
-          total > 0 ? highestPaid.clamp(0.0, total).toDouble() : highestPaid;
+      result['paid_amount'] = total > 0
+          ? highestPaid.clamp(0.0, total).toDouble()
+          : highestPaid;
     }
 
     if (remoteRows.isNotEmpty && !isPending(result)) {
@@ -810,6 +816,7 @@ class CacheConsistencyService {
       }
       return current;
     }
+
     void union(int left, int right) {
       final a = root(left);
       final b = root(right);

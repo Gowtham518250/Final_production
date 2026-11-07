@@ -6,7 +6,7 @@ import 'transaction_service.dart';
 import 'sms_notification_reader_service.dart';
 
 /// Transaction Integration Guide & Examples
-/// 
+///
 /// This page explains how to use the transaction features:
 /// 1. Manual transaction recording
 /// 2. Parsing bank/UPI notifications for review
@@ -29,17 +29,22 @@ class TransactionIntegrationGuide extends StatefulWidget {
   const TransactionIntegrationGuide({super.key});
 
   @override
-  State<TransactionIntegrationGuide> createState() => _TransactionIntegrationGuideState();
+  State<TransactionIntegrationGuide> createState() =>
+      _TransactionIntegrationGuideState();
 }
 
-class _TransactionIntegrationGuideState extends State<TransactionIntegrationGuide> {
+class _TransactionIntegrationGuideState
+    extends State<TransactionIntegrationGuide> {
   static const Color _primary = Color(0xFF6366F1);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: LiveTranslatedText('Transaction Integration', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Transaction Integration',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: _primary,
       ),
       body: SingleChildScrollView(
@@ -47,15 +52,13 @@ class _TransactionIntegrationGuideState extends State<TransactionIntegrationGuid
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSection(
-              'Integration Examples',
-              [
-                _buildCode('1. Parse Bank SMS', '''
+            _buildSection('Integration Examples', [
+              _buildCode('1. Parse Bank SMS', '''
 // Bank SMS from ICICI Bank. Parsing does not record a payment.
 String smsBody = "A/C xx1234 Debit ₹500 to SHOP MAIN - Ref: TXN123";
 Transaction? txn = TransactionService.parseSmsBanking(smsBody);
 '''),
-                _buildCode('2. Parse UPI Notification', '''
+              _buildCode('2. Parse UPI Notification', '''
 // From Google Pay
 String message = "₹500 transferred to 9876543210";
 Transaction? txn = TransactionService.parseUpiNotification(
@@ -63,7 +66,7 @@ Transaction? txn = TransactionService.parseUpiNotification(
   'GooglePay'
 );
 '''),
-                _buildCode('3. Parse WhatsApp Message', '''
+              _buildCode('3. Parse WhatsApp Message', '''
 // From customer on WhatsApp. Review and verify before recording.
 await SmsNotificationReaderService.parseWhatsAppMessage(
   "Hi, I sent you ₹1000 for your service",
@@ -71,7 +74,7 @@ await SmsNotificationReaderService.parseWhatsAppMessage(
   "9876543210"
 );
 '''),
-                _buildCode('4. Manual Transaction Recording', '''
+              _buildCode('4. Manual Transaction Recording', '''
 // Create and save manually
 final txn = Transaction(
   id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -86,54 +89,63 @@ final txn = Transaction(
 );
 await TransactionService.saveTransaction(txn);
 '''),
-              ],
-            ),
+            ]),
             const SizedBox(height: 20),
             const LiveTranslatedText(
               'Detected messages are unverified alerts. Parsing or matching a sale does not prove funds settled. Only record a clear incoming credit after merchant verification; failed, outgoing, pending, and ambiguous alerts cannot be confirmed as received.',
             ),
             const SizedBox(height: 20),
-            _buildSection(
-              'Supported Formats',
-              [
-                _buildFormatItem('Bank SMS', 
-                  '₹500 transferred | Debit ₹1000 | Credit ₹500\nRef: TXN123 | Ref: ABC789'),
-                _buildFormatItem('Google Pay',
-                  '₹500 transferred to 9876543210\n₹1000 received from Rahul'),
-                _buildFormatItem('PhonePe/Paytm',
-                  'Payment received from Shop - ₹2000\nYou sent ₹500 to 9876543210'),
-                _buildFormatItem('WhatsApp',
-                  'Sent you ₹1000 | Received ₹500\nPayment of ₹250 to your account'),
-              ],
-            ),
+            _buildSection('Supported Formats', [
+              _buildFormatItem(
+                'Bank SMS',
+                '₹500 transferred | Debit ₹1000 | Credit ₹500\nRef: TXN123 | Ref: ABC789',
+              ),
+              _buildFormatItem(
+                'Google Pay',
+                '₹500 transferred to 9876543210\n₹1000 received from Rahul',
+              ),
+              _buildFormatItem(
+                'PhonePe/Paytm',
+                'Payment received from Shop - ₹2000\nYou sent ₹500 to 9876543210',
+              ),
+              _buildFormatItem(
+                'WhatsApp',
+                'Sent you ₹1000 | Received ₹500\nPayment of ₹250 to your account',
+              ),
+            ]),
             const SizedBox(height: 20),
-            _buildSection(
-              'Transaction Fields',
-              [
-                _buildFieldItem('name', 'Customer or sender name (extracted or manual)'),
-                _buildFieldItem('phone', '10-digit phone number (optional)'),
-                _buildFieldItem('amount', 'Transaction amount in rupees'),
-                _buildFieldItem('type', 'PAID, RECEIVED, or PENDING'),
-                _buildFieldItem('source', 'Manual, SMS_BANK, UPI, GooglePay, PhonePe, WhatsApp'),
-                _buildFieldItem('created_at', 'Transaction date/time'),
-                _buildFieldItem('reference', 'Unique transaction ID from payment app'),
-              ],
-            ),
+            _buildSection('Transaction Fields', [
+              _buildFieldItem(
+                'name',
+                'Customer or sender name (extracted or manual)',
+              ),
+              _buildFieldItem('phone', '10-digit phone number (optional)'),
+              _buildFieldItem('amount', 'Transaction amount in rupees'),
+              _buildFieldItem('type', 'PAID, RECEIVED, or PENDING'),
+              _buildFieldItem(
+                'source',
+                'Manual, SMS_BANK, UPI, GooglePay, PhonePe, WhatsApp',
+              ),
+              _buildFieldItem('created_at', 'Transaction date/time'),
+              _buildFieldItem(
+                'reference',
+                'Unique transaction ID from payment app',
+              ),
+            ]),
             const SizedBox(height: 20),
-            _buildSection(
-              'Features',
-              [
-                LiveTranslatedText('Transaction history with filters (type, source, date)'),
-                LiveTranslatedText('Manual transaction recording form'),
-                LiveTranslatedText('Automatic SMS parsing from banks'),
-                LiveTranslatedText('UPI notification parsing'),
-                LiveTranslatedText('WhatsApp message parsing'),
-                LiveTranslatedText('Transaction details view'),
-                LiveTranslatedText('Export to sales/invoices'),
-                LiveTranslatedText('Duplicate detection by reference ID'),
-                LiveTranslatedText('Today/period totals calculation'),
-              ],
-            ),
+            _buildSection('Features', [
+              LiveTranslatedText(
+                'Transaction history with filters (type, source, date)',
+              ),
+              LiveTranslatedText('Manual transaction recording form'),
+              LiveTranslatedText('Automatic SMS parsing from banks'),
+              LiveTranslatedText('UPI notification parsing'),
+              LiveTranslatedText('WhatsApp message parsing'),
+              LiveTranslatedText('Transaction details view'),
+              LiveTranslatedText('Export to sales/invoices'),
+              LiveTranslatedText('Duplicate detection by reference ID'),
+              LiveTranslatedText('Today/period totals calculation'),
+            ]),
           ],
         ),
       ),
@@ -144,7 +156,14 @@ await TransactionService.saveTransaction(txn);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: _primary)),
+        LiveTranslatedText(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: _primary,
+          ),
+        ),
         const SizedBox(height: 12),
         ...children,
       ],
@@ -163,7 +182,14 @@ await TransactionService.saveTransaction(txn);
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12, color: _primary)),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: _primary,
+            ),
+          ),
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -183,7 +209,13 @@ await TransactionService.saveTransaction(txn);
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12)),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(height: 4),
           LiveTranslatedText(
             formats,
@@ -208,7 +240,11 @@ await TransactionService.saveTransaction(txn);
             ),
             child: LiveTranslatedText(
               field,
-              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: _primary),
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _primary,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -245,7 +281,8 @@ class TransactionUsageExamples {
   static Future<void> getReceivedTransactions() async {
     final txns = await TransactionService.loadTransactions();
     final received = txns.where((t) => t.type == 'RECEIVED').toList();
-    if (kDebugMode) debugPrint('Received today: ${received.length} transactions');
+    if (kDebugMode)
+      debugPrint('Received today: ${received.length} transactions');
   }
 
   /// Example 4: Delete transaction
@@ -259,11 +296,11 @@ class TransactionUsageExamples {
     final smsList = <Map<String, String>>[
       {
         'sender': 'ICICIBANK',
-        'body': 'A/C xx1234 Debit ₹500 to SHOP MAIN - Ref: TXN123'
+        'body': 'A/C xx1234 Debit ₹500 to SHOP MAIN - Ref: TXN123',
       },
       {
         'sender': 'SBIALERTS',
-        'body': 'A/C xx5678 Credit ₹1000 from CUSTOMER - Ref: ABC789'
+        'body': 'A/C xx5678 Credit ₹1000 from CUSTOMER - Ref: ABC789',
       },
     ];
 

@@ -10,7 +10,7 @@ enum FestivalType {
   navratri,
   christmas,
   pongalMakarSankranti,
-  none
+  none,
 }
 
 class Festival {
@@ -132,15 +132,17 @@ class FestivalCalendar {
     ];
   }
 
-  static List<Festival> getUpcomingFestivals(DateTime now, {int daysAhead = 15}) {
+  static List<Festival> getUpcomingFestivals(
+    DateTime now, {
+    int daysAhead = 15,
+  }) {
     final year = now.year;
     final allFestivals = getFestivalsForYear(year);
-    
+
     return allFestivals.where((f) {
       final daysUntilFestival = f.date.difference(now).inDays;
       return daysUntilFestival >= 0 && daysUntilFestival <= daysAhead;
-    }).toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
+    }).toList()..sort((a, b) => a.date.compareTo(b.date));
   }
 
   static Festival? getNearestFestival(DateTime now) {
@@ -176,7 +178,10 @@ class FestivalStockAlerts {
   ) {
     final alerts = <StockAlert>[];
     final now = DateTime.now();
-    final upcomingFestivals = FestivalCalendar.getUpcomingFestivals(now, daysAhead: 15);
+    final upcomingFestivals = FestivalCalendar.getUpcomingFestivals(
+      now,
+      daysAhead: 15,
+    );
 
     for (final festival in upcomingFestivals) {
       final daysUntilFestival = festival.date.difference(now).inDays;
@@ -191,11 +196,14 @@ class FestivalStockAlerts {
         if (multiplier == 0.0) continue;
 
         // Calculate average daily sales for this category
-        final categoryAvgDaily = _calculateCategoryAverage(category, salesHistory);
-        
+        final categoryAvgDaily = _calculateCategoryAverage(
+          category,
+          salesHistory,
+        );
+
         // Expected demand for 7 days
         final expectedDemand = (categoryAvgDaily * multiplier * 7).toInt();
-        
+
         // Alert if current stock is less than 50% of expected demand
         if (currentStock < (expectedDemand * 0.5).toInt()) {
           alerts.add(
@@ -213,10 +221,14 @@ class FestivalStockAlerts {
       }
     }
 
-    return alerts..sort((a, b) => a.daysUntilFestival.compareTo(b.daysUntilFestival));
+    return alerts
+      ..sort((a, b) => a.daysUntilFestival.compareTo(b.daysUntilFestival));
   }
 
-  static double _calculateCategoryAverage(String category, List<Map<String, dynamic>> salesHistory) {
+  static double _calculateCategoryAverage(
+    String category,
+    List<Map<String, dynamic>> salesHistory,
+  ) {
     if (salesHistory.isEmpty) return 10.0; // Default fallback
 
     double total = 0;
@@ -285,7 +297,10 @@ class FestivalAlertsWidget extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: LiveTranslatedText(
                 '+ ${alerts.length - 3} more alert${alerts.length - 3 > 1 ? 's' : ''}',
-                style: GoogleFonts.poppins(fontSize: 12, color: Colors.amber.shade700),
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.amber.shade700,
+                ),
               ),
             ),
         ],
@@ -310,7 +325,10 @@ class FestivalAlertsWidget extends StatelessWidget {
                 ),
                 LiveTranslatedText(
                   '${alert.festivalName} (${alert.daysUntilFestival}d) • Need ${alert.recommendedReorderQty}',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.amber.shade800),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.amber.shade800,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -325,7 +343,10 @@ class FestivalAlertsWidget extends StatelessWidget {
             ),
             child: LiveTranslatedText(
               '${alert.currentStock}',
-              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],

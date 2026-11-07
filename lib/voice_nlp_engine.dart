@@ -40,8 +40,9 @@ class ParsedItemV2 {
   final double price;
   final ConfidenceDetail confidence;
   final String? catalogMatchName; // canonical name from catalog, if any
-  final double? catalogPrice;     // catalog price, for sanity check display
-  final bool priceWasSpoken;       // true only when price tokens came from the transcript
+  final double? catalogPrice; // catalog price, for sanity check display
+  final bool
+  priceWasSpoken; // true only when price tokens came from the transcript
   final bool quantityPriceAmbiguous;
   bool isConfirmed;
 
@@ -56,12 +57,13 @@ class ParsedItemV2 {
     this.priceWasSpoken = false,
     this.quantityPriceAmbiguous = false,
     bool? isConfirmed,
-  }) : isConfirmed = isConfirmed ??
-            VoiceItemConfirmation.shouldAutoConfirm(
-              confidence: confidence.total,
-              catalogMatched: catalogMatchName != null,
-              quantityPriceAmbiguous: quantityPriceAmbiguous,
-            );
+  }) : isConfirmed =
+           isConfirmed ??
+           VoiceItemConfirmation.shouldAutoConfirm(
+             confidence: confidence.total,
+             catalogMatched: catalogMatchName != null,
+             quantityPriceAmbiguous: quantityPriceAmbiguous,
+           );
 
   /// Backward compat score for existing UI code
   double get confidenceScore => confidence.total;
@@ -78,16 +80,18 @@ class ParsedItemV2 {
 
 /// Broken-down confidence so the UI can show per-dimension warnings.
 class ConfidenceDetail {
-  final double nameScore;   // 0–1
-  final double qtyScore;    // 0–1
-  final double priceScore;  // 0–1
+  final double nameScore; // 0–1
+  final double qtyScore; // 0–1
+  final double priceScore; // 0–1
   final double patternBonus; // 0–0.1
   final double catalogBonus; // 0–0.15
-  double get total => ((nameScore * 0.35) +
-                       (qtyScore  * 0.25) +
-                       (priceScore * 0.30) +
-                       patternBonus +
-                       catalogBonus).clamp(0.0, 1.0);
+  double get total =>
+      ((nameScore * 0.35) +
+              (qtyScore * 0.25) +
+              (priceScore * 0.30) +
+              patternBonus +
+              catalogBonus)
+          .clamp(0.0, 1.0);
 
   const ConfidenceDetail({
     required this.nameScore,
@@ -157,68 +161,251 @@ class CompoundNumberParser {
   // 200/300, and a couple of garbled script entries), so I sourced from the
   // cleaner list instead of blindly merging both.
   static const _taAtoms = <String, num>{
-    'பூஜ்ஜியம்': 0, 'ஒன்று': 1, 'இரண்டு': 2, 'மூன்று': 3, 'நான்கு': 4, 'ஐந்து': 5,
-    'ஆறு': 6, 'ஏழு': 7, 'எட்டு': 8, 'ஒன்பது': 9, 'பத்து': 10,
-    'பதினொன்று': 11, 'பனிரண்டு': 12, 'பதிமூன்று': 13, 'பதிநான்கு': 14, 'பதிநைந்து': 15,
-    'பதினாறு': 16, 'பதினேழு': 17, 'பதினெட்டு': 18, 'பத்தொன்பது': 19,
-    'இருபது': 20, 'முப்பது': 30, 'நாற்பது': 40, 'ஐம்பது': 50,
-    'அறைக்கிலோ': 0.5, 'அரைக்கிலோ': 0.5, 'ஒன்றரை': 1.5,
+    'பூஜ்ஜியம்': 0,
+    'ஒன்று': 1,
+    'இரண்டு': 2,
+    'மூன்று': 3,
+    'நான்கு': 4,
+    'ஐந்து': 5,
+    'ஆறு': 6,
+    'ஏழு': 7,
+    'எட்டு': 8,
+    'ஒன்பது': 9,
+    'பத்து': 10,
+    'பதினொன்று': 11,
+    'பனிரண்டு': 12,
+    'பதிமூன்று': 13,
+    'பதிநான்கு': 14,
+    'பதிநைந்து': 15,
+    'பதினாறு': 16,
+    'பதினேழு': 17,
+    'பதினெட்டு': 18,
+    'பத்தொன்பது': 19,
+    'இருபது': 20,
+    'முப்பது': 30,
+    'நாற்பது': 40,
+    'ஐம்பது': 50,
+    'அறைக்கிலோ': 0.5,
+    'அரைக்கிலோ': 0.5,
+    'ஒன்றரை': 1.5,
   };
 
   static const _teAtoms = <String, num>{
-    'సున్న': 0, 'ఒకటి': 1, 'రెండు': 2, 'మూడు': 3, 'నాలుగు': 4, 'ఐదు': 5,
-    'ఆరు': 6, 'ఏడు': 7, 'ఎనిమిది': 8, 'తొమ్మిది': 9, 'పది': 10,
-    'పదకొండు': 11, 'పన్నెండు': 12, 'పదమూడు': 13, 'పదనాలుగు': 14, 'పదిహేను': 15,
-    'పదహారు': 16, 'పదిఏడు': 17, 'పద్దెనిమిది': 18, 'పందొమ్మిది': 19,
-    'ఇరవై': 20, 'ముప్పై': 30, 'నలభై': 40, 'యాభై': 50, 'అరకిలో': 0.5,
+    'సున్న': 0,
+    'ఒకటి': 1,
+    'రెండు': 2,
+    'మూడు': 3,
+    'నాలుగు': 4,
+    'ఐదు': 5,
+    'ఆరు': 6,
+    'ఏడు': 7,
+    'ఎనిమిది': 8,
+    'తొమ్మిది': 9,
+    'పది': 10,
+    'పదకొండు': 11,
+    'పన్నెండు': 12,
+    'పదమూడు': 13,
+    'పదనాలుగు': 14,
+    'పదిహేను': 15,
+    'పదహారు': 16,
+    'పదిఏడు': 17,
+    'పద్దెనిమిది': 18,
+    'పందొమ్మిది': 19,
+    'ఇరవై': 20,
+    'ముప్పై': 30,
+    'నలభై': 40,
+    'యాభై': 50,
+    'అరకిలో': 0.5,
   };
 
   static const _knAtoms = <String, num>{
-    'ಶೂನ್ಯ': 0, 'ಒಂದು': 1, 'ಎರಡು': 2, 'ಮೂರು': 3, 'ನಾಲ್ಕು': 4, 'ಐದು': 5,
-    'ಆರು': 6, 'ಏಳು': 7, 'ಎಂಟು': 8, 'ಒಂಬತ್ತು': 9, 'ಹತ್ತು': 10,
-    'ಹನ್ನೊಂದು': 11, 'ಹನ್ನೆರಡು': 12, 'ಹದಿಮೂರು': 13, 'ಹದಿನಾಲ್ಕು': 14, 'ಹದಿಐದು': 15,
-    'ಹದಿನಾರು': 16, 'ಹದಿನೇಳು': 17, 'ಹದಿನೆಂಟು': 18, 'ಹದಿಒಂಬತ್ತು': 19,
-    'ಇಪ್ಪತ್ತು': 20, 'ಮೂವತ್ತು': 30, 'ನಲವತ್ತು': 40, 'ಐವತ್ತು': 50,
-    'ಅರ್ಧ': 0.5, 'ಒಂದೂವರೆ': 1.5,
+    'ಶೂನ್ಯ': 0,
+    'ಒಂದು': 1,
+    'ಎರಡು': 2,
+    'ಮೂರು': 3,
+    'ನಾಲ್ಕು': 4,
+    'ಐದು': 5,
+    'ಆರು': 6,
+    'ಏಳು': 7,
+    'ಎಂಟು': 8,
+    'ಒಂಬತ್ತು': 9,
+    'ಹತ್ತು': 10,
+    'ಹನ್ನೊಂದು': 11,
+    'ಹನ್ನೆರಡು': 12,
+    'ಹದಿಮೂರು': 13,
+    'ಹದಿನಾಲ್ಕು': 14,
+    'ಹದಿಐದು': 15,
+    'ಹದಿನಾರು': 16,
+    'ಹದಿನೇಳು': 17,
+    'ಹದಿನೆಂಟು': 18,
+    'ಹದಿಒಂಬತ್ತು': 19,
+    'ಇಪ್ಪತ್ತು': 20,
+    'ಮೂವತ್ತು': 30,
+    'ನಲವತ್ತು': 40,
+    'ಐವತ್ತು': 50,
+    'ಅರ್ಧ': 0.5,
+    'ಒಂದೂವರೆ': 1.5,
   };
 
   static const _mlAtoms = <String, num>{
-    'പൂജ്യം': 0, 'ഒന്ന്': 1, 'രണ്ട്': 2, 'മൂന്ന്': 3, 'നാല്': 4, 'അഞ്ച്': 5,
-    'ആറ്': 6, 'ഏഴ്': 7, 'എട്ട്': 8, 'ഒൻപത്': 9, 'പത്ത്': 10,
-    'പതിനൊന്ന്': 11, 'പന്ത്രണ്ട്': 12, 'പതിമൂന്ന്': 13, 'പതിനാല്': 14, 'പതിനഞ്ച്': 15,
-    'പതിനാറ്': 16, 'പതിനേഴ്': 17, 'പതിനെട്ട്': 18, 'പത്തൊമ്പത്': 19,
-    'ഇരുപത്': 20, 'മുപ്പത്': 30, 'നാൽപത്': 40, 'അൻപത്': 50,
-    'അരകിലോ': 0.5, 'ഒന്നര': 1.5,
+    'പൂജ്യം': 0,
+    'ഒന്ന്': 1,
+    'രണ്ട്': 2,
+    'മൂന്ന്': 3,
+    'നാല്': 4,
+    'അഞ്ച്': 5,
+    'ആറ്': 6,
+    'ഏഴ്': 7,
+    'എട്ട്': 8,
+    'ഒൻപത്': 9,
+    'പത്ത്': 10,
+    'പതിനൊന്ന്': 11,
+    'പന്ത്രണ്ട്': 12,
+    'പതിമൂന്ന്': 13,
+    'പതിനാല്': 14,
+    'പതിനഞ്ച്': 15,
+    'പതിനാറ്': 16,
+    'പതിനേഴ്': 17,
+    'പതിനെട്ട്': 18,
+    'പത്തൊമ്പത്': 19,
+    'ഇരുപത്': 20,
+    'മുപ്പത്': 30,
+    'നാൽപത്': 40,
+    'അൻപത്': 50,
+    'അരകിലോ': 0.5,
+    'ഒന്നര': 1.5,
   };
 
   static const _bnAtoms = <String, num>{
-    'শূন্য': 0, 'এক': 1, 'দুই': 2, 'তিন': 3, 'চার': 4, 'পাঁচ': 5,
-    'ছয়': 6, 'সাত': 7, 'আট': 8, 'নয়': 9, 'দশ': 10,
-    'এগারো': 11, 'বারো': 12, 'তেরো': 13, 'চৌদ্দ': 14, 'পনের': 15,
-    'ষোল': 16, 'সতের': 17, 'আঠারো': 18, 'উনিশ': 19, 'বিশ': 20,
-    'ত্রিশ': 30, 'চল্লিশ': 40, 'পঞ্চাশ': 50, 'ষাট': 60, 'সত্তর': 70,
-    'আশি': 80, 'নব্বই': 90, 'শত': 100, 'হাজার': 1000,
-    'অর্ধ': 0.5, 'দেড়': 1.5,
+    'শূন্য': 0,
+    'এক': 1,
+    'দুই': 2,
+    'তিন': 3,
+    'চার': 4,
+    'পাঁচ': 5,
+    'ছয়': 6,
+    'সাত': 7,
+    'আট': 8,
+    'নয়': 9,
+    'দশ': 10,
+    'এগারো': 11,
+    'বারো': 12,
+    'তেরো': 13,
+    'চৌদ্দ': 14,
+    'পনের': 15,
+    'ষোল': 16,
+    'সতের': 17,
+    'আঠারো': 18,
+    'উনিশ': 19,
+    'বিশ': 20,
+    'ত্রিশ': 30,
+    'চল্লিশ': 40,
+    'পঞ্চাশ': 50,
+    'ষাট': 60,
+    'সত্তর': 70,
+    'আশি': 80,
+    'নব্বই': 90,
+    'শত': 100,
+    'হাজার': 1000,
+    'অর্ধ': 0.5,
+    'দেড়': 1.5,
   };
 
   static const _guAtoms = <String, num>{
-    'શૂન્ય': 0, 'એક': 1, 'બે': 2, 'ત્રણ': 3, 'ચાર': 4, 'પાંચ': 5,
-    'છ': 6, 'સાત': 7, 'આઠ': 8, 'નવ': 9, 'દસ': 10,
-    'અગિયાર': 11, 'બાર': 12, 'તેર': 13, 'ચૌદ': 14, 'પંદર': 15,
-    'સોળ': 16, 'સત્તર': 17, 'અઠાર': 18, 'ઉનીસ': 19, 'વીસ': 20,
-    'ત્રીસ': 30, 'ચાલીસ': 40, 'પચાસ': 50, 'સાઠ': 60, 'સોતર': 70,
-    'અસ્સી': 80, 'નવ્વે': 90, 'સો': 100, 'હજાર': 1000,
-    'અર્ધ': 0.5, 'દોઢ': 1.5,
+    'શૂન્ય': 0,
+    'એક': 1,
+    'બે': 2,
+    'ત્રણ': 3,
+    'ચાર': 4,
+    'પાંચ': 5,
+    'છ': 6,
+    'સાત': 7,
+    'આઠ': 8,
+    'નવ': 9,
+    'દસ': 10,
+    'અગિયાર': 11,
+    'બાર': 12,
+    'તેર': 13,
+    'ચૌદ': 14,
+    'પંદર': 15,
+    'સોળ': 16,
+    'સત્તર': 17,
+    'અઠાર': 18,
+    'ઉનીસ': 19,
+    'વીસ': 20,
+    'ત્રીસ': 30,
+    'ચાલીસ': 40,
+    'પચાસ': 50,
+    'સાઠ': 60,
+    'સોતર': 70,
+    'અસ્સી': 80,
+    'નવ્વે': 90,
+    'સો': 100,
+    'હજાર': 1000,
+    'અર્ધ': 0.5,
+    'દોઢ': 1.5,
   };
 
   static const _paAtoms = <String, num>{
-    'ਸਿਫਰ': 0, 'ਇੱਕ': 1, 'ਦੋ': 2, 'ਤਿੰਨ': 3, 'ਚਾਰ': 4, 'ਪੰਜ': 5,
-    'ਛੇ': 6, 'ਸੱਤ': 7, 'ਅੱਠ': 8, 'ਨੌਂ': 9, 'ਦਸ': 10,
-    'ਗਿਆਰਾਂ': 11, 'ਬਾਰਾਂ': 12, 'ਤੇਰਾਂ': 13, 'ਚੌਦਾਂ': 14, 'ਪੰਦਰਾਂ': 15,
-    'ਸੋਲਾਂ': 16, 'ਸਤਾਰਾਂ': 17, 'ਅਠਾਰਾਂ': 18, 'ਉਨੀਨੀ': 19, 'ਬੀਹ': 20,
-    'ਤੀਹ': 30, 'ਚਾਲੀ': 40, 'ਪੰਜਾਹ': 50, 'ਸਾਠ': 60, 'ਸਤਾਹ': 70,
-    'ਅਸੀ': 80, 'ਨਬੇ': 90, 'ਸੌ': 100, 'ਹਜ਼ਾਰ': 1000,
-    'ਅੱਧ': 0.5, 'ਡੇਢ': 1.5,
+    'ਸਿਫਰ': 0,
+    'ਇੱਕ': 1,
+    'ਦੋ': 2,
+    'ਤਿੰਨ': 3,
+    'ਚਾਰ': 4,
+    'ਪੰਜ': 5,
+    'ਛੇ': 6,
+    'ਸੱਤ': 7,
+    'ਅੱਠ': 8,
+    'ਨੌਂ': 9,
+    'ਦਸ': 10,
+    'ਗਿਆਰਾਂ': 11,
+    'ਬਾਰਾਂ': 12,
+    'ਤੇਰਾਂ': 13,
+    'ਚੌਦਾਂ': 14,
+    'ਪੰਦਰਾਂ': 15,
+    'ਸੋਲਾਂ': 16,
+    'ਸਤਾਰਾਂ': 17,
+    'ਅਠਾਰਾਂ': 18,
+    'ਉਨੀਨੀ': 19,
+    'ਬੀਹ': 20,
+    'ਤੀਹ': 30,
+    'ਚਾਲੀ': 40,
+    'ਪੰਜਾਹ': 50,
+    'ਸਾਠ': 60,
+    'ਸਤਾਹ': 70,
+    'ਅਸੀ': 80,
+    'ਨਬੇ': 90,
+    'ਸੌ': 100,
+    'ਹਜ਼ਾਰ': 1000,
+    'ਅੱਧ': 0.5,
+    'ਡੇਢ': 1.5,
+  };
+
+  // ── Additional language atoms for broader coverage ────────────────────────
+
+  static const _orAtoms = <String, num>{
+    'ଶୂନ୍ୟ': 0, 'ଗୋଟିଏ': 1, 'ଦୁଇ': 2, 'ତିନି': 3, 'ଚାରି': 4, 'ପାଞ୍ଚ': 5,
+    'ଛଅ': 6, 'ସାତ': 7, 'ଆଠ': 8, 'ନଅ': 9, 'ଦଶ': 10,
+    'ଏକ': 1,
+    'ସେ': 100, 'ହଜାର': 1000, 'ଅର୍ଦ୍ଧ': 0.5, 'ଡ଼ାଢ଼ି': 1.5,
+  };
+
+  static const _siAtoms = <String, num>{
+    'බිං': 0, 'එක': 1, 'දෙක': 2, 'තුන': 3, 'හතර': 4, 'පහ': 5,
+    'හය': 6, 'හත': 7, 'අට': 8, 'නව': 9, 'දහය': 10,
+    'සිය': 100, 'දහස': 1000, 'අඩ': 0.5, 'කාල': 0.25,
+  };
+
+  static const _thAtoms = <String, num>{
+    'ศูนย์': 0, 'หนึ่ง': 1, 'สอง': 2, 'สาม': 3, 'สี่': 4, 'ห้า': 5,
+    'หก': 6, 'เจ็ด': 7, 'แปด': 8, 'เก้า': 9, 'สิบ': 10,
+    'ร้อย': 100, 'พัน': 1000, 'ครึ่ง': 0.5, 'หนึ่งครึ่ง': 1.5,
+  };
+
+  static const _loAtoms = <String, num>{
+    'ສູນ': 0, 'ໜຶ່ງ': 1, 'ສອງ': 2, 'ສາມ': 3, 'ສີ່': 4, 'ຫ້າ': 5,
+    'ຫົກ': 6, 'ເຈັດ': 7, 'ແປດ': 8, 'ເກົ້າ': 9, 'ສິບ': 10,
+    'ຮ້ອຍ': 100, 'ພັນ': 1000, 'ເຄິ່ງ': 0.5, 'ໜຶ່ງເຄິ່ງ': 1.5,
   };
 
   /// Per-language atom set, with English number words ALWAYS merged in
@@ -260,6 +447,18 @@ class CompoundNumberParser {
       case 'pa':
         base = _paAtoms;
         break;
+      case 'or':
+        base = _orAtoms;
+        break;
+      case 'si':
+        base = _siAtoms;
+        break;
+      case 'th':
+        base = _thAtoms;
+        break;
+      case 'lo':
+        base = _loAtoms;
+        break;
       case 'en':
       default:
         base = _enAtoms;
@@ -297,13 +496,18 @@ class CompoundNumberParser {
     final tokens = text.split(RegExp(r'[\s\-]+'));
 
     num current = 0;
-    num result  = 0;
+    num result = 0;
     bool hasAny = false;
 
     for (int i = 0; i < tokens.length; i++) {
       final tok = tokens[i];
-      if (tok == 'and' || tok == 'a' || tok == 'aur' || tok == 'ka' ||
-          tok == 'ke' || tok == 'ki') continue;
+      if (tok == 'and' ||
+          tok == 'a' ||
+          tok == 'aur' ||
+          tok == 'ka' ||
+          tok == 'ke' ||
+          tok == 'ki')
+        continue;
 
       final atomVal = atoms[tok];
       if (atomVal == null) continue;
@@ -354,22 +558,20 @@ class CompoundNumberParser {
 
     String result = text;
     for (final word in words) {
-      // avoid replacing inside larger words. The lookbehind/lookahead here
-      // originally only excluded Devanagari (\u0900-\u097f), so on Tamil/
-      // Telugu/Kannada/Malayalam/Bengali/Gujarati/Punjabi script it could
-      // match a boundary INSIDE a longer native word. Widening this to cover
-      // all Indic Unicode blocks we support (Tamil \u0B80-\u0BFF, Telugu
-      // \u0C00-\u0C7F, Kannada \u0C80-\u0CFF, Malayalam \u0D00-\u0D7F,
-      // Bengali \u0980-\u09FF, Gujarati \u0A80-\u0AFF, Gurmukhi/Punjabi
-      // \u0A00-\u0A7F) so the same false-boundary bug doesn't happen there.
+      // FIX: Expanded Unicode ranges to cover ALL Indian language scripts
+      // to prevent matching boundaries inside larger native words
       final escaped = RegExp.escape(word);
       result = result.replaceAllMapped(
         RegExp(
-          '(?<![\\w\u0900-\u097f\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF'
-          '\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F])'
+          '(?<![\\w\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF'
+          '\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F'
+          '\u0D80-\u0DFF\u0E00-\u0E7F\u0E80-\u0EFF\u0F00-\u0FFF\u1000-\u109F'
+          '\u10A0-\u10FF\uAC00-\uD7AF\u4E00-\u9FFF\uFF00-\uFFEF])'
           '$escaped'
-          '(?![\\w\u0900-\u097f\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF'
-          '\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F])',
+          '(?![\\w\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF'
+          '\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F'
+          '\u0D80-\u0DFF\u0E00-\u0E7F\u0E80-\u0EFF\u0F00-\u0FFF\u1000-\u109F'
+          '\u10A0-\u10FF\uAC00-\uD7AF\u4E00-\u9FFF\uFF00-\uFFEF])',
           caseSensitive: false,
         ),
         (m) {
@@ -394,165 +596,583 @@ class PhoneticProductResolver {
   /// in STT output across 10 Indian languages + Hinglish code-switching.
   static const Map<String, List<String>> _clusters = {
     'Milk': [
-      'milk', 'doodh', 'dudh', 'dood', 'paal', 'pal', 'halu', 'hala',
-      'pallu', 'paal', 'doodhu', 'मिल्क', 'दूध', 'दुध',
-      'பால்', 'పాలు', 'ಹಾಲು', 'പാൽ', 'দুধ', 'दूद',
+      'milk',
+      'doodh',
+      'dudh',
+      'dood',
+      'paal',
+      'pal',
+      'halu',
+      'hala',
+      'pallu',
+      'paal',
+      'doodhu',
+      'मिल्क',
+      'दूध',
+      'दुध',
+      'பால்',
+      'పాలు',
+      'ಹಾಲು',
+      'പാൽ',
+      'দুধ',
+      'दूद',
     ],
     'Sugar': [
-      'sugar', 'shugger', 'shuga', 'cheeni', 'chini', 'shakkar', 'sakkare',
-      'sarkara', 'inippu', 'sakkara', 'cukkar', 'suchini',
-      'चीनी', 'চিনি', 'சர்க்கரை', 'పంచదార', 'ಸಕ್ಕರೆ', 'ഷുഗർ', 'ಶಕ್ಕರೆ',
+      'sugar',
+      'shugger',
+      'shuga',
+      'cheeni',
+      'chini',
+      'shakkar',
+      'sakkare',
+      'sarkara',
+      'inippu',
+      'sakkara',
+      'cukkar',
+      'suchini',
+      'चीनी',
+      'চিনি',
+      'சர்க்கரை',
+      'పంచదార',
+      'ಸಕ್ಕರೆ',
+      'ഷുഗർ',
+      'ಶಕ್ಕರೆ',
     ],
     'Rice': [
-      'rice', 'chawal', 'chaval', 'chaaval', 'biyyam', 'vari', 'arisi',
-      'anna', 'bhat', 'akki', 'chal', 'sonamasoori', 'basmati',
-      'चावल', 'চাল', 'அரிசி', 'బియ్యం', 'ಅಕ್ಕಿ', 'അരി',
+      'rice',
+      'chawal',
+      'chaval',
+      'chaaval',
+      'biyyam',
+      'vari',
+      'arisi',
+      'anna',
+      'bhat',
+      'akki',
+      'chal',
+      'sonamasoori',
+      'basmati',
+      'चावल',
+      'চাল',
+      'அரிசி',
+      'బియ్యం',
+      'ಅಕ್ಕಿ',
+      'അരി',
     ],
     'Oil': [
-      'oil', 'tel', 'tail', 'enne', 'noone', 'enu', 'taila', 'sunflower oil',
-      'coconut oil', 'mustard oil', 'sarson tel', 'nariyal tel',
-      'तेल', 'তেল', 'எண்ணெய்', 'నూనె', 'ಎಣ್ಣೆ', 'എണ്ണ',
+      'oil',
+      'tel',
+      'tail',
+      'enne',
+      'noone',
+      'enu',
+      'taila',
+      'sunflower oil',
+      'coconut oil',
+      'mustard oil',
+      'sarson tel',
+      'nariyal tel',
+      'तेल',
+      'তেল',
+      'எண்ணெய்',
+      'నూనె',
+      'ಎಣ್ಣೆ',
+      'എണ്ണ',
     ],
     'Flour': [
-      'flour', 'aata', 'atta', 'aataa', 'wheat flour', 'maida',
-      'आटा', 'আटा', 'மாவு', 'పిండి', 'ಹಿಟ್ಟು', 'മൈദ',
+      'flour',
+      'aata',
+      'atta',
+      'aataa',
+      'wheat flour',
+      'maida',
+      'आटा',
+      'আटा',
+      'மாவு',
+      'పిండి',
+      'ಹಿಟ್ಟು',
+      'മൈദ',
     ],
     'Salt': [
-      'salt', 'namak', 'uppu', 'uppu', 'lavana', 'meeta', 'noon',
-      'नमक', 'নুন', 'உப்பு', 'ఉప్పు', 'ಉಪ್ಪು', 'ഉപ്പ്',
+      'salt',
+      'namak',
+      'uppu',
+      'uppu',
+      'lavana',
+      'meeta',
+      'noon',
+      'नमक',
+      'নুন',
+      'உப்பு',
+      'ఉప్పు',
+      'ಉಪ್ಪು',
+      'ഉപ്പ്',
     ],
     'Dal': [
-      'dal', 'daal', 'dhal', 'paruppu', 'pappu', 'bele', 'parippu',
-      'moong dal', 'toor dal', 'chana dal', 'masoor dal',
-      'दाल', 'ডাল', 'பருப்பு', 'పప్పు', 'ಬೇಳೆ', 'പരിപ്പ്',
+      'dal',
+      'daal',
+      'dhal',
+      'paruppu',
+      'pappu',
+      'bele',
+      'parippu',
+      'moong dal',
+      'toor dal',
+      'chana dal',
+      'masoor dal',
+      'दाल',
+      'ডাল',
+      'பருப்பு',
+      'పప్పు',
+      'ಬೇಳೆ',
+      'പരിപ്പ്',
     ],
     'Tea': [
-      'tea', 'chai', 'chaa', 'chaha', 'thee', 'cha', 'chaaha',
-      'चाय', 'চা', 'தேயிலை', 'చాయ్', 'ಚಹಾ', 'ചായ',
+      'tea',
+      'chai',
+      'chaa',
+      'chaha',
+      'thee',
+      'cha',
+      'chaaha',
+      'चाय',
+      'চা',
+      'தேயிலை',
+      'చాయ్',
+      'ಚಹಾ',
+      'ചായ',
     ],
     'Coffee': [
-      'coffee', 'kaapi', 'kapi', 'kappi', 'cofee', 'coffe',
-      'कॉफी', 'কফি', 'காபி', 'కాఫీ', 'ಕಾಫಿ', 'കാപ്പി',
+      'coffee',
+      'kaapi',
+      'kapi',
+      'kappi',
+      'cofee',
+      'coffe',
+      'कॉफी',
+      'কফি',
+      'காபி',
+      'కాఫీ',
+      'ಕಾಫಿ',
+      'കാപ്പി',
     ],
     'Bread': [
-      'bread', 'pav', 'paav', 'bun', 'loaf', 'sliced bread',
-      'ब्रेड', 'পাউরুটি', 'பிரெட்', 'బ్రెడ్', 'ಬ್ರೆಡ್', 'ബ്രഡ്',
+      'bread',
+      'pav',
+      'paav',
+      'bun',
+      'loaf',
+      'sliced bread',
+      'ब्रेड',
+      'পাউরুটি',
+      'பிரெட்',
+      'బ్రెడ్',
+      'ಬ್ರೆಡ್',
+      'ബ്രഡ്',
     ],
     'Egg': [
-      'egg', 'anda', 'muttai', 'guddu', 'motta', 'aanda', 'ande',
-      'अंडा', 'ডিম', 'முட்டை', 'గుడ్డు', 'ಮೊಟ್ಟೆ', 'മുട്ട',
+      'egg',
+      'anda',
+      'muttai',
+      'guddu',
+      'motta',
+      'aanda',
+      'ande',
+      'अंडा',
+      'ডিম',
+      'முட்டை',
+      'గుడ్డు',
+      'ಮೊಟ್ಟೆ',
+      'മുട്ട',
     ],
     'Butter': [
-      'butter', 'makhan', 'makkhan', 'venna', 'vennai', 'batter', 'buttar',
-      'मक्खन', 'মাখন', 'வெண்ணெய்', 'వెన్న', 'ಬೆಣ್ಣೆ', 'വെണ്ണ',
+      'butter',
+      'makhan',
+      'makkhan',
+      'venna',
+      'vennai',
+      'batter',
+      'buttar',
+      'मक्खन',
+      'মাখন',
+      'வெண்ணெய்',
+      'వెన్న',
+      'ಬೆಣ್ಣೆ',
+      'വെണ്ണ',
     ],
     'Curd': [
-      'curd', 'yogurt', 'dahi', 'dahee', 'perugu', 'thayir', 'tayir',
-      'mosaru', 'thair', 'dard', 'dahe',
-      'दही', 'দই', 'தயிர்', 'పెరుగు', 'ಮೊಸರು', 'തൈര്',
+      'curd',
+      'yogurt',
+      'dahi',
+      'dahee',
+      'perugu',
+      'thayir',
+      'tayir',
+      'mosaru',
+      'thair',
+      'dard',
+      'dahe',
+      'दही',
+      'দই',
+      'தயிர்',
+      'పెరుగు',
+      'ಮೊಸರು',
+      'തൈര്',
     ],
     'Tomato': [
-      'tomato', 'tamatar', 'tamater', 'tometo', 'thakkali', 'ramapala',
-      'tamata', 'tomate', 'tamato',
-      'टमाटर', 'টমেটো', 'தக்காளி', 'టమాటో', 'ಟಮಾಟೊ', 'തക്കാളി',
+      'tomato',
+      'tamatar',
+      'tamater',
+      'tometo',
+      'thakkali',
+      'ramapala',
+      'tamata',
+      'tomate',
+      'tamato',
+      'टमाटर',
+      'টমেটো',
+      'தக்காளி',
+      'టమాటో',
+      'ಟಮಾಟೊ',
+      'തക്കാളി',
     ],
     'Onion': [
-      'onion', 'pyaaz', 'pyaj', 'pyaaj', 'ulli', 'vengayam', 'nirulli',
-      'kanda', 'dungli', 'pyaan',
-      'प्याज', 'পেঁয়াজ', 'வெங்காயம்', 'ఉల్లిపాయ', 'ಈರುಳ್ಳಿ', 'ഉള്ളി',
+      'onion',
+      'pyaaz',
+      'pyaj',
+      'pyaaj',
+      'ulli',
+      'vengayam',
+      'nirulli',
+      'kanda',
+      'dungli',
+      'pyaan',
+      'प्याज',
+      'পেঁয়াজ',
+      'வெங்காயம்',
+      'ఉల్లిపాయ',
+      'ಈರುಳ್ಳಿ',
+      'ഉള്ളി',
     ],
     'Potato': [
-      'potato', 'aloo', 'aalu', 'batata', 'bangaladumpa', 'urulaikizhangu',
-      'aluwa', 'urulaikilangu', 'batate', 'allu',
-      'आलू', 'আলু', 'உருளைக்கிழங்கு', 'బంగాళదుంప', 'ಆಲೂಗಡ್ಡೆ', 'ഉരുളക്കിഴങ്ങ്',
+      'potato',
+      'aloo',
+      'aalu',
+      'batata',
+      'bangaladumpa',
+      'urulaikizhangu',
+      'aluwa',
+      'urulaikilangu',
+      'batate',
+      'allu',
+      'आलू',
+      'আলু',
+      'உருளைக்கிழங்கு',
+      'బంగాళదుంప',
+      'ಆಲೂಗಡ್ಡೆ',
+      'ഉരുളക്കിഴങ്ങ്',
     ],
     'Soap': [
-      'soap', 'sabun', 'saabun', 'saboon', 'saappu', 'sappu', 'sopu',
-      'साबुन', 'সাবান', 'சோப்பு', 'సబ్బు', 'ಸಾಬೂನು', 'സോപ്പ്',
+      'soap',
+      'sabun',
+      'saabun',
+      'saboon',
+      'saappu',
+      'sappu',
+      'sopu',
+      'साबुन',
+      'সাবান',
+      'சோப்பு',
+      'సబ్బు',
+      'ಸಾಬೂನು',
+      'സോപ്പ്',
     ],
     'Biscuit': [
-      'biscuit', 'biscuits', 'biskut', 'biskit', 'biscut', 'cookie',
-      'बिस्किट', 'বিস্কুট', 'பிஸ்கட்', 'బిస్కెట్', 'ಬಿಸ್ಕೆಟ್', 'ബിസ്കറ്റ്',
+      'biscuit',
+      'biscuits',
+      'biskut',
+      'biskit',
+      'biscut',
+      'cookie',
+      'बिस्किट',
+      'বিস্কুট',
+      'பிஸ்கட்',
+      'బిస్కెట్',
+      'ಬಿಸ್ಕೆಟ್',
+      'ബിസ്കറ്റ്',
     ],
     'Water': [
-      'water', 'paani', 'pani', 'neeru', 'neer', 'tanni', 'jalam',
-      'पानी', 'জল', 'தண்ணீர்', 'నీళ్ళు', 'ನೀರು', 'വെള്ളം',
+      'water',
+      'paani',
+      'pani',
+      'neeru',
+      'neer',
+      'tanni',
+      'jalam',
+      'पानी',
+      'জল',
+      'தண்ணீர்',
+      'నీళ్ళు',
+      'ನೀರು',
+      'വെള്ളം',
     ],
     'Banana': [
-      'banana', 'kela', 'keli', 'arati', 'valai', 'pazham', 'baale',
-      'banaana', 'केला', 'কলা', 'வாழைப்பழம்', 'అరటి', 'ಬಾಳೆ', 'വാഴ',
+      'banana',
+      'kela',
+      'keli',
+      'arati',
+      'valai',
+      'pazham',
+      'baale',
+      'banaana',
+      'केला',
+      'কলা',
+      'வாழைப்பழம்',
+      'అరటి',
+      'ಬಾಳೆ',
+      'വാഴ',
     ],
     'Apple': [
-      'apple', 'seb', 'sebu', 'appu', 'safarchand', 'sfarchand',
-      'सेब', 'আপেল', 'ஆப்பிள்', 'ఆపిల్', 'ಸೇಬು', 'ആപ്പിൾ',
+      'apple',
+      'seb',
+      'sebu',
+      'appu',
+      'safarchand',
+      'sfarchand',
+      'सेब',
+      'আপেল',
+      'ஆப்பிள்',
+      'ఆపిల్',
+      'ಸೇಬು',
+      'ആപ്പിൾ',
     ],
     'Paneer': [
-      'paneer', 'panir', 'panner', 'cottage cheese', 'chenna',
-      'पनीर', 'পনির', 'பனீர்', 'పనీర్', 'ಪನೀರ್', 'പനീർ',
+      'paneer',
+      'panir',
+      'panner',
+      'cottage cheese',
+      'chenna',
+      'पनीर',
+      'পনির',
+      'பனீர்',
+      'పనీర్',
+      'ಪನೀರ್',
+      'പനീർ',
     ],
     'Ghee': [
-      'ghee', 'ghi', 'ghee', 'gi', 'tuppa', 'ney', 'nei',
-      'घी', 'ঘি', 'நெய்', 'నెయ్యి', 'ತುಪ್ಪ', 'നെയ്യ്',
+      'ghee',
+      'ghi',
+      'ghee',
+      'gi',
+      'tuppa',
+      'ney',
+      'nei',
+      'घी',
+      'ঘি',
+      'நெய்',
+      'నెయ్యి',
+      'ತುಪ್ಪ',
+      'നെയ്യ്',
     ],
     'Chilli': [
-      'chilli', 'chili', 'mirch', 'mirapakayalu', 'milagai', 'mulaku',
-      'lankha', 'mulagu', 'kaaram', 'chile',
-      'मिर्च', 'মরিচ', 'மிளகாய்', 'మిర్చి', 'ಮೆಣಸಿನಕಾಯಿ', 'മുളക്',
+      'chilli',
+      'chili',
+      'mirch',
+      'mirapakayalu',
+      'milagai',
+      'mulaku',
+      'lankha',
+      'mulagu',
+      'kaaram',
+      'chile',
+      'मिर्च',
+      'মরিচ',
+      'மிளகாய்',
+      'మిర్చి',
+      'ಮೆಣಸಿನಕಾಯಿ',
+      'മുളക്',
     ],
     'Turmeric': [
-      'turmeric', 'haldi', 'halud', 'manjal', 'pasupu', 'arisina',
-      'manjals', 'haldar',
-      'हल्दी', 'হলুদ', 'மஞ்சள்', 'పసుపు', 'ಅರಿಶಿನ', 'മഞ്ഞൾ',
+      'turmeric',
+      'haldi',
+      'halud',
+      'manjal',
+      'pasupu',
+      'arisina',
+      'manjals',
+      'haldar',
+      'हल्दी',
+      'হলুদ',
+      'மஞ்சள்',
+      'పసుపు',
+      'ಅರಿಶಿನ',
+      'മഞ്ഞൾ',
     ],
     'Coriander': [
-      'coriander', 'dhania', 'kothamalli', 'kothimira', 'kothambari',
-      'malli', 'cilantro', 'dhaniya',
-      'धनिया', 'ধনে', 'கொத்தமல்லி', 'కొత్తిమీర', 'ಕೊತ್ತಂಬರಿ', 'മല്ലി',
+      'coriander',
+      'dhania',
+      'kothamalli',
+      'kothimira',
+      'kothambari',
+      'malli',
+      'cilantro',
+      'dhaniya',
+      'धनिया',
+      'ধনে',
+      'கொத்தமல்லி',
+      'కొత్తిమీర',
+      'ಕೊತ್ತಂಬರಿ',
+      'മല്ലി',
     ],
     'Coconut': [
-      'coconut', 'nariyal', 'thenkai', 'kobbari', 'tengina', 'thenga',
-      'narikel', 'coconut oil',
-      'नारियल', 'নারকেল', 'தேங்காய்', 'కొబ్బరి', 'ತೆಂಗಿನಕಾಯಿ', 'നാളികേരം',
+      'coconut',
+      'nariyal',
+      'thenkai',
+      'kobbari',
+      'tengina',
+      'thenga',
+      'narikel',
+      'coconut oil',
+      'नारियल',
+      'নারকেল',
+      'தேங்காய்',
+      'కొబ్బరి',
+      'ತೆಂಗಿನಕಾಯಿ',
+      'നാളികേരം',
     ],
     // ── Prepared Food Items (prevents compound names from being split) ───────
     'Biryani': [
-      'biryani', 'biriyani', 'biryaani', 'biryanee', 'biriani', 'briyani',
-      'dum biryani', 'dum biriyani', 'chicken biryani', 'mutton biryani',
-      'veg biryani', 'egg biryani', 'hyderabadi biryani',
-      'बिरयानी', 'बिरियानी', 'బిర్యానీ', 'பிரியாணி', 'ಬಿರಿಯಾನಿ', 'ബിരിയാണി',
+      'biryani',
+      'biriyani',
+      'biryaani',
+      'biryanee',
+      'biriani',
+      'briyani',
+      'dum biryani',
+      'dum biriyani',
+      'chicken biryani',
+      'mutton biryani',
+      'veg biryani',
+      'egg biryani',
+      'hyderabadi biryani',
+      'बिरयानी',
+      'बिरियानी',
+      'బిర్యానీ',
+      'பிரியாணி',
+      'ಬಿರಿಯಾನಿ',
+      'ബിരിയാണി',
     ],
     'Dum Biryani': [
-      'dum biryani', 'dum biriyani', 'dam biryani', 'dumbiryani',
-      'dum briyani', 'dam biriyani', 'dumb biryani', 'dumb biriyani',
-      'డమ్ బిర్యానీ', 'दम बिरयानी', 'டம் பிரியாணி', 'ದಮ್ ಬಿರಿಯಾನಿ',
+      'dum biryani',
+      'dum biriyani',
+      'dam biryani',
+      'dumbiryani',
+      'dum briyani',
+      'dam biriyani',
+      'dumb biryani',
+      'dumb biriyani',
+      'డమ్ బిర్యానీ',
+      'दम बिरयानी',
+      'டம் பிரியாணி',
+      'ದಮ್ ಬಿರಿಯಾನಿ',
     ],
     'Chicken': [
-      'chicken', 'murgi', 'murga', 'kozhi', 'kodi', 'koli', 'murgha',
-      'चिकन', 'মুরগি', 'கோழி', 'కోడి', 'ಕೋಳಿ', 'കോഴി',
+      'chicken',
+      'murgi',
+      'murga',
+      'kozhi',
+      'kodi',
+      'koli',
+      'murgha',
+      'चिकन',
+      'মুরগি',
+      'கோழி',
+      'కోడి',
+      'ಕೋಳಿ',
+      'കോഴി',
     ],
     'Mutton': [
-      'mutton', 'gosht', 'aattu', 'mamsam', 'gosh', 'keema',
-      'मटन', 'গোশত', 'ஆட்டு', 'మాంసం', 'ಮಟನ್', 'ആട്ടിറച്ചി',
+      'mutton',
+      'gosht',
+      'aattu',
+      'mamsam',
+      'gosh',
+      'keema',
+      'मटन',
+      'গোশত',
+      'ஆட்டு',
+      'మాంసం',
+      'ಮಟನ್',
+      'ആട്ടിറച്ചി',
     ],
     'Fish': [
-      'fish', 'machli', 'machhi', 'meen', 'chepa', 'meenu', 'maach',
-      'मछली', 'মাছ', 'மீன்', 'చేప', 'ಮೀನು', 'മീൻ',
+      'fish',
+      'machli',
+      'machhi',
+      'meen',
+      'chepa',
+      'meenu',
+      'maach',
+      'मछली',
+      'মাছ',
+      'மீன்',
+      'చేప',
+      'ಮೀನು',
+      'മീൻ',
     ],
     'Sambar': [
-      'sambar', 'sambhar', 'sambaar', 'sambhaar', 'saambhar',
-      'सांभर', 'সাম্বার', 'சாம்பார்', 'సాంబార్', 'ಸಾಂಬಾರ್', 'സാമ്പാർ',
+      'sambar',
+      'sambhar',
+      'sambaar',
+      'sambhaar',
+      'saambhar',
+      'सांभर',
+      'সাম্বার',
+      'சாம்பார்',
+      'సాంబార్',
+      'ಸಾಂಬಾರ್',
+      'സാമ്പാർ',
     ],
     'Idli': [
-      'idli', 'idly', 'idle', 'idlee', 'idlli',
-      'इडली', 'ইডলি', 'இட்லி', 'ఇడ్లీ', 'ಇಡ್ಲಿ', 'ഇഡ്ഡലി',
+      'idli',
+      'idly',
+      'idle',
+      'idlee',
+      'idlli',
+      'इडली',
+      'ইডলি',
+      'இட்லி',
+      'ఇడ్లీ',
+      'ಇಡ್ಲಿ',
+      'ഇഡ്ഡലി',
     ],
     'Dosa': [
-      'dosa', 'dosai', 'dose', 'dhosa', 'masala dosa',
-      'डोसा', 'দোসা', 'தோசை', 'దోశ', 'ದೋಸೆ', 'ദോശ',
+      'dosa',
+      'dosai',
+      'dose',
+      'dhosa',
+      'masala dosa',
+      'डोसा',
+      'দোসা',
+      'தோசை',
+      'దోశ',
+      'ದೋಸೆ',
+      'ദോശ',
     ],
     'Roti': [
-      'roti', 'chapati', 'chapathi', 'phulka', 'naan', 'paratha', 'parota',
-      'रोटी', 'রুটি', 'சப்பாத்தி', 'రొట్టి', 'ರೊಟ್ಟಿ', 'ചപ്പാത്തി',
+      'roti',
+      'chapati',
+      'chapathi',
+      'phulka',
+      'naan',
+      'paratha',
+      'parota',
+      'रोटी',
+      'রুটি',
+      'சப்பாத்தி',
+      'రొట్టి',
+      'ರೊಟ್ಟಿ',
+      'ചപ്പാത്തി',
     ],
   };
 
@@ -630,6 +1250,7 @@ class PhoneticProductResolver {
       for (int i = 0; i < s.length - 1; i++) r.add(s.substring(i, i + 2));
       return r;
     }
+
     final ba = bg(a), bb = bg(b);
     final inter = ba.intersection(bb).length;
     return (2.0 * inter) / (ba.length + bb.length);
@@ -647,15 +1268,35 @@ class PhoneticProductResolver {
 /// When no unit is spoken, infer a sensible default from the product name.
 class UnitInferrer {
   static const Map<String, String> _productToUnit = {
-    'milk': 'L', 'water': 'L', 'oil': 'L', 'sunflower oil': 'L',
-    'flour': 'kg', 'rice': 'kg', 'dal': 'kg', 'sugar': 'kg', 'salt': 'kg',
-    'turmeric': 'g', 'coriander': 'g', 'chilli': 'g',
-    'egg': 'pc', 'bread': 'pc', 'biscuit': 'pc', 'soap': 'pc',
-    'butter': 'g', 'ghee': 'g', 'paneer': 'g',
-    'banana': 'pc', 'apple': 'pc', 'coconut': 'pc',
-    'tomato': 'kg', 'onion': 'kg', 'potato': 'kg',
-    'bungalow dumpa': 'kg', 'dumpa': 'kg',
-    'tea': 'g', 'coffee': 'g',
+    'milk': 'L',
+    'water': 'L',
+    'oil': 'L',
+    'sunflower oil': 'L',
+    'flour': 'kg',
+    'rice': 'kg',
+    'dal': 'kg',
+    'sugar': 'kg',
+    'salt': 'kg',
+    'turmeric': 'g',
+    'coriander': 'g',
+    'chilli': 'g',
+    'egg': 'pc',
+    'bread': 'pc',
+    'biscuit': 'pc',
+    'soap': 'pc',
+    'butter': 'g',
+    'ghee': 'g',
+    'paneer': 'g',
+    'banana': 'pc',
+    'apple': 'pc',
+    'coconut': 'pc',
+    'tomato': 'kg',
+    'onion': 'kg',
+    'potato': 'kg',
+    'bungalow dumpa': 'kg',
+    'dumpa': 'kg',
+    'tea': 'g',
+    'coffee': 'g',
     'curd': 'g',
   };
 
@@ -759,8 +1400,16 @@ class PriceSanityValidator {
 
     if (catalog == null || catalog.isEmpty) {
       // No catalog: only obvious outliers
-      if (price > 50000) return const PriceSanityResult(isPlausible: false, warningReason: 'Price exceeds ₹50,000');
-      if (price < 1)     return const PriceSanityResult(isPlausible: false, warningReason: 'Price below ₹1');
+      if (price > 50000)
+        return const PriceSanityResult(
+          isPlausible: false,
+          warningReason: 'Price exceeds ₹50,000',
+        );
+      if (price < 1)
+        return const PriceSanityResult(
+          isPlausible: false,
+          warningReason: 'Price below ₹1',
+        );
       return const PriceSanityResult(isPlausible: true);
     }
 
@@ -769,7 +1418,9 @@ class PriceSanityValidator {
     final similarPrices = <double>[];
 
     for (final p in catalog) {
-      final cn = (p['name'] ?? p['product_name'] ?? '').toString().toLowerCase();
+      final cn = (p['name'] ?? p['product_name'] ?? '')
+          .toString()
+          .toLowerCase();
       if (cn.contains(nameLower) || nameLower.contains(cn)) {
         final cp = double.tryParse(p['price']?.toString() ?? '');
         if (cp != null && cp > 0) similarPrices.add(cp);
@@ -778,8 +1429,16 @@ class PriceSanityValidator {
 
     if (similarPrices.isEmpty) {
       // Fall back to global range check
-      if (price > 50000) return const PriceSanityResult(isPlausible: false, warningReason: 'Price exceeds ₹50,000');
-      if (price < 1)     return const PriceSanityResult(isPlausible: false, warningReason: 'Price below ₹1');
+      if (price > 50000)
+        return const PriceSanityResult(
+          isPlausible: false,
+          warningReason: 'Price exceeds ₹50,000',
+        );
+      if (price < 1)
+        return const PriceSanityResult(
+          isPlausible: false,
+          warningReason: 'Price below ₹1',
+        );
       return const PriceSanityResult(isPlausible: true);
     }
 
@@ -789,14 +1448,16 @@ class PriceSanityValidator {
     if (price > median * 5) {
       return PriceSanityResult(
         isPlausible: false,
-        warningReason: 'Price ₹${price.toStringAsFixed(0)} is >5× catalog median ₹${median.toStringAsFixed(0)}',
+        warningReason:
+            'Price ₹${price.toStringAsFixed(0)} is >5× catalog median ₹${median.toStringAsFixed(0)}',
         catalogMedian: median,
       );
     }
     if (price < median * 0.1) {
       return PriceSanityResult(
         isPlausible: false,
-        warningReason: 'Price ₹${price.toStringAsFixed(0)} is <10% of catalog median ₹${median.toStringAsFixed(0)}',
+        warningReason:
+            'Price ₹${price.toStringAsFixed(0)} is <10% of catalog median ₹${median.toStringAsFixed(0)}',
         catalogMedian: median,
       );
     }
@@ -813,41 +1474,52 @@ class ConfidenceScorerV2 {
     required double qty,
     required double price,
     required String unit,
-    required int patternIndex,        // 0 = best pattern, 4 = worst
-    required bool catalogHit,         // product found in catalog
-    required bool pricePlausible,     // from PriceSanityValidator
-    required bool unitInferred,       // true if unit was auto-inferred
+    required int patternIndex, // 0 = best pattern, 4 = worst
+    required bool catalogHit, // product found in catalog
+    required bool pricePlausible, // from PriceSanityValidator
+    required bool unitInferred, // true if unit was auto-inferred
     required String langCode,
   }) {
     // ── Name sub-score ─────────────────────────────────────────────────────
     double nameScore = 1.0;
-    if (name.length < 2)          nameScore -= 0.50;
-    if (name.length < 3)          nameScore -= 0.20;
-    if (name.contains(RegExp(r'\d'))) nameScore -= 0.30;   // digits in name
-    if (name.split(' ').length > 4)   nameScore -= 0.15;   // too many words
-    if (name.length > 25)             nameScore -= 0.10;
-    if (catalogHit)                   nameScore = (nameScore + 0.20).clamp(0, 1);
+    if (name.length < 2) nameScore -= 0.50;
+    if (name.length < 3) nameScore -= 0.20;
+    if (name.contains(RegExp(r'\d'))) nameScore -= 0.30; // digits in name
+    if (name.split(' ').length > 4) nameScore -= 0.15; // too many words
+    if (name.length > 25) nameScore -= 0.10;
+    if (catalogHit) nameScore = (nameScore + 0.20).clamp(0, 1);
 
     // ── Qty sub-score ──────────────────────────────────────────────────────
     double qtyScore = 1.0;
-    if (qty <= 0)          qtyScore = 0.0;
-    else if (qty < 0.1)   qtyScore -= 0.40;
-    else if (qty > 500)   qtyScore -= 0.60;
-    else if (qty > 100)   qtyScore -= 0.30;
-    else if (qty > 50)    qtyScore -= 0.10;
+    if (qty <= 0)
+      qtyScore = 0.0;
+    else if (qty < 0.1)
+      qtyScore -= 0.40;
+    else if (qty > 500)
+      qtyScore -= 0.60;
+    else if (qty > 100)
+      qtyScore -= 0.30;
+    else if (qty > 50)
+      qtyScore -= 0.10;
 
     // Reasonable quantities
     if (qty >= 0.1 && qty <= 50) qtyScore = (qtyScore + 0.15).clamp(0, 1);
-    if (unitInferred)            qtyScore -= 0.05; // small penalty for inferred
+    if (unitInferred) qtyScore -= 0.05; // small penalty for inferred
 
     // ── Price sub-score ────────────────────────────────────────────────────
     double priceScore = 1.0;
-    if (price == 0)         priceScore = 0.50;  // missing price — add to cart, allow manual entry
-    else if (!pricePlausible) priceScore -= 0.45;
-    else if (price < 1)     priceScore -= 0.35;
-    else if (price < 5)     priceScore -= 0.15;
-    else if (price > 10000) priceScore -= 0.25;
-    else if (price >= 5 && price <= 5000) priceScore = (priceScore + 0.15).clamp(0, 1);
+    if (price == 0)
+      priceScore = 0.50; // missing price — add to cart, allow manual entry
+    else if (!pricePlausible)
+      priceScore -= 0.45;
+    else if (price < 1)
+      priceScore -= 0.35;
+    else if (price < 5)
+      priceScore -= 0.15;
+    else if (price > 10000)
+      priceScore -= 0.25;
+    else if (price >= 5 && price <= 5000)
+      priceScore = (priceScore + 0.15).clamp(0, 1);
 
     // ── Pattern bonus ──────────────────────────────────────────────────────
     // Pattern 0 (qty unit name price) = best → +0.10
@@ -858,9 +1530,9 @@ class ConfidenceScorerV2 {
     final catalogBonus = catalogHit ? 0.15 : 0.0;
 
     return ConfidenceDetail(
-      nameScore:    nameScore.clamp(0, 1),
-      qtyScore:     qtyScore.clamp(0, 1),
-      priceScore:   priceScore.clamp(0, 1),
+      nameScore: nameScore.clamp(0, 1),
+      qtyScore: qtyScore.clamp(0, 1),
+      priceScore: priceScore.clamp(0, 1),
       patternBonus: patternBonus,
       catalogBonus: catalogBonus,
     );
@@ -871,7 +1543,6 @@ class ConfidenceScorerV2 {
 
 /// Drop-in enhanced replacement for [MultiLangVoiceParser].
 class VoiceNlpEngineV2 {
-
   // ── Price/currency keywords — must NEVER become product names ───────────────
   static final _priceKeywords = RegExp(
     r'^(rupees?|rupee|rs\.?|inr|₹|rupe|rupaiye|rupaiya|paisa|paise|रुपीस|రూపాయలు|రూపాయ|రూపాయిలు|రూపాయి|రూ|ரூபாய்|ரூ|ರೂಪಾಯಿ|ರೂ|രൂപ|രൂ|টাকা|রুপি|રૂપિયા|રૂ|ਰੁਪਏ|ਰੁ'
@@ -897,11 +1568,17 @@ class VoiceNlpEngineV2 {
     caseSensitive: false,
   );
 
-  static final _currencyRe = RegExp(r'(₹|rs\.?|rupees?|inr|रूप(?:या|ये)|ரூ|రూ|રૃ|ਰੁ)', caseSensitive: false);
+  static final _currencyRe = RegExp(
+    r'(₹|rs\.?|rupees?|inr|रूप(?:या|ये)|ரூ|రూ|રૃ|ਰੁ)',
+    caseSensitive: false,
+  );
 
   static String _stripFillers(String t) {
     final cleaned = t.replaceAll(_currencyRe, ' ');
-    return cleaned.replaceAll(_fillerRe, ' ').replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+    return cleaned
+        .replaceAll(_fillerRe, ' ')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .trim();
   }
 
   // ── Item separators (expanded) ─────────────────────────────────────────────
@@ -913,36 +1590,57 @@ class VoiceNlpEngineV2 {
   );
 
   // ── Regex patterns for one item segment (ordered best → worst) ────────────
+  // FIX: Expanded Unicode ranges to cover ALL Indian language scripts:
+  // - Devanagari (Hindi, Marathi): \u0900-\u097F
+  // - Bengali: \u0980-\u09FF
+  // - Gurmukhi (Punjabi): \u0A00-\u0A7F
+  // - Gujarati: \u0A80-\u0AFF
+  // - Oriya: \u0B00-\u0B7F
+  // - Tamil: \u0B80-\u0BFF
+  // - Telugu: \u0C00-\u0C7F
+  // - Kannada: \u0C80-\u0CFF
+  // - Malayalam: \u0D00-\u0D7F
+  // - Sinhala: \u0D80-\u0DFF (bonus)
+  // - Thai: \u0E00-\u0E7F (bonus)
+  // - Lao: \u0E80-\u0EFF (bonus)
+  // - Tibetan: \u0F00-\u0FFF (bonus)
+  // - Myanmar: \u1000-\u109F (bonus)
+  // - Georgian: \u10A0-\u10FF (bonus)
+  // - Hangul: \uAC00-\uD7AF (bonus)
+  // - CJK: \u4E00-\u9FFF (bonus)
+  // - Full-width forms: \uFF00-\uFFEF (bonus)
+  static final _wordChars =
+      r'[\w\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0A80-\u0AFF\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\u0D80-\u0DFF\u0E00-\u0E7F\u0E80-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u10A0-\u10FF\uAC00-\uD7AF\u4E00-\u9FFF\uFF00-\uFFEF]';
 
   static final _patterns = [
     // P0: [qty] [unit] [name] [price]   e.g. "2 kg sugar 60"
     RegExp(
-      r'^(\d+\.?\d*)\s+(\S+)\s+([\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF\u0A80-\u0AFF\u0B00-\u0B7F]+(?:\s+[\w\u0900-\u0D7F]+)?)\s+(\d+\.?\d*)$',
+      r'^(\d+\.?\d*)\s+(\S+)\s+(' + _wordChars + r'+(?:\s+' + _wordChars + r'+)?)\s+(\d+\.?\d*)$',
       caseSensitive: false,
     ),
     // P1: [qty] [name] [price]          e.g. "2 sugar 60"
     RegExp(
-      r'^(\d+\.?\d*)\s+([\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF\u0A80-\u0AFF\u0B00-\u0B7F]+(?:\s+[\w\u0900-\u0D7F]+)?)\s+(\d+\.?\d*)$',
+      r'^(\d+\.?\d*)\s+(' + _wordChars + r'+(?:\s+' + _wordChars + r'+)?)\s+(\d+\.?\d*)$',
       caseSensitive: false,
     ),
     // P2: [name] [qty] [price]          e.g. "sugar 2 60"
     RegExp(
-      r'^([\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF]+(?:\s+[\w\u0900-\u0D7F]+)?)\s+(\d+\.?\d*)\s+(\d+\.?\d*)$',
+      r'^(' + _wordChars + r'+(?:\s+' + _wordChars + r'+)?)\s+(\d+\.?\d*)\s+(\d+\.?\d*)$',
       caseSensitive: false,
     ),
     // P3: [qty] [unit] [name]           e.g. "2 kg sugar"  (no price)
     RegExp(
-      r'^(\d+\.?\d*)\s+(\S+)\s+([\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF]+(?:\s+[\w\u0900-\u0D7F]+)?)$',
+      r'^(\d+\.?\d*)\s+(\S+)\s+(' + _wordChars + r'+(?:\s+' + _wordChars + r'+)?)$',
       caseSensitive: false,
     ),
     // P4: [name] [number]               e.g. "sugar 60"
     RegExp(
-      r'^([\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF]+(?:\s+[\w\u0900-\u0D7F]+)?)\s+(\d+\.?\d*)$',
+      r'^(' + _wordChars + r'+(?:\s+' + _wordChars + r'+)?)\s+(\d+\.?\d*)$',
       caseSensitive: false,
     ),
     // P5: [name] only
     RegExp(
-      r'^([\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF]+(?:\s+[\w\u0900-\u0D7F]+)?)$',
+      r'^(' + _wordChars + r'+(?:\s+' + _wordChars + r'+)?)$',
       caseSensitive: false,
     ),
   ];
@@ -955,14 +1653,24 @@ class VoiceNlpEngineV2 {
     List<Map<String, dynamic>>? catalog,
   }) {
     // 1. Replace word-numbers with digits
-    String text = CompoundNumberParser.replaceAllWordNumbers(raw.trim(), langCode);
+    String text = CompoundNumberParser.replaceAllWordNumbers(
+      raw.trim(),
+      langCode,
+    );
 
     // 2. Strip filler words and currency markers
     text = _stripFillers(text).toLowerCase().trim();
     if (text.isEmpty) return null;
 
     // 3. Normalize common connectors and bad spacing
-    text = text.replaceAll(RegExp(r'\bper\b|\bka\b|\bki\b|\bke\b|\bgm\b|\bpcs\b|\bpc\b', caseSensitive: false), ' ')
+    text = text
+        .replaceAll(
+          RegExp(
+            r'\bper\b|\bka\b|\bki\b|\bke\b|\bgm\b|\bpcs\b|\bpc\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
         .replaceAll(RegExp(r'\s{2,}'), ' ')
         .trim();
 
@@ -978,28 +1686,28 @@ class VoiceNlpEngineV2 {
       var quantityPriceAmbiguous = false;
 
       if (pi == 0) {
-        qty      = double.tryParse(m.group(1)!) ?? 1;
-        rawUnit  = m.group(2)!;
-        name     = m.group(3)!;
-        price    = double.tryParse(m.group(4)!) ?? 0;
+        qty = double.tryParse(m.group(1)!) ?? 1;
+        rawUnit = m.group(2)!;
+        name = m.group(3)!;
+        price = double.tryParse(m.group(4)!) ?? 0;
       } else if (pi == 1) {
-        qty      = double.tryParse(m.group(1)!) ?? 1;
-        rawUnit  = '';
-        name     = m.group(2)!;
-        price    = double.tryParse(m.group(3)!) ?? 0;
+        qty = double.tryParse(m.group(1)!) ?? 1;
+        rawUnit = '';
+        name = m.group(2)!;
+        price = double.tryParse(m.group(3)!) ?? 0;
       } else if (pi == 2) {
-        name     = m.group(1)!;
-        qty      = double.tryParse(m.group(2)!) ?? 1;
-        price    = double.tryParse(m.group(3)!) ?? 0;
-        rawUnit  = '';
+        name = m.group(1)!;
+        qty = double.tryParse(m.group(2)!) ?? 1;
+        price = double.tryParse(m.group(3)!) ?? 0;
+        rawUnit = '';
       } else if (pi == 3) {
-        qty      = double.tryParse(m.group(1)!) ?? 1;
-        rawUnit  = m.group(2)!;
-        name     = m.group(3)!;
-        price    = 0;
+        qty = double.tryParse(m.group(1)!) ?? 1;
+        rawUnit = m.group(2)!;
+        name = m.group(3)!;
+        price = 0;
       } else if (pi == 4) {
-        name     = m.group(1)!;
-        final n  = double.tryParse(m.group(2)!) ?? 0;
+        name = m.group(1)!;
+        final n = double.tryParse(m.group(2)!) ?? 0;
         if (n > _qtyPriceThreshold(name, catalog)) {
           qty = 1;
           price = n;
@@ -1010,10 +1718,10 @@ class VoiceNlpEngineV2 {
         rawUnit = '';
         quantityPriceAmbiguous = true;
       } else {
-        name     = m.group(1)!;
-        qty      = 1;
-        price    = 0;
-        rawUnit  = '';
+        name = m.group(1)!;
+        qty = 1;
+        price = 0;
+        rawUnit = '';
       }
 
       name = name.trim();
@@ -1061,15 +1769,22 @@ class VoiceNlpEngineV2 {
       String resolvedName = _toTitleCase(name);
       double? catalogPrice;
       bool catalogHit = false;
-      
+
       if (catalog != null && catalog.isNotEmpty) {
         final match = _findInCatalog(name, catalog);
         if (match != null) {
-          resolvedName = (match['name'] ?? match['product_name'] ?? resolvedName).toString();
+          resolvedName =
+              (match['name'] ?? match['product_name'] ?? resolvedName)
+                  .toString();
           catalogPrice = double.tryParse(match['price']?.toString() ?? '');
-          if (price == 0 && catalogPrice != null) price = catalogPrice;
+          // FIX: Only use catalog price when NO amount was spoken.
+          // Spoken amount must always win over catalog price.
+          if (!priceWasSpoken && price == 0 && catalogPrice != null && catalogPrice > 0) {
+            price = catalogPrice;
+          }
           catalogHit = true;
-          if (rawUnit.isEmpty && (match['unit']?.toString().isNotEmpty ?? false)) {
+          if (rawUnit.isEmpty &&
+              (match['unit']?.toString().isNotEmpty ?? false)) {
             final catalogUnit = match['unit']?.toString() ?? '';
             if (catalogUnit.isNotEmpty) {
               unitInferred = true;
@@ -1080,8 +1795,9 @@ class VoiceNlpEngineV2 {
 
       // Fallback to phonetic cluster normalizer if not matched in catalog
       if (!catalogHit) {
-        final canonical = PhoneticProductResolver.resolve(name)
-                       ?? PhoneticProductResolver.fuzzyResolve(name);
+        final canonical =
+            PhoneticProductResolver.resolve(name) ??
+            PhoneticProductResolver.fuzzyResolve(name);
         if (canonical != null) {
           resolvedName = canonical;
           catalogHit = true;
@@ -1089,18 +1805,22 @@ class VoiceNlpEngineV2 {
       }
 
       // 8. Price sanity
-      final sanity = PriceSanityValidator.validate(price, resolvedName, catalog);
+      final sanity = PriceSanityValidator.validate(
+        price,
+        resolvedName,
+        catalog,
+      );
 
       final conf = ConfidenceScorerV2.score(
-        name:           resolvedName,
-        qty:            qty,
-        price:          price,
-        unit:           unit,
-        patternIndex:   pi,
-        catalogHit:     catalogHit,
+        name: resolvedName,
+        qty: qty,
+        price: price,
+        unit: unit,
+        patternIndex: pi,
+        catalogHit: catalogHit,
         pricePlausible: sanity.isPlausible,
-        unitInferred:   unitInferred,
-        langCode:       langCode,
+        unitInferred: unitInferred,
+        langCode: langCode,
       );
 
       // NLP-8: keep partial items at low confidence rather than dropping them
@@ -1108,14 +1828,14 @@ class VoiceNlpEngineV2 {
       if (conf.total < 0.05 && price == 0 && qty <= 0) continue;
 
       return ParsedItemV2(
-        name:            resolvedName,
-        qty:             qty,
-        unit:            unit,
-        price:           price,
-        confidence:      conf,
+        name: resolvedName,
+        qty: qty,
+        unit: unit,
+        price: price,
+        confidence: conf,
         catalogMatchName: catalogHit ? resolvedName : null,
-        catalogPrice:    catalogPrice,
-        priceWasSpoken:  priceWasSpoken,
+        catalogPrice: catalogPrice,
+        priceWasSpoken: priceWasSpoken,
         quantityPriceAmbiguous: quantityPriceAmbiguous,
       );
     }
@@ -1153,21 +1873,26 @@ class VoiceNlpEngineV2 {
 
     String norm(String value) => value
         .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\s]'), ' ')
+        .replaceAll(
+          RegExp(
+            r'[^a-z0-9\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F\s]',
+          ),
+          ' ',
+        )
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
-    Set<String> tokens(String value) => norm(value)
-        .split(RegExp(r'\s+'))
-        .where((token) => token.length >= 3)
-        .toSet();
+    Set<String> tokens(String value) => norm(
+      value,
+    ).split(RegExp(r'\s+')).where((token) => token.length >= 3).toSet();
 
     final normalizedQuery = norm(n);
 
     // 1. Exact name must always win.
     for (final p in catalog) {
       final cn = norm(
-        (p['name'] ?? p['product_name'] ?? p['canonical_name'] ?? '').toString(),
+        (p['name'] ?? p['product_name'] ?? p['canonical_name'] ?? '')
+            .toString(),
       );
       if (cn.isNotEmpty && cn == normalizedQuery) return p;
     }
@@ -1180,14 +1905,16 @@ class VoiceNlpEngineV2 {
       final candidates = <Map<String, dynamic>>[];
       for (final p in catalog) {
         final cn = norm(
-          (p['name'] ?? p['product_name'] ?? p['canonical_name'] ?? '').toString(),
+          (p['name'] ?? p['product_name'] ?? p['canonical_name'] ?? '')
+              .toString(),
         );
         final productTokens = tokens(cn);
         final overlap = queryTokens.intersection(productTokens);
         if (overlap.isEmpty) continue;
 
-        final strongOverlap = overlap.any((token) =>
-            token.length >= 5 && productTokens.contains(token));
+        final strongOverlap = overlap.any(
+          (token) => token.length >= 5 && productTokens.contains(token),
+        );
         if (strongOverlap) {
           candidates.add(p);
         }
@@ -1199,24 +1926,29 @@ class VoiceNlpEngineV2 {
       if (candidates.length > 1) {
         // Prefer the product containing the largest number of query tokens.
         candidates.sort((a, b) {
-          final at = tokens(norm(
-            (a['name'] ?? a['product_name'] ?? '').toString(),
-          ));
-          final bt = tokens(norm(
-            (b['name'] ?? b['product_name'] ?? '').toString(),
-          ));
-          return bt.intersection(queryTokens).length
+          final at = tokens(
+            norm((a['name'] ?? a['product_name'] ?? '').toString()),
+          );
+          final bt = tokens(
+            norm((b['name'] ?? b['product_name'] ?? '').toString()),
+          );
+          return bt
+              .intersection(queryTokens)
+              .length
               .compareTo(at.intersection(queryTokens).length);
         });
 
         final top = candidates.first;
-        final topTokens = tokens(norm(
-          (top['name'] ?? top['product_name'] ?? '').toString(),
-        ));
+        final topTokens = tokens(
+          norm((top['name'] ?? top['product_name'] ?? '').toString()),
+        );
         final topScore = topTokens.intersection(queryTokens).length;
-        final secondTokens = tokens(norm(
-          (candidates[1]['name'] ?? candidates[1]['product_name'] ?? '').toString(),
-        ));
+        final secondTokens = tokens(
+          norm(
+            (candidates[1]['name'] ?? candidates[1]['product_name'] ?? '')
+                .toString(),
+          ),
+        );
         final secondScore = secondTokens.intersection(queryTokens).length;
 
         if (topScore > secondScore) return top;
@@ -1228,9 +1960,7 @@ class VoiceNlpEngineV2 {
     if (queryTokens.length == 1) {
       final token = queryTokens.first;
       final matches = catalog.where((p) {
-        final cn = norm(
-          (p['name'] ?? p['product_name'] ?? '').toString(),
-        );
+        final cn = norm((p['name'] ?? p['product_name'] ?? '').toString());
         return tokens(cn).contains(token);
       }).toList();
 
@@ -1246,9 +1976,7 @@ class VoiceNlpEngineV2 {
     double secondSim = 0;
     Map<String, dynamic>? best;
     for (final p in catalog) {
-      final cn = norm(
-        (p['name'] ?? p['product_name'] ?? '').toString(),
-      );
+      final cn = norm((p['name'] ?? p['product_name'] ?? '').toString());
       if (cn.isEmpty) continue;
       final sim = PhoneticProductResolver._jaccardBigram(normalizedQuery, cn);
       if (sim > bestSim) {
@@ -1278,7 +2006,9 @@ class VoiceNlpEngineV2 {
     final items = <ParsedItemV2>[];
 
     // Tokenise into (word | number) tokens
-    final tokenRe = RegExp(r'\d+\.?\d*|[\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF]+');
+    final tokenRe = RegExp(
+      r'\d+\.?\d*|[\w\u0900-\u0D7F\u0980-\u09FF\u0A00-\u0AFF]+',
+    );
     final tokens = tokenRe.allMatches(text).map((m) => m.group(0)!).toList();
 
     final numRe = RegExp(r'^\d+\.?\d*$');
@@ -1323,9 +2053,10 @@ class VoiceNlpEngineV2 {
   static List<ParsedItemV2> _deduplicate(List<ParsedItemV2> items) {
     final result = <ParsedItemV2>[];
     for (final item in items) {
-      final existing = result.indexWhere((e) =>
-        _isSameProduct(e.name, item.name) &&
-        (e.price - item.price).abs() < 1.0,
+      final existing = result.indexWhere(
+        (e) =>
+            _isSameProduct(e.name, item.name) &&
+            (e.price - item.price).abs() < 1.0,
       );
       if (existing == -1) {
         result.add(item);
@@ -1341,7 +2072,8 @@ class VoiceNlpEngineV2 {
   }
 
   static bool _isSameProduct(String a, String b) {
-    a = a.toLowerCase(); b = b.toLowerCase();
+    a = a.toLowerCase();
+    b = b.toLowerCase();
     if (a == b) return true;
     if (a.contains(b) || b.contains(a)) return true;
     return PhoneticProductResolver._jaccardBigram(a, b) > 0.80;
@@ -1384,7 +2116,9 @@ class VoiceNlpEngineV2 {
     // Step 3: NLP-3 sliding-window fallback (no separators needed)
     final windowItems = _slidingWindowParse(
       CompoundNumberParser.replaceAllWordNumbers(
-        _stripFillers(text).toLowerCase(), langCode),
+        _stripFillers(text).toLowerCase(),
+        langCode,
+      ),
       langCode,
       catalog: catalog,
     );
@@ -1402,7 +2136,8 @@ class VoiceNlpEngineV2 {
 
   static String _toTitleCase(String s) {
     if (s.isEmpty) return s;
-    return s.split(' ')
+    return s
+        .split(' ')
         .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
         .join(' ');
   }

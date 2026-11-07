@@ -34,8 +34,9 @@ class AttendanceShiftPolicy {
     if (rawKey == 'morning') return morningIndex;
     if (rawKey == 'afternoon' || rawKey == 'evening') return afternoonIndex;
 
-    final rawLabel =
-        (record['label'] ?? record['session_label'] ?? '').toString().toLowerCase();
+    final rawLabel = (record['label'] ?? record['session_label'] ?? '')
+        .toString()
+        .toLowerCase();
     if (rawLabel.contains('morning')) return morningIndex;
     if (rawLabel.contains('afternoon') || rawLabel.contains('evening')) {
       return afternoonIndex;
@@ -124,7 +125,8 @@ class AttendanceShiftPolicy {
       'completed_sessions': completed,
       'open_sessions': open,
       'required_sessions': requiredShifts,
-      'attendance_complete': attended == requiredShifts && completed == requiredShifts,
+      'attendance_complete':
+          attended == requiredShifts && completed == requiredShifts,
     };
   }
 }

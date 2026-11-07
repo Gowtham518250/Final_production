@@ -4,7 +4,7 @@ import 'hybrid_accuracy_test_suite.dart';
 
 /// Accuracy Test Runner UI
 /// Executes synthetic payment-matching scenario tests and displays pass rates.
-/// 
+///
 /// Tests conducted:
 /// 1. Conflict Resolution (Same Amount @ Same Time)
 /// 2. Same Amount @ Different Times
@@ -88,10 +88,7 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
         children: [
           const LiveTranslatedText(
             'Payment Matching Scenario Tests',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const LiveTranslatedText(
@@ -145,10 +142,7 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: _progress,
-              minHeight: 8,
-            ),
+            child: LinearProgressIndicator(value: _progress, minHeight: 8),
           ),
           const SizedBox(height: 8),
           LiveTranslatedText(
@@ -175,7 +169,10 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [ratingColor.withValues(alpha: 0.1), ratingColor.withValues(alpha: 0.05)],
+              colors: [
+                ratingColor.withValues(alpha: 0.1),
+                ratingColor.withValues(alpha: 0.05),
+              ],
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: ratingColor.withValues(alpha: 0.3)),
@@ -224,15 +221,23 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
         ),
         const SizedBox(height: 12),
 
-        _buildTestResult('Conflict Resolution pass rate', stats.test1Accuracy,
-            '${stats.test1Passed}/${stats.test1Total}'),
-        const SizedBox(height: 8),
-        _buildTestResult('Same Amount @ Different Times pass rate', stats.test2Accuracy,
-            '${stats.test2Passed}/${stats.test2Total}'),
+        _buildTestResult(
+          'Conflict Resolution pass rate',
+          stats.test1Accuracy,
+          '${stats.test1Passed}/${stats.test1Total}',
+        ),
         const SizedBox(height: 8),
         _buildTestResult(
-            'Fuzzy Matching (±10%) pass rate', stats.test3Accuracy,
-            '${stats.test3Passed}/${stats.test3Total}'),
+          'Same Amount @ Different Times pass rate',
+          stats.test2Accuracy,
+          '${stats.test2Passed}/${stats.test2Total}',
+        ),
+        const SizedBox(height: 8),
+        _buildTestResult(
+          'Fuzzy Matching (±10%) pass rate',
+          stats.test3Accuracy,
+          '${stats.test3Passed}/${stats.test3Total}',
+        ),
         const SizedBox(height: 8),
         _buildTestResult(
           'Large Scale (10,000 scenarios) pass rate',
@@ -241,8 +246,11 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
           subtitle: '${stats.test4Conflicts} conflicts detected',
         ),
         const SizedBox(height: 8),
-        _buildTestResult('Edge Cases pass rate', stats.test5Accuracy,
-            '${stats.test5Passed}/${stats.test5Total}'),
+        _buildTestResult(
+          'Edge Cases pass rate',
+          stats.test5Accuracy,
+          '${stats.test5Passed}/${stats.test5Total}',
+        ),
 
         const SizedBox(height: 20),
 
@@ -307,8 +315,8 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
     final color = accuracy >= 95
         ? Colors.green
         : accuracy >= 90
-            ? Colors.orange
-            : Colors.red;
+        ? Colors.orange
+        : Colors.red;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -325,7 +333,10 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
             children: [
               LiveTranslatedText(
                 name,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
@@ -364,10 +375,7 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          LiveTranslatedText(
-            label,
-            style: const TextStyle(fontSize: 12),
-          ),
+          LiveTranslatedText(label, style: const TextStyle(fontSize: 12)),
           LiveTranslatedText(
             value,
             style: TextStyle(
@@ -410,7 +418,11 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
           const SizedBox(height: 12),
           const LiveTranslatedText(
             'Estimated time: 2-3 minutes',
-            style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
       ),
@@ -489,7 +501,8 @@ class _HybridAccuracyTestPageState extends State<HybridAccuracyTestPage> {
 
   void _exportResults() {
     final stats = _testSuite.stats;
-    final exportText = '''
+    final exportText =
+        '''
 HYBRID PAYMENT SYSTEM - SYNTHETIC SCENARIO TEST REPORT
 Generated: ${DateTime.now()}
 Note: These results are not real-world payment accuracy. Ground truth is synthetic.

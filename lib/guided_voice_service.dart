@@ -624,15 +624,14 @@ class GuidedVoiceService extends ChangeNotifier {
       _updatePlaybackState(speaking: false);
     }
   }
-
 }
 
 /// Stops screen-specific guidance when the visible route changes. This does
 /// not touch PaymentAnnouncementService, which owns background payment alerts.
 class GuidedVoiceRouteObserver extends NavigatorObserver {
   GuidedVoiceRouteObserver({Future<void> Function()? stopGuidance})
-      : _stopGuidance =
-            stopGuidance ?? GuidedVoiceService.instance.cancelForRouteChange;
+    : _stopGuidance =
+          stopGuidance ?? GuidedVoiceService.instance.cancelForRouteChange;
 
   final Future<void> Function() _stopGuidance;
 

@@ -29,7 +29,8 @@ class LowMemoryPerformance {
     int minPixels = 64,
     int? maxPixels,
   }) {
-    final effectiveMaxPixels = maxPixels ??
+    final effectiveMaxPixels =
+        maxPixels ??
         (DeviceCapabilityService.instance.isLowEndDevice ? 768 : 960);
     if (!logicalPixels.isFinite ||
         !devicePixelRatio.isFinite ||

@@ -18,7 +18,11 @@ class LogFileStorage {
   static Future<void> appendLogEntry(String logEntry) async {
     try {
       final file = await _logFile();
-      await file.writeAsString('$logEntry\n', mode: FileMode.append, flush: true);
+      await file.writeAsString(
+        '$logEntry\n',
+        mode: FileMode.append,
+        flush: true,
+      );
 
       final lines = await file.readAsLines();
       if (lines.length > _maxLogLines) {

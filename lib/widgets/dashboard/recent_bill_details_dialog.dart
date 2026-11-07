@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../export_service.dart';
 import 'recent_bill_data.dart';
 
 class RecentBillDetailsDialog extends StatelessWidget {
@@ -40,15 +41,7 @@ class RecentBillDetailsDialog extends StatelessWidget {
   }
 
   DateTime? _date() {
-    final value = _text(bill.data, const [
-      'business_date',
-      'sale_date',
-      'invoice_date',
-      'created_at',
-      'createdAt',
-      'timestamp',
-    ]);
-    return DateTime.tryParse(value)?.toLocal();
+    return ExportService.resolveSalesDate(bill.data);
   }
 
   double _itemAmount(Map<String, dynamic> item) {

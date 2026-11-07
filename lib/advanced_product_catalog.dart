@@ -18,7 +18,7 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   List<Product> _filteredProducts = [];
   List<Product> _wishlist = [];
   Map<int, ProductComparison> _comparisons = {};
-  
+
   // Search and filter state
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -32,12 +32,24 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
 
   // Available filters
   final List<String> _categories = [
-    'Grocery', 'Electronics', 'Fashion', 'Home & Kitchen', 
-    'Beauty & Personal Care', 'Sports & Fitness', 'Toys & Games'
+    'Grocery',
+    'Electronics',
+    'Fashion',
+    'Home & Kitchen',
+    'Beauty & Personal Care',
+    'Sports & Fitness',
+    'Toys & Games',
   ];
-  
+
   final List<String> _brands = [
-    'Apple', 'Samsung', 'Nike', 'Adidas', 'Sony', 'LG', 'Dell', 'HP'
+    'Apple',
+    'Samsung',
+    'Nike',
+    'Adidas',
+    'Sony',
+    'LG',
+    'Dell',
+    'HP',
   ];
 
   @override
@@ -63,7 +75,7 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   Future<void> _loadProducts() async {
     final prefs = await SharedPreferences.getInstance();
     final productsJson = prefs.getString('advanced_products');
-    
+
     if (productsJson != null) {
       final List<dynamic> decoded = json.decode(productsJson);
       setState(() {
@@ -78,7 +90,7 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   Future<void> _loadWishlist() async {
     final prefs = await SharedPreferences.getInstance();
     final wishlistJson = prefs.getString('user_wishlist');
-    
+
     if (wishlistJson != null) {
       final List<dynamic> decoded = json.decode(wishlistJson);
       setState(() {
@@ -102,7 +114,8 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
           inStock: true,
           discount: 6,
           images: ['https://example.com/iphone15.jpg'],
-          description: 'Latest iPhone with A17 Pro chip, titanium design, and advanced camera system',
+          description:
+              'Latest iPhone with A17 Pro chip, titanium design, and advanced camera system',
           specifications: {
             'Display': '6.7-inch Super Retina XDR',
             'Processor': 'A17 Pro',
@@ -122,7 +135,8 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
           inStock: true,
           discount: 10,
           images: ['https://example.com/galaxy24.jpg'],
-          description: 'Premium Android flagship with S Pen, 200MP camera, and AI features',
+          description:
+              'Premium Android flagship with S Pen, 200MP camera, and AI features',
           specifications: {
             'Display': '6.8-inch Dynamic AMOLED',
             'Processor': 'Snapdragon 8 Gen 3',
@@ -146,7 +160,7 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
     setState(() {
       _filteredProducts = _allProducts.where((product) {
         // Search filter
-        if (_searchQuery.isNotEmpty && 
+        if (_searchQuery.isNotEmpty &&
             !product.name.toLowerCase().contains(_searchQuery) &&
             !product.brand.toLowerCase().contains(_searchQuery) &&
             !product.category.toLowerCase().contains(_searchQuery)) {
@@ -178,13 +192,13 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
         }
 
         // Category filter
-        if (_selectedCategories.isNotEmpty && 
+        if (_selectedCategories.isNotEmpty &&
             !_selectedCategories.contains(product.category)) {
           return false;
         }
 
         // Brand filter
-        if (_selectedBrands.isNotEmpty && 
+        if (_selectedBrands.isNotEmpty &&
             !_selectedBrands.contains(product.brand)) {
           return false;
         }
@@ -215,7 +229,9 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   void _sortProducts() {
     switch (_sortBy) {
       case SortOption.popularity:
-        _filteredProducts.sort((a, b) => b.reviewCount.compareTo(a.reviewCount));
+        _filteredProducts.sort(
+          (a, b) => b.reviewCount.compareTo(a.reviewCount),
+        );
         break;
       case SortOption.priceLowToHigh:
         _filteredProducts.sort((a, b) => a.price.compareTo(b.price));
@@ -238,7 +254,7 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   Future<void> _toggleWishlist(Product product) async {
     final prefs = await SharedPreferences.getInstance();
     List<Product> currentWishlist = [];
-    
+
     final wishlistJson = prefs.getString('user_wishlist');
     if (wishlistJson != null) {
       final List<dynamic> decoded = json.decode(wishlistJson);
@@ -251,8 +267,11 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
       currentWishlist.add(product);
     }
 
-    await prefs.setString('user_wishlist', json.encode(currentWishlist.map((e) => e.toJson()).toList()));
-    
+    await prefs.setString(
+      'user_wishlist',
+      json.encode(currentWishlist.map((e) => e.toJson()).toList()),
+    );
+
     setState(() {
       _wishlist = currentWishlist;
     });
@@ -261,7 +280,9 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   void _addToComparison(Product product) {
     if (_comparisons.length >= 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('You can compare up to 4 products')),
+        const SnackBar(
+          content: LiveTranslatedText('You can compare up to 4 products'),
+        ),
       );
       return;
     }
@@ -279,7 +300,10 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: LiveTranslatedText('Shop', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Shop',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
@@ -355,12 +379,13 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            ..._selectedCategories.map((category) => _buildFilterChip(category, true)),
+            ..._selectedCategories.map(
+              (category) => _buildFilterChip(category, true),
+            ),
             ..._selectedBrands.map((brand) => _buildFilterChip(brand, true)),
             if (_priceRange != PriceRange.all)
               _buildFilterChip(_priceRange.label, true),
-            if (_minRating > 0)
-              _buildFilterChip('Rating $_minRating+', true),
+            if (_minRating > 0) _buildFilterChip('Rating $_minRating+', true),
           ],
         ),
       ),
@@ -468,7 +493,7 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
 
   Widget _buildProductCard(Product product) {
     final isWishlisted = _wishlist.any((p) => p.id == product.id);
-    
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -484,20 +509,36 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
                     width: double.infinity,
                     decoration: BoxDecoration(
                       color: Colors.grey[200],
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(12),
+                      ),
                     ),
                     child: product.images.isNotEmpty
-                        ? Image.network(product.images[0], fit: BoxFit.cover, errorBuilder: (_, __, ___) {
-                            return Center(child: Icon(Icons.image, color: Colors.grey[400]));
-                          })
-                        : Center(child: Icon(Icons.image, color: Colors.grey[400])),
+                        ? Image.network(
+                            product.images[0],
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) {
+                              return Center(
+                                child: Icon(
+                                  Icons.image,
+                                  color: Colors.grey[400],
+                                ),
+                              );
+                            },
+                          )
+                        : Center(
+                            child: Icon(Icons.image, color: Colors.grey[400]),
+                          ),
                   ),
                   if (product.discount > 0)
                     Positioned(
                       top: 8,
                       left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.green,
                           borderRadius: BorderRadius.circular(4),
@@ -544,14 +585,21 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: _getRatingColor(product.rating),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.star, size: 12, color: Colors.white),
+                            const Icon(
+                              Icons.star,
+                              size: 12,
+                              color: Colors.white,
+                            ),
                             const SizedBox(width: 2),
                             LiveTranslatedText(
                               product.rating.toString(),
@@ -567,7 +615,10 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
                       const SizedBox(width: 8),
                       LiveTranslatedText(
                         '(${product.reviewCount})',
-                        style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[600]),
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                        ),
                       ),
                     ],
                   ),
@@ -605,7 +656,10 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
                             side: BorderSide(color: Colors.grey[300]!),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                           ),
-                          child: LiveTranslatedText('Compare', style: GoogleFonts.poppins(fontSize: 10)),
+                          child: LiveTranslatedText(
+                            'Compare',
+                            style: GoogleFonts.poppins(fontSize: 10),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -619,7 +673,10 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 8),
                           ),
-                          child: LiveTranslatedText('Add', style: GoogleFonts.poppins(fontSize: 10)),
+                          child: LiveTranslatedText(
+                            'Add',
+                            style: GoogleFonts.poppins(fontSize: 10),
+                          ),
                         ),
                       ),
                     ],
@@ -678,7 +735,9 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
   void _showComparisonSheet() {
     if (_comparisons.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('No products added to comparison')),
+        const SnackBar(
+          content: LiveTranslatedText('No products added to comparison'),
+        ),
       );
       return;
     }
@@ -686,9 +745,8 @@ class _AdvancedProductCatalogState extends State<AdvancedProductCatalog> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => ProductComparisonSheet(
-        comparisons: _comparisons.values.toList(),
-      ),
+      builder: (context) =>
+          ProductComparisonSheet(comparisons: _comparisons.values.toList()),
     );
   }
 
@@ -890,10 +948,19 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                LiveTranslatedText('Filters', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+                LiveTranslatedText(
+                  'Filters',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 TextButton(
                   onPressed: _resetFilters,
-                  child: LiveTranslatedText('Reset All', style: GoogleFonts.poppins(color: Colors.blue[600])),
+                  child: LiveTranslatedText(
+                    'Reset All',
+                    style: GoogleFonts.poppins(color: Colors.blue[600]),
+                  ),
                 ),
               ],
             ),
@@ -929,7 +996,13 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: LiveTranslatedText('Apply Filters', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: LiveTranslatedText(
+                  'Apply Filters',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ),
@@ -942,7 +1015,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+        LiveTranslatedText(
+          title,
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 12),
         content,
         const SizedBox(height: 24),
@@ -1033,7 +1109,10 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
             });
           },
         ),
-        LiveTranslatedText('$_minRating+ Rating', style: GoogleFonts.poppins(color: Colors.grey[600])),
+        LiveTranslatedText(
+          '$_minRating+ Rating',
+          style: GoogleFonts.poppins(color: Colors.grey[600]),
+        ),
       ],
     );
   }
@@ -1075,14 +1154,16 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
   }
 
   void _applyFilters() {
-    widget.onApply(FilterOptions(
-      categories: _selectedCategories,
-      brands: _selectedBrands,
-      priceRange: _priceRange,
-      minRating: _minRating,
-      inStockOnly: _inStockOnly,
-      discountOnly: _discountOnly,
-    ));
+    widget.onApply(
+      FilterOptions(
+        categories: _selectedCategories,
+        brands: _selectedBrands,
+        priceRange: _priceRange,
+        minRating: _minRating,
+        inStockOnly: _inStockOnly,
+        discountOnly: _discountOnly,
+      ),
+    );
     Navigator.pop(context);
   }
 }
@@ -1129,7 +1210,13 @@ class ProductDetailSheet extends StatelessWidget {
                           product.images[index],
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) {
-                            return Center(child: Icon(Icons.image, size: 64, color: Colors.grey[400]));
+                            return Center(
+                              child: Icon(
+                                Icons.image,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                            );
                           },
                         );
                       },
@@ -1143,7 +1230,10 @@ class ProductDetailSheet extends StatelessWidget {
                         // Title and price
                         LiveTranslatedText(
                           product.name,
-                          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.poppins(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Row(
@@ -1168,7 +1258,10 @@ class ProductDetailSheet extends StatelessWidget {
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.green,
                                   borderRadius: BorderRadius.circular(4),
@@ -1190,14 +1283,21 @@ class ProductDetailSheet extends StatelessWidget {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: _getRatingColor(product.rating),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.star, size: 16, color: Colors.white),
+                                  const Icon(
+                                    Icons.star,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
                                   const SizedBox(width: 4),
                                   LiveTranslatedText(
                                     product.rating.toString(),
@@ -1210,14 +1310,19 @@ class ProductDetailSheet extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            LiveTranslatedText('${product.reviewCount} Ratings & Reviews'),
+                            LiveTranslatedText(
+                              '${product.reviewCount} Ratings & Reviews',
+                            ),
                           ],
                         ),
                         const SizedBox(height: 24),
                         // Description
                         LiveTranslatedText(
                           'Description',
-                          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         LiveTranslatedText(
@@ -1228,7 +1333,10 @@ class ProductDetailSheet extends StatelessWidget {
                         // Specifications
                         LiveTranslatedText(
                           'Specifications',
-                          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         ...product.specifications.entries.map((entry) {
@@ -1240,14 +1348,18 @@ class ProductDetailSheet extends StatelessWidget {
                                   flex: 1,
                                   child: LiveTranslatedText(
                                     entry.key,
-                                    style: GoogleFonts.poppins(color: Colors.grey[600]),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.grey[600],
+                                    ),
                                   ),
                                 ),
                                 Expanded(
                                   flex: 2,
                                   child: LiveTranslatedText(
                                     entry.value,
-                                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1324,7 +1436,13 @@ class ProductComparisonSheet extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                LiveTranslatedText('Product Comparison', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+                LiveTranslatedText(
+                  'Product Comparison',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
@@ -1341,7 +1459,9 @@ class ProductComparisonSheet extends StatelessWidget {
                   // Specification column
                   _buildSpecColumn(),
                   // Product columns
-                  ...comparisons.map((comparison) => _buildProductColumn(comparison.product)),
+                  ...comparisons.map(
+                    (comparison) => _buildProductColumn(comparison.product),
+                  ),
                 ],
               ),
             ),
@@ -1358,7 +1478,10 @@ class ProductComparisonSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const LiveTranslatedText('Specifications', style: TextStyle(fontWeight: FontWeight.bold)),
+          const LiveTranslatedText(
+            'Specifications',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 24),
           const LiveTranslatedText('Product Name'),
           const SizedBox(height: 16),
@@ -1388,11 +1511,20 @@ class ProductComparisonSheet extends StatelessWidget {
               ? Image.network(product.images[0], height: 100, fit: BoxFit.cover)
               : Container(height: 100, color: Colors.grey[200]),
           const SizedBox(height: 8),
-          LiveTranslatedText(product.name, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+          LiveTranslatedText(
+            product.name,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 24),
           LiveTranslatedText(product.brand),
           const SizedBox(height: 16),
-          LiveTranslatedText('₹${product.price}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.orange[600])),
+          LiveTranslatedText(
+            '₹${product.price}',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.bold,
+              color: Colors.orange[600],
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -1403,7 +1535,10 @@ class ProductComparisonSheet extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           if (product.discount > 0)
-            LiveTranslatedText('${product.discount}% OFF', style: GoogleFonts.poppins(color: Colors.green)),
+            LiveTranslatedText(
+              '${product.discount}% OFF',
+              style: GoogleFonts.poppins(color: Colors.green),
+            ),
         ],
       ),
     );
@@ -1415,7 +1550,11 @@ class WishlistSheet extends StatelessWidget {
   final List<Product> wishlist;
   final Function(Product) onRemove;
 
-  const WishlistSheet({super.key, required this.wishlist, required this.onRemove});
+  const WishlistSheet({
+    super.key,
+    required this.wishlist,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1436,7 +1575,13 @@ class WishlistSheet extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                LiveTranslatedText('My Wishlist (${wishlist.length})', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+                LiveTranslatedText(
+                  'My Wishlist (${wishlist.length})',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(context),
@@ -1451,9 +1596,16 @@ class WishlistSheet extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.favorite_border, size: 64, color: Colors.grey[400]),
+                        Icon(
+                          Icons.favorite_border,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
                         const SizedBox(height: 16),
-                        LiveTranslatedText('Your wishlist is empty', style: GoogleFonts.poppins(color: Colors.grey[600])),
+                        LiveTranslatedText(
+                          'Your wishlist is empty',
+                          style: GoogleFonts.poppins(color: Colors.grey[600]),
+                        ),
                       ],
                     ),
                   )

@@ -25,11 +25,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ProductEntry {
   final String id;
-  String canonicalName;           // English, title-case
+  String canonicalName; // English, title-case
   double defaultPrice;
   String defaultUnit;
   Map<String, List<String>> aliases; // locale → list of spoken forms
-  int matchCount;                 // how often this was matched (popularity sort)
+  int matchCount; // how often this was matched (popularity sort)
 
   ProductEntry({
     required this.id,
@@ -42,29 +42,29 @@ class ProductEntry {
 
   /// All spoken forms across all locales (flattened)
   List<String> get allAliases => [
-        canonicalName.toLowerCase(),
-        ...aliases.values.expand((list) => list).map((a) => a.toLowerCase()),
-      ];
+    canonicalName.toLowerCase(),
+    ...aliases.values.expand((list) => list).map((a) => a.toLowerCase()),
+  ];
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': canonicalName,
-        'price': defaultPrice,
-        'unit': defaultUnit,
-        'aliases': aliases,
-        'matchCount': matchCount,
-      };
+    'id': id,
+    'name': canonicalName,
+    'price': defaultPrice,
+    'unit': defaultUnit,
+    'aliases': aliases,
+    'matchCount': matchCount,
+  };
 
   factory ProductEntry.fromJson(Map<String, dynamic> j) => ProductEntry(
-        id: j['id'] as String,
-        canonicalName: j['name'] as String,
-        defaultPrice: (j['price'] as num).toDouble(),
-        defaultUnit: j['unit'] as String? ?? 'pc',
-        aliases: (j['aliases'] as Map<String, dynamic>? ?? {}).map(
-          (k, v) => MapEntry(k, List<String>.from(v as List)),
-        ),
-        matchCount: j['matchCount'] as int? ?? 0,
-      );
+    id: j['id'] as String,
+    canonicalName: j['name'] as String,
+    defaultPrice: (j['price'] as num).toDouble(),
+    defaultUnit: j['unit'] as String? ?? 'pc',
+    aliases: (j['aliases'] as Map<String, dynamic>? ?? {}).map(
+      (k, v) => MapEntry(k, List<String>.from(v as List)),
+    ),
+    matchCount: j['matchCount'] as int? ?? 0,
+  );
 }
 
 // ─── Phonetic fingerprint ─────────────────────────────────────────────────────
@@ -105,17 +105,17 @@ String _fingerprint(String word) {
 
   // Strip vowels and diacritics
   result = result
-      .replaceAll(RegExp(r'[aeiouAEIOU]'), '')        // Latin vowels
-      .replaceAll(RegExp(r'[\u0900-\u0903]'), '')     // Devanagari vowel marks
-      .replaceAll(RegExp(r'[\u0A00-\u0A03]'), '')     // Gujarati vowel marks
-      .replaceAll(RegExp(r'[\u0A80-\u0A83]'), '')     // Gurmukhi vowel marks
-      .replaceAll(RegExp(r'[\u0980-\u0983]'), '')     // Bengali vowel marks
-      .replaceAll(RegExp(r'[\u0B80-\u0B83]'), '')     // Tamil vowel marks
-      .replaceAll(RegExp(r'[\u0C00-\u0C03]'), '')     // Telugu vowel marks
-      .replaceAll(RegExp(r'[\u0C80-\u0C83]'), '')     // Kannada vowel marks
-      .replaceAll(RegExp(r'[\u0D00-\u0D03]'), '')     // Malayalam vowel marks
-      .replaceAll(RegExp(r'[\u093A-\u094F]'), '')     // Devanagari matras
-      .replaceAll(RegExp(r'[^a-z]'), '');             // Remove anything else
+      .replaceAll(RegExp(r'[aeiouAEIOU]'), '') // Latin vowels
+      .replaceAll(RegExp(r'[\u0900-\u0903]'), '') // Devanagari vowel marks
+      .replaceAll(RegExp(r'[\u0A00-\u0A03]'), '') // Gujarati vowel marks
+      .replaceAll(RegExp(r'[\u0A80-\u0A83]'), '') // Gurmukhi vowel marks
+      .replaceAll(RegExp(r'[\u0980-\u0983]'), '') // Bengali vowel marks
+      .replaceAll(RegExp(r'[\u0B80-\u0B83]'), '') // Tamil vowel marks
+      .replaceAll(RegExp(r'[\u0C00-\u0C03]'), '') // Telugu vowel marks
+      .replaceAll(RegExp(r'[\u0C80-\u0C83]'), '') // Kannada vowel marks
+      .replaceAll(RegExp(r'[\u0D00-\u0D03]'), '') // Malayalam vowel marks
+      .replaceAll(RegExp(r'[\u093A-\u094F]'), '') // Devanagari matras
+      .replaceAll(RegExp(r'[^a-z]'), ''); // Remove anything else
 
   return result.isEmpty ? word.toLowerCase() : result;
 }
@@ -145,7 +145,8 @@ class ProductCatalogService {
             .toList();
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('ProductCatalog: load failed ($e), using initial');
+      if (kDebugMode)
+        debugPrint('ProductCatalog: load failed ($e), using initial');
     }
 
     // Merge initial products (fill in any missing from DB)
@@ -153,18 +154,24 @@ class ProductCatalogService {
       final name = (p['name'] ?? p['product_name'] ?? '').toString();
       final price = double.tryParse((p['price'] ?? '0').toString()) ?? 0.0;
       if (name.isEmpty) continue;
-      if (_catalog.any((e) => e.canonicalName.toLowerCase() == name.toLowerCase())) continue;
-      _catalog.add(ProductEntry(
-        id: name.toLowerCase().replaceAll(' ', '_'),
-        canonicalName: name,
-        defaultPrice: price,
-        defaultUnit: p['unit']?.toString() ?? 'pc',
-        aliases: _defaultAliases(name),
-      ));
+      if (_catalog.any(
+        (e) => e.canonicalName.toLowerCase() == name.toLowerCase(),
+      ))
+        continue;
+      _catalog.add(
+        ProductEntry(
+          id: name.toLowerCase().replaceAll(' ', '_'),
+          canonicalName: name,
+          defaultPrice: price,
+          defaultUnit: p['unit']?.toString() ?? 'pc',
+          aliases: _defaultAliases(name),
+        ),
+      );
     }
 
     _rebuildIndex();
-    if (kDebugMode) debugPrint('ProductCatalog: ${_catalog.length} entries loaded');
+    if (kDebugMode)
+      debugPrint('ProductCatalog: ${_catalog.length} entries loaded');
   }
 
   /// Persist catalog to shared_preferences.
@@ -191,9 +198,7 @@ class ProductCatalogService {
     final queryFp = _fingerprint(query);
 
     // 1. Exact canonical name match
-    final exact = _catalog.where(
-      (e) => e.canonicalName.toLowerCase() == query,
-    );
+    final exact = _catalog.where((e) => e.canonicalName.toLowerCase() == query);
     if (exact.isNotEmpty) {
       exact.first.matchCount++;
       return exact.first;
@@ -211,7 +216,6 @@ class ProductCatalogService {
     // Example: "enna biryani" must not resolve to Oil because "enna" is an
     // alias of Oil. Compound phrases need their own exact/strong catalog match.
     final queryHasMultipleWords = query.contains(RegExp(r'\s'));
-
 
     // 3. Fingerprint index lookup (fast narrow)
     final candidateIndices = <int>{};
@@ -263,12 +267,14 @@ class ProductCatalogService {
 
   /// Return all catalog entries as simple maps (for NLP parser's knownProducts).
   List<Map<String, dynamic>> toParserFormat() => _catalog
-      .map((e) => {
-            'name': e.canonicalName,
-            'product_name': e.canonicalName,
-            'price': e.defaultPrice,
-            'unit': e.defaultUnit,
-          })
+      .map(
+        (e) => {
+          'name': e.canonicalName,
+          'product_name': e.canonicalName,
+          'price': e.defaultPrice,
+          'unit': e.defaultUnit,
+        },
+      )
       .toList();
 
   // ── Learning ───────────────────────────────────────────────────────────────
@@ -298,7 +304,10 @@ class ProductCatalogService {
 
     _rebuildIndex();
     save(); // persist in background
-    if (kDebugMode) debugPrint('ProductCatalog: learned "$spoken" → "$canonicalName" [$localeCode]');
+    if (kDebugMode)
+      debugPrint(
+        'ProductCatalog: learned "$spoken" → "$canonicalName" [$localeCode]',
+      );
   }
 
   // ── Internal ───────────────────────────────────────────────────────────────
@@ -344,6 +353,7 @@ class ProductCatalogService {
       for (int i = 0; i < s.length - 1; i++) set.add(s.substring(i, i + 2));
       return set;
     }
+
     final ba = bg(a), bb = bg(b);
     if (ba.isEmpty || bb.isEmpty) return 0.0;
     return (2.0 * ba.intersection(bb).length) / (ba.length + bb.length);
@@ -356,8 +366,11 @@ class ProductCatalogService {
     for (int i = 1; i <= a.length; i++) {
       for (int j = 1; j <= b.length; j++) {
         final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-        dp[i][j] = [dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost]
-            .reduce((x, y) => x < y ? x : y);
+        dp[i][j] = [
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost,
+        ].reduce((x, y) => x < y ? x : y);
       }
     }
     return dp[a.length][b.length];
@@ -367,33 +380,105 @@ class ProductCatalogService {
   /// product name. Extend this as your catalog grows.
   static Map<String, List<String>> _defaultAliases(String name) {
     const aliases = <String, Map<String, List<String>>>{
-      'sugar':   {'hi-IN': ['चीनी', 'शक्कर'], 'ta-IN': ['சர்க்கரை'], 'te-IN': ['పంచదార'],
-                  'kn-IN': ['ಸಕ್ಕರೆ'], 'ml-IN': ['പഞ്ചസാര'], 'mr-IN': ['साखर'],
-                  'bn-IN': ['চিনি'], 'gu-IN': ['ખાંડ'], 'pa-IN': ['ਖੰਡ']},
-      'rice':    {'hi-IN': ['चावल'], 'ta-IN': ['அரிசி'], 'te-IN': ['బియ్యం'],
-                  'kn-IN': ['ಅಕ್ಕಿ'], 'ml-IN': ['അരി'], 'mr-IN': ['तांदूळ'],
-                  'bn-IN': ['চাল'], 'gu-IN': ['ચોખા'], 'pa-IN': ['ਚਾਵਲ']},
-      'salt':    {'hi-IN': ['नमक'], 'ta-IN': ['உப்பு'], 'te-IN': ['ఉప్పు'],
-                  'kn-IN': ['ಉಪ್ಪು'], 'ml-IN': ['ഉപ്പ്'], 'mr-IN': ['मीठ'],
-                  'bn-IN': ['লবণ', 'নুন'], 'gu-IN': ['મીઠું'], 'pa-IN': ['ਲੂਣ']},
-      'oil':     {'hi-IN': ['तेल'], 'ta-IN': ['எண்ணெய்'], 'te-IN': ['నూనె'],
-                  'kn-IN': ['ಎಣ್ಣೆ'], 'ml-IN': ['എണ്ണ'], 'mr-IN': ['तेल'],
-                  'bn-IN': ['তেল'], 'gu-IN': ['તેલ'], 'pa-IN': ['ਤੇਲ']},
-      'dal':     {'hi-IN': ['दाल', 'दाल'], 'ta-IN': ['பருப்பு'], 'te-IN': ['పప్పు'],
-                  'kn-IN': ['ಬೇಳೆ'], 'ml-IN': ['പരിപ്പ്'], 'mr-IN': ['डाळ'],
-                  'bn-IN': ['ডাল'], 'gu-IN': ['દાળ'], 'pa-IN': ['ਦਾਲ']},
-      'atta':    {'hi-IN': ['आटा', 'अता'], 'ta-IN': ['மாவு'], 'te-IN': ['పిండి'],
-                  'kn-IN': ['ಹಿಟ್ಟು'], 'ml-IN': ['മാവ്'], 'mr-IN': ['पीठ'],
-                  'bn-IN': ['আটা'], 'gu-IN': ['લોટ'], 'pa-IN': ['ਆਟਾ']},
-      'onion':   {'hi-IN': ['प्याज', 'प्याज़'], 'ta-IN': ['வெங்காயம்'], 'te-IN': ['ఉల్లిపాయ'],
-                  'kn-IN': ['ಈರುಳ್ಳಿ'], 'ml-IN': ['ഉള്ളി'], 'mr-IN': ['कांदा'],
-                  'bn-IN': ['পেঁয়াজ'], 'gu-IN': ['ડુંગળી'], 'pa-IN': ['ਪਿਆਜ਼']},
-      'tomato':  {'hi-IN': ['टमाटर', 'तमातर'], 'ta-IN': ['தக்காளி'], 'te-IN': ['టమాటా'],
-                  'kn-IN': ['ಟೊಮ್ಯಾಟೊ'], 'ml-IN': ['തക്കാളി'], 'mr-IN': ['टोमॅटो'],
-                  'bn-IN': ['টমেটো'], 'gu-IN': ['ટામેટા'], 'pa-IN': ['ਟਮਾਟਰ']},
-      'potato':  {'hi-IN': ['आलू', 'आलु'], 'ta-IN': ['உருளைக்கிழங்கு'], 'te-IN': ['బంగాళాదుంప'],
-                  'kn-IN': ['ಆಲೂಗಡ್ಡೆ'], 'ml-IN': ['ഉരുളക്കിഴങ്ങ്'], 'mr-IN': ['बटाटा'],
-                  'bn-IN': ['আলু'], 'gu-IN': ['બટાટા'], 'pa-IN': ['ਆਲੂ']},
+      'sugar': {
+        'hi-IN': ['चीनी', 'शक्कर'],
+        'ta-IN': ['சர்க்கரை'],
+        'te-IN': ['పంచదార'],
+        'kn-IN': ['ಸಕ್ಕರೆ'],
+        'ml-IN': ['പഞ്ചസാര'],
+        'mr-IN': ['साखर'],
+        'bn-IN': ['চিনি'],
+        'gu-IN': ['ખાંડ'],
+        'pa-IN': ['ਖੰਡ'],
+      },
+      'rice': {
+        'hi-IN': ['चावल'],
+        'ta-IN': ['அரிசி'],
+        'te-IN': ['బియ్యం'],
+        'kn-IN': ['ಅಕ್ಕಿ'],
+        'ml-IN': ['അരി'],
+        'mr-IN': ['तांदूळ'],
+        'bn-IN': ['চাল'],
+        'gu-IN': ['ચોખા'],
+        'pa-IN': ['ਚਾਵਲ'],
+      },
+      'salt': {
+        'hi-IN': ['नमक'],
+        'ta-IN': ['உப்பு'],
+        'te-IN': ['ఉప్పు'],
+        'kn-IN': ['ಉಪ್ಪು'],
+        'ml-IN': ['ഉപ്പ്'],
+        'mr-IN': ['मीठ'],
+        'bn-IN': ['লবণ', 'নুন'],
+        'gu-IN': ['મીઠું'],
+        'pa-IN': ['ਲੂਣ'],
+      },
+      'oil': {
+        'hi-IN': ['तेल'],
+        'ta-IN': ['எண்ணெய்'],
+        'te-IN': ['నూనె'],
+        'kn-IN': ['ಎಣ್ಣೆ'],
+        'ml-IN': ['എണ്ണ'],
+        'mr-IN': ['तेल'],
+        'bn-IN': ['তেল'],
+        'gu-IN': ['તેલ'],
+        'pa-IN': ['ਤੇਲ'],
+      },
+      'dal': {
+        'hi-IN': ['दाल', 'दाल'],
+        'ta-IN': ['பருப்பு'],
+        'te-IN': ['పప్పు'],
+        'kn-IN': ['ಬೇಳೆ'],
+        'ml-IN': ['പരിപ്പ്'],
+        'mr-IN': ['डाळ'],
+        'bn-IN': ['ডাল'],
+        'gu-IN': ['દાળ'],
+        'pa-IN': ['ਦਾਲ'],
+      },
+      'atta': {
+        'hi-IN': ['आटा', 'अता'],
+        'ta-IN': ['மாவு'],
+        'te-IN': ['పిండి'],
+        'kn-IN': ['ಹಿಟ್ಟು'],
+        'ml-IN': ['മാവ്'],
+        'mr-IN': ['पीठ'],
+        'bn-IN': ['আটা'],
+        'gu-IN': ['લોટ'],
+        'pa-IN': ['ਆਟਾ'],
+      },
+      'onion': {
+        'hi-IN': ['प्याज', 'प्याज़'],
+        'ta-IN': ['வெங்காயம்'],
+        'te-IN': ['ఉల్లిపాయ'],
+        'kn-IN': ['ಈರುಳ್ಳಿ'],
+        'ml-IN': ['ഉള്ളി'],
+        'mr-IN': ['कांदा'],
+        'bn-IN': ['পেঁয়াজ'],
+        'gu-IN': ['ડુંગળી'],
+        'pa-IN': ['ਪਿਆਜ਼'],
+      },
+      'tomato': {
+        'hi-IN': ['टमाटर', 'तमातर'],
+        'ta-IN': ['தக்காளி'],
+        'te-IN': ['టమాటా'],
+        'kn-IN': ['ಟೊಮ್ಯಾಟೊ'],
+        'ml-IN': ['തക്കാളി'],
+        'mr-IN': ['टोमॅटो'],
+        'bn-IN': ['টমেটো'],
+        'gu-IN': ['ટામેટા'],
+        'pa-IN': ['ਟਮਾਟਰ'],
+      },
+      'potato': {
+        'hi-IN': ['आलू', 'आलु'],
+        'ta-IN': ['உருளைக்கிழங்கு'],
+        'te-IN': ['బంగాళాదుంప'],
+        'kn-IN': ['ಆಲೂಗಡ್ಡೆ'],
+        'ml-IN': ['ഉരുളക്കിഴങ്ങ്'],
+        'mr-IN': ['बटाटा'],
+        'bn-IN': ['আলু'],
+        'gu-IN': ['બટાટા'],
+        'pa-IN': ['ਆਲੂ'],
+      },
     };
     return aliases[name.toLowerCase()] ?? {};
   }

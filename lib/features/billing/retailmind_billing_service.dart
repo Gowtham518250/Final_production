@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api_client.dart';
 
-
 /// Structured API error. FastAPI may place a string or an object in "detail".
 class RetailMindBillingException implements Exception {
   final int statusCode;
@@ -36,7 +35,8 @@ class RetailMindBillingException implements Exception {
         ? Map<String, dynamic>.from(detail)
         : const <String, dynamic>{};
     final rawCode = body['code'] ?? detailMap['code'];
-    final rawMessage = detailMap['message'] ??
+    final rawMessage =
+        detailMap['message'] ??
         detailMap['detail'] ??
         (detail is String ? detail : null) ??
         body['message'];
@@ -64,18 +64,44 @@ class AiUsageSnapshot {
   final String? planName;
   final String? subscriptionStatus;
 
-  const AiUsageSnapshot({required this.limit, required this.used, required this.remaining, this.resetsAt, this.planCode, this.planName, this.subscriptionStatus});
+  const AiUsageSnapshot({
+    required this.limit,
+    required this.used,
+    required this.remaining,
+    this.resetsAt,
+    this.planCode,
+    this.planName,
+    this.subscriptionStatus,
+  });
 
   factory AiUsageSnapshot.fromJson(Map<String, dynamic> json) {
-    final raw = json['usage'] is Map ? Map<String, dynamic>.from(json['usage'] as Map) : json;
+    final raw = json['usage'] is Map
+        ? Map<String, dynamic>.from(json['usage'] as Map)
+        : json;
     final limit = _asInt(raw['daily_limit'] ?? raw['limit'], 0);
     final used = _asInt(raw['used'] ?? raw['queries_used'], 0);
-    final remaining = _asInt(raw['remaining'] ?? raw['queries_remaining'], (limit - used).clamp(0, limit));
+    final remaining = _asInt(
+      raw['remaining'] ?? raw['queries_remaining'],
+      (limit - used).clamp(0, limit),
+    );
     final resetRaw = raw['resets_at'] ?? raw['reset_at'] ?? raw['period_end'];
-    return AiUsageSnapshot(limit: limit, used: used, remaining: remaining < 0 ? 0 : (remaining > limit ? limit : remaining), resetsAt: resetRaw == null ? null : DateTime.tryParse(resetRaw.toString()), planCode: json['plan_code']?.toString() ?? raw['plan_code']?.toString(), planName: json['plan_name']?.toString() ?? raw['plan_name']?.toString(), subscriptionStatus: json['subscription_status']?.toString() ?? raw['subscription_status']?.toString());
+    return AiUsageSnapshot(
+      limit: limit,
+      used: used,
+      remaining: remaining < 0 ? 0 : (remaining > limit ? limit : remaining),
+      resetsAt: resetRaw == null
+          ? null
+          : DateTime.tryParse(resetRaw.toString()),
+      planCode: json['plan_code']?.toString() ?? raw['plan_code']?.toString(),
+      planName: json['plan_name']?.toString() ?? raw['plan_name']?.toString(),
+      subscriptionStatus:
+          json['subscription_status']?.toString() ??
+          raw['subscription_status']?.toString(),
+    );
   }
 
-  static int _asInt(dynamic value, int fallback) => value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
+  static int _asInt(dynamic value, int fallback) =>
+      value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
 }
 
 /// Dynamic plan definition supplied by the billing API.
@@ -92,23 +118,71 @@ class RetailMindSubscriptionPlan {
   final List<String> features;
   final bool recommended;
 
-  const RetailMindSubscriptionPlan({required this.code, required this.name, required this.amountPaise, this.monthlyAmountPaise = 0, this.yearlyAmountPaise = 0, required this.currency, required this.interval, required this.dailyAiQueryLimit, this.features = const [], this.recommended = false});
+  const RetailMindSubscriptionPlan({
+    required this.code,
+    required this.name,
+    required this.amountPaise,
+    this.monthlyAmountPaise = 0,
+    this.yearlyAmountPaise = 0,
+    required this.currency,
+    required this.interval,
+    required this.dailyAiQueryLimit,
+    this.features = const [],
+    this.recommended = false,
+  });
   double get amount => amountPaise / 100;
-  double amountFor(String interval) => (interval == 'YEARLY' ? yearlyAmountPaise : monthlyAmountPaise) / 100;
+  double amountFor(String interval) =>
+      (interval == 'YEARLY' ? yearlyAmountPaise : monthlyAmountPaise) / 100;
 
   factory RetailMindSubscriptionPlan.fromJson(Map<String, dynamic> json) {
-    final amountRaw = json['amount_paise'] ?? json['amount_minor'] ?? json['amount'] ?? json['price'];
-    final amount = amountRaw is num ? amountRaw.toDouble() : double.tryParse(amountRaw?.toString() ?? '') ?? 0;
-    final minor = json['amount_paise'] != null || json['amount_minor'] != null || json['amount_in_minor_units'] == true;
+    final amountRaw =
+        json['amount_paise'] ??
+        json['amount_minor'] ??
+        json['amount'] ??
+        json['price'];
+    final amount = amountRaw is num
+        ? amountRaw.toDouble()
+        : double.tryParse(amountRaw?.toString() ?? '') ?? 0;
+    final minor =
+        json['amount_paise'] != null ||
+        json['amount_minor'] != null ||
+        json['amount_in_minor_units'] == true;
     final features = json['features'];
     final monthlyRaw = json['monthly_amount_paise'] ?? 0;
     final yearlyRaw = json['yearly_amount_paise'] ?? 0;
-    final monthly = monthlyRaw is num ? monthlyRaw.round() : int.tryParse(monthlyRaw.toString()) ?? 0;
-    final yearly = yearlyRaw is num ? yearlyRaw.round() : int.tryParse(yearlyRaw.toString()) ?? 0;
-    return RetailMindSubscriptionPlan(code: (json['plan_code'] ?? json['code'] ?? json['id'] ?? '').toString(), name: (json['name'] ?? json['display_name'] ?? 'Retail Mind Plan').toString(), amountPaise: monthly > 0 ? monthly : (minor ? amount.round() : (amount * 100).round()), monthlyAmountPaise: monthly, yearlyAmountPaise: yearly, currency: (json['currency'] ?? 'INR').toString(), interval: (json['billing_interval'] ?? json['interval'] ?? 'month').toString(), dailyAiQueryLimit: _asInt(json['daily_ai_query_limit'] ?? json['ai_queries_per_day'] ?? json['daily_query_limit'], 0), features: features is List ? features.map((value) => value.toString()).toList() : const [], recommended: json['recommended'] == true || json['is_popular'] == true);
+    final monthly = monthlyRaw is num
+        ? monthlyRaw.round()
+        : int.tryParse(monthlyRaw.toString()) ?? 0;
+    final yearly = yearlyRaw is num
+        ? yearlyRaw.round()
+        : int.tryParse(yearlyRaw.toString()) ?? 0;
+    return RetailMindSubscriptionPlan(
+      code: (json['plan_code'] ?? json['code'] ?? json['id'] ?? '').toString(),
+      name: (json['name'] ?? json['display_name'] ?? 'Retail Mind Plan')
+          .toString(),
+      amountPaise: monthly > 0
+          ? monthly
+          : (minor ? amount.round() : (amount * 100).round()),
+      monthlyAmountPaise: monthly,
+      yearlyAmountPaise: yearly,
+      currency: (json['currency'] ?? 'INR').toString(),
+      interval: (json['billing_interval'] ?? json['interval'] ?? 'month')
+          .toString(),
+      dailyAiQueryLimit: _asInt(
+        json['daily_ai_query_limit'] ??
+            json['ai_queries_per_day'] ??
+            json['daily_query_limit'],
+        0,
+      ),
+      features: features is List
+          ? features.map((value) => value.toString()).toList()
+          : const [],
+      recommended: json['recommended'] == true || json['is_popular'] == true,
+    );
   }
 
-  static int _asInt(dynamic value, int fallback) => value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
+  static int _asInt(dynamic value, int fallback) =>
+      value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
 }
 
 /// Cashfree secrets and payment state never enter the Flutter client.
@@ -122,7 +196,8 @@ class RetailMindBillingService {
 
   static final Map<int, _FeatureAccessSnapshotCache> _featureAccessCache = {};
   static final Map<int, Future<Map<String, bool>>> _featureAccessInFlight = {};
-  static final Map<int, Map<String, Future<bool>>> _singleFeatureAccessInFlight = {};
+  static final Map<int, Map<String, Future<bool>>>
+  _singleFeatureAccessInFlight = {};
 
   static String featureAccessPath(String featureCode) =>
       '/api/billing/feature-access/${Uri.encodeComponent(featureCode)}';
@@ -176,8 +251,9 @@ class RetailMindBillingService {
   }
 
   static Future<Map<String, bool>> _requestFeatureAccessSnapshot() async {
-    final response = await ApiClient.getJson(featureAccessSnapshotPath)
-        .timeout(const Duration(seconds: 15));
+    final response = await ApiClient.getJson(
+      featureAccessSnapshotPath,
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode == 404) return const {};
     if (response.statusCode != 200) {
       throw RetailMindBillingException.fromResponse(
@@ -285,8 +361,9 @@ class RetailMindBillingService {
     String featureCode, {
     required int? expectedOwnerId,
   }) async {
-    final response = await ApiClient.getJson(featureAccessPath(featureCode))
-        .timeout(const Duration(seconds: 15));
+    final response = await ApiClient.getJson(
+      featureAccessPath(featureCode),
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw RetailMindBillingException.fromResponse(
         response,
@@ -316,34 +393,64 @@ class RetailMindBillingService {
 
   static Map<String, dynamic> _decode(http.Response response) {
     final value = jsonDecode(response.body);
-    if (value is! Map) throw const FormatException('Unexpected billing response.');
+    if (value is! Map)
+      throw const FormatException('Unexpected billing response.');
     return Map<String, dynamic>.from(value);
   }
 
   static Future<List<RetailMindSubscriptionPlan>> fetchPlans() async {
-    final response = await ApiClient.getJson(plansPath).timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) throw RetailMindBillingException.fromResponse(response, fallback: 'Unable to load subscription plans (${response.statusCode}).');
+    final response = await ApiClient.getJson(
+      plansPath,
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200)
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to load subscription plans (${response.statusCode}).',
+      );
     final body = _decode(response);
     final raw = body['plans'] ?? body['items'] ?? body['data'];
     if (raw is! List) return const [];
-    return raw.whereType<Map>().map((row) => RetailMindSubscriptionPlan.fromJson(Map<String, dynamic>.from(row))).where((plan) => plan.code.isNotEmpty).toList();
+    return raw
+        .whereType<Map>()
+        .map(
+          (row) => RetailMindSubscriptionPlan.fromJson(
+            Map<String, dynamic>.from(row),
+          ),
+        )
+        .where((plan) => plan.code.isNotEmpty)
+        .toList();
   }
 
   static Future<AiUsageSnapshot> fetchUsage() async {
-    final response = await ApiClient.getJson(usagePath).timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) throw RetailMindBillingException.fromResponse(response, fallback: 'Unable to load AI usage (${response.statusCode}).');
+    final response = await ApiClient.getJson(
+      usagePath,
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200)
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to load AI usage (${response.statusCode}).',
+      );
     return AiUsageSnapshot.fromJson(_decode(response));
   }
 
   static Future<Map<String, dynamic>> fetchCurrentSubscription() async {
-    final response = await ApiClient.getJson(currentPath).timeout(const Duration(seconds: 15));
+    final response = await ApiClient.getJson(
+      currentPath,
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode == 404) return const {};
-    if (response.statusCode != 200) throw RetailMindBillingException.fromResponse(response, fallback: 'Unable to load subscription (${response.statusCode}).');
+    if (response.statusCode != 200)
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to load subscription (${response.statusCode}).',
+      );
     return _decode(response);
   }
 
   static Future<void> cancelSubscription(int subscriptionId) async {
-    final response = await ApiClient.postJson('/api/billing/subscriptions/$subscriptionId/cancel', const {}).timeout(const Duration(seconds: 25));
+    final response = await ApiClient.postJson(
+      '/api/billing/subscriptions/$subscriptionId/cancel',
+      const {},
+    ).timeout(const Duration(seconds: 25));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw RetailMindBillingException.fromResponse(
         response,
@@ -352,8 +459,14 @@ class RetailMindBillingService {
     }
   }
 
-  static Future<Map<String, dynamic>> createSubscription(String planCode, {String billingInterval = 'MONTHLY'}) async {
-    final response = await ApiClient.postJson(createSubscriptionPath, {'plan_code': planCode, 'billing_interval': billingInterval}).timeout(const Duration(seconds: 30));
+  static Future<Map<String, dynamic>> createSubscription(
+    String planCode, {
+    String billingInterval = 'MONTHLY',
+  }) async {
+    final response = await ApiClient.postJson(createSubscriptionPath, {
+      'plan_code': planCode,
+      'billing_interval': billingInterval,
+    }).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw RetailMindBillingException.fromResponse(
         response,
@@ -364,10 +477,17 @@ class RetailMindBillingService {
   }
 
   static bool shouldOpenCashfreeCheckout(Map<String, dynamic> result) {
-    final planChanged = result['plan_changed'] == true || result['planChanged'] == true;
-    final requiresCheckout = result['requires_checkout'] != false && result['requiresCheckout'] != false;
-    final successValue = result['success'] == true || (result['status'] ?? '').toString().toUpperCase() == 'ACTIVE';
-    final statusCode = (result['status'] ?? result['subscription_status'] ?? '').toString().toUpperCase();
+    final planChanged =
+        result['plan_changed'] == true || result['planChanged'] == true;
+    final requiresCheckout =
+        result['requires_checkout'] != false &&
+        result['requiresCheckout'] != false;
+    final successValue =
+        result['success'] == true ||
+        (result['status'] ?? '').toString().toUpperCase() == 'ACTIVE';
+    final statusCode = (result['status'] ?? result['subscription_status'] ?? '')
+        .toString()
+        .toUpperCase();
     final subscriptionId = (result['subscription_id'] ?? '').toString();
     final sessionId = (result['subscription_session_id'] ?? '').toString();
 
@@ -383,11 +503,11 @@ class RetailMindBillingService {
       return false;
     }
 
-    return requiresCheckout && subscriptionId.isNotEmpty && sessionId.isNotEmpty;
+    return requiresCheckout &&
+        subscriptionId.isNotEmpty &&
+        sessionId.isNotEmpty;
   }
-
 }
-
 
 class _FeatureAccessSnapshotCache {
   const _FeatureAccessSnapshotCache({

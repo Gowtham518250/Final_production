@@ -22,10 +22,7 @@ void main() {
     });
 
     test('allows a larger queue on standard devices', () {
-      expect(
-        DynamicTranslationLoadPolicy.maxPending(lowEndDevice: false),
-        240,
-      );
+      expect(DynamicTranslationLoadPolicy.maxPending(lowEndDevice: false), 240);
       expect(
         DynamicTranslationLoadPolicy.shouldAccept(
           pendingUniqueRequests: 239,

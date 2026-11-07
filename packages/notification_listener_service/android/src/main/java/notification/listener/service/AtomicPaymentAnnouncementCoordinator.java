@@ -7,21 +7,14 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
-import org.json.JSONArray;
-
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Atomic announcement idempotency gate shared by all Flutter engines and the
@@ -37,24 +30,8 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
     private static final int DB_VERSION = 1;
     private static final String TABLE = "announcement_observations";
     private static final long MAX_AGE_MS = 24L * 60L * 60L * 1000L;
-    private static final long CROSS_APP_MS = 10L * 60L * 1000L;
-    private static final long TRUECALLER_CROSS_APP_MS = 8_000L;
-    private static final long SMS_ECHO_MS = 3L * 60L * 60L * 1000L;
-    private static final long EXACT_TEXT_REPLAY_MS = 2000L;
-    private static final long NOTIFICATION_UPDATE_MS = 30_000L;
-    // App notification + bank SMS for one transfer usually land within a
-    // minute but share no payer/account/UTR. Pair one-to-one only.
-    private static final long WEAK_MODALITY_MS = 60_000L;
+    private static final long STRONG_CROSS_SOURCE_MS = 10L * 60L * 1000L;
     private static final int MAX_ROWS = 500;
-    private static final Pattern ACCOUNT_PATTERN = Pattern.compile(
-            "(?:account|a/c|acct)[^0-9]{0,12}(?:x{2,})?([0-9]{4})|x{2,}([0-9]{4})",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern PAYER_FROM_PATTERN = Pattern.compile(
-            "\\b(?:from|received from|transfer from)\\s+([\\p{L}][\\p{L} .'-]{1,50}?)(?=\\s+(?:to|via|for|on|using|upi|utr|reference|ref|txn|id|credited|sent|paid|account|a/c)\\b|[.,;]|₹|$)",
-            Pattern.CASE_INSENSITIVE);
-    private static final Pattern PAYER_SENT_PATTERN = Pattern.compile(
-            "^\\s*([\\p{L}][\\p{L} .'-]{1,50}?)\\s+(?:sent|paid|transferred)\\b",
-            Pattern.CASE_INSENSITIVE);
 
     private static volatile AtomicPaymentAnnouncementCoordinator instance;
     private static final Object INSTANCE_LOCK = new Object();
@@ -139,11 +116,8 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         final String rawText = value(input.get("rawText"));
         final String referenceHash = hash(normalizeReference(value(input.get("referenceId"))));
         final String sourceIdentity = resolveSourceIdentity(input, origin, rawText);
-        final String payerHash = hash(normalizePayer(firstNonEmpty(
-                value(input.get("payerName")), extractPayer(rawText))));
-        final String accountHash = hash(normalizeAccount(firstNonEmpty(
-                value(input.get("accountSuffix")), extractAccount(rawText))));
-        final String textHash = hash(normalizeText(rawText));
+        final String payerHash = hash(normalizePayer(value(input.get("payerName"))));
+        final String accountHash = hash(normalizeAccount(value(input.get("accountSuffix"))));
         final long now = (long) number(input.get("timestamp"), System.currentTimeMillis());
 
         SQLiteDatabase db = getWritableDatabase();
@@ -151,9 +125,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         try {
             db.delete(TABLE, "seen_at < ?", new String[]{String.valueOf(now - MAX_AGE_MS)});
             List<Observation> observations = readObservations(db, now - MAX_AGE_MS);
-            Observation uniqueCandidate = null;
-            boolean ambiguous = false;
-
+            List<Observation> strongMatches = new ArrayList<>();
             for (Observation old : observations) {
                 if (old.amountCents != amountCents) continue;
                 boolean sameDirection = old.direction.equals(direction);
@@ -186,110 +158,30 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                     }
                     continue;
                 }
-                // A reference on only one side neither proves nor disproves
-                // identity: fall through to the strict cross-channel checks.
 
-                long currentPostTime = notificationPostTime(sourceIdentity);
-                long previousPostTime = notificationPostTime(old.sourceIdentity);
-                boolean notificationAccountConflict = notEmpty(accountHash)
-                    && notEmpty(old.accountHash)
-                    && !accountHash.equals(old.accountHash);
-                boolean notificationPayerConflict = notEmpty(payerHash)
-                    && notEmpty(old.payerHash)
-                    && !payerHash.equals(old.payerHash);
-                boolean sameNotificationAccount = notEmpty(accountHash)
-                    && accountHash.equals(old.accountHash);
-                boolean sameNotificationPayer = notEmpty(payerHash)
-                    && payerHash.equals(old.payerHash);
-                boolean enrichment =
-                    (notEmpty(referenceHash) != notEmpty(old.referenceHash))
-                    || (notEmpty(payerHash) != notEmpty(old.payerHash))
-                    || (notEmpty(accountHash) != notEmpty(old.accountHash));
-                if (sameDirection
-                    && !"unknown".equals(direction)
-                    && isNotificationUpdate(sourceIdentity, old.sourceIdentity)
-                    && currentPostTime > 0L
-                    && previousPostTime > 0L
-                    && Math.abs(currentPostTime - previousPostTime)
-                        <= NOTIFICATION_UPDATE_MS
-                    && !notificationAccountConflict
-                    && !notificationPayerConflict
-                    && (sameNotificationAccount || sameNotificationPayer || enrichment)) {
-                    // This gate suppresses speech only; Flutter retains the
-                    // event for payment history and merchant review.
-                    ContentValues refresh = new ContentValues();
-                    refresh.put("seen_at", now);
-                    refresh.put("source_identity", emptyToNull(sourceIdentity));
-                    if (notEmpty(referenceHash)) {
-                        refresh.put("reference_hash", referenceHash);
-                    }
-                    refresh.put("payer_hash", emptyToNull(payerHash));
-                    refresh.put("account_hash", emptyToNull(accountHash));
-                    refresh.put("text_hash", emptyToNull(textHash));
-                    db.update(TABLE, refresh, "id = ?",
-                        new String[]{String.valueOf(old.id)});
-                    db.setTransactionSuccessful();
-                    return true;
-                }
-
-                // Fuzzy cross-source matching is stricter: both sides must
-                // agree on a known direction, in addition to payer/account evidence.
-                if (!sameDirection || "unknown".equals(direction)) continue;
-
-                long age = Math.abs(now - old.seenAt);
-                if (old.channel.equals(channel)) {
-                    // Distinct native notification posts in the same channel
-                    // always remain separate payment candidates.
-                    if (notEmpty(sourceIdentity) || notEmpty(old.sourceIdentity)) continue;
-                    if (age <= EXACT_TEXT_REPLAY_MS &&
-                            notEmpty(textHash) && textHash.equals(old.textHash)) {
-                        db.setTransactionSuccessful();
-                        return true;
-                    }
+                if (old.channel.equals(channel)
+                        || !sameDirection
+                        || "unknown".equals(direction)
+                        || Math.abs(now - old.seenAt) > STRONG_CROSS_SOURCE_MS
+                        || hasClaim(old.claimedChannels, channel)) {
                     continue;
                 }
-
-                long allowedAge = ("sms".equals(origin) || "sms".equals(old.origin))
-                        ? SMS_ECHO_MS : CROSS_APP_MS;
-                if (age > allowedAge) continue;
-
-                boolean currentTruecaller = isTruecallerChannel(channel, origin);
-                boolean oldTruecaller = isTruecallerChannel(old.channel, old.origin);
-                boolean ignorePayer = currentTruecaller || oldTruecaller;
-                if (notEmpty(accountHash) && notEmpty(old.accountHash)
-                        && !accountHash.equals(old.accountHash)) continue;
-                if (!ignorePayer && notEmpty(payerHash) && notEmpty(old.payerHash)
-                        && !payerHash.equals(old.payerHash)) continue;
-
+                boolean payerConflict = notEmpty(payerHash) && notEmpty(old.payerHash)
+                        && !payerHash.equals(old.payerHash);
+                boolean accountConflict = notEmpty(accountHash) && notEmpty(old.accountHash)
+                        && !accountHash.equals(old.accountHash);
+                boolean samePayer = notEmpty(payerHash) && payerHash.equals(old.payerHash);
                 boolean sameAccount = notEmpty(accountHash) && accountHash.equals(old.accountHash);
-                boolean samePayer = !ignorePayer
-                    && notEmpty(payerHash) && payerHash.equals(old.payerHash);
-                String counterpartChannel = currentTruecaller ? old.channel : channel;
-                boolean truecallerCrossAppEcho =
-                        currentTruecaller != oldTruecaller
-                                && age <= TRUECALLER_CROSS_APP_MS
-                                && isTrustedTruecallerEchoCounterpart(counterpartChannel);
-                long weakWindowMs = (long) number(input.get("weakWindowMs"), WEAK_MODALITY_MS);
-                boolean weakModalityPair = weakWindowMs > 0 && age <= weakWindowMs
-                        && (("sms".equals(origin) && "notification".equals(old.origin))
-                                || ("notification".equals(origin) && "sms".equals(old.origin)));
-                if (!sameAccount && !samePayer && !truecallerCrossAppEcho
-                        && !weakModalityPair) continue;
-                if (old.claimedChannels.contains(channel)) continue;
-
-                if (uniqueCandidate != null && uniqueCandidate.id != old.id) {
-                    ambiguous = true;
-                    break;
+                if (!payerConflict && !accountConflict && (samePayer || sameAccount)) {
+                    strongMatches.add(old);
                 }
-                uniqueCandidate = old;
             }
 
-            if (uniqueCandidate != null && !ambiguous) {
-                uniqueCandidate.claimedChannels.add(channel);
-                ContentValues values = new ContentValues();
-                values.put("claimed_channels", toJson(uniqueCandidate.claimedChannels));
-                db.update(TABLE, values, "id = ?",
-                        new String[]{String.valueOf(uniqueCandidate.id)});
+            if (strongMatches.size() == 1) {
+                Observation match = strongMatches.get(0);
+                ContentValues claim = new ContentValues();
+                claim.put("claimed_channels", addClaim(match.claimedChannels, channel));
+                db.update(TABLE, claim, "id = ?", new String[]{String.valueOf(match.id)});
                 db.setTransactionSuccessful();
                 return true;
             }
@@ -303,9 +195,8 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
             values.put("origin", origin);
             values.put("payer_hash", emptyToNull(payerHash));
             values.put("account_hash", emptyToNull(accountHash));
-            values.put("text_hash", emptyToNull(textHash));
             values.put("seen_at", now);
-            values.put("claimed_channels", "[]");
+            values.put("claimed_channels", "\n");
             db.insertOrThrow(TABLE, null, values);
             db.execSQL("DELETE FROM " + TABLE + " WHERE id NOT IN " +
                     "(SELECT id FROM " + TABLE + " ORDER BY seen_at DESC LIMIT " + MAX_ROWS + ")");
@@ -331,8 +222,8 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         List<Observation> items = new ArrayList<>();
         Cursor cursor = db.query(TABLE,
                 new String[]{"id", "source_identity", "reference_hash", "amount_cents",
-                        "direction", "channel", "origin", "payer_hash", "account_hash",
-                        "text_hash", "seen_at", "claimed_channels"},
+                        "direction", "channel", "payer_hash", "account_hash",
+                        "seen_at", "claimed_channels"},
                 "seen_at >= ?", new String[]{String.valueOf(minTime)},
                 null, null, "seen_at DESC", String.valueOf(MAX_ROWS));
         try {
@@ -344,47 +235,16 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                 item.amountCents = cursor.getLong(3);
                 item.direction = value(cursor.getString(4));
                 item.channel = value(cursor.getString(5));
-                item.origin = value(cursor.getString(6));
-                item.payerHash = cursor.getString(7);
-                item.accountHash = cursor.getString(8);
-                item.textHash = cursor.getString(9);
-                item.seenAt = cursor.getLong(10);
-                item.claimedChannels = parseJsonSet(cursor.getString(11));
+                item.payerHash = value(cursor.getString(6));
+                item.accountHash = value(cursor.getString(7));
+                item.seenAt = cursor.getLong(8);
+                item.claimedChannels = value(cursor.getString(9));
                 items.add(item);
             }
         } finally {
             cursor.close();
         }
         return items;
-    }
-
-    private static long notificationPostTime(String identity) {
-        if (!notEmpty(identity)) return 0L;
-        String[] parts = identity.split("\\|");
-        if (parts.length < 3) return 0L;
-        try {
-            return Long.parseLong(parts[parts.length - 1]);
-        } catch (NumberFormatException error) {
-            return 0L;
-        }
-    }
-
-    private static boolean isNotificationUpdate(String a, String b) {
-        String streamA = notificationStream(a);
-        String streamB = notificationStream(b);
-        return notEmpty(streamA) && streamA.equals(streamB);
-    }
-
-    private static String notificationStream(String identity) {
-        if (!notEmpty(identity) || identity.startsWith("sms|")) return null;
-        String[] parts = identity.split("\\|");
-        if (parts.length < 3 || notificationPostTime(identity) <= 0L) return null;
-        StringBuilder stream = new StringBuilder();
-        for (int i = 0; i < parts.length - 1; i++) {
-            if (i > 0) stream.append('|');
-            stream.append(parts[i]);
-        }
-        return stream.toString();
     }
 
     private static String resolveSourceIdentity(Map<?, ?> input, String origin, String rawText) {
@@ -423,55 +283,6 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         return colon >= 0 ? value.substring(0, colon) : value;
     }
 
-    private static boolean isTruecallerChannel(String channel, String origin) {
-        String normalizedChannel = value(channel).toLowerCase(Locale.ROOT);
-        String normalizedOrigin = value(origin).toLowerCase(Locale.ROOT);
-        return normalizedChannel.contains("com.truecaller")
-                || normalizedChannel.contains("truecaller_notification")
-                || normalizedOrigin.equals("truecaller_notification");
-    }
-
-    private static boolean isTrustedTruecallerEchoCounterpart(String channel) {
-        String normalized = value(channel).toLowerCase(Locale.ROOT);
-        String[] parts = normalized.split("\\|");
-        if (parts.length == 0) return false;
-        String origin = parts[0];
-        if ("sms".equals(origin) || "notification+sms".equals(origin)) return true;
-        String source = parts[parts.length - 1];
-        return source.equals("googlepay")
-                || source.equals("phonepe")
-                || source.equals("paytm")
-                || source.equals("amazonpay")
-                || source.equals("bhim")
-                || source.equals("payzapp")
-                || source.equals("icici")
-                || source.equals("sbiyono")
-                || source.equals("axis")
-                || source.equals("hdfc")
-                || source.equals("bankapp")
-                || source.equals("banksms")
-                || source.equals("com.google.android.apps.nbu.paisa.user")
-                || source.equals("com.google.android.apps.nbu.paisa.merchant")
-                || source.equals("net.one97.paytm")
-                || source.equals("com.paytm.business")
-                || source.equals("com.phonepe.app")
-                || source.equals("com.phonepe.app.business")
-                || source.equals("com.phonepe.app.merchant")
-                || source.equals("com.phonepe.business")
-                || source.equals("in.org.npci.upiapp")
-                || source.equals("com.dreamplug.androidapp")
-                || source.equals("com.hdfcbank.payzapp")
-                || source.equals("com.icicibank.imobile")
-                || source.equals("com.sbi.imobile")
-                || source.equals("com.axis.mobile")
-                || source.equals("com.hdfcbank.smartbuy")
-                || source.equals("com.indusind.mobilebanking")
-                || source.equals("com.yes.mobile")
-                || source.equals("com.baroda.mpassbook")
-                || source.equals("com.canarabank.mobility")
-                || source.equals("com.kotak.mobile.banking");
-    }
-
     private static String normalizeReference(String value) {
         return value == null ? "" : value.trim().toUpperCase(Locale.ROOT)
                 .replaceAll("[^A-Z0-9]", "");
@@ -486,39 +297,20 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         return value == null ? "" : value.replaceAll("[^0-9]", "");
     }
 
+    private static boolean hasClaim(String claims, String channel) {
+        return claims != null && claims.contains("\n" + channel + "\n");
+    }
+
+    private static String addClaim(String claims, String channel) {
+        if (hasClaim(claims, channel)) return claims;
+        String normalized = claims == null || !claims.startsWith("\n") ? "\n" : claims;
+        if (!normalized.endsWith("\n")) normalized += "\n";
+        return normalized + channel + "\n";
+    }
+
     private static String normalizeText(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT)
                 .replaceAll("\\s+", " ").trim();
-    }
-
-    private static String extractPayer(String raw) {
-        if (raw == null || raw.isEmpty()) return "";
-        Matcher sent = PAYER_SENT_PATTERN.matcher(raw);
-        if (sent.find()) return sent.group(1).trim();
-        Matcher from = PAYER_FROM_PATTERN.matcher(raw);
-        return from.find() ? from.group(1).trim() : "";
-    }
-
-    private static String extractAccount(String raw) {
-        if (raw == null || raw.isEmpty()) return "";
-        Matcher matcher = ACCOUNT_PATTERN.matcher(raw);
-        if (!matcher.find()) return "";
-        return firstNonEmpty(matcher.group(1), matcher.group(2));
-    }
-
-    private static Set<String> parseJsonSet(String raw) {
-        Set<String> items = new HashSet<>();
-        try {
-            JSONArray array = new JSONArray(firstNonEmpty(raw, "[]"));
-            for (int i = 0; i < array.length(); i++) items.add(array.optString(i));
-        } catch (org.json.JSONException ignored) {}
-        return items;
-    }
-
-    private static String toJson(Set<String> values) {
-        JSONArray array = new JSONArray();
-        for (String value : values) array.put(value);
-        return array.toString();
     }
 
     private static String hash(String value) {
@@ -561,11 +353,9 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         long amountCents;
         String direction;
         String channel;
-        String origin;
         String payerHash;
         String accountHash;
-        String textHash;
         long seenAt;
-        Set<String> claimedChannels = Collections.emptySet();
+        String claimedChannels;
     }
 }

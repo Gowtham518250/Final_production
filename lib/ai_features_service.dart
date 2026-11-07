@@ -7,19 +7,28 @@ import 'api_client.dart';
 
 class FestivalStockPredictorService {
   static const List<String> indianFestivals = [
-    'Diwali', 'Holi', 'Eid', 'Pongal', 'Navratri', 
-    'Durga Puja', 'Rakhi', 'Janmashtami', 'Ganesh Chaturthi'
+    'Diwali',
+    'Holi',
+    'Eid',
+    'Pongal',
+    'Navratri',
+    'Durga Puja',
+    'Rakhi',
+    'Janmashtami',
+    'Ganesh Chaturthi',
   ];
-  
+
   /// Get upcoming festival alerts from backend
   static Future<List<Map<String, dynamic>>> getUpcomingFestivalAlerts() async {
     try {
       final response = await ApiClient.getJson(ApiClient.todayInsightEndpoint);
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final festivals = List<Map<String, dynamic>>.from(data['festivals'] ?? []);
-        
+        final festivals = List<Map<String, dynamic>>.from(
+          data['festivals'] ?? [],
+        );
+
         return festivals.where((f) {
           final daysUntil = f['days_until'] ?? 999;
           return daysUntil > 0 && daysUntil <= 14;
@@ -31,12 +40,16 @@ class FestivalStockPredictorService {
       return [];
     }
   }
-  
+
   /// Get top products to stock for a festival
-  static Future<List<Map<String, dynamic>>> getFestivalTopProducts(String festivalName) async {
+  static Future<List<Map<String, dynamic>>> getFestivalTopProducts(
+    String festivalName,
+  ) async {
     try {
-      final response = await ApiClient.getJson('/api/festivals/top-products/$festivalName');
-      
+      final response = await ApiClient.getJson(
+        '/api/festivals/top-products/$festivalName',
+      );
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return List<Map<String, dynamic>>.from(data['top_5_products'] ?? []);
@@ -49,23 +62,23 @@ class FestivalStockPredictorService {
   }
 }
 
-
 /// Feature 4: Chatbot Context Service
 /// Inject shop data into chatbot for personalized responses
-
 
 class ChatbotContextService {
   static Future<Map<String, String>> _localShopContext() async {
     final prefs = await SharedPreferences.getInstance();
-    final shopName = (prefs.getString('shop_name') ??
-            prefs.getString('shopName') ??
-            prefs.getString('business_name') ??
-            'your shop')
-        .trim();
-    final role = (prefs.getString('user_type') ??
-            prefs.getString('role') ??
-            'shop owner')
-        .trim();
+    final shopName =
+        (prefs.getString('shop_name') ??
+                prefs.getString('shopName') ??
+                prefs.getString('business_name') ??
+                'your shop')
+            .trim();
+    final role =
+        (prefs.getString('user_type') ??
+                prefs.getString('role') ??
+                'shop owner')
+            .trim();
     return {
       'shop_name': shopName.isEmpty ? 'your shop' : shopName,
       'role': role.isEmpty ? 'shop owner' : role,
@@ -100,14 +113,14 @@ class ChatbotContextService {
     if (question.isEmpty) return 'Please enter a message.';
 
     try {
-      final response = await ApiClient.postForm(
-        ApiClient.chatbotMessageEndpoint,
-        {
-          'message': question,
-          'language_code': languageCode.trim().isEmpty ? 'en' : languageCode,
-          'conversation_history': jsonEncode(conversationHistory.take(8).toList()),
-        },
-      );
+      final response =
+          await ApiClient.postForm(ApiClient.chatbotMessageEndpoint, {
+            'message': question,
+            'language_code': languageCode.trim().isEmpty ? 'en' : languageCode,
+            'conversation_history': jsonEncode(
+              conversationHistory.take(8).toList(),
+            ),
+          });
 
       dynamic decoded;
       try {
@@ -135,13 +148,15 @@ class ChatbotContextService {
         return 'Your session may have expired. Please sign in again and retry.';
       }
       if (decoded is Map) {
-        final detail = decoded['detail'] ?? decoded['message'] ?? decoded['error'];
+        final detail =
+            decoded['detail'] ?? decoded['message'] ?? decoded['error'];
         if (detail != null && detail.toString().trim().isNotEmpty) {
           return detail.toString();
         }
       }
       return 'The assistant is temporarily unavailable (HTTP ' +
-          response.statusCode.toString() + '). Please try again.';
+          response.statusCode.toString() +
+          '). Please try again.';
     } catch (_) {
       return 'Could not reach the assistant service. Check your connection and try again.';
     }

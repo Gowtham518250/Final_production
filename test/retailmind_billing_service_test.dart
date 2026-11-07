@@ -61,7 +61,10 @@ void main() {
         'status': 'ACTIVE',
       };
 
-      expect(RetailMindBillingService.shouldOpenCashfreeCheckout(response), isFalse);
+      expect(
+        RetailMindBillingService.shouldOpenCashfreeCheckout(response),
+        isFalse,
+      );
     });
 
     test('opens a Cashfree checkout only when a new mandate is required', () {
@@ -72,7 +75,10 @@ void main() {
         'subscription_session_id': 'sess_456',
       };
 
-      expect(RetailMindBillingService.shouldOpenCashfreeCheckout(response), isTrue);
+      expect(
+        RetailMindBillingService.shouldOpenCashfreeCheckout(response),
+        isTrue,
+      );
     });
   });
 }

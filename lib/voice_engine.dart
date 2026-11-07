@@ -40,19 +40,19 @@ final _log = Logger(
 
 /// Speech priority. Higher value = more important.
 enum SpeechPriority {
-  low,      // queued; never interrupts
-  normal,   // queued behind current speech
-  high,     // may preempt low/normal; waits for high/critical
+  low, // queued; never interrupts
+  normal, // queued behind current speech
+  high, // may preempt low/normal; waits for high/critical
   critical, // may preempt low/normal; queues behind high/critical
 }
 
 // ─── Queue entry ──────────────────────────────────────────────────────────────
 
 class _SpeechJob {
-  final String?         audioPath;
+  final String? audioPath;
   final HumanizerResult result;
-  final String          locale;
-  final SpeechPriority  priority;
+  final String locale;
+  final SpeechPriority priority;
   final Completer<void> completer;
 
   _SpeechJob({
@@ -90,7 +90,7 @@ const _localeProfiles = <String, _LocaleProfile>{
 
 class VoiceEngine {
   // TTS + audio
-  final FlutterTts  _tts         = FlutterTts();
+  final FlutterTts _tts = FlutterTts();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   // Cached voice selection
@@ -100,7 +100,7 @@ class VoiceEngine {
 
   // Mode flags
   bool _useStitchedVoice = false;
-  bool _initialized      = false;
+  bool _initialized = false;
 
   // ── Public state streams ─────────────────────────────────────────────────
 
@@ -119,8 +119,8 @@ class VoiceEngine {
   VoidCallback? onSpeakError;
 
   // ── Priority queue ───────────────────────────────────────────────────────
-  final _queue   = <_SpeechJob>[];
-  bool  _running = false;
+  final _queue = <_SpeechJob>[];
+  bool _running = false;
 
   // ── Amplitude timer ──────────────────────────────────────────────────────
   Timer? _ampTimer;
@@ -131,14 +131,14 @@ class VoiceEngine {
   Future<void> init({
     required double volume,
     required double speechRate,
-    String?         savedVoiceName,
-    String?         savedVoiceLocale,
-    bool            useStitchedVoice = false,
+    String? savedVoiceName,
+    String? savedVoiceLocale,
+    bool useStitchedVoice = false,
   }) async {
     if (_initialized) return;
 
-    _useStitchedVoice  = useStitchedVoice;
-    _cachedVoiceName   = savedVoiceName;
+    _useStitchedVoice = useStitchedVoice;
+    _cachedVoiceName = savedVoiceName;
     _cachedVoiceLocale = savedVoiceLocale;
 
     try {
@@ -207,16 +207,16 @@ class VoiceEngine {
 
   /// Queue an announcement. Returns a Future that resolves when speech ends.
   Future<void> playAnnouncement({
-    String?          audioPath,
+    String? audioPath,
     required HumanizerResult result,
-    required String  locale,
-    SpeechPriority   priority = SpeechPriority.normal,
+    required String locale,
+    SpeechPriority priority = SpeechPriority.normal,
   }) {
     final job = _SpeechJob(
       audioPath: audioPath,
-      result:    result,
-      locale:    locale,
-      priority:  priority,
+      result: result,
+      locale: locale,
+      priority: priority,
     );
 
     final running = _currentJob;
@@ -246,11 +246,7 @@ class VoiceEngine {
       pitch: timing.pitch,
       rate: timing.rate,
     );
-    return playAnnouncement(
-      result: result,
-      locale: locale,
-      priority: priority,
-    );
+    return playAnnouncement(result: result, locale: locale, priority: priority);
   }
 
   Future<void> stop() async {
@@ -273,9 +269,12 @@ class VoiceEngine {
       final dynamic voices = await _tts.getVoices;
       if (voices == null || voices is! List) return;
 
-      final target     = locale.replaceAll('_', '-').toLowerCase();
+      final target = locale.replaceAll('_', '-').toLowerCase();
       final candidates = voices.where((v) {
-        final vl = (v['locale'] ?? '').toString().replaceAll('_', '-').toLowerCase();
+        final vl = (v['locale'] ?? '')
+            .toString()
+            .replaceAll('_', '-')
+            .toLowerCase();
         return vl == target;
       }).toList();
 
@@ -284,9 +283,10 @@ class VoiceEngine {
         return;
       }
 
-      final best = _pickByPreference(candidates, ['google', 'neural', 'network'])
-          ?? _pickByPreference(candidates, ['female', 'male'])
-          ?? candidates.first;
+      final best =
+          _pickByPreference(candidates, ['google', 'neural', 'network']) ??
+          _pickByPreference(candidates, ['female', 'male']) ??
+          candidates.first;
 
       await _applyVoice(best['name'].toString(), best['locale'].toString());
       _log.d('Auto-selected voice: ${best['name']} for $locale');
@@ -296,21 +296,26 @@ class VoiceEngine {
   }
 
   Future<void> updateVoice(String name, String locale) async {
-    _cachedVoiceName   = name;
+    _cachedVoiceName = name;
     _cachedVoiceLocale = locale;
-    _currentLocale     = null;
+    _currentLocale = null;
     await _applyVoice(name, locale);
   }
 
   // ── Timeout helper ────────────────────────────────────────────────────────
 
   int calculateTimeout(String text, double multiplier) {
-    final isIndian = _currentLocale != null &&
-        RegExp(r'^(hi|ta|te|kn|ml|mr|gu|bn|pa)')
-            .hasMatch(_currentLocale!.split('-').first.toLowerCase());
+    final isIndian =
+        _currentLocale != null &&
+        RegExp(
+          r'^(hi|ta|te|kn|ml|mr|gu|bn|pa)',
+        ).hasMatch(_currentLocale!.split('-').first.toLowerCase());
 
-    final profile = _localeProfiles[_currentLocale] ?? const _LocaleProfile(1.0, 0.0);
-    final base    = (isIndian ? text.length * 0.055 : text.length * 0.030) / profile.rateMultiplier;
+    final profile =
+        _localeProfiles[_currentLocale] ?? const _LocaleProfile(1.0, 0.0);
+    final base =
+        (isIndian ? text.length * 0.055 : text.length * 0.030) /
+        profile.rateMultiplier;
     final buffered = (base + 2.0).clamp(6.0, 40.0);
     return (buffered * multiplier).ceil();
   }
@@ -339,8 +344,7 @@ class VoiceEngine {
 
   void _insertByPriority(_SpeechJob job) {
     var index = _queue.length;
-    while (index > 0 &&
-        _queue[index - 1].priority.index < job.priority.index) {
+    while (index > 0 && _queue[index - 1].priority.index < job.priority.index) {
       index--;
     }
     _queue.insert(index, job);
@@ -410,8 +414,12 @@ class VoiceEngine {
     }
 
     // Apply locale-aware rate/pitch modifiers
-    final profile = _localeProfiles[effectiveLocale] ?? const _LocaleProfile(1.0, 0.0);
-    final finalRate  = (job.result.rate  * profile.rateMultiplier).clamp(0.1, 1.0);
+    final profile =
+        _localeProfiles[effectiveLocale] ?? const _LocaleProfile(1.0, 0.0);
+    final finalRate = (job.result.rate * profile.rateMultiplier).clamp(
+      0.1,
+      1.0,
+    );
     final finalPitch = (job.result.pitch + profile.pitchOffset).clamp(0.5, 2.0);
 
     await _tts.setPitch(finalPitch);
@@ -452,10 +460,12 @@ class VoiceEngine {
     _ampTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       _ampPhase += 0.08;
       // Layered sine waves to look organic
-      final amp = (math.sin(_ampPhase) * 0.35 +
-                   math.sin(_ampPhase * 2.3) * 0.25 +
-                   math.sin(_ampPhase * 0.7) * 0.20 +
-                   0.45).clamp(0.0, 1.0);
+      final amp =
+          (math.sin(_ampPhase) * 0.35 +
+                  math.sin(_ampPhase * 2.3) * 0.25 +
+                  math.sin(_ampPhase * 0.7) * 0.20 +
+                  0.45)
+              .clamp(0.0, 1.0);
       if (!_ampCtrl.isClosed) _ampCtrl.add(amp);
     });
   }
@@ -499,13 +509,11 @@ class VoiceEngine {
   Future<bool> _safeSetLocale(String locale) async {
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
-        final availability = await _tts.isLanguageAvailable(locale).timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => false,
-        );
+        final availability = await _tts
+            .isLanguageAvailable(locale)
+            .timeout(const Duration(seconds: 2), onTimeout: () => false);
         final available =
-            availability == true ||
-            (availability is num && availability > 0);
+            availability == true || (availability is num && availability > 0);
         if (!available) {
           _log.w('Locale $locale is unavailable (attempt $attempt)');
           continue;
@@ -526,7 +534,11 @@ class VoiceEngine {
         _currentLocale = locale;
         return true;
       } catch (e, st) {
-        _log.w('_safeSetLocale attempt $attempt failed: $locale', error: e, stackTrace: st);
+        _log.w(
+          '_safeSetLocale attempt $attempt failed: $locale',
+          error: e,
+          stackTrace: st,
+        );
         await Future<void>.delayed(Duration(milliseconds: 80 * (attempt + 1)));
       }
     }
@@ -545,7 +557,9 @@ class VoiceEngine {
 
   dynamic _pickByPreference(List<dynamic> voices, List<String> keywords) {
     for (final kw in keywords) {
-      final match = voices.where((v) => v['name'].toString().toLowerCase().contains(kw));
+      final match = voices.where(
+        (v) => v['name'].toString().toLowerCase().contains(kw),
+      );
       if (match.isNotEmpty) return match.first;
     }
     return null;
@@ -560,24 +574,28 @@ class VoiceEngine {
         final speakTimeout = Duration(
           seconds: (text.length * 0.12 + 12).clamp(15, 60).toInt(),
         );
-        await _tts.speak(text).timeout(
-          speakTimeout,
-          onTimeout: () {
-            _log.w(
-              'TTS speak timed out after ${speakTimeout.inSeconds}s: "$text"',
+        await _tts
+            .speak(text)
+            .timeout(
+              speakTimeout,
+              onTimeout: () {
+                _log.w(
+                  'TTS speak timed out after ${speakTimeout.inSeconds}s: "$text"',
+                );
+                _setSpeaking(false);
+                _stopAmpTimer();
+                // Stop a possibly late native utterance before the payment is
+                // escalated to an audible fallback notification.
+                unawaited(
+                  _tts.stop().catchError((Object error) {
+                    _log.w('Could not stop timed-out TTS: $error');
+                  }),
+                );
+                throw TimeoutException(
+                  'TTS playback did not complete in time.',
+                );
+              },
             );
-            _setSpeaking(false);
-            _stopAmpTimer();
-            // Stop a possibly late native utterance before the payment is
-            // escalated to an audible fallback notification.
-            unawaited(
-              _tts.stop().catchError((Object error) {
-                _log.w('Could not stop timed-out TTS: $error');
-              }),
-            );
-            throw TimeoutException('TTS playback did not complete in time.');
-          },
-        );
         return;
       } catch (e, st) {
         // Retry only an immediate engine/setup failure. A late error may
@@ -586,9 +604,12 @@ class VoiceEngine {
           _log.w('TTS speak attempt $i failed, retrying…');
           await Future<void>.delayed(Duration(milliseconds: 120 * (i + 1)));
         } else {
-          _log.e('TTS speak failed after ${retries + 1} attempts: '
-              '"${text.substring(0, text.length.clamp(0, 40))}"',
-              error: e, stackTrace: st);
+          _log.e(
+            'TTS speak failed after ${retries + 1} attempts: '
+            '"${text.substring(0, text.length.clamp(0, 40))}"',
+            error: e,
+            stackTrace: st,
+          );
           rethrow;
         }
       }
@@ -631,8 +652,8 @@ class VoiceEngine {
     }
 
     final amount = double.tryParse(match.group(1)!) ?? 0.0;
-    final words  = _getNumberWords(amount, locale);
-    final dir    = await getApplicationDocumentsDirectory();
+    final words = _getNumberWords(amount, locale);
+    final dir = await getApplicationDocumentsDirectory();
     final studio = p.join(dir.path, 'voice_studio');
 
     final allExist = (await Future.wait(
@@ -655,18 +676,21 @@ class VoiceEngine {
   }
 
   List<String> _getNumberWords(double amount, String locale) {
-    final key     = locale.split('-').first.toLowerCase();
+    final key = locale.split('-').first.toLowerCase();
     final isHindi = key == 'hi' || key == 'mr';
     return _buildWords(amount, isHindi ? 'hi' : 'en');
   }
 
   List<String> _buildWords(double amount, String wordLang) {
     final words = <String>[];
-    int n        = amount.floor();
-    final paise  = ((amount - n) * 100).round();
+    int n = amount.floor();
+    final paise = ((amount - n) * 100).round();
 
     void addBreak(int val) {
-      if (val < 20) { words.add(val.toString()); return; }
+      if (val < 20) {
+        words.add(val.toString());
+        return;
+      }
       if (val < 100) {
         words.add(((val ~/ 10) * 10).toString());
         final o = val % 10;
@@ -679,14 +703,33 @@ class VoiceEngine {
     if (n == 0) {
       words.add('0');
     } else {
-      if (n >= 10000000) { addBreak(n ~/ 10000000); words.add(wordLang == 'hi' ? 'करोड़'  : 'crore');    n %= 10000000; }
-      if (n >= 100000)   { addBreak(n ~/ 100000);   words.add(wordLang == 'hi' ? 'लाख'    : 'lakh');     n %= 100000; }
-      if (n >= 1000)     { addBreak(n ~/ 1000);     words.add(wordLang == 'hi' ? 'हज़ार'   : 'thousand'); n %= 1000; }
-      if (n >= 100)      { addBreak(n ~/ 100);      words.add(wordLang == 'hi' ? 'सौ'     : 'hundred');  n %= 100; }
-      if (n > 0)          addBreak(n);
+      if (n >= 10000000) {
+        addBreak(n ~/ 10000000);
+        words.add(wordLang == 'hi' ? 'करोड़' : 'crore');
+        n %= 10000000;
+      }
+      if (n >= 100000) {
+        addBreak(n ~/ 100000);
+        words.add(wordLang == 'hi' ? 'लाख' : 'lakh');
+        n %= 100000;
+      }
+      if (n >= 1000) {
+        addBreak(n ~/ 1000);
+        words.add(wordLang == 'hi' ? 'हज़ार' : 'thousand');
+        n %= 1000;
+      }
+      if (n >= 100) {
+        addBreak(n ~/ 100);
+        words.add(wordLang == 'hi' ? 'सौ' : 'hundred');
+        n %= 100;
+      }
+      if (n > 0) addBreak(n);
     }
     words.add(wordLang == 'hi' ? 'रुपये' : 'rupees');
-    if (paise > 0) { addBreak(paise); words.add(wordLang == 'hi' ? 'पैसे' : 'paise'); }
+    if (paise > 0) {
+      addBreak(paise);
+      words.add(wordLang == 'hi' ? 'पैसे' : 'paise');
+    }
     return words;
   }
 }

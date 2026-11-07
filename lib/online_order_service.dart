@@ -70,14 +70,15 @@ class OnlineOrderService {
     if (orderId.isEmpty) return false;
 
     final escapedOrderId = RegExp.escape(orderId);
-    final invoiceSource = (invoice['source'] ??
-            invoice['origin_source'] ??
-            invoice['order_source'] ??
-            invoice['sale_type'] ??
-            '')
-        .toString()
-        .trim()
-        .toUpperCase();
+    final invoiceSource =
+        (invoice['source'] ??
+                invoice['origin_source'] ??
+                invoice['order_source'] ??
+                invoice['sale_type'] ??
+                '')
+            .toString()
+            .trim()
+            .toUpperCase();
     final isExplicitlyOffline = const {
       'OFFLINE',
       'POS',
@@ -359,7 +360,13 @@ class OnlineOrderService {
               .toString()
               .trim();
       final isOnline =
-          const {'ONLINE', 'ONLINE_ORDER', 'WEB', 'APP', 'ONLINE_STORE'}.contains(source) ||
+          const {
+            'ONLINE',
+            'ONLINE_ORDER',
+            'WEB',
+            'APP',
+            'ONLINE_STORE',
+          }.contains(source) ||
           invoiceKey.toUpperCase().startsWith('ONL');
       if (!isOnline) continue;
 
@@ -411,7 +418,10 @@ class OnlineOrderService {
   }
 
   @visibleForTesting
-  static Map<String, dynamic>? normalizeOwnerOrderAnalytics(dynamic decoded) {
+  static Map<String, dynamic>? normalizeOwnerOrderAnalytics(
+    dynamic decoded, {
+    int? canonicalTotalCount,
+  }) {
     if (decoded is! Map) return null;
 
     int? integer(dynamic value) {
@@ -430,7 +440,11 @@ class OnlineOrderService {
     final totalCount = integer(
       decoded['totalCount'] ?? decoded['total_count'] ?? decoded['total'],
     );
-    if (totalCount == null || totalCount < 0) return null;
+    final normalizedTotalCount =
+        canonicalTotalCount != null && canonicalTotalCount >= 0
+        ? canonicalTotalCount
+        : totalCount;
+    if (normalizedTotalCount == null || normalizedTotalCount < 0) return null;
 
     final pending = integer(decoded['pending']) ?? 0;
     final todayCount = integer(decoded['todayCount']) ?? 0;
@@ -444,13 +458,58 @@ class OnlineOrderService {
       'todayRevenue': number(decoded['todayRevenue']),
       'paidCount': paidCount,
       'todayPaidCount': todayPaidCount,
-      'totalCount': totalCount,
+      'totalCount': normalizedTotalCount,
       'totalRevenue': number(decoded['totalRevenue']),
       'totalPaidCount': integer(decoded['totalPaidCount']) ?? 0,
       'rejectedCount': integer(decoded['rejectedCount']) ?? 0,
       'cancelledCount': integer(decoded['cancelledCount']) ?? 0,
       'available': true,
     };
+  }
+
+  @visibleForTesting
+  static int? normalizeOwnerOrdersTotal(dynamic decoded) {
+    if (decoded is! Map) return null;
+    final value =
+        decoded['total'] ?? decoded['totalCount'] ?? decoded['total_count'];
+    final total = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString() ?? '');
+    return total != null && total >= 0 ? total : null;
+  }
+
+  static Future<int?> _getCanonicalOwnerOrdersTotal(
+    Map<String, String> headers,
+  ) async {
+    try {
+      final response = await ApiClient.getJson(
+        '/store/owner/orders?limit=1',
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final total = normalizeOwnerOrdersTotal(jsonDecode(response.body));
+        if (total != null) return total;
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Owner orders total request failed: $error');
+      }
+    }
+
+    try {
+      final response = await ApiClient.getJson(
+        '/api/sales-restore/cancelled-order-identifiers',
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        return normalizeOwnerOrdersTotal(jsonDecode(response.body));
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Owner lifetime order count request failed: $error');
+      }
+    }
+    return null;
   }
 
   /// Canonical online-store analytics from the same owner-order dataset
@@ -477,6 +536,11 @@ class OnlineOrderService {
     if (token.isEmpty) return Map<String, dynamic>.from(empty);
     final headers = {'Authorization': 'Bearer $token'};
 
+    // The orders list exposes the total across every lifecycle state and is
+    // also used by the Online Orders screen. Prefer it to an aggregate that
+    // may report only accepted orders as its total.
+    final canonicalTotalFuture = _getCanonicalOwnerOrdersTotal(headers);
+
     // Prefer the server-side aggregate query: it uses COUNT(*) scoped to this
     // owner and includes every lifecycle status without downloading order
     // details page by page. If the endpoint is unavailable/feature-gated, keep
@@ -487,43 +551,26 @@ class OnlineOrderService {
         headers: headers,
       ).timeout(const Duration(seconds: 8));
       if (aggregateResponse.statusCode == 200) {
+        final canonicalTotalCount = await canonicalTotalFuture;
         final normalized = normalizeOwnerOrderAnalytics(
           jsonDecode(aggregateResponse.body),
+          canonicalTotalCount: canonicalTotalCount,
         );
-        if (normalized != null) return normalized;
+        if (normalized != null && canonicalTotalCount != null) {
+          return normalized;
+        }
       }
     } catch (aggregateError) {
       if (kDebugMode) {
-        debugPrint('Owner order aggregate endpoint unavailable: $aggregateError');
+        debugPrint(
+          'Owner order aggregate endpoint unavailable: $aggregateError',
+        );
       }
     }
 
-    // Fallback: fetch the lifetime total independently of the paged screen.
-    // That screen may be feature-gated or have a narrower visibility policy;
-    // the dashboard count must include every lifecycle status.
-    int? lifetimeOrderCount;
-    try {
-      final countResponse = await ApiClient.getJson(
-        '/api/sales-restore/cancelled-order-identifiers',
-        headers: headers,
-      ).timeout(const Duration(seconds: 8));
-      if (countResponse.statusCode == 200) {
-        final countDecoded = jsonDecode(countResponse.body);
-        if (countDecoded is Map) {
-          final rawCount = countDecoded['totalCount'] ?? countDecoded['total'];
-          final parsedCount = rawCount is num
-              ? rawCount.toInt()
-              : int.tryParse(rawCount?.toString() ?? '');
-          if (parsedCount != null && parsedCount >= 0) {
-            lifetimeOrderCount = parsedCount;
-          }
-        }
-      }
-    } catch (countError) {
-      if (kDebugMode) {
-        debugPrint('getAnalytics lifetime count request failed: $countError');
-      }
-    }
+    // The total request already falls back to the owner-scoped lifetime count
+    // endpoint if the orders list is unavailable.
+    int? lifetimeOrderCount = await canonicalTotalFuture;
 
     try {
       // Derive revenue from order rows so cancelled/returned statuses cannot
@@ -648,6 +695,10 @@ class OnlineOrderService {
       };
     } catch (e) {
       if (kDebugMode) debugPrint('getAnalytics: ' + e.toString());
+
+      if (lifetimeOrderCount != null) {
+        return {...empty, 'totalCount': lifetimeOrderCount, 'available': true};
+      }
 
       // The order-management endpoint can return 403 when the shop does not
       // have the Online Orders entitlement. Dashboard lifetime counts are

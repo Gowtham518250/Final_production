@@ -10,7 +10,7 @@ class FileDownloadService {
     try {
       // Request permission if needed
       final status = await Permission.storage.request();
-      
+
       if (!status.isGranted) {
         debugPrint('❌ Storage permission denied');
         return null;
@@ -27,7 +27,7 @@ class FileDownloadService {
         // For iOS, use Documents directory
         return await getApplicationDocumentsDirectory();
       }
-      
+
       return await getApplicationDocumentsDirectory();
     } catch (e) {
       debugPrint('❌ Error getting downloads directory: $e');
@@ -42,7 +42,7 @@ class FileDownloadService {
   }) async {
     try {
       final downloadDir = await getDownloadsDirectory();
-      
+
       if (downloadDir == null) {
         debugPrint('❌ Could not access downloads directory');
         return null;
@@ -75,7 +75,7 @@ class FileDownloadService {
   }) async {
     try {
       final downloadDir = await getDownloadsDirectory();
-      
+
       if (downloadDir == null) {
         debugPrint('❌ Could not access downloads directory');
         return null;
@@ -105,7 +105,7 @@ class FileDownloadService {
   static Future<List<File>> getDownloadedFiles() async {
     try {
       final downloadDir = await getDownloadsDirectory();
-      
+
       if (downloadDir == null) {
         return [];
       }

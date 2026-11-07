@@ -28,7 +28,9 @@ class CustomerShopService {
       }
 
       final body = json.decode(res.body);
-      final raw = body is Map && body['products'] is List ? body['products'] as List : <dynamic>[];
+      final raw = body is Map && body['products'] is List
+          ? body['products'] as List
+          : <dynamic>[];
       final products = raw
           .whereType<Map>()
           .map((p) => normalizeProduct(Map<String, dynamic>.from(p)))
@@ -41,7 +43,9 @@ class CustomerShopService {
     }
   }
 
-  static List<Map<String, dynamic>> _filterInStock(List<Map<String, dynamic>> list) {
+  static List<Map<String, dynamic>> _filterInStock(
+    List<Map<String, dynamic>> list,
+  ) {
     return list.where((p) {
       final price = (p['price'] as num?)?.toDouble() ?? 0;
       final stock = (p['stock'] as num?)?.toInt() ?? 0;
@@ -58,7 +62,8 @@ class CustomerShopService {
       if (res.statusCode == 200) {
         final body = json.decode(res.body);
         if (body is Map) {
-          return double.tryParse(body['online_setup_fee']?.toString() ?? '0') ?? 0.0;
+          return double.tryParse(body['online_setup_fee']?.toString() ?? '0') ??
+              0.0;
         }
       }
     } catch (e) {
@@ -87,8 +92,11 @@ class CustomerShopService {
   }
 
   static Map<String, dynamic> normalizeProduct(Map raw) {
-    final name = (raw['product_name'] ?? raw['name'] ?? raw['product'] ?? 'Item').toString();
-    final price = double.tryParse(
+    final name =
+        (raw['product_name'] ?? raw['name'] ?? raw['product'] ?? 'Item')
+            .toString();
+    final price =
+        double.tryParse(
           (raw['price'] ?? raw['selling_price'] ?? raw['unit_price'] ?? '0')
               .toString(),
         ) ??
@@ -96,7 +104,8 @@ class CustomerShopService {
     // The online-store API calls available inventory stock_available.
     // Without this alias, every API product normalized to stock=0 and the
     // storefront filtered the entire catalogue out as unavailable.
-    final rawStock = raw['stock'] ??
+    final rawStock =
+        raw['stock'] ??
         raw['stock_available'] ??
         raw['current_stock'] ??
         raw['available_quantity'] ??
@@ -107,10 +116,11 @@ class CustomerShopService {
     final stock = rawStock is num
         ? rawStock.floor()
         : (int.tryParse(rawStock.toString()) ??
-            double.tryParse(rawStock.toString())?.floor() ??
-            0);
+              double.tryParse(rawStock.toString())?.floor() ??
+              0);
     final id = (raw['id'] ?? raw['product_id'] ?? '').toString().trim();
-    final imageUrl = (raw['image_url'] ?? raw['imageUrl'] ?? raw['photo'] ?? '').toString();
+    final imageUrl = (raw['image_url'] ?? raw['imageUrl'] ?? raw['photo'] ?? '')
+        .toString();
     return {
       'id': id,
       'name': name,
@@ -142,12 +152,16 @@ class CustomerShopService {
       'shop_id': shopId,
       'shop_name': shopName,
       'customer_email': customerEmail,
-      'items': items.map((i) => {
-        'name': i['name'],
-        'qty': i['qty'],
-        'price': i['price'],
-        'id': i['id'],
-      }).toList(),
+      'items': items
+          .map(
+            (i) => {
+              'name': i['name'],
+              'qty': i['qty'],
+              'price': i['price'],
+              'id': i['id'],
+            },
+          )
+          .toList(),
       'total_amount': totalAmount,
       'payment_method': paymentMethod,
       'payment_status': paymentStatus,
@@ -162,10 +176,14 @@ class CustomerShopService {
     // Local order history is the immediate source of truth.
     await OrderHistoryService.addOrder(localOrder);
 
-    final apiItems = items.map((i) => {
-      'product_id': int.tryParse(i['id'].toString()) ?? 0,
-      'quantity': int.tryParse(i['qty']?.toString() ?? '1') ?? 1,
-    }).toList();
+    final apiItems = items
+        .map(
+          (i) => {
+            'product_id': int.tryParse(i['id'].toString()) ?? 0,
+            'quantity': int.tryParse(i['qty']?.toString() ?? '1') ?? 1,
+          },
+        )
+        .toList();
 
     final queued = await SyncQueueManager.enqueue('customer_place_order', {
       'operation_id': localOrderId,
@@ -207,14 +225,14 @@ class CustomerShopService {
         .collection('products')
         .doc(productId)
         .set({
-      'name': name,
-      'price': price,
-      'stock': stock,
-      'available': available,
-      'image_url': imageUrl ?? '',
-      'category': category,
-      'updated_at': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+          'name': name,
+          'price': price,
+          'stock': stock,
+          'available': available,
+          'image_url': imageUrl ?? '',
+          'category': category,
+          'updated_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
   }
 
   static Future<void> syncInventoryToFirestore(
@@ -225,9 +243,16 @@ class CustomerShopService {
     for (final item in inventory) {
       final name = (item['product_name'] ?? item['name'] ?? '').toString();
       if (name.isEmpty) continue;
-      final id = (item['id'] ?? name).toString().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+      final id = (item['id'] ?? name).toString().replaceAll(
+        RegExp(r'[^a-zA-Z0-9_]'),
+        '_',
+      );
       final price = double.tryParse(item['price']?.toString() ?? '0') ?? 0;
-      final stock = int.tryParse(item['stock']?.toString() ?? item['quantity']?.toString() ?? '0') ?? 0;
+      final stock =
+          int.tryParse(
+            item['stock']?.toString() ?? item['quantity']?.toString() ?? '0',
+          ) ??
+          0;
       final imageUrl = (item['image_url'] ?? item['imageUrl'] ?? '').toString();
       await upsertProductToFirestore(
         shopId: shopId,

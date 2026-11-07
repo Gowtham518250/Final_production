@@ -42,24 +42,27 @@ void main() {
       expect(result.single['payment_status'], 'PAID');
     });
 
-    test('different invoice identities stay separate with identical amounts', () {
-      final result = InvoiceDedupHelper.canonicalizeInvoices([
-        {
-          'sale_id': 'SALE_A',
-          'invoice_number': 'BILL-001',
-          'total_amount': 100.0,
-          'paid_amount': 0.0,
-        },
-        {
-          'sale_id': 'SALE_B',
-          'invoice_number': 'BILL-002',
-          'total_amount': 100.0,
-          'paid_amount': 0.0,
-        },
-      ]);
+    test(
+      'different invoice identities stay separate with identical amounts',
+      () {
+        final result = InvoiceDedupHelper.canonicalizeInvoices([
+          {
+            'sale_id': 'SALE_A',
+            'invoice_number': 'BILL-001',
+            'total_amount': 100.0,
+            'paid_amount': 0.0,
+          },
+          {
+            'sale_id': 'SALE_B',
+            'invoice_number': 'BILL-002',
+            'total_amount': 100.0,
+            'paid_amount': 0.0,
+          },
+        ]);
 
-      expect(result, hasLength(2));
-    });
+        expect(result, hasLength(2));
+      },
+    );
 
     test('paid state wins against a stale unpaid copy', () {
       final result = InvoiceDedupHelper.canonicalizeInvoices([
@@ -109,33 +112,36 @@ void main() {
       expect(result.single['total_amount'], 36.0);
     });
 
-    test('same numeric sale and invoice IDs do not make a sale an invoice mirror', () {
-      final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
-        [
-          {
-            'id': 1,
-            'invoice_number': 'MANUAL-001',
-            'total_amount': 36.0,
-            'paid_amount': 36.0,
-            'payment_status': 'PAID',
-          },
-        ],
-        [
-          {
-            'id': 1,
-            'sale_id': 'SALE-001',
-            'total_amount': 85.0,
-            'paid_amount': 85.0,
-            'payment_status': 'PAID',
-          },
-        ],
-      );
+    test(
+      'same numeric sale and invoice IDs do not make a sale an invoice mirror',
+      () {
+        final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
+          [
+            {
+              'id': 1,
+              'invoice_number': 'MANUAL-001',
+              'total_amount': 36.0,
+              'paid_amount': 36.0,
+              'payment_status': 'PAID',
+            },
+          ],
+          [
+            {
+              'id': 1,
+              'sale_id': 'SALE-001',
+              'total_amount': 85.0,
+              'paid_amount': 85.0,
+              'payment_status': 'PAID',
+            },
+          ],
+        );
 
-      expect(result, hasLength(1));
-      expect(result.single['invoice_number'], 'MANUAL-001');
-      expect(result.single['total_amount'], 36.0);
-      expect(result.single['paid_amount'], 36.0);
-    });
+        expect(result, hasLength(1));
+        expect(result.single['invoice_number'], 'MANUAL-001');
+        expect(result.single['total_amount'], 36.0);
+        expect(result.single['paid_amount'], 36.0);
+      },
+    );
 
     test('invoice mirrors combine all item rows instead of replacing them', () {
       final canonical = InvoiceDedupHelper.canonicalizeInvoiceLedger(
@@ -181,7 +187,8 @@ void main() {
       expect(lines, hasLength(2));
       final names = lines.map((line) {
         final item = Map<String, dynamic>.from(line as Map);
-        return (item['product_name'] ?? item['description'] ?? item['product']).toString();
+        return (item['product_name'] ?? item['description'] ?? item['product'])
+            .toString();
       }).toSet();
       expect(names, containsAll(['Chicken', 'Mutton']));
     });
@@ -221,177 +228,183 @@ void main() {
       );
     });
 
-    test('missing price in an invoice mirror does not duplicate a known line', () {
-      final result = InvoiceDedupHelper.canonicalizeInvoices([
-        {
-          'invoice_number': 'BILL-PARTIAL-LINE',
-          'total_amount': 50.0,
-          'items': [
-            {
-              'product_name': 'Tea',
-              'quantity': 1,
-              'unit_price': 50,
-              'line_total': 50,
-            },
-          ],
-        },
-        {
-          'invoice_number': 'BILL-PARTIAL-LINE',
-          'total_amount': 50.0,
-          'line_items': [
-            {
-              'description': 'Tea',
-              'quantity': 1,
-            },
-          ],
-        },
-      ]);
+    test(
+      'missing price in an invoice mirror does not duplicate a known line',
+      () {
+        final result = InvoiceDedupHelper.canonicalizeInvoices([
+          {
+            'invoice_number': 'BILL-PARTIAL-LINE',
+            'total_amount': 50.0,
+            'items': [
+              {
+                'product_name': 'Tea',
+                'quantity': 1,
+                'unit_price': 50,
+                'line_total': 50,
+              },
+            ],
+          },
+          {
+            'invoice_number': 'BILL-PARTIAL-LINE',
+            'total_amount': 50.0,
+            'line_items': [
+              {'description': 'Tea', 'quantity': 1},
+            ],
+          },
+        ]);
 
-      expect(result, hasLength(1));
-      expect((result.single['line_items'] as List), hasLength(1));
-      expect(
-        (result.single['line_items'] as List).first['unit_price'],
-        50,
-      );
-    });
+        expect(result, hasLength(1));
+        expect((result.single['line_items'] as List), hasLength(1));
+        expect((result.single['line_items'] as List).first['unit_price'], 50);
+      },
+    );
 
-    test('same line from local and cloud mirrors merges when product IDs differ', () {
-      final result = InvoiceDedupHelper.canonicalizeInvoices([
-        {
-          'invoice_number': 'BILL-ID-ALIAS',
-          'total_amount': 10.0,
-          'paid_amount': 10.0,
-          'items': [
-            {
-              'product_id': 12,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-          ],
-        },
-        {
-          'invoice_number': 'BILL-ID-ALIAS',
-          'total_amount': 10.0,
-          'paid_amount': 10.0,
-          'line_items': [
-            {
-              'product_id': 9012,
-              'product_name': ' tea   powder ',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-          ],
-        },
-      ]);
+    test(
+      'same line from local and cloud mirrors merges when product IDs differ',
+      () {
+        final result = InvoiceDedupHelper.canonicalizeInvoices([
+          {
+            'invoice_number': 'BILL-ID-ALIAS',
+            'total_amount': 10.0,
+            'paid_amount': 10.0,
+            'items': [
+              {
+                'product_id': 12,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+            ],
+          },
+          {
+            'invoice_number': 'BILL-ID-ALIAS',
+            'total_amount': 10.0,
+            'paid_amount': 10.0,
+            'line_items': [
+              {
+                'product_id': 9012,
+                'product_name': ' tea   powder ',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+            ],
+          },
+        ]);
 
-      expect(result, hasLength(1));
-      final lines = List<Map<String, dynamic>>.from(
-        result.single['line_items'] as List,
-      );
-      expect(lines, hasLength(1));
-      expect(lines.single['product_id'], 9012);
-      expect(lines.single['line_total'], 10);
-      expect(result.single['total_amount'], 10.0);
-    });
+        expect(result, hasLength(1));
+        final lines = List<Map<String, dynamic>>.from(
+          result.single['line_items'] as List,
+        );
+        expect(lines, hasLength(1));
+        expect(lines.single['product_id'], 9012);
+        expect(lines.single['line_total'], 10);
+        expect(result.single['total_amount'], 10.0);
+      },
+    );
 
-    test('same product and quantity with different final amounts stays separate', () {
-      final result = InvoiceDedupHelper.canonicalizeInvoices([
-        {
-          'invoice_number': 'BILL-DISCOUNT-LINES',
-          'total_amount': 19.0,
-          'items': [
-            {
-              'product_id': 12,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-          ],
-        },
-        {
-          'invoice_number': 'BILL-DISCOUNT-LINES',
-          'total_amount': 19.0,
-          'line_items': [
-            {
-              'product_id': 9012,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 9,
-            },
-          ],
-        },
-      ]);
+    test(
+      'same product and quantity with different final amounts stays separate',
+      () {
+        final result = InvoiceDedupHelper.canonicalizeInvoices([
+          {
+            'invoice_number': 'BILL-DISCOUNT-LINES',
+            'total_amount': 19.0,
+            'items': [
+              {
+                'product_id': 12,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+            ],
+          },
+          {
+            'invoice_number': 'BILL-DISCOUNT-LINES',
+            'total_amount': 19.0,
+            'line_items': [
+              {
+                'product_id': 9012,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 9,
+              },
+            ],
+          },
+        ]);
 
-      expect(result, hasLength(1));
-      final lines = List<Map<String, dynamic>>.from(
-        result.single['line_items'] as List,
-      );
-      expect(lines, hasLength(2));
-      expect(lines.map((line) => line['line_total']).toSet(), {9, 10});
-    });
+        expect(result, hasLength(1));
+        final lines = List<Map<String, dynamic>>.from(
+          result.single['line_items'] as List,
+        );
+        expect(lines, hasLength(2));
+        expect(lines.map((line) => line['line_total']).toSet(), {9, 10});
+      },
+    );
 
-    test('one-to-one mirror matching preserves intentional repeated identical lines', () {
-      final result = InvoiceDedupHelper.canonicalizeInvoices([
-        {
-          'invoice_number': 'BILL-REPEATED-LINES',
-          'total_amount': 20.0,
-          'items': [
-            {
-              'product_id': 12,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-            {
-              'product_id': 13,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-          ],
-        },
-        {
-          'invoice_number': 'BILL-REPEATED-LINES',
-          'total_amount': 20.0,
-          'line_items': [
-            {
-              'product_id': 9012,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-            {
-              'product_id': 9013,
-              'product_name': 'Tea Powder',
-              'quantity': 1,
-              'unit_price': 10,
-              'line_total': 10,
-            },
-          ],
-        },
-      ]);
+    test(
+      'one-to-one mirror matching preserves intentional repeated identical lines',
+      () {
+        final result = InvoiceDedupHelper.canonicalizeInvoices([
+          {
+            'invoice_number': 'BILL-REPEATED-LINES',
+            'total_amount': 20.0,
+            'items': [
+              {
+                'product_id': 12,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+              {
+                'product_id': 13,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+            ],
+          },
+          {
+            'invoice_number': 'BILL-REPEATED-LINES',
+            'total_amount': 20.0,
+            'line_items': [
+              {
+                'product_id': 9012,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+              {
+                'product_id': 9013,
+                'product_name': 'Tea Powder',
+                'quantity': 1,
+                'unit_price': 10,
+                'line_total': 10,
+              },
+            ],
+          },
+        ]);
 
-      expect(result, hasLength(1));
-      final lines = List<Map<String, dynamic>>.from(
-        result.single['line_items'] as List,
-      );
-      expect(lines, hasLength(2));
-      expect(
-        lines.fold<double>(
-          0,
-          (sum, item) => sum + (item['line_total'] as num).toDouble(),
-        ),
-        20.0,
-      );
-    });
+        expect(result, hasLength(1));
+        final lines = List<Map<String, dynamic>>.from(
+          result.single['line_items'] as List,
+        );
+        expect(lines, hasLength(2));
+        expect(
+          lines.fold<double>(
+            0,
+            (sum, item) => sum + (item['line_total'] as num).toDouble(),
+          ),
+          20.0,
+        );
+      },
+    );
 
     test('a sale mirror is merged when it matches a real invoice', () {
       final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
@@ -433,47 +446,50 @@ void main() {
       expect(result.single['payment_status'], 'PAID');
     });
 
-    test('large sales history only imports rows explicitly linked to invoices', () {
-      final invoices = [
-        for (var i = 0; i < 600; i++)
-          {
-            'id': 1000 + i,
-            'invoice_number': 'BILL-$i',
-            'total_amount': 100.0 + i,
-            'paid_amount': 0.0,
-          },
-      ];
-      final sales = [
-        for (var i = 0; i < 600; i++)
-          if (i % 3 == 0)
+    test(
+      'large sales history only imports rows explicitly linked to invoices',
+      () {
+        final invoices = [
+          for (var i = 0; i < 600; i++)
             {
-              'sale_id': 'SALE-$i',
-              'invoice_id': 1000 + i,
+              'id': 1000 + i,
               'invoice_number': 'BILL-$i',
               'total_amount': 100.0 + i,
-              'paid_amount': 100.0 + i,
-              'payment_status': 'PAID',
-            }
-          else
-            {
-              'sale_id': 'POS-$i',
-              'total_amount': 25.0,
-              'paid_amount': 25.0,
-              'payment_status': 'PAID',
+              'paid_amount': 0.0,
             },
-      ];
+        ];
+        final sales = [
+          for (var i = 0; i < 600; i++)
+            if (i % 3 == 0)
+              {
+                'sale_id': 'SALE-$i',
+                'invoice_id': 1000 + i,
+                'invoice_number': 'BILL-$i',
+                'total_amount': 100.0 + i,
+                'paid_amount': 100.0 + i,
+                'payment_status': 'PAID',
+              }
+            else
+              {
+                'sale_id': 'POS-$i',
+                'total_amount': 25.0,
+                'paid_amount': 25.0,
+                'payment_status': 'PAID',
+              },
+        ];
 
-      final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
-        invoices,
-        sales,
-      );
+        final result = InvoiceDedupHelper.canonicalizeInvoiceLedger(
+          invoices,
+          sales,
+        );
 
-      expect(result, hasLength(600));
-      final linked = result.singleWhere(
-        (row) => row['invoice_number'] == 'BILL-0',
-      );
-      expect(linked['sale_id'], 'SALE-0');
-      expect(linked['paid_amount'], 100.0);
-    });
+        expect(result, hasLength(600));
+        final linked = result.singleWhere(
+          (row) => row['invoice_number'] == 'BILL-0',
+        );
+        expect(linked['sale_id'], 'SALE-0');
+        expect(linked['paid_amount'], 100.0);
+      },
+    );
   });
 }

@@ -41,16 +41,22 @@ class InventoryManagementService {
     String? saleId,
   }) async {
     try {
-    if (kDebugMode) debugPrint('📦 Decreasing stock for $productName by $quantitySold units');
+      if (kDebugMode)
+        debugPrint(
+          '📦 Decreasing stock for $productName by $quantitySold units',
+        );
 
       // Canonical backend stock mutation. The old /products/{id}/decrease-stock
       // endpoint was a legacy route and could diverge from invoice sync.
-      final parsedQuantity = InventorySyncService.parsePositiveQuantity(quantitySold);
+      final parsedQuantity = InventorySyncService.parsePositiveQuantity(
+        quantitySold,
+      );
       if (parsedQuantity == null) {
         return {
           'success': false,
           'error': 'INVALID_QUANTITY',
-          'message': 'Quantity must be a positive value with at most three decimal places.',
+          'message':
+              'Quantity must be a positive value with at most three decimal places.',
         };
       }
       final referenceId = (saleId != null && saleId.trim().isNotEmpty)
@@ -66,11 +72,13 @@ class InventoryManagementService {
       if (result['success'] == true) {
         final newStock = result['new_stock'] ?? result['current_stock'] ?? 0;
         final alertTriggered = result['alertTriggered'] == true;
-    if (kDebugMode) debugPrint('✅ Stock updated: $productName new stock = $newStock');
+        if (kDebugMode)
+          debugPrint('✅ Stock updated: $productName new stock = $newStock');
 
         // Handle low stock alert
         if (alertTriggered && newStock < minStockLevel) {
-          _triggerLowStockAlert( // FIX A — catchError so void→Future errors surface
+          _triggerLowStockAlert(
+            // FIX A — catchError so void→Future errors surface
             productName: productName,
             currentStock: newStock,
             minStock: minStockLevel,
@@ -81,7 +89,7 @@ class InventoryManagementService {
             'success': true,
             'newStock': newStock,
             'alertTriggered': true,
-            'message': '⚠️ Low stock alert triggered for $productName'
+            'message': '⚠️ Low stock alert triggered for $productName',
           };
         }
 
@@ -89,38 +97,42 @@ class InventoryManagementService {
           'success': true,
           'newStock': newStock,
           'alertTriggered': false,
-          'message': '✅ Stock decreased by $quantitySold units'
+          'message': '✅ Stock decreased by $quantitySold units',
         };
-      } else if (result['error'] == 'OUT_OF_STOCK' || result['error'] == 'INVALID_QUANTITY') {
-        final error = result['message'] ?? result['error'] ?? 'Invalid stock operation';
-    if (kDebugMode) debugPrint('❌ Stock decrease error: $error');
+      } else if (result['error'] == 'OUT_OF_STOCK' ||
+          result['error'] == 'INVALID_QUANTITY') {
+        final error =
+            result['message'] ?? result['error'] ?? 'Invalid stock operation';
+        if (kDebugMode) debugPrint('❌ Stock decrease error: $error');
         return {
           'success': false,
           'newStock': -1,
           'alertTriggered': false,
-          'message': error
+          'message': error,
         };
       } else {
         return {
           'success': false,
           'newStock': -1,
           'alertTriggered': false,
-          'message': result['message'] ?? result['error'] ?? 'Failed to update stock'
+          'message':
+              result['message'] ?? result['error'] ?? 'Failed to update stock',
         };
       }
     } catch (e) {
-    if (kDebugMode) debugPrint('❌ Error decreasing stock: $e');
+      if (kDebugMode) debugPrint('❌ Error decreasing stock: $e');
       return {
         'success': false,
         'newStock': -1,
         'alertTriggered': false,
-        'message': 'Error: $e'
+        'message': 'Error: $e',
       };
     }
   }
 
   /// Manually trigger low stock alert
-  static Future<void> _triggerLowStockAlert({ // FIX A — was void, swallowed all errors
+  static Future<void> _triggerLowStockAlert({
+    // FIX A — was void, swallowed all errors
     required String productName,
     required num currentStock,
     required num minStock,
@@ -165,7 +177,10 @@ class InventoryManagementService {
       final lastAlert = DateTime.tryParse(lastAlertStr);
       if (lastAlert != null &&
           DateTime.now().difference(lastAlert) < const Duration(minutes: 30)) {
-    if (kDebugMode) debugPrint('⏳ Alert cooldown active for $productName — skipping email');
+        if (kDebugMode)
+          debugPrint(
+            '⏳ Alert cooldown active for $productName — skipping email',
+          );
         return;
       }
     }
@@ -177,22 +192,20 @@ class InventoryManagementService {
     if (whatsappOnly) return;
 
     try {
-      final response = await ApiClient.postJson(
-        '/alerts/trigger',
-        {
-          'type': 'LOW_STOCK',
-          'product_id': productId,
-          'product_name': productName,
-          'current_stock': currentStock,
-          'min_stock': minStock,
-        },
-      ).timeout(const Duration(seconds: 5));
-      
+      final response = await ApiClient.postJson('/alerts/trigger', {
+        'type': 'LOW_STOCK',
+        'product_id': productId,
+        'product_name': productName,
+        'current_stock': currentStock,
+        'min_stock': minStock,
+      }).timeout(const Duration(seconds: 5));
+
       if (response.statusCode == 200) {
-    if (kDebugMode) debugPrint('✅ Backend notified of low stock alert');
+        if (kDebugMode) debugPrint('✅ Backend notified of low stock alert');
       }
     } catch (e) {
-    if (kDebugMode) debugPrint('⚠️ Failed to notify backend/email of alert: $e');
+      if (kDebugMode)
+        debugPrint('⚠️ Failed to notify backend/email of alert: $e');
     }
   }
 
@@ -208,7 +221,7 @@ class InventoryManagementService {
       const key = 'low_stock_history';
       final historyRaw = prefs.getString(key) ?? '[]';
       final List<dynamic> history = json.decode(historyRaw);
-      
+
       history.insert(0, {
         'product_id': productId,
         'product_name': productName,
@@ -220,20 +233,25 @@ class InventoryManagementService {
 
       // Keep last 50 alerts
       if (history.length > 50) history.removeLast();
-      
+
       await prefs.setString(key, json.encode(history));
     } catch (e) {
-    if (kDebugMode) debugPrint('⚠️ Failed to save alert to history: $e');
+      if (kDebugMode) debugPrint('⚠️ Failed to save alert to history: $e');
     }
   }
 
   /// Get alert history for dashboard (Legacy fallback)
-  static Future<List<Map<String, dynamic>>> getAlertHistory({int limit = 20}) async {
+  static Future<List<Map<String, dynamic>>> getAlertHistory({
+    int limit = 20,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final historyRaw = prefs.getString('low_stock_history') ?? '[]';
       final List<dynamic> history = json.decode(historyRaw);
-      return history.take(limit).map((e) => Map<String, dynamic>.from(e)).toList();
+      return history
+          .take(limit)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     } catch (e) {
       debugPrint('⚠️ Error loading alert history: $e');
       return [];
@@ -243,39 +261,41 @@ class InventoryManagementService {
   /// 🚀 REAL-TIME: Get all products currently below their threshold
   static Future<List<Map<String, dynamic>>> getAllLowStockProducts() async {
     try {
-      final List<Map<String, dynamic>> backendProducts = await LocalStorageService.loadBackendProducts();
-      final Map<String, dynamic> localProducts = await LocalStorageService.loadLocalProducts();
-      
+      final List<Map<String, dynamic>> backendProducts =
+          await LocalStorageService.loadBackendProducts();
+      final Map<String, dynamic> localProducts =
+          await LocalStorageService.loadLocalProducts();
+
       final List<Map<String, dynamic>> lowStock = [];
-      
+
       // Check Backend Products
       for (var p in backendProducts) {
         final stock = InventoryStockHelper.readStock(p);
-        final minS  = double.tryParse(p['min_stock']?.toString()     ?? '10') ?? 10;
+        final minS = double.tryParse(p['min_stock']?.toString() ?? '10') ?? 10;
         if (stock < minS) {
           lowStock.add({
             'productName': p['product_name'] ?? 'Unknown',
             'currentStock': stock,
             'productId': p['id'],
-            'type': 'BACKEND'
+            'type': 'BACKEND',
           });
         }
       }
-      
+
       // Check Local Products
       localProducts.forEach((key, p) {
         final stock = InventoryStockHelper.readStock(p);
-        final minS  = double.tryParse(p['min_stock']?.toString()     ?? '10') ?? 10;
+        final minS = double.tryParse(p['min_stock']?.toString() ?? '10') ?? 10;
         if (stock < minS) {
           lowStock.add({
             'productName': p['product_name'] ?? 'Unknown',
             'currentStock': stock,
             'productId': 0,
-            'type': 'LOCAL'
+            'type': 'LOCAL',
           });
         }
       });
-      
+
       return lowStock;
     } catch (e) {
       debugPrint('⚠️ Low Stock fetch failed: $e');
@@ -284,9 +304,12 @@ class InventoryManagementService {
   }
 
   /// 🚀 100/100: Real-time stock check for a specific product name (Fuzzy)
-  static Future<Map<String, dynamic>?> checkStockRealtime(String productName) async {
+  static Future<Map<String, dynamic>?> checkStockRealtime(
+    String productName,
+  ) async {
     try {
-      final List<Map<String, dynamic>> backendProducts = await LocalStorageService.loadBackendProducts();
+      final List<Map<String, dynamic>> backendProducts =
+          await LocalStorageService.loadBackendProducts();
       final String normName = FormatHelper.normalizeName(productName);
 
       // Pass 1: exact match only. Always prefer this over any fuzzy match —
@@ -303,7 +326,7 @@ class InventoryManagementService {
             'productName': p['product_name'],
             'stock': stock,
             'isLow': stock < minS,
-            'minStock': minS
+            'minStock': minS,
           };
         }
       }
@@ -334,7 +357,7 @@ class InventoryManagementService {
           'productName': bestCandidate['product_name'],
           'stock': stock,
           'isLow': stock < minS,
-          'minStock': minS
+          'minStock': minS,
         };
       }
 
@@ -345,24 +368,35 @@ class InventoryManagementService {
   }
 
   /// 🚀 100/100: Predict when a product will run out based on sales velocity
-  static Future<Map<String, dynamic>?> getStockoutPrediction(String productName) async {
+  static Future<Map<String, dynamic>?> getStockoutPrediction(
+    String productName,
+  ) async {
     try {
       final List<dynamic> salesData = await LocalStorageService.loadSales();
-      final List<Map<String, dynamic>> sales = salesData.map((e) => Map<String, dynamic>.from(e)).toList();
-      final List<Map<String, dynamic>> products = await LocalStorageService.loadBackendProducts();
-      
-      final p = products.firstWhere((e) => e['product_name'] == productName, orElse: () => {});
+      final List<Map<String, dynamic>> sales = salesData
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      final List<Map<String, dynamic>> products =
+          await LocalStorageService.loadBackendProducts();
+
+      final p = products.firstWhere(
+        (e) => e['product_name'] == productName,
+        orElse: () => {},
+      );
       if (p.isEmpty) return null;
 
       final currentStock = InventoryStockHelper.readStock(p);
-      if (currentStock <= 0) return {'daysRemaining': 0, 'status': 'OUT_OF_STOCK'};
+      if (currentStock <= 0)
+        return {'daysRemaining': 0, 'status': 'OUT_OF_STOCK'};
 
       // Calculate avg sales per day for last 30 days
       final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
       double totalQtySold = 0;
       for (var s in sales) {
         final date = DateTime.tryParse(s['created_at'] ?? s['sale_date'] ?? '');
-        if (date != null && date.isAfter(thirtyDaysAgo) && s['product'] == productName) {
+        if (date != null &&
+            date.isAfter(thirtyDaysAgo) &&
+            s['product'] == productName) {
           totalQtySold += (s['quantity'] as num?)?.toDouble() ?? 0.0;
         }
       }
@@ -374,7 +408,7 @@ class InventoryManagementService {
       return {
         'daysRemaining': daysRemaining,
         'avgPerDay': avgPerDay.toStringAsFixed(2),
-        'status': daysRemaining < 7 ? 'CRITICAL' : 'OK'
+        'status': daysRemaining < 7 ? 'CRITICAL' : 'OK',
       };
     } catch (e) {
       return null;
@@ -399,34 +433,46 @@ class InventoryManagementService {
       }
       return {'success': false, 'stock': -1};
     } catch (e) {
-    if (kDebugMode) debugPrint('❌ Error fetching stock: $e');
+      if (kDebugMode) debugPrint('❌ Error fetching stock: $e');
       return {'success': false, 'stock': -1};
     }
   }
 
   /// 🚀 PRODUCTION-GRADE: Atomic inventory deduction with persistent idempotency and explicit rollback.
-  static Future<void> deductStockLocally(List items, {required String saleId}) async {
+  static Future<void> deductStockLocally(
+    List items, {
+    required String saleId,
+  }) async {
     // ── 1. GLOBAL SALE IDEMPOTENCY: Reject duplicates ──
-    final alreadyProcessed = await LocalStorageService.isDeductionProcessed(saleId);
+    final alreadyProcessed = await LocalStorageService.isDeductionProcessed(
+      saleId,
+    );
     if (alreadyProcessed) {
-      if (kDebugMode) debugPrint('⚠️ Idempotency Triggered: Sale $saleId already processed for stock. Skipping.');
+      if (kDebugMode)
+        debugPrint(
+          '⚠️ Idempotency Triggered: Sale $saleId already processed for stock. Skipping.',
+        );
       return;
     }
-    if (kDebugMode) debugPrint('📦 Beginning atomic stock deduction for Sale: $saleId');
+    if (kDebugMode)
+      debugPrint('📦 Beginning atomic stock deduction for Sale: $saleId');
 
     try {
       // ── 2. PRE-TRANSACTION LOAD (Snapshot for state revert) ──
-      List<Map<String, dynamic>> products = await LocalStorageService.loadBackendProducts();
-      Map<String, dynamic> localProducts = await LocalStorageService.loadLocalProducts();
+      List<Map<String, dynamic>> products =
+          await LocalStorageService.loadBackendProducts();
+      Map<String, dynamic> localProducts =
+          await LocalStorageService.loadLocalProducts();
 
       bool updatedBackend = false;
-      bool updatedLocal   = false;
-      List<String> logs   = [];
+      bool updatedLocal = false;
+      List<String> logs = [];
       final Set<String> changedBackendProductIds = <String>{};
       final Map<String, double> deductedQtyByProductId = {};
 
       // Helper for normalization
-      String normalizeName(String r) => r.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim();
+      String normalizeName(String r) =>
+          r.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim();
 
       // ── 3. DEDUCTION LOGIC (PRIORITY MATCHING) ──
       for (var rawItem in items) {
@@ -445,8 +491,12 @@ class InventoryManagementService {
           continue;
         }
 
-        final String rawId   = (item['product_id'] ?? item['id'] ?? '').toString().trim();
-        final String rawName = (item['product_name'] ?? item['item'] ?? '').toString().trim();
+        final String rawId = (item['product_id'] ?? item['id'] ?? '')
+            .toString()
+            .trim();
+        final String rawName = (item['product_name'] ?? item['item'] ?? '')
+            .toString()
+            .trim();
         final String normSaleName = normalizeName(rawName);
         final String barcode = (item['barcode'] ?? '').toString().trim();
         // Parse quantity from either 'qty' or 'quantity' key, handle string and number types
@@ -457,40 +507,57 @@ class InventoryManagementService {
         } else if (qtyRaw is String) {
           qtySold = double.tryParse(qtyRaw.trim()) ?? 1.0;
         }
-        
+
         // 🔧 FIX: Debug quantity parsing to ensure correct quantity is used
         if (kDebugMode) {
           debugPrint('🔍 [Deduction] Processing item: $rawName');
           debugPrint('   Raw qty: $qtyRaw (${qtyRaw.runtimeType})');
           debugPrint('   Parsed qtySold: $qtySold');
         }
-        
+
         bool found = false;
 
         // A. Match in Backend Cache (Prioritize ID > Barcode > Exact Name > Normalized Name)
         for (var p in products) {
-          final String invId   = (p['id']?.toString() ?? p['product_id']?.toString() ?? '').trim();
-          final String invSku  = (p['sku']?.toString() ?? p['barcode']?.toString() ?? '').trim();
-          final String invNameOrig = (p['product_name'] ?? p['name'] ?? '').toString().trim();
+          final String invId =
+              (p['id']?.toString() ?? p['product_id']?.toString() ?? '').trim();
+          final String invSku =
+              (p['sku']?.toString() ?? p['barcode']?.toString() ?? '').trim();
+          final String invNameOrig = (p['product_name'] ?? p['name'] ?? '')
+              .toString()
+              .trim();
           final String normInvName = FormatHelper.normalizeName(invNameOrig);
-          
+
           bool match = false;
-          if (rawId.isNotEmpty && rawId != '0' && rawId != 'null' && invId == rawId) {
+          if (rawId.isNotEmpty &&
+              rawId != '0' &&
+              rawId != 'null' &&
+              invId == rawId) {
             match = true;
-            debugPrint('✅ Strict ID Match Found: ID [$invId] for item [$rawName]');
+            debugPrint(
+              '✅ Strict ID Match Found: ID [$invId] for item [$rawName]',
+            );
           } else if (barcode.isNotEmpty && invSku == barcode) {
             match = true;
-            debugPrint('✅ Strict Barcode Match Found: BC [$invSku] for item [$rawName]');
-          } else if (rawName.isNotEmpty && invNameOrig.toLowerCase() == rawName.toLowerCase()) {
+            debugPrint(
+              '✅ Strict Barcode Match Found: BC [$invSku] for item [$rawName]',
+            );
+          } else if (rawName.isNotEmpty &&
+              invNameOrig.toLowerCase() == rawName.toLowerCase()) {
             // ✅ FIX: Exact case-insensitive name match BEFORE normalized match
             match = true;
-            debugPrint('✅ Exact Name Match Found: [$invNameOrig] matches [$rawName]');
+            debugPrint(
+              '✅ Exact Name Match Found: [$invNameOrig] matches [$rawName]',
+            );
           } else if (normSaleName.isNotEmpty && normInvName == normSaleName) {
             // ✅ FIX: Only use normalized match if names have similar length (prevent "Milk" matching "Milk 500ml")
             final nameLenDiff = (invNameOrig.length - rawName.length).abs();
-            if (nameLenDiff <= 5) {  // Allow max 5 character difference
+            if (nameLenDiff <= 5) {
+              // Allow max 5 character difference
               match = true;
-              debugPrint('✅ Normalized Name Match Found: [$normInvName] matches [$normSaleName] (len diff: $nameLenDiff)');
+              debugPrint(
+                '✅ Normalized Name Match Found: [$normInvName] matches [$normSaleName] (len diff: $nameLenDiff)',
+              );
             }
           }
 
@@ -499,17 +566,25 @@ class InventoryManagementService {
             double nextVal = (current - qtySold).clamp(0.0, 999999.0);
             InventoryStockHelper.writeStock(p, nextVal);
             updatedBackend = true;
-            final idForSync = (p['id'] ?? p['product_id'] ?? '').toString().trim();
+            final idForSync = (p['id'] ?? p['product_id'] ?? '')
+                .toString()
+                .trim();
             if (idForSync.isNotEmpty) {
               changedBackendProductIds.add(idForSync);
-              deductedQtyByProductId[idForSync] = (deductedQtyByProductId[idForSync] ?? 0) + qtySold;
+              deductedQtyByProductId[idForSync] =
+                  (deductedQtyByProductId[idForSync] ?? 0) + qtySold;
             }
             found = true;
-            debugPrint('📉 Stock updated: $invNameOrig [$current → $nextVal] (Qty deducted: $qtySold)');
-            logs.add('Deducted ${qtySold} from Backend Product: $invNameOrig [ID:$invId]');
-            
+            debugPrint(
+              '📉 Stock updated: $invNameOrig [$current → $nextVal] (Qty deducted: $qtySold)',
+            );
+            logs.add(
+              'Deducted ${qtySold} from Backend Product: $invNameOrig [ID:$invId]',
+            );
+
             // 🚨 REAL-TIME LOW STOCK ALERT 🚨
-            double minS = double.tryParse(p['min_stock']?.toString() ?? '10') ?? 10.0;
+            double minS =
+                double.tryParse(p['min_stock']?.toString() ?? '10') ?? 10.0;
             if (nextVal < minS) {
               _triggerLowStockAlert(
                 productName: invNameOrig,
@@ -526,22 +601,32 @@ class InventoryManagementService {
         if (!found) {
           String? matchKey;
           localProducts.forEach((key, p) {
-            final String invId   = (p['id']?.toString() ?? p['product_id']?.toString() ?? '').trim();
-            final String invSku  = (p['sku']?.toString() ?? p['barcode']?.toString() ?? '').trim();
-            final String invNameOrig = (p['product_name'] ?? p['name'] ?? '').toString().trim();
+            final String invId =
+                (p['id']?.toString() ?? p['product_id']?.toString() ?? '')
+                    .trim();
+            final String invSku =
+                (p['sku']?.toString() ?? p['barcode']?.toString() ?? '').trim();
+            final String invNameOrig = (p['product_name'] ?? p['name'] ?? '')
+                .toString()
+                .trim();
             final String normInvName = FormatHelper.normalizeName(invNameOrig);
 
-            if (rawId.isNotEmpty && rawId != '0' && rawId != 'null' && invId == rawId) {
+            if (rawId.isNotEmpty &&
+                rawId != '0' &&
+                rawId != 'null' &&
+                invId == rawId) {
               matchKey = key;
             } else if (barcode.isNotEmpty && invSku == barcode) {
               matchKey = key;
-            } else if (rawName.isNotEmpty && invNameOrig.toLowerCase() == rawName.toLowerCase()) {
+            } else if (rawName.isNotEmpty &&
+                invNameOrig.toLowerCase() == rawName.toLowerCase()) {
               // ✅ FIX: Exact case-insensitive name match BEFORE normalized match
               matchKey = key;
             } else if (normSaleName.isNotEmpty && normInvName == normSaleName) {
               // ✅ FIX: Only use normalized match if names have similar length
               final nameLenDiff = (invNameOrig.length - rawName.length).abs();
-              if (nameLenDiff <= 5) {  // Allow max 5 character difference
+              if (nameLenDiff <= 5) {
+                // Allow max 5 character difference
                 matchKey = key;
               }
             }
@@ -549,30 +634,40 @@ class InventoryManagementService {
 
           if (matchKey != null) {
             final p = localProducts[matchKey];
-            final String invNameOrig = (p['product_name']?.toString() ?? '').trim();
+            final String invNameOrig = (p['product_name']?.toString() ?? '')
+                .trim();
             double current = InventoryStockHelper.readStock(p);
             double nextVal = (current - qtySold).clamp(0.0, 999999.0);
             InventoryStockHelper.writeStock(p, nextVal);
             updatedLocal = true;
-            debugPrint('📉 Local Stock updated: $invNameOrig [$current → $nextVal]');
+            debugPrint(
+              '📉 Local Stock updated: $invNameOrig [$current → $nextVal]',
+            );
             logs.add('Deducted ${qtySold} from Local Product: $invNameOrig');
             found = true;
 
             // 🚨 REAL-TIME LOW STOCK ALERT (Local) 🚨
-            double minS = double.tryParse(p['min_stock']?.toString() ?? '10') ?? 10.0;
+            double minS =
+                double.tryParse(p['min_stock']?.toString() ?? '10') ?? 10.0;
             if (nextVal < minS) {
               _triggerLowStockAlert(
                 productName: invNameOrig,
                 currentStock: nextVal.toInt(),
                 minStock: minS,
-                productId: int.tryParse(p['id']?.toString() ?? p['product_id']?.toString() ?? '0') ?? 0,
+                productId:
+                    int.tryParse(
+                      p['id']?.toString() ?? p['product_id']?.toString() ?? '0',
+                    ) ??
+                    0,
               ).catchError((_) {});
             }
           }
         }
 
         if (!found) {
-          debugPrint('⚠️ [InvenMatch] No match found for product: "$rawName" (ID: $rawId, BC: $barcode)');
+          debugPrint(
+            '⚠️ [InvenMatch] No match found for product: "$rawName" (ID: $rawId, BC: $barcode)',
+          );
         }
       }
 
@@ -588,7 +683,6 @@ class InventoryManagementService {
       // Mark as processed persistently in dedicated box
       await LocalStorageService.markDeductionProcessed(saleId);
 
-
       if (kDebugMode) debugPrint('✅ Transaction Committed: $saleId');
       logs.forEach(print);
 
@@ -597,17 +691,17 @@ class InventoryManagementService {
         onInventoryChanged?.call();
       }
 
-      // Best-effort cloud sync removed: 
+      // Best-effort cloud sync removed:
       // The backend automatically deducts stock when it processes the Invoice/Sale payload via /api/invoices/sync.
       // Explicitly calling decrease-stock here causes DOUBLE DEDUCTIONS on the backend!
-
     } catch (e, st) {
       // ── 5. FALLBACK ROLLBACK ──
-      // Because we used local 'products' and 'localProducts' copies, 
-      // the actual SharedPreferences state WAS NEVER UPDATED. 
+      // Because we used local 'products' and 'localProducts' copies,
+      // the actual SharedPreferences state WAS NEVER UPDATED.
       // This is an inherent atomic rollback.
-    if (kDebugMode) debugPrint('❌ TRANSACTION ABORTED (State Reverted) for $saleId: $e');
-    if (kDebugMode) debugPrint(st.toString());
+      if (kDebugMode)
+        debugPrint('❌ TRANSACTION ABORTED (State Reverted) for $saleId: $e');
+      if (kDebugMode) debugPrint(st.toString());
     }
   }
 
@@ -644,7 +738,8 @@ class InventoryManagementService {
 
         final productId = int.tryParse(id) ?? 0;
         final name = product['product_name']?.toString() ?? 'Product';
-        final minS = double.tryParse(product['min_stock']?.toString() ?? '10') ?? 10.0;
+        final minS =
+            double.tryParse(product['min_stock']?.toString() ?? '10') ?? 10.0;
 
         try {
           if (productId > 0) {
@@ -675,7 +770,7 @@ class InventoryManagementService {
           }
         }
       }
-      
+
       // Trigger queue processing
       SyncService.processQueueSafe();
     } catch (e) {
@@ -686,33 +781,82 @@ class InventoryManagementService {
   }
 
   /// 🚀 100/100: Restore stock when a sale is cancelled
-  static Future<void> restoreStockLocally(List items, {required String saleId}) async {
+  static Future<void> restoreStockLocally(
+    List items, {
+    required String saleId,
+  }) async {
     try {
-      List<Map<String, dynamic>> products = await LocalStorageService.loadBackendProducts();
-      Map<String, dynamic> localProducts = await LocalStorageService.loadLocalProducts();
+      // Idempotent: a retried cancellation must not double-restore stock.
+      final idemBox = await LocalStorageService.getIdempotencyBoxForRestore();
+      final restoreKey = 'stock_restored_$saleId';
+      if (idemBox.containsKey(restoreKey)) {
+        debugPrint('♻️ Stock already restored for Sale: $saleId — skipping');
+        return;
+      }
+
+      List<Map<String, dynamic>> products =
+          await LocalStorageService.loadBackendProducts();
+      Map<String, dynamic> localProducts =
+          await LocalStorageService.loadLocalProducts();
+
+      String normalizeName(String v) =>
+          v.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      double parseQty(dynamic raw) {
+        if (raw is num) return raw.toDouble();
+        return double.tryParse(raw?.toString().trim() ?? '') ?? 0.0;
+      }
 
       bool updated = false;
 
       for (var rawItem in items) {
         final Map<String, dynamic> item = Map<String, dynamic>.from(rawItem);
-        final String rawName = (item['product_name'] ?? item['item'] ?? '').toString().trim();
-        // Parse quantity from either 'qty' or 'quantity' key, handle string and number types
-        final dynamic qtyRaw = item['qty'] ?? item['quantity'] ?? 0;
-        double qtyToRestore = 0.0;
-        if (qtyRaw is num) {
-          qtyToRestore = qtyRaw.toDouble();
-        } else if (qtyRaw is String) {
-          qtyToRestore = double.tryParse(qtyRaw.trim()) ?? 0.0;
+        if (item['is_custom_item'] == true || item['stock_tracked'] == false) {
+          continue;
         }
-        
-        if (qtyToRestore <= 0) continue;
+        final String rawName =
+            (item['product_name'] ?? item['name'] ?? item['item'] ?? '')
+                .toString()
+                .trim();
+        final int productId =
+            int.tryParse((item['product_id'] ?? item['id'] ?? '').toString()) ??
+            0;
+        final qtyToRestore = parseQty(item['qty'] ?? item['quantity']);
+        if (qtyToRestore <= 0 || (productId <= 0 && rawName.isEmpty)) continue;
 
-        // Find in Backend
+        bool matches(Map<String, dynamic> p) {
+          final pid =
+              int.tryParse(
+                (p['id'] ?? p['product_id'] ?? p['backend_id'] ?? '')
+                    .toString(),
+              ) ??
+              0;
+          if (productId > 0 && pid == productId) return true;
+          final invName = normalizeName(
+            (p['product_name'] ?? p['name'] ?? '').toString(),
+          );
+          return invName.isNotEmpty && invName == normalizeName(rawName);
+        }
+
+        // Restore in the backend product cache.
         for (var p in products) {
-          final invName = (p['product_name'] ?? p['name'] ?? '').toString().toLowerCase();
-          if (invName == rawName.toLowerCase()) {
+          if (matches(p)) {
             final current = InventoryStockHelper.readStock(p);
             InventoryStockHelper.writeStock(p, current + qtyToRestore);
+            updated = true;
+            break;
+          }
+        }
+
+        // Restore in the local-only product cache too.
+        for (var p in localProducts.values) {
+          if (p is Map && matches(Map<String, dynamic>.from(p))) {
+            final pm = Map<String, dynamic>.from(p);
+            final current = InventoryStockHelper.readStock(pm);
+            InventoryStockHelper.writeStock(pm, current + qtyToRestore);
+            for (final e in pm.entries) {
+              (p as Map)[e.key] = e.value;
+            }
             updated = true;
             break;
           }
@@ -721,6 +865,10 @@ class InventoryManagementService {
 
       if (updated) {
         await LocalStorageService.saveBackendProducts(products);
+        await LocalStorageService.saveLocalProducts(
+          Map<String, dynamic>.from(localProducts),
+        );
+        await idemBox.put(restoreKey, DateTime.now().toIso8601String());
         onInventoryChanged?.call();
         debugPrint('♻️ Stock restored for Sale: $saleId');
       }

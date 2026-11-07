@@ -29,21 +29,30 @@ void main() {
       );
     });
 
-    test('falls back to English copy for supported keys and preserves unknown copy', () {
-      expect(
-        VoiceBillingLocalization.label('Detected items', 'unknown'),
-        'Detected items',
-      );
-      expect(
-        VoiceBillingLocalization.label('A new message', 'te'),
-        'A new message',
-      );
-    });
+    test(
+      'falls back to English copy for supported keys and preserves unknown copy',
+      () {
+        expect(
+          VoiceBillingLocalization.label('Detected items', 'unknown'),
+          'Detected items',
+        );
+        expect(
+          VoiceBillingLocalization.label('A new message', 'te'),
+          'A new message',
+        );
+      },
+    );
   });
 
   group('placeholder labels for sales entry', () {
     const placeholders = [
-      'Product Name', 'Qty', 'Price', 'Disc (₹)', 'GST %', 'Phone Number', 'Customer Name',
+      'Product Name',
+      'Qty',
+      'Price',
+      'Disc (₹)',
+      'GST %',
+      'Phone Number',
+      'Customer Name',
     ];
     const langs = ['te', 'hi', 'ta', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa'];
 
@@ -69,9 +78,15 @@ void main() {
       expect(VoiceBillingLocalization.label('Qty', 'te_IN'), 'పరిమాణం');
     });
 
-    test('an unknown key falls back to itself, an unknown language to English', () {
-      expect(VoiceBillingLocalization.label('Something else', 'te'), 'Something else');
-      expect(VoiceBillingLocalization.label('Price', 'xx'), 'Price');
-    });
-});
+    test(
+      'an unknown key falls back to itself, an unknown language to English',
+      () {
+        expect(
+          VoiceBillingLocalization.label('Something else', 'te'),
+          'Something else',
+        );
+        expect(VoiceBillingLocalization.label('Price', 'xx'), 'Price');
+      },
+    );
+  });
 }

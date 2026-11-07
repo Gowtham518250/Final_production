@@ -8,7 +8,7 @@ class AdvancedAnimations {
   static const Curve springCurve = Cubic(0.175, 0.885, 0.32, 1.275);
   static const Curve bounceCurve = Cubic(0.68, -0.55, 0.265, 1.55);
   static const Curve elasticCurve = Cubic(0.36, 0.07, 0.19, 0.97);
-  
+
   // Duration presets
   static const Duration microDuration = Duration(milliseconds: 150);
   static const Duration quickDuration = Duration(milliseconds: 200);
@@ -56,7 +56,10 @@ class _MicroInteractionWidgetState extends State<MicroInteractionWidget>
       vsync: this,
     );
     _scaleAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: AdvancedAnimations.springCurve),
+      CurvedAnimation(
+        parent: _controller,
+        curve: AdvancedAnimations.springCurve,
+      ),
     );
   }
 
@@ -70,11 +73,11 @@ class _MicroInteractionWidgetState extends State<MicroInteractionWidget>
     if (widget.enableHaptics) {
       HapticFeedback.lightImpact();
     }
-    
+
     _controller
         .animateTo(widget.pressScale)
         .then((_) => _controller.animateTo(1.0));
-    
+
     widget.onTap?.call();
   }
 
@@ -157,13 +160,10 @@ class _ParticleEffectState extends State<ParticleEffect>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    
+    _controller = AnimationController(duration: widget.duration, vsync: this);
+
     _initializeParticles();
-    
+
     if (widget.autoStart) {
       _controller.forward();
     }
@@ -171,14 +171,16 @@ class _ParticleEffectState extends State<ParticleEffect>
 
   void _initializeParticles() {
     for (int i = 0; i < widget.particleCount; i++) {
-      _particles.add(Particle(
-        x: 0,
-        y: 0,
-        velocityX: _random.nextDouble() * 4 - 2,
-        velocityY: -_random.nextDouble() * 6 - 2,
-        size: _random.nextDouble() * 8 + 4,
-        opacity: 1.0,
-      ));
+      _particles.add(
+        Particle(
+          x: 0,
+          y: 0,
+          velocityX: _random.nextDouble() * 4 - 2,
+          velocityY: -_random.nextDouble() * 6 - 2,
+          size: _random.nextDouble() * 8 + 4,
+          opacity: 1.0,
+        ),
+      );
     }
   }
 
@@ -268,7 +270,10 @@ class ParticlePainter extends CustomPainter {
       if (particle.opacity > 0) {
         paint.color = color.withValues(alpha: particle.opacity);
         canvas.drawCircle(
-          Offset(size.width / 2 + particle.x * 50, size.height - particle.y * 50),
+          Offset(
+            size.width / 2 + particle.x * 50,
+            size.height - particle.y * 50,
+          ),
           particle.size,
           paint,
         );
@@ -286,10 +291,7 @@ class SpringAnimationHelper {
     required TickerProvider vsync,
     Duration duration = const Duration(milliseconds: 300),
   }) {
-    return AnimationController(
-      duration: duration,
-      vsync: vsync,
-    );
+    return AnimationController(duration: duration, vsync: vsync);
   }
 
   static Animation<double> createSpringAnimation(
@@ -298,9 +300,10 @@ class SpringAnimationHelper {
     double end = 1.0,
     Curve curve = AdvancedAnimations.springCurve,
   }) {
-    return Tween<double>(begin: begin, end: end).animate(
-      CurvedAnimation(parent: controller, curve: curve),
-    );
+    return Tween<double>(
+      begin: begin,
+      end: end,
+    ).animate(CurvedAnimation(parent: controller, curve: curve));
   }
 
   static Future<void> animateWithSpring(
@@ -344,11 +347,17 @@ class _BounceSuccessAnimationState extends State<BounceSuccessAnimation>
     );
 
     _scaleAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _controller, curve: AdvancedAnimations.bounceCurve),
+      CurvedAnimation(
+        parent: _controller,
+        curve: AdvancedAnimations.bounceCurve,
+      ),
     );
 
     _rotationAnimation = Tween<double>(begin: 0.0, end: 0.1).animate(
-      CurvedAnimation(parent: _controller, curve: AdvancedAnimations.elasticCurve),
+      CurvedAnimation(
+        parent: _controller,
+        curve: AdvancedAnimations.elasticCurve,
+      ),
     );
 
     _controller.addStatusListener((status) {
@@ -421,9 +430,10 @@ class _ShakeErrorAnimationState extends State<ShakeErrorAnimation>
       vsync: this,
     );
 
-    _offsetAnimation = Tween<double>(begin: 0.0, end: 10.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticIn),
-    );
+    _offsetAnimation = Tween<double>(
+      begin: 0.0,
+      end: 10.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.elasticIn));
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -497,21 +507,17 @@ class _FadeSlideAnimationState extends State<FadeSlideAnimation>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: widget.curve),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
 
     _slideAnimation = Tween<Offset>(
       begin: widget.beginOffset,
       end: widget.endOffset,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: widget.curve),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
 
     if (widget.trigger) {
       _controller.forward();
@@ -604,16 +610,15 @@ class _PulseAnimationState extends State<PulseAnimation>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
 
-    _pulseAnimation = Tween<double>(begin: widget.minScale, end: widget.maxScale)
-        .animate(CurvedAnimation(
-          parent: _controller,
-          curve: AdvancedAnimations.springCurve,
-        ));
+    _pulseAnimation =
+        Tween<double>(begin: widget.minScale, end: widget.maxScale).animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: AdvancedAnimations.springCurve,
+          ),
+        );
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {

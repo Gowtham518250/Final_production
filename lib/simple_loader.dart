@@ -39,10 +39,7 @@ class SimpleLoader {
     }
   }
 
-  static Future<void> _show(
-    BuildContext context,
-    String message,
-  ) async {
+  static Future<void> _show(BuildContext context, String message) async {
     if (_visible) {
       return _dialogReady?.future ?? Future<void>.value();
     }

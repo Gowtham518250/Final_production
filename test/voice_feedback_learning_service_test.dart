@@ -10,68 +10,80 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('learns a repeated Telugu correction without ASCII word-boundary regex', () async {
-    for (var i = 0; i < 3; i++) {
-      await VoiceFeedbackLearningService.recordCorrection(
-        originalTranscript: 'బుబ్ట్',
-        correctedItemName: 'బూస్ట్',
-        languageCode: 'te',
-        originalConfidence: 0.72,
-      );
-    }
+  test(
+    'learns a repeated Telugu correction without ASCII word-boundary regex',
+    () async {
+      for (var i = 0; i < 3; i++) {
+        await VoiceFeedbackLearningService.recordCorrection(
+          originalTranscript: 'బుబ్ట్',
+          correctedItemName: 'బూస్ట్',
+          languageCode: 'te',
+          originalConfidence: 0.72,
+        );
+      }
 
-    final corrected = await VoiceFeedbackLearningService.applyLearnedCorrections(
-      transcript: '2 కిలోల బుబ్ట్',
-      languageCode: 'te',
-    );
+      final corrected =
+          await VoiceFeedbackLearningService.applyLearnedCorrections(
+            transcript: '2 కిలోల బుబ్ట్',
+            languageCode: 'te',
+          );
 
-    expect(corrected, '2 కిలోల బూస్ట్');
-  });
+      expect(corrected, '2 కిలోల బూస్ట్');
+    },
+  );
 
-  test('does not replace an alias embedded inside a longer Latin word', () async {
-    for (var i = 0; i < 3; i++) {
-      await VoiceFeedbackLearningService.recordCorrection(
-        originalTranscript: 'soap',
-        correctedItemName: 'dove',
+  test(
+    'does not replace an alias embedded inside a longer Latin word',
+    () async {
+      for (var i = 0; i < 3; i++) {
+        await VoiceFeedbackLearningService.recordCorrection(
+          originalTranscript: 'soap',
+          correctedItemName: 'dove',
+          languageCode: 'en',
+          originalConfidence: 0.8,
+        );
+      }
+
+      final embedded =
+          await VoiceFeedbackLearningService.applyLearnedCorrections(
+            transcript: 'soapdish',
+            languageCode: 'en',
+          );
+      final wholePhrase =
+          await VoiceFeedbackLearningService.applyLearnedCorrections(
+            transcript: '2 soap',
+            languageCode: 'en',
+          );
+
+      expect(embedded, 'soapdish');
+      expect(wholePhrase, '2 dove');
+    },
+  );
+
+  test(
+    'does not activate conflicting corrections tied for first place',
+    () async {
+      for (var i = 0; i < 3; i++) {
+        await VoiceFeedbackLearningService.recordCorrection(
+          originalTranscript: 'bubt',
+          correctedItemName: 'boost',
+          languageCode: 'en',
+          originalConfidence: 0.6,
+        );
+        await VoiceFeedbackLearningService.recordCorrection(
+          originalTranscript: 'bubt',
+          correctedItemName: 'boosted',
+          languageCode: 'en',
+          originalConfidence: 0.6,
+        );
+      }
+
+      final result = await VoiceFeedbackLearningService.applyLearnedCorrections(
+        transcript: 'bubt',
         languageCode: 'en',
-        originalConfidence: 0.8,
       );
-    }
 
-    final embedded = await VoiceFeedbackLearningService.applyLearnedCorrections(
-      transcript: 'soapdish',
-      languageCode: 'en',
-    );
-    final wholePhrase = await VoiceFeedbackLearningService.applyLearnedCorrections(
-      transcript: '2 soap',
-      languageCode: 'en',
-    );
-
-    expect(embedded, 'soapdish');
-    expect(wholePhrase, '2 dove');
-  });
-
-  test('does not activate conflicting corrections tied for first place', () async {
-    for (var i = 0; i < 3; i++) {
-      await VoiceFeedbackLearningService.recordCorrection(
-        originalTranscript: 'bubt',
-        correctedItemName: 'boost',
-        languageCode: 'en',
-        originalConfidence: 0.6,
-      );
-      await VoiceFeedbackLearningService.recordCorrection(
-        originalTranscript: 'bubt',
-        correctedItemName: 'boosted',
-        languageCode: 'en',
-        originalConfidence: 0.6,
-      );
-    }
-
-    final result = await VoiceFeedbackLearningService.applyLearnedCorrections(
-      transcript: 'bubt',
-      languageCode: 'en',
-    );
-
-    expect(result, 'bubt');
-  });
+      expect(result, 'bubt');
+    },
+  );
 }

@@ -11,10 +11,7 @@ class PerformanceOptimizations {
     required Widget Function() builder,
     required List<Object?> dependencies,
   }) {
-    return _MemoizedWidget(
-      builder: builder,
-      dependencies: dependencies,
-    );
+    return _MemoizedWidget(builder: builder, dependencies: dependencies);
   }
 
   /// Optimized ListView builder with proper caching
@@ -36,7 +33,9 @@ class PerformanceOptimizations {
       addAutomaticKeepAlives: itemCount <= 20,
       // Add semantic child cache for accessibility performance
       addRepaintBoundaries: true,
-      cacheExtent: itemCount > 50 ? 220.0 : null, // Smaller prefetch window for low-memory devices
+      cacheExtent: itemCount > 50
+          ? 220.0
+          : null, // Smaller prefetch window for low-memory devices
       itemBuilder: itemBuilder,
     );
   }
@@ -77,10 +76,7 @@ class _MemoizedWidget extends StatefulWidget {
   final Widget Function() builder;
   final List<Object?> dependencies;
 
-  const _MemoizedWidget({
-    required this.builder,
-    required this.dependencies,
-  });
+  const _MemoizedWidget({required this.builder, required this.dependencies});
 
   @override
   State<_MemoizedWidget> createState() => _MemoizedWidgetState();
@@ -117,20 +113,24 @@ class PerformanceMonitor {
       final duration = DateTime.now().difference(_startTimes[operation]!);
       _durations[operation] = duration;
       _startTimes.remove(operation);
-      
+
       if (kDebugMode) {
-        debugPrint('⏱️ Performance: $operation took ${duration.inMilliseconds}ms');
+        debugPrint(
+          '⏱️ Performance: $operation took ${duration.inMilliseconds}ms',
+        );
       }
-      
+
       // Warn if operation takes too long
       if (duration.inMilliseconds > 100) {
-        debugPrint('⚠️ SLOW OPERATION: $operation took ${duration.inMilliseconds}ms');
+        debugPrint(
+          '⚠️ SLOW OPERATION: $operation took ${duration.inMilliseconds}ms',
+        );
       }
     }
   }
 
   static Duration? getDuration(String operation) => _durations[operation];
-  
+
   static void clear() {
     _startTimes.clear();
     _durations.clear();
@@ -190,10 +190,10 @@ class ListOptimizer {
   /// Paginate large lists for better performance
   static List<T> paginate<T>(List<T> list, int page, int pageSize) {
     if (list.isEmpty) return [];
-    
+
     final start = page * pageSize;
     if (start >= list.length) return [];
-    
+
     final end = (start + pageSize).clamp(0, list.length);
     return list.sublist(start, end);
   }

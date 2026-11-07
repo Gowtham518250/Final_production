@@ -10,59 +10,142 @@ import 'attendance_shift_policy.dart';
 /// (14:00–23:00). A worker can check in only once in each shift.
 class OfflineAttendanceService {
   static const String _prefix = 'attendance_local_v2_';
-  static Future<int?> _userId() async { final p=await SharedPreferences.getInstance(); return p.getInt('user_id') ?? p.getInt('userId'); }
-  static String _date(DateTime v) => '${v.year.toString().padLeft(4,'0')}-${v.month.toString().padLeft(2,'0')}-${v.day.toString().padLeft(2,'0')}';
-  static String _identity(Map<String,dynamic> r,int uid){final w=r['worker_id']?.toString().trim()??'';final e=r['employee_id']?.toString().trim()??'';if(w.isNotEmpty)return 'worker:$w';if(e.isNotEmpty)return 'employee:$e';return 'user:$uid';}
-  static int _sessionIndexOf(Map<String,dynamic> r) =>
+  static Future<int?> _userId() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt('user_id') ?? p.getInt('userId');
+  }
+
+  static String _date(DateTime v) =>
+      '${v.year.toString().padLeft(4, '0')}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
+  static String _identity(Map<String, dynamic> r, int uid) {
+    final w = r['worker_id']?.toString().trim() ?? '';
+    final e = r['employee_id']?.toString().trim() ?? '';
+    if (w.isNotEmpty) return 'worker:$w';
+    if (e.isNotEmpty) return 'employee:$e';
+    return 'user:$uid';
+  }
+
+  static int _sessionIndexOf(Map<String, dynamic> r) =>
       AttendanceShiftPolicy.indexForRecord(r);
   // NOTE: the key now includes a session index so multiple check-in/out
   // pairs on the same date are stored as separate records instead of
   // overwriting each other.
-  static String _recordKey(Map<String,dynamic> r,int uid)=>'${_identity(r,uid)}:${(r['attendance_date']?.toString()??'').split('T').first}:${_sessionIndexOf(r)}';
-  static Future<String> _key(int uid) async=>'$_prefix$uid';
+  static String _recordKey(Map<String, dynamic> r, int uid) =>
+      '${_identity(r, uid)}:${(r['attendance_date']?.toString() ?? '').split('T').first}:${_sessionIndexOf(r)}';
+  static Future<String> _key(int uid) async => '$_prefix$uid';
 
-  static bool _sameWorker(Map r,int employeeId,int? workerId)=>(r['employee_id']?.toString()??'')==employeeId.toString()&&(r['worker_id']?.toString()??'')==(workerId?.toString()??'');
+  static bool _sameWorker(Map r, int employeeId, int? workerId) =>
+      (r['employee_id']?.toString() ?? '') == employeeId.toString() &&
+      (r['worker_id']?.toString() ?? '') == (workerId?.toString() ?? '');
 
-  static Future<List<Map<String,dynamic>>> loadLocalRecords() async { final uid=await _userId();if(uid==null||uid<=0)return <Map<String,dynamic>>[];final p=await SharedPreferences.getInstance();final raw=p.getString(await _key(uid));if(raw==null||raw.isEmpty)return <Map<String,dynamic>>[];try{final d=jsonDecode(raw);if(d is! List)return <Map<String,dynamic>>[];return d.whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList();}catch(_){return <Map<String,dynamic>>[];} }
+  static Future<List<Map<String, dynamic>>> loadLocalRecords() async {
+    final uid = await _userId();
+    if (uid == null || uid <= 0) return <Map<String, dynamic>>[];
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(await _key(uid));
+    if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+    try {
+      final d = jsonDecode(raw);
+      if (d is! List) return <Map<String, dynamic>>[];
+      return d
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
 
-  static Future<void> _saveRecords(List<Map<String,dynamic>> records) async { final uid=await _userId();if(uid==null||uid<=0)return;final p=await SharedPreferences.getInstance();final out=<String,Map<String,dynamic>>{};for(final r in records){final k=_recordKey(r,uid);if(k.endsWith(':'))continue;out[k]=Map<String,dynamic>.from(r);}await p.setString(await _key(uid),jsonEncode(out.values.toList())); }
+  static Future<void> _saveRecords(List<Map<String, dynamic>> records) async {
+    final uid = await _userId();
+    if (uid == null || uid <= 0) return;
+    final p = await SharedPreferences.getInstance();
+    final out = <String, Map<String, dynamic>>{};
+    for (final r in records) {
+      final k = _recordKey(r, uid);
+      if (k.endsWith(':')) continue;
+      out[k] = Map<String, dynamic>.from(r);
+    }
+    await p.setString(await _key(uid), jsonEncode(out.values.toList()));
+  }
 
   /// All sessions (check-in/out pairs) for [employeeId]/[workerId] on [date],
   /// sorted by session index (i.e. chronological order).
-  static Future<List<Map<String,dynamic>>> _findTodaySessions({required int employeeId,int? workerId,required String date}) async {
-    final records=await loadLocalRecords();
-    final sessions=records.where((r)=>_sameWorker(r,employeeId,workerId)&&(r['attendance_date']?.toString()??'').split('T').first==date).map((e)=>Map<String,dynamic>.from(e)).toList();
-    sessions.sort((a,b)=>_sessionIndexOf(a).compareTo(_sessionIndexOf(b)));
+  static Future<List<Map<String, dynamic>>> _findTodaySessions({
+    required int employeeId,
+    int? workerId,
+    required String date,
+  }) async {
+    final records = await loadLocalRecords();
+    final sessions = records
+        .where(
+          (r) =>
+              _sameWorker(r, employeeId, workerId) &&
+              (r['attendance_date']?.toString() ?? '').split('T').first == date,
+        )
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    sessions.sort((a, b) => _sessionIndexOf(a).compareTo(_sessionIndexOf(b)));
     return sessions;
   }
 
   /// The currently open session for today, if any (checked in, not yet
   /// checked out). This is what determines whether the next tap should be
   /// a check-in or a check-out.
-  static Future<Map<String,dynamic>?> _findOpenSession({required int employeeId,int? workerId,required String date}) async {
-    final sessions=await _findTodaySessions(employeeId:employeeId,workerId:workerId,date:date);
-    for(final s in sessions.reversed){if(s['check_in_time']!=null&&s['check_out_time']==null)return s;}
+  static Future<Map<String, dynamic>?> _findOpenSession({
+    required int employeeId,
+    int? workerId,
+    required String date,
+  }) async {
+    final sessions = await _findTodaySessions(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+    );
+    for (final s in sessions.reversed) {
+      if (s['check_in_time'] != null && s['check_out_time'] == null) return s;
+    }
     return null;
   }
 
-  static Future<void> _upsertSession({required int employeeId,int? workerId,required String date,required int sessionIndex,DateTime? checkIn,DateTime? checkOut,String? status,double? workingHours}) async {
-    final records=await loadLocalRecords();
-    final index=records.indexWhere((r)=>_sameWorker(r,employeeId,workerId)&&(r['attendance_date']?.toString()??'').split('T').first==date&&_sessionIndexOf(r)==sessionIndex);
-    final existing=index>=0?Map<String,dynamic>.from(records[index]):<String,dynamic>{};
-    final merged=<String,dynamic>{
+  static Future<void> _upsertSession({
+    required int employeeId,
+    int? workerId,
+    required String date,
+    required int sessionIndex,
+    DateTime? checkIn,
+    DateTime? checkOut,
+    String? status,
+    double? workingHours,
+  }) async {
+    final records = await loadLocalRecords();
+    final index = records.indexWhere(
+      (r) =>
+          _sameWorker(r, employeeId, workerId) &&
+          (r['attendance_date']?.toString() ?? '').split('T').first == date &&
+          _sessionIndexOf(r) == sessionIndex,
+    );
+    final existing = index >= 0
+        ? Map<String, dynamic>.from(records[index])
+        : <String, dynamic>{};
+    final merged = <String, dynamic>{
       ...existing,
-      'employee_id':employeeId,
-      if(workerId!=null)'worker_id':workerId,
-      'attendance_date':date,
-      'session_index':sessionIndex,
-      if(checkIn!=null)'check_in_time':checkIn.toUtc().toIso8601String(),
-      if(checkOut!=null)'check_out_time':checkOut.toUtc().toIso8601String(),
-      if(status!=null)'status':status.toUpperCase(),
-      if(workingHours!=null)'working_hours':workingHours,
-      'local_pending':true,
-      'updated_at':DateTime.now().toUtc().toIso8601String(),
+      'employee_id': employeeId,
+      if (workerId != null) 'worker_id': workerId,
+      'attendance_date': date,
+      'session_index': sessionIndex,
+      if (checkIn != null) 'check_in_time': checkIn.toUtc().toIso8601String(),
+      if (checkOut != null)
+        'check_out_time': checkOut.toUtc().toIso8601String(),
+      if (status != null) 'status': status.toUpperCase(),
+      if (workingHours != null) 'working_hours': workingHours,
+      'local_pending': true,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
-    if(index>=0)records[index]=merged;else records.add(merged);
+    if (index >= 0)
+      records[index] = merged;
+    else
+      records.add(merged);
     await _saveRecords(records);
   }
 
@@ -81,7 +164,8 @@ class OfflineAttendanceService {
       date: date,
     );
     for (final session in sessions) {
-      if (session['check_in_time'] == null || session['check_out_time'] != null) {
+      if (session['check_in_time'] == null ||
+          session['check_out_time'] != null) {
         continue;
       }
       final index = _sessionIndexOf(session);
@@ -92,7 +176,9 @@ class OfflineAttendanceService {
       final shiftEnd = AttendanceShiftPolicy.shiftEnd(businessDate, index);
       if (now.isBefore(shiftEnd)) continue;
 
-      final checkIn = DateTime.tryParse(session['check_in_time'].toString())?.toLocal();
+      final checkIn = DateTime.tryParse(
+        session['check_in_time'].toString(),
+      )?.toLocal();
       if (checkIn == null) continue;
       final checkoutAt = shiftEnd.isBefore(checkIn) ? checkIn : shiftEnd;
       final hours = checkoutAt.difference(checkIn).inSeconds / 3600.0;
@@ -107,22 +193,19 @@ class OfflineAttendanceService {
         workingHours: hours,
         status: 'PRESENT',
       );
-      final queued = await SyncQueueManager.enqueue(
-        'attendance_check_out',
-        {
-          'operation_id': operationId,
-          'idempotency_key': operationId,
-          'employee_id': employeeId,
-          'worker_id': workerId,
-          'attendance_date': date,
-          'session_index': index,
-          'check_in_time': session['check_in_time'],
-          'check_out_time': checkoutAt.toUtc().toIso8601String(),
-          'working_hours': hours,
-          'status': 'PRESENT',
-          'checkout_reason': 'SHIFT_EXPIRED',
-        },
-      );
+      final queued = await SyncQueueManager.enqueue('attendance_check_out', {
+        'operation_id': operationId,
+        'idempotency_key': operationId,
+        'employee_id': employeeId,
+        'worker_id': workerId,
+        'attendance_date': date,
+        'session_index': index,
+        'check_in_time': session['check_in_time'],
+        'check_out_time': checkoutAt.toUtc().toIso8601String(),
+        'working_hours': hours,
+        'status': 'PRESENT',
+        'checkout_reason': 'SHIFT_EXPIRED',
+      });
       if (!queued) {
         throw StateError('Unable to queue automatic attendance checkout');
       }
@@ -146,7 +229,7 @@ class OfflineAttendanceService {
   }
 
   /// Starts the Morning or Afternoon shift once. Duplicate check-ins are rejected.
-  static Future<bool> checkIn({required int employeeId,int? workerId}) async {
+  static Future<bool> checkIn({required int employeeId, int? workerId}) async {
     final now = DateTime.now();
     final date = _date(now);
     await _closeExpiredOpenSessions(
@@ -190,7 +273,8 @@ class OfflineAttendanceService {
       );
     }
 
-    final operationId = 'ATT_IN_${workerId ?? employeeId}_${date}_s$sessionIndex';
+    final operationId =
+        'ATT_IN_${workerId ?? employeeId}_${date}_s$sessionIndex';
     await _upsertSession(
       employeeId: employeeId,
       workerId: workerId,
@@ -200,29 +284,28 @@ class OfflineAttendanceService {
       status: 'PRESENT',
     );
 
-    final queued = await SyncQueueManager.enqueue(
-      'attendance_check_in',
-      {
-        'operation_id': operationId,
-        'idempotency_key': operationId,
-        'employee_id': employeeId,
-        'worker_id': workerId,
-        'attendance_date': date,
-        'session_index': sessionIndex,
-        'check_in_time': now.toUtc().toIso8601String(),
-        'check_out_time': null,
-        'status': 'PRESENT',
-      },
-    );
+    final queued = await SyncQueueManager.enqueue('attendance_check_in', {
+      'operation_id': operationId,
+      'idempotency_key': operationId,
+      'employee_id': employeeId,
+      'worker_id': workerId,
+      'attendance_date': date,
+      'session_index': sessionIndex,
+      'check_in_time': now.toUtc().toIso8601String(),
+      'check_out_time': null,
+      'status': 'PRESENT',
+    });
     if (!queued) {
-      throw StateError('Unable to persist attendance check-in to durable outbox');
+      throw StateError(
+        'Unable to persist attendance check-in to durable outbox',
+      );
     }
     return true;
   }
 
   /// Closes the currently open session for today. No-op (returns true) if
   /// everything is already checked out, so repeated taps stay safe.
-  static Future<bool> checkOut({required int employeeId,int? workerId}) async {
+  static Future<bool> checkOut({required int employeeId, int? workerId}) async {
     final now = DateTime.now();
     final date = _date(now);
     final open = await _findOpenSession(
@@ -244,7 +327,10 @@ class OfflineAttendanceService {
       throw StateError('Attendance check-in timestamp is missing or invalid.');
     }
 
-    final shiftEnd = AttendanceShiftPolicy.shiftEnd(DateTime.parse(date), sessionIndex);
+    final shiftEnd = AttendanceShiftPolicy.shiftEnd(
+      DateTime.parse(date),
+      sessionIndex,
+    );
     final checkoutAt = now.isAfter(shiftEnd) ? shiftEnd : now;
     if (checkoutAt.isBefore(checkIn)) {
       throw StateError('Checkout time cannot be before check-in time.');
@@ -263,60 +349,81 @@ class OfflineAttendanceService {
       status: 'PRESENT',
     );
 
-    final queued = await SyncQueueManager.enqueue(
-      'attendance_check_out',
-      {
-        'operation_id': operationId,
-        'idempotency_key': operationId,
-        'employee_id': employeeId,
-        'worker_id': workerId,
-        'attendance_date': date,
-        'session_index': sessionIndex,
-        'check_in_time': open['check_in_time'],
-        'check_out_time': checkoutAt.toUtc().toIso8601String(),
-        'working_hours': hours,
-        'status': 'PRESENT',
-      },
-    );
+    final queued = await SyncQueueManager.enqueue('attendance_check_out', {
+      'operation_id': operationId,
+      'idempotency_key': operationId,
+      'employee_id': employeeId,
+      'worker_id': workerId,
+      'attendance_date': date,
+      'session_index': sessionIndex,
+      'check_in_time': open['check_in_time'],
+      'check_out_time': checkoutAt.toUtc().toIso8601String(),
+      'working_hours': hours,
+      'status': 'PRESENT',
+    });
     if (!queued) {
-      throw StateError('Unable to persist attendance check-out to durable outbox');
+      throw StateError(
+        'Unable to persist attendance check-out to durable outbox',
+      );
     }
     return true;
   }
 
   /// The open session for today, if any — the single source of truth the UI
   /// should use to decide whether the next tap is a check-in or check-out.
-  static Future<Map<String,dynamic>?> openSessionToday({required int employeeId,int? workerId}) => _findOpenSession(employeeId:employeeId,workerId:workerId,date:_date(DateTime.now()));
+  static Future<Map<String, dynamic>?> openSessionToday({
+    required int employeeId,
+    int? workerId,
+  }) => _findOpenSession(
+    employeeId: employeeId,
+    workerId: workerId,
+    date: _date(DateTime.now()),
+  );
 
   /// All of today's sessions in chronological order (for history display).
-  static Future<List<Map<String,dynamic>>> todaySessions({required int employeeId,int? workerId}) => _findTodaySessions(employeeId:employeeId,workerId:workerId,date:_date(DateTime.now()));
+  static Future<List<Map<String, dynamic>>> todaySessions({
+    required int employeeId,
+    int? workerId,
+  }) => _findTodaySessions(
+    employeeId: employeeId,
+    workerId: workerId,
+    date: _date(DateTime.now()),
+  );
 
   /// Total worked hours for today across all sessions (closed sessions use
   /// their stored working_hours; an open session contributes live elapsed
   /// time so the UI can show a running total).
-  static Future<double> todayTotalHours({required int employeeId,int? workerId}) async {
-    final date=_date(DateTime.now());
-    final sessions=await _findTodaySessions(employeeId:employeeId,workerId:workerId,date:date);
-    if(sessions.length==1){
-      final backendTotal=sessions.first['total_working_hours'];
-      if(backendTotal is num)return backendTotal.toDouble();
+  static Future<double> todayTotalHours({
+    required int employeeId,
+    int? workerId,
+  }) async {
+    final date = _date(DateTime.now());
+    final sessions = await _findTodaySessions(
+      employeeId: employeeId,
+      workerId: workerId,
+      date: date,
+    );
+    if (sessions.length == 1) {
+      final backendTotal = sessions.first['total_working_hours'];
+      if (backendTotal is num) return backendTotal.toDouble();
     }
-    double total=0;
-    for(final s in sessions){
-      final sessionHours=s['working_hours'];
-      if(sessionHours is num){
-        total+=sessionHours.toDouble();
+    double total = 0;
+    for (final s in sessions) {
+      final sessionHours = s['working_hours'];
+      if (sessionHours is num) {
+        total += sessionHours.toDouble();
         continue;
       }
-      final cin=DateTime.tryParse((s['check_in_time']??'').toString());
-      final cout=DateTime.tryParse((s['check_out_time']??'').toString());
-      if(cin!=null&&cout!=null)total+=cout.toLocal().difference(cin.toLocal()).inSeconds/3600.0;
-      else if(cin!=null&&s['check_out_time']==null) {
+      final cin = DateTime.tryParse((s['check_in_time'] ?? '').toString());
+      final cout = DateTime.tryParse((s['check_out_time'] ?? '').toString());
+      if (cin != null && cout != null)
+        total += cout.toLocal().difference(cin.toLocal()).inSeconds / 3600.0;
+      else if (cin != null && s['check_out_time'] == null) {
         final index = _sessionIndexOf(s);
         final end = AttendanceShiftPolicy.shiftEnd(DateTime.parse(date), index);
         final now = DateTime.now();
         final effectiveNow = now.isAfter(end) ? end : now;
-        total += effectiveNow.difference(cin.toLocal()).inSeconds/3600.0;
+        total += effectiveNow.difference(cin.toLocal()).inSeconds / 3600.0;
       }
     }
     return total;
@@ -325,7 +432,9 @@ class OfflineAttendanceService {
   /// Expand a backend attendance row into durable local records, one per
   /// server-provided session. This preserves history and payroll after the
   /// user clears app data.
-  static List<Map<String,dynamic>> _expandRemoteRecord(Map<String,dynamic> server) {
+  static List<Map<String, dynamic>> _expandRemoteRecord(
+    Map<String, dynamic> server,
+  ) {
     final rawSessions = server['sessions'];
     if (rawSessions is Map && rawSessions.isNotEmpty) {
       final expanded = <Map<String, dynamic>>[];
@@ -338,12 +447,12 @@ class OfflineAttendanceService {
         final index = canonicalKey == 'morning'
             ? AttendanceShiftPolicy.morningIndex
             : (canonicalKey == 'afternoon'
-                ? AttendanceShiftPolicy.afternoonIndex
-                : AttendanceShiftPolicy.indexForRecord({
-                    ...server,
-                    ...session,
-                    'session_key': canonicalKey,
-                  }));
+                  ? AttendanceShiftPolicy.afternoonIndex
+                  : AttendanceShiftPolicy.indexForRecord({
+                      ...server,
+                      ...session,
+                      'session_key': canonicalKey,
+                    }));
         if (index == null || (index != 0 && index != 1)) continue;
         expanded.add({
           ...server,
@@ -359,37 +468,41 @@ class OfflineAttendanceService {
     }
 
     final index = AttendanceShiftPolicy.indexForRecord(server);
-    return [{
-      ...server,
-      'session_index': index,
-      'session_key': server['session_key'] == 'evening'
-          ? 'afternoon'
-          : AttendanceShiftPolicy.keyForIndex(index),
-      'local_pending': false,
-    }];
+    return [
+      {
+        ...server,
+        'session_index': index,
+        'session_key': server['session_key'] == 'evening'
+            ? 'afternoon'
+            : AttendanceShiftPolicy.keyForIndex(index),
+        'local_pending': false,
+      },
+    ];
   }
 
-  static Future<void> mergeRemoteRecords(List<Map<String,dynamic>> remoteRecords) async {
-    if(remoteRecords.isEmpty)return;
-    try{
-      final uid=await _userId();
-      if(uid==null||uid<=0)return;
-      final local=await loadLocalRecords();
-      final merged=<String,Map<String,dynamic>>{};
-      for(final r in local){
-        merged[_recordKey(r,uid)]=Map<String,dynamic>.from(r);
+  static Future<void> mergeRemoteRecords(
+    List<Map<String, dynamic>> remoteRecords,
+  ) async {
+    if (remoteRecords.isEmpty) return;
+    try {
+      final uid = await _userId();
+      if (uid == null || uid <= 0) return;
+      final local = await loadLocalRecords();
+      final merged = <String, Map<String, dynamic>>{};
+      for (final r in local) {
+        merged[_recordKey(r, uid)] = Map<String, dynamic>.from(r);
       }
 
-      for(final serverRaw in remoteRecords){
-        for(final server in _expandRemoteRecord(serverRaw)){
-          final k=_recordKey(server,uid);
-          final previous=merged[k];
+      for (final serverRaw in remoteRecords) {
+        for (final server in _expandRemoteRecord(serverRaw)) {
+          final k = _recordKey(server, uid);
+          final previous = merged[k];
 
-          if(previous == null){
-            merged[k]={
+          if (previous == null) {
+            merged[k] = {
               ...server,
-              'local_pending':false,
-              'synced_at':DateTime.now().toUtc().toIso8601String(),
+              'local_pending': false,
+              'synced_at': DateTime.now().toUtc().toIso8601String(),
             };
             continue;
           }
@@ -402,8 +515,8 @@ class OfflineAttendanceService {
           // backend may still return the older open daily row for a short
           // period. Never let that stale remote open row erase a confirmed
           // local checkout.
-          if(localHasCheckout && !remoteHasCheckout){
-            merged[k]={
+          if (localHasCheckout && !remoteHasCheckout) {
+            merged[k] = {
               ...server,
               ...previous,
               'local_pending': previous['local_pending'] == true,
@@ -414,21 +527,63 @@ class OfflineAttendanceService {
 
           // Once the backend contains the checkout, the server record is the
           // authoritative state and can clear the local pending flag.
-          merged[k]={
+          merged[k] = {
             ...previous,
             ...server,
-            'local_pending':false,
-            'synced_at':DateTime.now().toUtc().toIso8601String(),
+            'local_pending': false,
+            'synced_at': DateTime.now().toUtc().toIso8601String(),
           };
         }
       }
       await _saveRecords(merged.values.toList());
-    }catch(e){
-      if(kDebugMode)debugPrint('⚠️ Failed to cache remote attendance history: $e');
+    } catch (e) {
+      if (kDebugMode)
+        debugPrint('⚠️ Failed to cache remote attendance history: $e');
     }
   }
 
-  static Future<void> reconcileFromBackend() async { final uid=await _userId();if(uid==null||uid<=0)return;try{final date=_date(DateTime.now());final response=await ApiClient.getJson('${ApiClient.attendancePrefix}/date/$date');if(response.statusCode!=200)return;final decoded=jsonDecode(response.body);if(decoded is! Map||decoded['records'] is! List)return;final remote=(decoded['records'] as List).whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList();if(remote.isEmpty)return;await mergeRemoteRecords(remote);}catch(e){if(kDebugMode)debugPrint('OfflineAttendance reconcile skipped: $e');} }
+  static Future<void> reconcileFromBackend() async {
+    final uid = await _userId();
+    if (uid == null || uid <= 0) return;
+    try {
+      final date = _date(DateTime.now());
+      final response = await ApiClient.getJson(
+        '${ApiClient.attendancePrefix}/date/$date',
+      );
+      if (response.statusCode != 200) return;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map || decoded['records'] is! List) return;
+      final remote = (decoded['records'] as List)
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      if (remote.isEmpty) return;
+      await mergeRemoteRecords(remote);
+    } catch (e) {
+      if (kDebugMode) debugPrint('OfflineAttendance reconcile skipped: $e');
+    }
+  }
 
-  static Future<void> markSynced({required int employeeId,int? workerId,required String date,int sessionIndex=0}) async {final records=await loadLocalRecords();for(int i=0;i<records.length;i++){final r=records[i];if(_sameWorker(r,employeeId,workerId)&&(r['attendance_date']?.toString().split('T').first??'')==date&&_sessionIndexOf(r)==sessionIndex){records[i]={...r,'local_pending':false,'synced_at':DateTime.now().toUtc().toIso8601String()};await _saveRecords(records);return;}}}
+  static Future<void> markSynced({
+    required int employeeId,
+    int? workerId,
+    required String date,
+    int sessionIndex = 0,
+  }) async {
+    final records = await loadLocalRecords();
+    for (int i = 0; i < records.length; i++) {
+      final r = records[i];
+      if (_sameWorker(r, employeeId, workerId) &&
+          (r['attendance_date']?.toString().split('T').first ?? '') == date &&
+          _sessionIndexOf(r) == sessionIndex) {
+        records[i] = {
+          ...r,
+          'local_pending': false,
+          'synced_at': DateTime.now().toUtc().toIso8601String(),
+        };
+        await _saveRecords(records);
+        return;
+      }
+    }
+  }
 }

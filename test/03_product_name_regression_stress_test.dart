@@ -28,7 +28,11 @@ void main() {
         'Clinic Plus Shampoo',
         'Lifebuoy Soap',
       ]) {
-        expect(AnalyticsEngine.isPlaceholderProductName(name), isFalse, reason: name);
+        expect(
+          AnalyticsEngine.isPlaceholderProductName(name),
+          isFalse,
+          reason: name,
+        );
       }
     });
 
@@ -42,7 +46,11 @@ void main() {
         'INVOICE_999',
         'transaction-xyz',
       ]) {
-        expect(AnalyticsEngine.isPlaceholderProductName(name), isTrue, reason: name);
+        expect(
+          AnalyticsEngine.isPlaceholderProductName(name),
+          isTrue,
+          reason: name,
+        );
       }
     });
 
@@ -59,13 +67,20 @@ void main() {
         'Tea Powder',
         'Sugar',
       ]) {
-        expect(AnalyticsEngine.isPlaceholderProductName(name), isFalse, reason: name);
+        expect(
+          AnalyticsEngine.isPlaceholderProductName(name),
+          isFalse,
+          reason: name,
+        );
       }
     });
 
     test('detector is deterministic', () {
       for (var i = 0; i < 100; i++) {
-        expect(AnalyticsEngine.isPlaceholderProductName('Aashirvaad Atta'), isFalse);
+        expect(
+          AnalyticsEngine.isPlaceholderProductName('Aashirvaad Atta'),
+          isFalse,
+        );
         expect(AnalyticsEngine.isPlaceholderProductName('sale-17'), isTrue);
       }
     });

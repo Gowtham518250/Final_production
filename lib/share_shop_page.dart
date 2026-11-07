@@ -69,7 +69,8 @@ class ShareShopPage extends StatelessWidget {
           _ActionCard(
             icon: Icons.settings_rounded,
             title: 'Manage Online Store',
-            subtitle: 'Enable or disable online shopping and configure your online order fee.',
+            subtitle:
+                'Enable or disable online shopping and configure your online order fee.',
             onTap: () => Navigator.pushNamed(context, '/online-store-manager'),
           ),
           const SizedBox(height: 12),
@@ -83,7 +84,8 @@ class ShareShopPage extends StatelessWidget {
           _ActionCard(
             icon: Icons.store_mall_directory_rounded,
             title: 'Open Store Hub',
-            subtitle: 'Manage inventory, storefront settings and the customer experience.',
+            subtitle:
+                'Manage inventory, storefront settings and the customer experience.',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const OnlineStoreHubPage()),

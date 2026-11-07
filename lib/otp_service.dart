@@ -69,7 +69,8 @@ class OTPService {
       if (decoded is Map) {
         return {
           'success': false,
-          'message': decoded['detail']?.toString() ??
+          'message':
+              decoded['detail']?.toString() ??
               decoded['message']?.toString() ??
               fallback,
         };
@@ -89,19 +90,17 @@ class OTPService {
     }
 
     try {
-      final response = await ApiClient.postJson(
-        '/auth/send-owner-otp',
-        {
-          'email': normalizedEmail,
-          'purpose': title ?? 'Owner Verification',
-        },
-      );
+      final response = await ApiClient.postJson('/auth/send-owner-otp', {
+        'email': normalizedEmail,
+        'purpose': title ?? 'Owner Verification',
+      });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await _markOtpSent(normalizedEmail);
         return {
           'success': true,
-          'message': 'Verification OTP sent. Check your email inbox and spam folder.',
+          'message':
+              'Verification OTP sent. Check your email inbox and spam folder.',
         };
       }
 
@@ -132,13 +131,10 @@ class OTPService {
     }
 
     try {
-      final response = await ApiClient.postJson(
-        '/auth/verify-owner-otp',
-        {
-          'email': normalizedEmail,
-          'otp': code,
-        },
-      );
+      final response = await ApiClient.postJson('/auth/verify-owner-otp', {
+        'email': normalizedEmail,
+        'otp': code,
+      });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await _clearLocalOtpTimer();
@@ -176,11 +172,10 @@ class OTPService {
           'success': true,
           'message': decoded is Map
               ? (decoded['message']?.toString() ??
-                  'Delivery OTP sent to the customer.')
+                    'Delivery OTP sent to the customer.')
               : 'Delivery OTP sent to the customer.',
           'email': decoded is Map ? decoded['email']?.toString() : null,
-          'expires_in':
-              decoded is Map ? decoded['expires_in'] : null,
+          'expires_in': decoded is Map ? decoded['expires_in'] : null,
         };
       }
 
@@ -219,8 +214,7 @@ class OTPService {
         return {
           'success': true,
           'message': decoded is Map
-              ? (decoded['message']?.toString() ??
-                  'Order marked as delivered.')
+              ? (decoded['message']?.toString() ?? 'Order marked as delivered.')
               : 'Order marked as delivered.',
         };
       }
@@ -248,15 +242,12 @@ class OTPService {
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
     try {
-      final response = await ApiClient.postJson(
-        '/auth/reset-worker-pin',
-        {
-          'email': normalizedEmail,
-          'otp': otp.trim(),
-          'worker_id': workerId,
-          'new_pin': newPin.trim(),
-        },
-      );
+      final response = await ApiClient.postJson('/auth/reset-worker-pin', {
+        'email': normalizedEmail,
+        'otp': otp.trim(),
+        'worker_id': workerId,
+        'new_pin': newPin.trim(),
+      });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await clearResetState();
@@ -266,10 +257,7 @@ class OTPService {
         };
       }
 
-      return _errorFromResponse(
-        response,
-        'Unable to reset worker PIN.',
-      );
+      return _errorFromResponse(response, 'Unable to reset worker PIN.');
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Worker PIN reset failed: $e');
       return {
@@ -290,13 +278,10 @@ class OTPService {
     }
 
     try {
-      final response = await ApiClient.postJson(
-        '/auth/send-otp',
-        {
-          'email': normalizedEmail,
-          'purpose': title ?? 'Verification',
-        },
-      );
+      final response = await ApiClient.postJson('/auth/send-otp', {
+        'email': normalizedEmail,
+        'purpose': title ?? 'Verification',
+      });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await _markOtpSent(normalizedEmail);
@@ -328,20 +313,14 @@ class OTPService {
     }
 
     try {
-      final response = await ApiClient.postJson(
-        '/auth/verify-otp',
-        {
-          'email': normalizedEmail,
-          'otp': code,
-        },
-      );
+      final response = await ApiClient.postJson('/auth/verify-otp', {
+        'email': normalizedEmail,
+        'otp': code,
+      });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await _clearLocalOtpTimer();
-        return {
-          'success': true,
-          'message': 'OTP verified successfully.',
-        };
+        return {'success': true, 'message': 'OTP verified successfully.'};
       }
 
       return _errorFromResponse(response, 'Invalid or expired OTP.');
@@ -354,9 +333,7 @@ class OTPService {
     }
   }
 
-  static Future<Map<String, dynamic>> sendPasswordResetOTP(
-    String email,
-  ) async {
+  static Future<Map<String, dynamic>> sendPasswordResetOTP(String email) async {
     final normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail.isEmpty) {
       return {'success': false, 'message': 'Email is required'};
@@ -376,10 +353,7 @@ class OTPService {
         };
       }
 
-      return _errorFromResponse(
-        response,
-        'Failed to send reset OTP.',
-      );
+      return _errorFromResponse(response, 'Failed to send reset OTP.');
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ Password-reset OTP request failed: $e');
@@ -403,25 +377,16 @@ class OTPService {
     }
 
     try {
-      final response = await ApiClient.postJson(
-        '/auth/check-reset-otp',
-        {
-          'email': normalizedEmail,
-          'otp': code,
-        },
-      );
+      final response = await ApiClient.postJson('/auth/check-reset-otp', {
+        'email': normalizedEmail,
+        'otp': code,
+      });
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        return {
-          'success': true,
-          'message': 'OTP verified successfully.',
-        };
+        return {'success': true, 'message': 'OTP verified successfully.'};
       }
 
-      return _errorFromResponse(
-        response,
-        'Invalid or expired reset OTP.',
-      );
+      return _errorFromResponse(response, 'Invalid or expired reset OTP.');
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Reset OTP verification failed: $e');
       return {

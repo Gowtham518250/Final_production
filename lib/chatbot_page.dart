@@ -23,7 +23,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _messages = [
     {
-      'msg': "Hello! I'm your Retail Mind assistant. Ask me how to use the app or get help with a shop task.",
+      'msg':
+          "Hello! I'm your Retail Mind assistant. Ask me how to use the app or get help with a shop task.",
       'isMe': false,
     },
   ];
@@ -68,10 +69,12 @@ class _ChatbotPageState extends State<ChatbotPage> {
     if (text.isEmpty) return;
 
     final history = _messages
-        .map((entry) => <String, String>{
-              'role': entry['isMe'] == true ? 'user' : 'assistant',
-              'content': entry['msg'].toString(),
-            })
+        .map(
+          (entry) => <String, String>{
+            'role': entry['isMe'] == true ? 'user' : 'assistant',
+            'content': entry['msg'].toString(),
+          },
+        )
         .toList(growable: false);
 
     final languageCode = context.read<LanguageProvider>().locale.languageCode;
@@ -164,8 +167,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.auto_awesome_rounded,
-                    color: Colors.white, size: 26),
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -190,8 +196,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     ],
                   ),
                 ),
-                const Icon(Icons.verified_user_outlined,
-                    color: Colors.white70, size: 19),
+                const Icon(
+                  Icons.verified_user_outlined,
+                  color: Colors.white70,
+                  size: 19,
+                ),
               ],
             ),
           ),
@@ -351,8 +360,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe)
@@ -364,8 +374,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 color: _primary.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.auto_awesome_rounded,
-                  size: 17, color: _primary),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                size: 17,
+                color: _primary,
+              ),
             ),
           Flexible(
             child: Container(
@@ -386,8 +399,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     : Border.all(color: const Color(0xFFE5EAF3)),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF172554)
-                        .withValues(alpha: isMe ? 0.08 : 0.035),
+                    color: const Color(
+                      0xFF172554,
+                    ).withValues(alpha: isMe ? 0.08 : 0.035),
                     blurRadius: 10,
                     offset: const Offset(0, 3),
                   ),
@@ -458,10 +472,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
           const SizedBox(
             width: 15,
             height: 15,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: _primary,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
           ),
           const SizedBox(width: 9),
           LiveTranslatedText(
@@ -481,7 +492,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border(
-            top: BorderSide(color: const Color(0xFFCBD5E1).withValues(alpha: 0.55)),
+            top: BorderSide(
+              color: const Color(0xFFCBD5E1).withValues(alpha: 0.55),
+            ),
           ),
         ),
         child: Row(
@@ -500,8 +513,10 @@ class _ChatbotPageState extends State<ChatbotPage> {
                   hintStyle: GoogleFonts.poppins(color: _muted, fontSize: 11),
                   filled: true,
                   fillColor: const Color(0xFFF4F7FC),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
                     borderSide: BorderSide.none,

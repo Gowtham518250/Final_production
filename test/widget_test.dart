@@ -7,9 +7,7 @@ void main() {
   testWidgets('Application test shell builds', (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: Center(child: Text('Retail Mind test shell')),
-        ),
+        home: Scaffold(body: Center(child: Text('Retail Mind test shell'))),
       ),
     );
 

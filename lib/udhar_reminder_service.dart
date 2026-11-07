@@ -12,7 +12,7 @@ class UdharReminder {
   final double amountDue;
   final int daysOverdue;
   final DateTime lastReminderDate;
-  
+
   UdharReminder({
     required this.customerId,
     required this.customerName,
@@ -28,16 +28,16 @@ class UdharReminderService {
   static const String _tag = '💳 UDHAR_REMINDER';
   static const String _skippedPrefix = 'udhar_skipped_';
   static const int skipDurationDays = 3;
-  
+
   /// Check if reminder should be shown (not skipped)
   static Future<bool> shouldShowReminder(String customerId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final skippedKey = '$_skippedPrefix$customerId';
       final skippedUntil = prefs.getString(skippedKey);
-      
+
       if (skippedUntil == null) return true;
-      
+
       final skippedDate = DateTime.parse(skippedUntil);
       return DateTime.now().isAfter(skippedDate);
     } catch (e) {
@@ -45,21 +45,21 @@ class UdharReminderService {
       return true;
     }
   }
-  
+
   /// Mark reminder as skipped for N days
   static Future<void> skipReminder(String customerId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final skippedKey = '$_skippedPrefix$customerId';
       final skipUntil = DateTime.now().add(Duration(days: skipDurationDays));
-      
+
       await prefs.setString(skippedKey, skipUntil.toIso8601String());
       debugPrint('$_tag Skipped reminder for $customerId until $skipUntil');
     } catch (e) {
       debugPrint('$_tag Error skipping reminder: $e');
     }
   }
-  
+
   /// Clear skip for a customer (re-enable reminders)
   static Future<void> clearSkip(String customerId) async {
     try {
@@ -70,7 +70,7 @@ class UdharReminderService {
       debugPrint('$_tag Error clearing skip: $e');
     }
   }
-  
+
   /// Send reminder via WhatsApp
   static Future<void> sendReminderViaWhatsApp({
     required String customerPhone,
@@ -84,25 +84,27 @@ class UdharReminderService {
         amount: amountDue,
         language: language,
       );
-      
+
       // Append UPI Deep Link
       final prefs = await SharedPreferences.getInstance();
-      final upiId = prefs.getString('primary_upi_id') ?? prefs.getString('upi_id');
+      final upiId =
+          prefs.getString('primary_upi_id') ?? prefs.getString('upi_id');
       final shopName = prefs.getString('shop_name') ?? 'Shop';
       if (upiId != null && upiId.isNotEmpty) {
-        final upiLink = 'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(shopName)}&am=${amountDue.toStringAsFixed(2)}&cu=INR&tn=UdharPayment';
+        final upiLink =
+            'upi://pay?pa=$upiId&pn=${Uri.encodeComponent(shopName)}&am=${amountDue.toStringAsFixed(2)}&cu=INR&tn=UdharPayment';
         message += '\n\n*Pay via UPI:*\n$upiLink';
       }
-      
+
       String formattedPhone = customerPhone.replaceAll(RegExp(r'[^\d]'), '');
       if (!formattedPhone.startsWith('91')) {
         formattedPhone = '91$formattedPhone';
       }
-      
+
       final whatsappUrl = Uri.parse(
         'https://wa.me/$formattedPhone/?text=${Uri.encodeComponent(message)}',
       );
-      
+
       if (await canLaunchUrl(whatsappUrl)) {
         await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
       } else {
@@ -120,7 +122,7 @@ class UdharReminderCard extends StatefulWidget {
   final VoiceLanguage language;
   final Function() onSent;
   final Function() onSkipped;
-  
+
   const UdharReminderCard({
     required this.reminder,
     required this.language,
@@ -128,14 +130,14 @@ class UdharReminderCard extends StatefulWidget {
     required this.onSkipped,
     Key? key,
   }) : super(key: key);
-  
+
   @override
   State<UdharReminderCard> createState() => _UdharReminderCardState();
 }
 
 class _UdharReminderCardState extends State<UdharReminderCard> {
   bool _isSending = false;
-  
+
   @override
   Widget build(BuildContext context) {
     final message = WhatsAppMessageService.buildUdharReminderMessage(
@@ -143,7 +145,7 @@ class _UdharReminderCardState extends State<UdharReminderCard> {
       amount: widget.reminder.amountDue,
       language: widget.language,
     );
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -185,7 +187,10 @@ class _UdharReminderCardState extends State<UdharReminderCard> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red,
                     borderRadius: BorderRadius.circular(20),
@@ -201,11 +206,11 @@ class _UdharReminderCardState extends State<UdharReminderCard> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 12),
             Divider(color: Colors.grey[300]),
             const SizedBox(height: 12),
-            
+
             // Message preview
             Container(
               padding: const EdgeInsets.all(10),
@@ -222,9 +227,9 @@ class _UdharReminderCardState extends State<UdharReminderCard> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Buttons
             Row(
               children: [
@@ -233,18 +238,18 @@ class _UdharReminderCardState extends State<UdharReminderCard> {
                     onPressed: _isSending
                         ? null
                         : () async {
-                      setState(() => _isSending = true);
-                      
-                      await UdharReminderService.skipReminder(
-                        widget.reminder.customerId,
-                      );
-                      
-                      widget.onSkipped();
-                      
-                      if (mounted) {
-                        setState(() => _isSending = false);
-                      }
-                    },
+                            setState(() => _isSending = true);
+
+                            await UdharReminderService.skipReminder(
+                              widget.reminder.customerId,
+                            );
+
+                            widget.onSkipped();
+
+                            if (mounted) {
+                              setState(() => _isSending = false);
+                            }
+                          },
                     child: const Text('Skip'),
                   ),
                 ),
@@ -254,29 +259,29 @@ class _UdharReminderCardState extends State<UdharReminderCard> {
                     onPressed: _isSending
                         ? null
                         : () async {
-                      setState(() => _isSending = true);
-                      
-                      if (widget.reminder.customerPhone != null) {
-                        await UdharReminderService.sendReminderViaWhatsApp(
-                          customerPhone: widget.reminder.customerPhone!,
-                          customerName: widget.reminder.customerName,
-                          amountDue: widget.reminder.amountDue,
-                          language: widget.language,
-                        );
-                      }
-                      
-                      widget.onSent();
-                      
-                      if (mounted) {
-                        setState(() => _isSending = false);
-                      }
-                    },
+                            setState(() => _isSending = true);
+
+                            if (widget.reminder.customerPhone != null) {
+                              await UdharReminderService.sendReminderViaWhatsApp(
+                                customerPhone: widget.reminder.customerPhone!,
+                                customerName: widget.reminder.customerName,
+                                amountDue: widget.reminder.amountDue,
+                                language: widget.language,
+                              );
+                            }
+
+                            widget.onSent();
+
+                            if (mounted) {
+                              setState(() => _isSending = false);
+                            }
+                          },
                     icon: _isSending
                         ? SizedBox(
-                          height: 16,
-                          width: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.send),
                     label: const Text('Send Now'),
                     style: ElevatedButton.styleFrom(
@@ -298,27 +303,27 @@ class UdharReminderListView extends StatefulWidget {
   final List<UdharReminder> pendingReminders;
   final VoiceLanguage language;
   final Function() onUpdate;
-  
+
   const UdharReminderListView({
     required this.pendingReminders,
     required this.language,
     required this.onUpdate,
     Key? key,
   }) : super(key: key);
-  
+
   @override
   State<UdharReminderListView> createState() => _UdharReminderListViewState();
 }
 
 class _UdharReminderListViewState extends State<UdharReminderListView> {
   late List<UdharReminder> reminders;
-  
+
   @override
   void initState() {
     super.initState();
     reminders = List.from(widget.pendingReminders);
   }
-  
+
   @override
   Widget build(BuildContext context) {
     if (reminders.isEmpty) {
@@ -338,7 +343,7 @@ class _UdharReminderListViewState extends State<UdharReminderListView> {
         ),
       );
     }
-    
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: ListView.builder(

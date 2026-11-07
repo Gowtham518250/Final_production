@@ -3,8 +3,16 @@ import 'package:retail_mind/payment_direction_speech.dart';
 
 void main() {
   const languages = [
-    'english', 'hindi', 'tamil', 'telugu', 'kannada',
-    'marathi', 'gujarati', 'bengali', 'punjabi', 'malayalam',
+    'english',
+    'hindi',
+    'tamil',
+    'telugu',
+    'kannada',
+    'marathi',
+    'gujarati',
+    'bengali',
+    'punjabi',
+    'malayalam',
   ];
 
   test('each language asks the merchant to verify and includes the amount', () {

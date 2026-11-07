@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kReleaseMode, debugPrint;
+import 'package:flutter/foundation.dart'
+    show kDebugMode, kReleaseMode, debugPrint;
 import 'email_sender_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'email_secrets_defaults.dart';
@@ -13,8 +14,14 @@ Future<void> setupEmailCredentialsOnce() async {
     return;
   }
 
-  var senderEmail = const String.fromEnvironment('EMAIL_SENDER', defaultValue: '');
-  var appPassword = const String.fromEnvironment('EMAIL_APP_PASSWORD', defaultValue: '');
+  var senderEmail = const String.fromEnvironment(
+    'EMAIL_SENDER',
+    defaultValue: '',
+  );
+  var appPassword = const String.fromEnvironment(
+    'EMAIL_APP_PASSWORD',
+    defaultValue: '',
+  );
 
   // Never load disk secrets in release builds — use dart-define or in-app setup only.
   if (!kReleaseMode) {
@@ -26,7 +33,9 @@ Future<void> setupEmailCredentialsOnce() async {
 
   if (senderEmail.isEmpty || appPassword.isEmpty) {
     if (kDebugMode) {
-      debugPrint('⚠️ Email not seeded: use dart-define (EMAIL_SENDER, EMAIL_APP_PASSWORD)');
+      debugPrint(
+        '⚠️ Email not seeded: use dart-define (EMAIL_SENDER, EMAIL_APP_PASSWORD)',
+      );
       debugPrint('   Or open /email-setup in the app after launch.');
     }
     return;
@@ -38,7 +47,11 @@ Future<void> setupEmailCredentialsOnce() async {
   );
 
   if (kDebugMode) {
-    debugPrint(ok ? '✅ Email credentials seeded for frontend OTP' : '❌ Failed to seed email credentials');
+    debugPrint(
+      ok
+          ? '✅ Email credentials seeded for frontend OTP'
+          : '❌ Failed to seed email credentials',
+    );
   }
 }
 
@@ -49,7 +62,7 @@ Future<bool> setupEmailCredentialsUI(BuildContext context) async {
   final emailCtrl = TextEditingController();
   final passwordCtrl = TextEditingController();
   bool accepted = false;
-  
+
   await showDialog<bool>(
     context: context,
     barrierDismissible: false,
@@ -107,7 +120,7 @@ Future<bool> setupEmailCredentialsUI(BuildContext context) async {
       ],
     ),
   );
-  
+
   if (!accepted) return false;
 
   final ok = await EmailSenderService.setCredentials(
@@ -129,23 +142,23 @@ Future<bool> setupEmailCredentialsUI(BuildContext context) async {
 Future<bool> testEmailCredentials() async {
   try {
     if (kDebugMode) print('🧪 Testing email credentials...');
-    
+
     const _secureStorage = FlutterSecureStorage();
     final email = await _secureStorage.read(key: 'sender_email');
     final password = await _secureStorage.read(key: 'app_password');
-    
+
     if (email == null || password == null) {
       if (kDebugMode) print('❌ Email credentials not configured yet');
       return false;
     }
-    
+
     if (kDebugMode) print('✓ Credentials found: $email');
-    
+
     final test = await EmailSenderService.testEmailConfiguration(
       recipientEmail: email,
     );
     final sent = test['success'] == true;
-    
+
     if (sent) {
       if (kDebugMode) print('✅ Test email sent successfully!');
       return true;
@@ -171,13 +184,13 @@ class _EmailSetupWidgetState extends State<EmailSetupWidget> {
   bool _isTesting = false;
   bool _testPassed = false;
   String _testMessage = '';
-  
+
   @override
   void initState() {
     super.initState();
     _checkConfiguration();
   }
-  
+
   Future<void> _checkConfiguration() async {
     await EmailSenderService.initialize();
     final hasCreds = await EmailSenderService.isConfigured();
@@ -187,24 +200,24 @@ class _EmailSetupWidgetState extends State<EmailSetupWidget> {
       _hasCredentials = hasCreds;
     });
   }
-  
+
   Future<void> _runTest() async {
     setState(() {
       _isTesting = true;
       _testMessage = 'Testing email credentials...';
     });
-    
+
     final result = await testEmailCredentials();
-    
+
     setState(() {
       _isTesting = false;
       _testPassed = result;
-      _testMessage = result 
-        ? '✅ Email credentials working!' 
-        : '❌ Email test failed. Check logs.';
+      _testMessage = result
+          ? '✅ Email credentials working!'
+          : '❌ Email test failed. Check logs.';
     });
   }
-  
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -217,15 +230,13 @@ class _EmailSetupWidgetState extends State<EmailSetupWidget> {
         style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
       );
     }
-    
+
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _testPassed ? Colors.green.shade50 : Colors.yellow.shade50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: _testPassed ? Colors.green : Colors.orange,
-        ),
+        border: Border.all(color: _testPassed ? Colors.green : Colors.orange),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,16 +255,20 @@ class _EmailSetupWidgetState extends State<EmailSetupWidget> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _testPassed ? '✅ Email Service Ready' : '⚠️ Email Service Status',
+                      _testPassed
+                          ? '✅ Email Service Ready'
+                          : '⚠️ Email Service Status',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: _testPassed ? Colors.green.shade700 : Colors.orange.shade700,
+                        color: _testPassed
+                            ? Colors.green.shade700
+                            : Colors.orange.shade700,
                       ),
                     ),
                     Text(
-                      _testPassed 
-                        ? 'OTP emails will send automatically'
-                        : 'Click Test to verify email configuration',
+                      _testPassed
+                          ? 'OTP emails will send automatically'
+                          : 'Click Test to verify email configuration',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade700,
@@ -270,7 +285,9 @@ class _EmailSetupWidgetState extends State<EmailSetupWidget> {
               _testMessage,
               style: TextStyle(
                 fontSize: 12,
-                color: _testPassed ? Colors.green.shade700 : Colors.orange.shade700,
+                color: _testPassed
+                    ? Colors.green.shade700
+                    : Colors.orange.shade700,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -278,9 +295,13 @@ class _EmailSetupWidgetState extends State<EmailSetupWidget> {
           SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: _isTesting ? null : _runTest,
-            icon: _isTesting 
-              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(Icons.mail),
+            icon: _isTesting
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(Icons.mail),
             label: Text(_isTesting ? 'Testing...' : 'Test Email Credentials'),
             style: ElevatedButton.styleFrom(
               backgroundColor: _testPassed ? Colors.green : Colors.orange,

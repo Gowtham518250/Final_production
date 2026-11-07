@@ -81,8 +81,16 @@ class _RetailIntelligencePageState extends State<RetailIntelligencePage>
             builder: (_, __) => ShaderMask(
               shaderCallback: (bounds) => LinearGradient(
                 colors: [
-                  Color.lerp(const Color(0xFF6366F1), const Color(0xFF8B5CF6), _glowAnimation.value)!,
-                  Color.lerp(const Color(0xFF06B6D4), const Color(0xFF3B82F6), _glowAnimation.value)!,
+                  Color.lerp(
+                    const Color(0xFF6366F1),
+                    const Color(0xFF8B5CF6),
+                    _glowAnimation.value,
+                  )!,
+                  Color.lerp(
+                    const Color(0xFF06B6D4),
+                    const Color(0xFF3B82F6),
+                    _glowAnimation.value,
+                  )!,
                 ],
               ).createShader(bounds),
               child: LiveTranslatedText(
@@ -109,13 +117,36 @@ class _RetailIntelligencePageState extends State<RetailIntelligencePage>
         indicatorWeight: 3,
         labelColor: Colors.black, // Changed to black
         unselectedLabelColor: Colors.black38, // Changed to black
-        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 12),
+        labelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
         unselectedLabelStyle: GoogleFonts.poppins(fontSize: 12),
         tabs: const [
-          Tab(icon: Icon(Icons.flash_on_rounded, size: 18, color: Colors.orange), text: 'Flash Sale'),
-          Tab(icon: Icon(Icons.person_off_rounded, size: 18, color: Colors.red), text: 'Churn Risk'),
-          Tab(icon: Icon(Icons.inventory_2_rounded, size: 18, color: Colors.indigo), text: 'Auto-PO'),
-          Tab(icon: Icon(Icons.trending_up_rounded, size: 18, color: Colors.green), text: 'Smart Reorder'),
+          Tab(
+            icon: Icon(Icons.flash_on_rounded, size: 18, color: Colors.orange),
+            text: 'Flash Sale',
+          ),
+          Tab(
+            icon: Icon(Icons.person_off_rounded, size: 18, color: Colors.red),
+            text: 'Churn Risk',
+          ),
+          Tab(
+            icon: Icon(
+              Icons.inventory_2_rounded,
+              size: 18,
+              color: Colors.indigo,
+            ),
+            text: 'Auto-PO',
+          ),
+          Tab(
+            icon: Icon(
+              Icons.trending_up_rounded,
+              size: 18,
+              color: Colors.green,
+            ),
+            text: 'Smart Reorder',
+          ),
         ],
       ),
     );
@@ -132,7 +163,12 @@ class _GlassCard extends StatelessWidget {
   final Color? borderColor;
   final VoidCallback? onTap;
 
-  const _GlassCard({required this.child, this.padding, this.borderColor, this.onTap});
+  const _GlassCard({
+    required this.child,
+    this.padding,
+    this.borderColor,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -179,8 +215,21 @@ Widget _buildStatPill(String label, String value, Color color) {
     ),
     child: Column(
       children: [
-        LiveTranslatedText(value, style: GoogleFonts.poppins(color: color, fontWeight: FontWeight.w700, fontSize: 16)),
-        LiveTranslatedText(label, style: GoogleFonts.poppins(color: color.withValues(alpha: 0.8), fontSize: 10)),
+        LiveTranslatedText(
+          value,
+          style: GoogleFonts.poppins(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+        LiveTranslatedText(
+          label,
+          style: GoogleFonts.poppins(
+            color: color.withValues(alpha: 0.8),
+            fontSize: 10,
+          ),
+        ),
       ],
     ),
   );
@@ -197,7 +246,8 @@ class _FlashSaleTab extends StatefulWidget {
   State<_FlashSaleTab> createState() => _FlashSaleTabState();
 }
 
-class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderStateMixin {
+class _FlashSaleTabState extends State<_FlashSaleTab>
+    with SingleTickerProviderStateMixin {
   final _categoryController = TextEditingController();
   final _discountController = TextEditingController(text: '20');
   final _hoursController = TextEditingController(text: '2');
@@ -219,8 +269,10 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 1))
-      ..repeat(reverse: true);
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
     _pulseAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
@@ -232,28 +284,31 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
       // Load from local storage first for immediate response (offline-first)
       final prefs = await SharedPreferences.getInstance();
       final localFlashSaleData = prefs.getString('active_flash_sale');
-      
+
       if (localFlashSaleData != null && localFlashSaleData.isNotEmpty) {
         try {
           final data = jsonDecode(localFlashSaleData);
           final expiry = DateTime.parse(data['expiry']);
-          
+
           // Check if flash sale is still valid
           if (DateTime.now().isBefore(expiry) && mounted) {
             setState(() {
               _activeFlashSale = data;
             });
-            if (kDebugMode) debugPrint('✅ Active flash sale loaded from local storage');
+            if (kDebugMode)
+              debugPrint('✅ Active flash sale loaded from local storage');
           } else {
             // Expired, clear local data
             await prefs.remove('active_flash_sale');
-            if (kDebugMode) debugPrint('⏰ Flash sale expired, cleared local data');
+            if (kDebugMode)
+              debugPrint('⏰ Flash sale expired, cleared local data');
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Error parsing local flash sale data: $e');
+          if (kDebugMode)
+            debugPrint('⚠️ Error parsing local flash sale data: $e');
         }
       }
-      
+
       // Then sync with backend for latest data
       try {
         final res = await ApiClient.getJson('/api/flash-sale/active');
@@ -265,7 +320,7 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
             'hours': data['hours_duration']?.toString(),
             'expiry': data['end_time'],
           };
-          
+
           // Check if backend flash sale is still valid
           final expiry = DateTime.parse(data['end_time']);
           if (DateTime.now().isBefore(expiry)) {
@@ -273,8 +328,12 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
               _activeFlashSale = flashSaleData;
             });
             // Save to local storage for offline use
-            await prefs.setString('active_flash_sale', json.encode(flashSaleData));
-            if (kDebugMode) debugPrint('✅ Active flash sale synced from backend');
+            await prefs.setString(
+              'active_flash_sale',
+              json.encode(flashSaleData),
+            );
+            if (kDebugMode)
+              debugPrint('✅ Active flash sale synced from backend');
           } else {
             // Backend flash sale expired, clear local data
             await prefs.remove('active_flash_sale');
@@ -283,7 +342,8 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
           }
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Backend flash sale sync failed, using local data: $e');
+        if (kDebugMode)
+          debugPrint('⚠️ Backend flash sale sync failed, using local data: $e');
         // Keep using local data if backend sync fails
       }
     } catch (e) {
@@ -318,30 +378,25 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
       return;
     }
 
-    final normalizedCategory =
-        selectedCategory.toLowerCase() == 'all' ? 'ALL' : selectedCategory;
+    final normalizedCategory = selectedCategory.toLowerCase() == 'all'
+        ? 'ALL'
+        : selectedCategory;
 
-    final discount =
-        double.tryParse(_discountController.text.trim()) ?? 20.0;
+    final discount = double.tryParse(_discountController.text.trim()) ?? 20.0;
     final hours = int.tryParse(_hoursController.text.trim()) ?? 2;
 
     setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
 
     try {
-      final res = await ApiClient.postJson(
-        '/api/flash-sale/setup',
-        {
-          'category': normalizedCategory,
-          'discount_pct': discount,
-          'hours': hours,
-        },
-      );
+      final res = await ApiClient.postJson('/api/flash-sale/setup', {
+        'category': normalizedCategory,
+        'discount_pct': discount,
+        'hours': hours,
+      });
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw Exception(
-          'Flash sale setup failed (${res.statusCode})',
-        );
+        throw Exception('Flash sale setup failed (${res.statusCode})');
       }
 
       Map<String, dynamic> serverData = {};
@@ -356,13 +411,10 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
         }
       }
 
-      final serverExpiry =
-          serverData['end_time']?.toString().trim() ?? '';
+      final serverExpiry = serverData['end_time']?.toString().trim() ?? '';
       final expiry = serverExpiry.isNotEmpty
           ? serverExpiry
-          : DateTime.now()
-              .add(Duration(hours: hours))
-              .toIso8601String();
+          : DateTime.now().add(Duration(hours: hours)).toIso8601String();
 
       final flashSaleData = <String, dynamic>{
         'category': normalizedCategory,
@@ -372,17 +424,15 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
       };
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'active_flash_sale',
-        jsonEncode(flashSaleData),
-      );
+      await prefs.setString('active_flash_sale', jsonEncode(flashSaleData));
 
       if (!mounted) return;
 
       setState(() {
         _activeFlashSale = flashSaleData;
-        _categoryController.text =
-            normalizedCategory == 'ALL' ? 'All' : normalizedCategory;
+        _categoryController.text = normalizedCategory == 'ALL'
+            ? 'All'
+            : normalizedCategory;
       });
 
       HapticFeedback.heavyImpact();
@@ -448,57 +498,111 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
                         color: Colors.orangeAccent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.flash_on_rounded, color: Colors.orangeAccent),
+                      child: const Icon(
+                        Icons.flash_on_rounded,
+                        color: Colors.orangeAccent,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LiveTranslatedText('Flash Sale Engine', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 16)),
-                        LiveTranslatedText('Timed discount across a category or all products', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                        LiveTranslatedText(
+                          'Flash Sale Engine',
+                          style: GoogleFonts.poppins(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                        LiveTranslatedText(
+                          'Timed discount across a category or all products',
+                          style: GoogleFonts.poppins(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
                 // Category presets
-                LiveTranslatedText('Quick Presets:', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                LiveTranslatedText(
+                  'Quick Presets:',
+                  style: GoogleFonts.poppins(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: _presetCategories.map((cat) => GestureDetector(
-                    onTap: () => setState(() => _categoryController.text = cat),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _categoryController.text == cat
-                            ? Colors.orangeAccent.withValues(alpha: 0.3)
-                            : Colors.white.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: _categoryController.text == cat
-                              ? Colors.orangeAccent
-                              : Colors.white12,
+                  children: _presetCategories
+                      .map(
+                        (cat) => GestureDetector(
+                          onTap: () =>
+                              setState(() => _categoryController.text = cat),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _categoryController.text == cat
+                                  ? Colors.orangeAccent.withValues(alpha: 0.3)
+                                  : Colors.white.withValues(alpha: 0.07),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _categoryController.text == cat
+                                    ? Colors.orangeAccent
+                                    : Colors.white12,
+                              ),
+                            ),
+                            child: LiveTranslatedText(
+                              cat,
+                              style: GoogleFonts.poppins(
+                                color: Colors.black87,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: LiveTranslatedText(cat, style: GoogleFonts.poppins(
-                        color: Colors.black87,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      )),
-                    ),
-                  )).toList(),
+                      )
+                      .toList(),
                 ),
                 const SizedBox(height: 16),
-                _buildDarkField(_categoryController, 'Category', Icons.category_rounded, hint: 'Choose All or a category'),
+                _buildDarkField(
+                  _categoryController,
+                  'Category',
+                  Icons.category_rounded,
+                  hint: 'Choose All or a category',
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(child: _buildDarkField(_discountController, 'Discount %', Icons.percent_rounded, keyboardType: TextInputType.number)),
+                    Expanded(
+                      child: _buildDarkField(
+                        _discountController,
+                        'Discount %',
+                        Icons.percent_rounded,
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildDarkField(_hoursController, 'Duration (hrs)', Icons.timer_rounded, keyboardType: TextInputType.number)),
+                    Expanded(
+                      child: _buildDarkField(
+                        _hoursController,
+                        'Duration (hrs)',
+                        Icons.timer_rounded,
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -510,7 +614,9 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orangeAccent,
                       foregroundColor: Colors.black87,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       elevation: 8,
                       shadowColor: Colors.orangeAccent.withValues(alpha: 0.5),
                     ),
@@ -521,7 +627,13 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
                             children: [
                               const Icon(Icons.campaign_rounded, size: 22),
                               const SizedBox(width: 8),
-                              LiveTranslatedText('LAUNCH FLASH SALE ⚡', style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 15)),
+                              LiveTranslatedText(
+                                'LAUNCH FLASH SALE ⚡',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
                             ],
                           ),
                   ),
@@ -548,12 +660,23 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
                   child: Container(
                     width: 12,
                     height: 12,
-                    decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(
+                      color: Colors.greenAccent,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              LiveTranslatedText('ACTIVE FLASH SALE', style: GoogleFonts.poppins(color: Colors.greenAccent, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
+              LiveTranslatedText(
+                'ACTIVE FLASH SALE',
+                style: GoogleFonts.poppins(
+                  color: Colors.greenAccent,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  letterSpacing: 1,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -562,13 +685,22 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
             children: [
               _buildStatPill(
                 'Category',
-                (_activeFlashSale!['category']?.toString().toUpperCase() == 'ALL')
+                (_activeFlashSale!['category']?.toString().toUpperCase() ==
+                        'ALL')
                     ? 'All Products'
                     : (_activeFlashSale!['category']?.toString() ?? 'Unknown'),
                 Colors.orangeAccent,
               ),
-              _buildStatPill('Discount', '${_activeFlashSale!['discount']}%', Colors.greenAccent),
-              _buildStatPill('Duration', '${_activeFlashSale!['hours']}h', Colors.cyanAccent),
+              _buildStatPill(
+                'Discount',
+                '${_activeFlashSale!['discount']}%',
+                Colors.greenAccent,
+              ),
+              _buildStatPill(
+                'Duration',
+                '${_activeFlashSale!['hours']}h',
+                Colors.cyanAccent,
+              ),
             ],
           ),
         ],
@@ -576,17 +708,32 @@ class _FlashSaleTabState extends State<_FlashSaleTab> with SingleTickerProviderS
     );
   }
 
-  Widget _buildDarkField(TextEditingController c, String label, IconData icon,
-      {String? hint, TextInputType? keyboardType}) {
+  Widget _buildDarkField(
+    TextEditingController c,
+    String label,
+    IconData icon, {
+    String? hint,
+    TextInputType? keyboardType,
+  }) {
     return TextField(
       controller: c,
-      style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w600),
+      style: GoogleFonts.poppins(
+        color: Colors.black,
+        fontWeight: FontWeight.w600,
+      ),
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        hintStyle: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w500),
-        labelStyle: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600),
+        hintStyle: GoogleFonts.poppins(
+          color: Colors.grey[600],
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+        labelStyle: GoogleFonts.poppins(
+          color: Colors.black87,
+          fontWeight: FontWeight.w600,
+        ),
         prefixIcon: Icon(icon, color: Colors.grey.shade700, size: 20),
         filled: true,
         fillColor: Colors.grey.shade100,
@@ -631,12 +778,15 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
   }
 
   void _loadChurn() async {
-    setState(() { _isLoading = true; _hasFailed = false; });
+    setState(() {
+      _isLoading = true;
+      _hasFailed = false;
+    });
     try {
       // Load from local storage first for immediate response (offline-first)
       final prefs = await SharedPreferences.getInstance();
       final localChurnData = prefs.getString('churn_risk_data');
-      
+
       if (localChurnData != null && localChurnData.isNotEmpty) {
         try {
           final data = jsonDecode(localChurnData);
@@ -650,10 +800,12 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
           if (kDebugMode) debugPrint('⚠️ Error parsing local churn data: $e');
         }
       }
-      
+
       // Then sync with backend for latest data
       try {
-        final res = await ApiClient.getJson('/api/analytics/churn-risk?days=$_selectedDays');
+        final res = await ApiClient.getJson(
+          '/api/analytics/churn-risk?days=$_selectedDays',
+        );
         if (mounted && res.statusCode == 200) {
           final data = jsonDecode(res.body);
           setState(() {
@@ -665,11 +817,16 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
           if (kDebugMode) debugPrint('✅ Churn risk data synced from backend');
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Backend churn sync failed, using local data: $e');
+        if (kDebugMode)
+          debugPrint('⚠️ Backend churn sync failed, using local data: $e');
         // Keep using local data if backend sync fails
       }
     } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _hasFailed = true; });
+      if (mounted)
+        setState(() {
+          _isLoading = false;
+          _hasFailed = true;
+        });
       if (kDebugMode) debugPrint('❌ Churn data load failed: $e');
     }
   }
@@ -689,15 +846,33 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
                   color: Colors.redAccent.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.person_off_rounded, color: Colors.redAccent, size: 28),
+                child: const Icon(
+                  Icons.person_off_rounded,
+                  color: Colors.redAccent,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LiveTranslatedText('Churn Risk Predictor', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 16)),
-                    LiveTranslatedText('Customers inactive for ${_selectedDays}+ days', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                    LiveTranslatedText(
+                      'Churn Risk Predictor',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      'Customers inactive for ${_selectedDays}+ days',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -705,12 +880,29 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
               PopupMenuButton<int>(
                 color: const Color(0xFF1E293B),
                 initialValue: _selectedDays,
-                onSelected: (v) { setState(() => _selectedDays = v); _loadChurn(); },
-                itemBuilder: (_) => [15, 30, 45, 60].map((d) =>
-                  PopupMenuItem(value: d, child: LiveTranslatedText('$d days', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w600)))
-                ).toList(),
+                onSelected: (v) {
+                  setState(() => _selectedDays = v);
+                  _loadChurn();
+                },
+                itemBuilder: (_) => [15, 30, 45, 60]
+                    .map(
+                      (d) => PopupMenuItem(
+                        value: d,
+                        child: LiveTranslatedText(
+                          '$d days',
+                          style: GoogleFonts.poppins(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -718,8 +910,19 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
                   ),
                   child: Row(
                     children: [
-                      LiveTranslatedText('${_selectedDays}d', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                      const Icon(Icons.arrow_drop_down, color: Colors.black54, size: 18),
+                      LiveTranslatedText(
+                        '${_selectedDays}d',
+                        style: GoogleFonts.poppins(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.black54,
+                        size: 18,
+                      ),
                     ],
                   ),
                 ),
@@ -732,31 +935,49 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                _buildStatPill('At Risk', '${_customers.length}', Colors.redAccent),
+                _buildStatPill(
+                  'At Risk',
+                  '${_customers.length}',
+                  Colors.redAccent,
+                ),
                 const SizedBox(width: 10),
-                _buildStatPill('Est. Revenue Loss', '₹${(_customers.length * 850).toStringAsFixed(0)}', Colors.orangeAccent),
+                _buildStatPill(
+                  'Est. Revenue Loss',
+                  '₹${(_customers.length * 850).toStringAsFixed(0)}',
+                  Colors.orangeAccent,
+                ),
               ],
             ),
           ),
         const SizedBox(height: 8),
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)))
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+                )
               : _hasFailed || _customers.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: _customers.length,
-                      itemBuilder: (ctx, i) => _buildChurnCard(_customers[i], i),
-                    ),
+              ? _buildEmptyState()
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  itemCount: _customers.length,
+                  itemBuilder: (ctx, i) => _buildChurnCard(_customers[i], i),
+                ),
         ),
       ],
     );
   }
 
   Widget _buildChurnCard(dynamic c, int index) {
-    final riskLevel = index < 3 ? 'HIGH' : index < 7 ? 'MEDIUM' : 'LOW';
-    final riskColor = index < 3 ? Colors.redAccent : index < 7 ? Colors.orangeAccent : Colors.yellowAccent;
+    final riskLevel = index < 3
+        ? 'HIGH'
+        : index < 7
+        ? 'MEDIUM'
+        : 'LOW';
+    final riskColor = index < 3
+        ? Colors.redAccent
+        : index < 7
+        ? Colors.orangeAccent
+        : Colors.yellowAccent;
 
     return _GlassCard(
       borderColor: riskColor.withValues(alpha: 0.3),
@@ -769,14 +990,21 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
             height: 44,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [riskColor.withValues(alpha: 0.4), riskColor.withValues(alpha: 0.1)],
+                colors: [
+                  riskColor.withValues(alpha: 0.4),
+                  riskColor.withValues(alpha: 0.1),
+                ],
               ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
               child: LiveTranslatedText(
                 (c['name'] ?? 'U').substring(0, 1).toUpperCase(),
-                style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 18),
+                style: GoogleFonts.poppins(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
               ),
             ),
           ),
@@ -787,20 +1015,42 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
               children: [
                 Row(
                   children: [
-                    LiveTranslatedText(c['name'] ?? 'Unknown', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700)),
+                    LiveTranslatedText(
+                      c['name'] ?? 'Unknown',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: riskColor.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: LiveTranslatedText(riskLevel, style: GoogleFonts.poppins(color: riskColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                      child: LiveTranslatedText(
+                        riskLevel,
+                        style: GoogleFonts.poppins(
+                          color: riskColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                LiveTranslatedText('Last visit: ${(c['last_visit'] ?? '').toString().split('T').first}',
-                    style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 11)),
+                LiveTranslatedText(
+                  'Last visit: ${(c['last_visit'] ?? '').toString().split('T').first}',
+                  style: GoogleFonts.poppins(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ),
           ),
@@ -808,11 +1058,15 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
           GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();
-              final phone = (c['phone'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
+              final phone = (c['phone'] ?? '').toString().replaceAll(
+                RegExp(r'[^0-9]'),
+                '',
+              );
               final msg = Uri.encodeComponent(
-                  '🙏 Hello ${c['name']}, we miss you at our store!\n\n'
-                  '🎁 Come back and get *10% OFF* your next purchase.\n'
-                  'This offer is exclusively for you! ❤️');
+                '🙏 Hello ${c['name']}, we miss you at our store!\n\n'
+                '🎁 Come back and get *10% OFF* your next purchase.\n'
+                'This offer is exclusively for you! ❤️',
+              );
               launchUrlString('https://wa.me/$phone?text=$msg');
             },
             child: Container(
@@ -822,7 +1076,11 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
               ),
-              child: const Icon(Icons.send_rounded, color: Colors.greenAccent, size: 22),
+              child: const Icon(
+                Icons.send_rounded,
+                color: Colors.greenAccent,
+                size: 22,
+              ),
             ),
           ),
         ],
@@ -841,22 +1099,43 @@ class _ChurnRiskTabState extends State<_ChurnRiskTab> {
               color: Colors.greenAccent.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.people_alt_rounded, color: Colors.greenAccent, size: 48),
+            child: const Icon(
+              Icons.people_alt_rounded,
+              color: Colors.greenAccent,
+              size: 48,
+            ),
           ),
           const SizedBox(height: 20),
-          LiveTranslatedText('All Customers Active! 🎉', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 18)),
+          LiveTranslatedText(
+            'All Customers Active! 🎉',
+            style: GoogleFonts.poppins(
+              color: Colors.black,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
           const SizedBox(height: 8),
-          LiveTranslatedText('No churn risk detected in the last $_selectedDays days.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(color: Colors.white38, fontSize: 13)),
+          LiveTranslatedText(
+            'No churn risk detected in the last $_selectedDays days.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(color: Colors.white38, fontSize: 13),
+          ),
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _loadChurn,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6366F1),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: LiveTranslatedText('Refresh', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w600)),
+            child: LiveTranslatedText(
+              'Refresh',
+              style: GoogleFonts.poppins(
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -889,11 +1168,17 @@ class _AutoPOTabState extends State<_AutoPOTab> {
   void _loadPOs() async {
     setState(() => _isLoading = true);
     try {
-      final res = await ApiClient.getJson('/api/inventory/generate-purchase-orders');
+      final res = await ApiClient.getJson(
+        '/api/inventory/generate-purchase-orders',
+      );
       if (mounted) {
-        final orders = jsonDecode(res.body)['purchase_orders'] as Map<String, dynamic>? ?? {};
+        final orders =
+            jsonDecode(res.body)['purchase_orders'] as Map<String, dynamic>? ??
+            {};
         int count = 0;
-        orders.forEach((_, items) { count += (items as List).length; });
+        orders.forEach((_, items) {
+          count += (items as List).length;
+        });
         setState(() {
           _pos = orders;
           _totalItems = count;
@@ -906,7 +1191,8 @@ class _AutoPOTabState extends State<_AutoPOTab> {
   }
 
   void _shareAllPOs() {
-    String msg = '📦 *Purchase Orders — ${DateTime.now().toString().split(' ').first}*\n\n';
+    String msg =
+        '📦 *Purchase Orders — ${DateTime.now().toString().split(' ').first}*\n\n';
     _pos.forEach((supplier, items) {
       msg += '🏭 *$supplier*\n';
       for (var i in (items as List)) {
@@ -932,15 +1218,33 @@ class _AutoPOTabState extends State<_AutoPOTab> {
                   color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.inventory_2_rounded, color: Color(0xFF6366F1), size: 28),
+                child: const Icon(
+                  Icons.inventory_2_rounded,
+                  color: Color(0xFF6366F1),
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LiveTranslatedText('Auto PO Generator', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 16)),
-                    LiveTranslatedText('${_pos.length} suppliers • $_totalItems items need restock', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                    LiveTranslatedText(
+                      'Auto PO Generator',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      '${_pos.length} suppliers • $_totalItems items need restock',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -952,9 +1256,15 @@ class _AutoPOTabState extends State<_AutoPOTab> {
                     decoration: BoxDecoration(
                       color: Colors.green.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.4),
+                      ),
                     ),
-                    child: const Icon(Icons.send_rounded, color: Colors.greenAccent, size: 22),
+                    child: const Icon(
+                      Icons.send_rounded,
+                      color: Colors.greenAccent,
+                      size: 22,
+                    ),
                   ),
                 ),
             ],
@@ -962,13 +1272,17 @@ class _AutoPOTabState extends State<_AutoPOTab> {
         ),
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)))
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+                )
               : _pos.isEmpty
-                  ? _buildHealthyState()
-                  : ListView(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      children: _pos.entries.map((e) => _buildSupplierCard(e.key, e.value as List)).toList(),
-                    ),
+              ? _buildHealthyState()
+              : ListView(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  children: _pos.entries
+                      .map((e) => _buildSupplierCard(e.key, e.value as List))
+                      .toList(),
+                ),
         ),
       ],
     );
@@ -985,56 +1299,120 @@ class _AutoPOTabState extends State<_AutoPOTab> {
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           iconColor: Colors.white54,
           collapsedIconColor: Colors.white54,
-          title: LiveTranslatedText(supplier, style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700)),
-          subtitle: LiveTranslatedText('${items.length} items need restock', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 11)),
+          title: LiveTranslatedText(
+            supplier,
+            style: GoogleFonts.poppins(
+              color: Colors.black,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: LiveTranslatedText(
+            '${items.length} items need restock',
+            style: GoogleFonts.poppins(
+              color: Colors.black87,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
           leading: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.purpleAccent.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.storefront_rounded, color: Colors.purpleAccent, size: 20),
+            child: const Icon(
+              Icons.storefront_rounded,
+              color: Colors.purpleAccent,
+              size: 20,
+            ),
           ),
           children: [
-            ...items.map((i) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white10),
+            ...items.map(
+              (i) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.shopping_bag_outlined,
+                      color: Colors.grey[700],
+                      size: 16,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: LiveTranslatedText(
+                        i['product'] ?? '',
+                        style: GoogleFonts.poppins(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      'Stock: ${i['current_stock']}',
+                      style: GoogleFonts.poppins(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: LiveTranslatedText(
+                        'Order ${i['recommended_order_qty']}',
+                        style: GoogleFonts.poppins(
+                          color: Colors.greenAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.shopping_bag_outlined, color: Colors.grey[700], size: 16),
-                  const SizedBox(width: 10),
-                  Expanded(child: LiveTranslatedText(i['product'] ?? '', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13))),
-                  LiveTranslatedText('Stock: ${i['current_stock']}', style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 12)),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.greenAccent.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                    child: LiveTranslatedText('Order ${i['recommended_order_qty']}', style: GoogleFonts.poppins(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ),
-            )),
+            ),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
                   var msg = '📦 Order Request to *$supplier*\n\n';
-                  for (var i in items) { msg += '• ${i['product']} — Qty: ${i['recommended_order_qty']}\n'; }
+                  for (var i in items) {
+                    msg +=
+                        '• ${i['product']} — Qty: ${i['recommended_order_qty']}\n';
+                  }
                   msg += '\nKindly confirm availability. 🙏';
-                  launchUrlString('https://wa.me/?text=${Uri.encodeComponent(msg)}');
+                  launchUrlString(
+                    'https://wa.me/?text=${Uri.encodeComponent(msg)}',
+                  );
                 },
                 icon: const Icon(Icons.send_rounded, size: 16),
-                label: LiveTranslatedText('Send PO to $supplier', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                label: LiveTranslatedText(
+                  'Send PO to $supplier',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -1050,11 +1428,30 @@ class _AutoPOTabState extends State<_AutoPOTab> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.verified_rounded, color: Colors.greenAccent, size: 64),
+          const Icon(
+            Icons.verified_rounded,
+            color: Colors.greenAccent,
+            size: 64,
+          ),
           const SizedBox(height: 16),
-          LiveTranslatedText('Inventory is Healthy! ✅', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 18)),
+          LiveTranslatedText(
+            'Inventory is Healthy! ✅',
+            style: GoogleFonts.poppins(
+              color: Colors.black,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
           const SizedBox(height: 8),
-          LiveTranslatedText('No purchase orders needed right now.', textAlign: TextAlign.center, style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13)),
+          LiveTranslatedText(
+            'No purchase orders needed right now.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              color: Colors.black87,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );
@@ -1087,14 +1484,24 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
     setState(() => _isLoading = true);
     try {
       final inventory = await LocalStorageService.loadBackendProducts();
-      final stockList = inventory.map((p) => {
-        'name': p['product_name'] ?? '',
-        'stock': int.tryParse(p['current_stock']?.toString() ?? '0') ?? 0,
-        'supplier_whatsapp': p['supplier_phone'] ?? '',
-      }).toList();
+      final stockList = inventory
+          .map(
+            (p) => {
+              'name': p['product_name'] ?? '',
+              'stock': int.tryParse(p['current_stock']?.toString() ?? '0') ?? 0,
+              'supplier_whatsapp': p['supplier_phone'] ?? '',
+            },
+          )
+          .toList();
 
-      final alerts = await SmartReorderAIService.getReorderAlerts(inventory: stockList);
-      if (mounted) setState(() { _alerts = alerts; _isLoading = false; });
+      final alerts = await SmartReorderAIService.getReorderAlerts(
+        inventory: stockList,
+      );
+      if (mounted)
+        setState(() {
+          _alerts = alerts;
+          _isLoading = false;
+        });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1115,15 +1522,33 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
                   color: Colors.cyanAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.trending_up_rounded, color: Colors.cyanAccent, size: 28),
+                child: const Icon(
+                  Icons.trending_up_rounded,
+                  color: Colors.cyanAccent,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LiveTranslatedText('Smart Reorder AI', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 16)),
-                    LiveTranslatedText('Stockout predictions from sales velocity', style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                    LiveTranslatedText(
+                      'Smart Reorder AI',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      'Stockout predictions from sales velocity',
+                      style: GoogleFonts.poppins(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1134,14 +1559,16 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
         ),
         Expanded(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.cyanAccent),
+                )
               : _alerts.isEmpty
-                  ? _buildNoAlertsState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: _alerts.length,
-                      itemBuilder: (ctx, i) => _buildAlertCard(_alerts[i]),
-                    ),
+              ? _buildNoAlertsState()
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  itemCount: _alerts.length,
+                  itemBuilder: (ctx, i) => _buildAlertCard(_alerts[i]),
+                ),
         ),
       ],
     );
@@ -1149,10 +1576,14 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
 
   Widget _buildAlertCard(Map<String, dynamic> alert) {
     final days = alert['days_until_stockout'] as int? ?? 0;
-    final urgencyColor = days <= 1 ? Colors.redAccent
-        : days <= 3 ? Colors.orangeAccent
+    final urgencyColor = days <= 1
+        ? Colors.redAccent
+        : days <= 3
+        ? Colors.orangeAccent
         : Colors.yellowAccent;
-    final velocity = (alert['daily_velocity'] as double? ?? 0).toStringAsFixed(1);
+    final velocity = (alert['daily_velocity'] as double? ?? 0).toStringAsFixed(
+      1,
+    );
     final reorderQty = alert['suggested_reorder_qty'] as int? ?? 0;
 
     return _GlassCard(
@@ -1163,18 +1594,38 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
           Row(
             children: [
               Expanded(
-                child: LiveTranslatedText(alert['product_name'] ?? '', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 15)),
+                child: LiveTranslatedText(
+                  alert['product_name'] ?? '',
+                  style: GoogleFonts.poppins(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: urgencyColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: urgencyColor.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: urgencyColor.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: LiveTranslatedText(
-                  days <= 1 ? '🔴 CRITICAL' : days <= 3 ? '🟠 URGENT' : '🟡 WARNING',
-                  style: GoogleFonts.poppins(color: urgencyColor, fontSize: 10, fontWeight: FontWeight.w700),
+                  days <= 1
+                      ? '🔴 CRITICAL'
+                      : days <= 3
+                      ? '🟠 URGENT'
+                      : '🟡 WARNING',
+                  style: GoogleFonts.poppins(
+                    color: urgencyColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -1184,7 +1635,11 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildStatPill('Days Left', '$days', urgencyColor),
-              _buildStatPill('Stock', '${alert['current_stock']}', Colors.white70),
+              _buildStatPill(
+                'Stock',
+                '${alert['current_stock']}',
+                Colors.white70,
+              ),
               _buildStatPill('Avg/Day', velocity, Colors.cyanAccent),
               _buildStatPill('Reorder', '$reorderQty', Colors.greenAccent),
             ],
@@ -1211,18 +1666,30 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
                       suggestedQty: reorderQty,
                       shopName: _shopName,
                     );
-                    final phone = (alert['supplier_whatsapp'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
+                    final phone = (alert['supplier_whatsapp'] ?? '')
+                        .toString()
+                        .replaceAll(RegExp(r'[^0-9]'), '');
                     final encoded = Uri.encodeComponent(msg);
-                    launchUrlString(phone.isNotEmpty
-                        ? 'https://wa.me/$phone?text=$encoded'
-                        : 'https://wa.me/?text=$encoded');
+                    launchUrlString(
+                      phone.isNotEmpty
+                          ? 'https://wa.me/$phone?text=$encoded'
+                          : 'https://wa.me/?text=$encoded',
+                    );
                   },
                   icon: const Icon(Icons.send_rounded, size: 16),
-                  label: LiveTranslatedText('WhatsApp Supplier', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12)),
+                  label: LiveTranslatedText(
+                    'WhatsApp Supplier',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
@@ -1245,14 +1712,27 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
               color: Colors.cyanAccent.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check_circle_rounded, color: Colors.cyanAccent, size: 56),
+            child: const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.cyanAccent,
+              size: 56,
+            ),
           ),
           const SizedBox(height: 20),
-          LiveTranslatedText('Stock Levels Safe! 📦', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+          LiveTranslatedText(
+            'Stock Levels Safe! 📦',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
           const SizedBox(height: 8),
-          LiveTranslatedText('No products running critically low.\nKeep selling! 🚀',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(color: Colors.white38, fontSize: 13)),
+          LiveTranslatedText(
+            'No products running critically low.\nKeep selling! 🚀',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(color: Colors.white38, fontSize: 13),
+          ),
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: _loadAlerts,
@@ -1264,7 +1744,10 @@ class _SmartReorderTabState extends State<_SmartReorderTab> {
                 side: const BorderSide(color: Colors.cyanAccent, width: 1),
               ),
             ),
-            child: LiveTranslatedText('Refresh Analysis', style: GoogleFonts.poppins()),
+            child: LiveTranslatedText(
+              'Refresh Analysis',
+              style: GoogleFonts.poppins(),
+            ),
           ),
         ],
       ),

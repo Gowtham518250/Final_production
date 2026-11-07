@@ -14,18 +14,18 @@ class BackupService {
   static Future<Map<String, dynamic>> createBackup() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Validate we have data to backup
       if (prefs.getKeys().isEmpty) {
         throw Exception('No app data to backup');
       }
-      
+
       // Do not report a full backup if the user-scoped business snapshot
       // could not be exported.
-        final snapshotPath = await LocalStorageService.exportSecureBackup();
+      final snapshotPath = await LocalStorageService.exportSecureBackup();
       if (snapshotPath == null) {
         throw StateError('Could not export the local business-data snapshot.');
-        }
+      }
       final localStorageSnapshot = await File(snapshotPath).readAsString();
       if (localStorageSnapshot.isEmpty) {
         throw StateError('The local business-data snapshot is empty.');
@@ -51,7 +51,7 @@ class BackupService {
       final backupPath = await _saveBackupFile(backupData);
       if (kDebugMode)
         debugPrint('✅ Backup created successfully at: $backupPath');
-      
+
       return {
         'success': true,
         'path': backupPath,
@@ -60,7 +60,7 @@ class BackupService {
         'recordCount': prefs.getKeys().length,
       };
     } catch (e) {
-    if (kDebugMode) debugPrint('❌ Backup creation failed: $e');
+      if (kDebugMode) debugPrint('❌ Backup creation failed: $e');
       throw Exception('Backup creation failed: $e');
     }
   }
@@ -81,7 +81,7 @@ class BackupService {
 
       final jsonStr = await file.readAsString();
       final backupData = jsonDecode(jsonStr) as Map<String, dynamic>;
-      
+
       // Validate backup structure
       if (!backupData.containsKey('timestamp') ||
           !backupData.containsKey('data')) {
@@ -125,14 +125,14 @@ class BackupService {
           throw Exception('Backup file corrupted: checksum mismatch');
         }
       }
-      
+
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Restore all preferences
       final prefsData =
           backupData['data']['preferences'] as Map<String, dynamic>;
       int restoredCount = 0;
-      
+
       for (var entry in prefsData.entries) {
         try {
           await _restorePreference(prefs, entry.key, entry.value);
@@ -157,7 +157,7 @@ class BackupService {
         );
       return true;
     } catch (e) {
-    if (kDebugMode) debugPrint('❌ Backup restore failed: $e');
+      if (kDebugMode) debugPrint('❌ Backup restore failed: $e');
       throw Exception('Backup restore failed: $e');
     }
   }
@@ -182,7 +182,7 @@ class BackupService {
           try {
             final content = await File(file.path).readAsString();
             final data = jsonDecode(content) as Map<String, dynamic>;
-            
+
             backups.add({
               'path': file.path,
               'timestamp': data['timestamp'] ?? '',
@@ -228,7 +228,7 @@ class BackupService {
   static Future<void> autoBackup() async {
     try {
       await createBackup();
-      
+
       // Clean old backups
       final backups = await listBackups();
       if (backups.length > maxBackups) {
@@ -239,7 +239,7 @@ class BackupService {
       }
     } catch (e) {
       // Silently fail for auto-backup
-    if (kDebugMode) debugPrint('Auto-backup error: $e');
+      if (kDebugMode) debugPrint('Auto-backup error: $e');
     }
   }
 
@@ -257,7 +257,7 @@ class BackupService {
       final fileName =
           'retail_mind_backup_${DateTime.now().millisecondsSinceEpoch}.json';
       final exportFile = File('${directory.path}/$fileName');
-      
+
       await sourceFile.copy(exportFile.path);
       return exportFile.path;
     } catch (e) {
@@ -385,9 +385,9 @@ class BackupService {
 
       final jsonStr = await file.readAsString();
       final backupData = jsonDecode(jsonStr) as Map<String, dynamic>;
-      
+
       // Check required fields
-      if (!backupData.containsKey('timestamp') || 
+      if (!backupData.containsKey('timestamp') ||
           !backupData.containsKey('data') ||
           !backupData.containsKey('version')) {
         return false;

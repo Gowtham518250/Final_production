@@ -43,7 +43,7 @@ class AnalyticsEngine {
     });
   }
 
-  static bool _isOnlineSale(Map<String, dynamic> sale) {
+  static bool isOnlineSale(Map<String, dynamic> sale) {
     final source = (sale['source'] ?? sale['order_source'] ?? '')
         .toString()
         .trim()
@@ -128,6 +128,7 @@ class AnalyticsEngine {
       isPlaceholderProductName(raw ?? '');
 
   List<dynamic> sales = [];
+  List<Map<String, dynamic>> lifetimeSalesCache = [];
   int selectedTimeFilter = 0;
 
   List<Map<String, dynamic>> filteredSalesCache = [];
@@ -661,7 +662,7 @@ class AnalyticsEngine {
       cancelledAliases.addAll(
         CacheConsistencyService.identityTokens(record, dataset: 'sales'),
       );
-      if (_isOnlineSale(record)) {
+      if (isOnlineSale(record)) {
         cancelledOnlineReferences.addAll(_onlineOrderReferences(record));
       }
     }
@@ -681,7 +682,7 @@ class AnalyticsEngine {
         dataset: 'sales',
       );
       if (aliases.intersection(cancelledAliases).isNotEmpty) continue;
-      if (_isOnlineSale(record) &&
+      if (isOnlineSale(record) &&
           _onlineOrderReferences(
             record,
           ).any(cancelledOnlineReferences.contains)) {
@@ -880,6 +881,9 @@ class AnalyticsEngine {
     }
 
     final sortedTransactions = transactionsWithDates;
+    lifetimeSalesCache = List<Map<String, dynamic>>.unmodifiable(
+      sortedTransactions,
+    );
     final filtered = sortedTransactions.where((transaction) {
       final dt = _tryGetBusinessDate(transaction);
       if (dt == null) return false;
@@ -917,7 +921,7 @@ class AnalyticsEngine {
       0.0,
       (sum, t) => sum + _toDouble(t['gross_revenue']),
     );
-    totalTransactions = sortedTransactions.length;
+    totalTransactions = lifetimeSalesCache.length;
     averageSale = totalTransactions == 0 ? 0.0 : totalSales / totalTransactions;
     totalOnlineOrders = onlineKeys.length;
     todayTransactionsCount = todayKeys.length;

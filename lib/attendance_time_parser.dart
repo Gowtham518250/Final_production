@@ -13,8 +13,9 @@ class AttendanceTimeParser {
     final parsed = DateTime.tryParse(value);
     if (parsed == null) return null;
 
-    final hasExplicitZone =
-        RegExp(r'(?:[zZ]|[+-]\d{2}:\d{2})$').hasMatch(value);
+    final hasExplicitZone = RegExp(
+      r'(?:[zZ]|[+-]\d{2}:\d{2})$',
+    ).hasMatch(value);
     return hasExplicitZone ? parsed.toLocal() : parsed;
   }
 }

@@ -36,6 +36,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   Future<List<PaymentEvent>> emitAll(List<PaymentEvent> inputs) async {
+    SharedPreferences.setMockInitialValues({});
     final service = PaymentDetectionService();
     service.debugResetTransientDetectionState();
     service.clearBill();
@@ -49,7 +50,7 @@ void main() {
     return events;
   }
 
-  group('one payment -> one alert; two payments -> two alerts', () {
+  group('only shared payment identity suppresses duplicate alerts', () {
     test('our own notifications are never re-read as payments', () async {
       final service = PaymentDetectionService();
       service.debugResetTransientDetectionState();
@@ -73,7 +74,7 @@ void main() {
     });
 
     test(
-      'PhonePe notification + Truecaller mirror of the same payment = 1',
+      'PhonePe notification + matching Truecaller event = 1 visible payment',
       () async {
         final now = DateTime.now();
         final events = await emitAll([
@@ -121,7 +122,7 @@ void main() {
       expect(events, hasLength(2));
     });
 
-    test('SMS arriving 20 minutes later pairs with its notification', () async {
+    test('SMS arriving 20 minutes later with the same payer merges', () async {
       final now = DateTime.now();
       final events = await emitAll([
         _credit(
@@ -143,7 +144,7 @@ void main() {
     });
 
     test(
-      'two payments + two late SMS = 2, a third unmatched SMS = 3',
+      'two uniquely matched SMS merge; one unmatched SMS stays visible',
       () async {
         final now = DateTime.now();
         PaymentEvent n(String id, int minsAgo, String payer) => _credit(
@@ -202,7 +203,7 @@ void main() {
     });
 
     test(
-      'app notification (payer only) + bank SMS (UTR only) within 60s = 1',
+      'app notification + bank SMS with one-sided UTR but no payer remain separate',
       () async {
         final now = DateTime.now();
         final events = await emitAll([
@@ -222,7 +223,7 @@ void main() {
             ref: '412345678901',
           ),
         ]);
-        expect(events, hasLength(1));
+        expect(events, hasLength(2));
       },
     );
 
@@ -325,7 +326,7 @@ void main() {
       expect(events, hasLength(1));
     });
 
-    test('SMS 90 minutes later still pairs with its notification', () async {
+    test('SMS 90 minutes later with the same payer merges', () async {
       final now = DateTime.now();
       final events = await emitAll([
         _credit(
@@ -404,8 +405,9 @@ void main() {
         // repeat-suppression policy rather than the service's platform TTS
         // adapter, which is intentionally absent in Flutter unit tests.
         queue.enqueue(first, ui(first));
+        await Future<void>.delayed(const Duration(milliseconds: 2200));
         queue.enqueue(updated, ui(updated));
-        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await Future<void>.delayed(const Duration(milliseconds: 2200));
 
         expect(emitted, hasLength(2));
         expect(emitted.every((event) => !event.isMerchantConfirmed), isTrue);
@@ -480,7 +482,7 @@ void main() {
     );
 
     test(
-      'same notification repost stays in review but is announced once',
+      'same notification repost is one visible payment and one announcement',
       () async {
         SharedPreferences.setMockInitialValues({});
         final originalVoiceEnabled = PdsConfig.isVoiceEnabled;
@@ -540,10 +542,8 @@ void main() {
         queue.enqueue(repost, ui(repost));
         await Future<void>.delayed(const Duration(milliseconds: 300));
 
-        expect(
-          emitted.map((event) => event.id),
-          containsAll(<String>['repost-first', 'repost-update']),
-        );
+        expect(emitted.map((event) => event.id), contains('repost-first'));
+        expect(emitted, hasLength(1));
         expect(spoken, hasLength(1));
 
         queue.dispose();
@@ -625,7 +625,7 @@ void main() {
     );
 
     test(
-      'ambiguous same-payer same-amount cross-source match does not suppress a payment',
+      'ambiguous same-payer match remains visible when two payments are equally near',
       () async {
         final now = DateTime.now();
         final events = await emitAll([
@@ -703,7 +703,7 @@ void main() {
       },
     );
     test(
-      'SMS echo of second same-value payment pairs with nearest notification',
+      'ambiguous SMS matching two same-value payments stays visible',
       () async {
         final now = DateTime.now();
         final events = await emitAll([

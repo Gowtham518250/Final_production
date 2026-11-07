@@ -22,22 +22,21 @@ Map<String, dynamic> sale({
 void main() {
   group('P0 Sales dedup deployment suite', () {
     test('duplicate stable identity collapses to one logical bill', () {
-      final rows = [
-        sale(id: 'SALE-1'),
-        sale(id: 'SALE-1'),
-        sale(id: 'SALE-1'),
-      ];
+      final rows = [sale(id: 'SALE-1'), sale(id: 'SALE-1'), sale(id: 'SALE-1')];
       expect(SalesDedupHelper.dedupeBills(rows), hasLength(1));
     });
 
-    test('different stable identities remain separate even when content is identical', () {
-      final rows = [
-        sale(id: 'SALE-A'),
-        sale(id: 'SALE-B'),
-        sale(id: 'SALE-C'),
-      ];
-      expect(SalesDedupHelper.dedupeBills(rows), hasLength(3));
-    });
+    test(
+      'different stable identities remain separate even when content is identical',
+      () {
+        final rows = [
+          sale(id: 'SALE-A'),
+          sale(id: 'SALE-B'),
+          sale(id: 'SALE-C'),
+        ];
+        expect(SalesDedupHelper.dedupeBills(rows), hasLength(3));
+      },
+    );
 
     test('100 unique sales remain 100 bills', () {
       final rows = List.generate(100, (i) => sale(id: 'SALE-$i'));
@@ -86,29 +85,32 @@ void main() {
       );
     });
 
-    test('rapid repeated sales with identical values remain distinct when IDs differ', () {
-      final rows = List.generate(
-        20,
-        (i) => sale(id: 'RAPID-$i', total: 100, product: 'Rice'),
-      );
-      expect(SalesDedupHelper.dedupeBills(rows), hasLength(20));
-    });
+    test(
+      'rapid repeated sales with identical values remain distinct when IDs differ',
+      () {
+        final rows = List.generate(
+          20,
+          (i) => sale(id: 'RAPID-$i', total: 100, product: 'Rice'),
+        );
+        expect(SalesDedupHelper.dedupeBills(rows), hasLength(20));
+      },
+    );
 
     test('offline and server copies sharing identity dedupe safely', () {
-      final rows = [
-        sale(id: 'OFFLINE-123'),
-        sale(id: 'OFFLINE-123'),
-      ];
+      final rows = [sale(id: 'OFFLINE-123'), sale(id: 'OFFLINE-123')];
       expect(SalesDedupHelper.dedupeBills(rows), hasLength(1));
     });
 
-    test('same identity with changed server amount still remains one logical bill', () {
-      final rows = [
-        sale(id: 'SYNC-1', total: 100),
-        sale(id: 'SYNC-1', total: 105),
-      ];
-      expect(SalesDedupHelper.dedupeBills(rows), hasLength(1));
-    });
+    test(
+      'same identity with changed server amount still remains one logical bill',
+      () {
+        final rows = [
+          sale(id: 'SYNC-1', total: 100),
+          sale(id: 'SYNC-1', total: 105),
+        ];
+        expect(SalesDedupHelper.dedupeBills(rows), hasLength(1));
+      },
+    );
 
     test('different date alone does not merge different identities', () {
       final rows = [
@@ -137,13 +139,16 @@ void main() {
       expect(values.toSet(), hasLength(1));
     });
 
-    test('invoice-style identities are supported as normal stable identifiers', () {
-      final rows = [
-        {...sale(id: 'INV-1001'), 'invoice_number': 'INV-1001'},
-        {...sale(id: 'INV-1002'), 'invoice_number': 'INV-1002'},
-      ];
-      expect(SalesDedupHelper.dedupeBills(rows), hasLength(2));
-    });
+    test(
+      'invoice-style identities are supported as normal stable identifiers',
+      () {
+        final rows = [
+          {...sale(id: 'INV-1001'), 'invoice_number': 'INV-1001'},
+          {...sale(id: 'INV-1002'), 'invoice_number': 'INV-1002'},
+        ];
+        expect(SalesDedupHelper.dedupeBills(rows), hasLength(2));
+      },
+    );
 
     test('sale IDs with punctuation remain stable identifiers', () {
       final rows = [
@@ -153,13 +158,16 @@ void main() {
       expect(SalesDedupHelper.dedupeBills(rows), hasLength(2));
     });
 
-    test('zero-value sale is not silently merged with a different identity', () {
-      final rows = [
-        sale(id: 'ZERO-A', total: 0),
-        sale(id: 'ZERO-B', total: 0),
-      ];
-      expect(SalesDedupHelper.dedupeBills(rows), hasLength(2));
-    });
+    test(
+      'zero-value sale is not silently merged with a different identity',
+      () {
+        final rows = [
+          sale(id: 'ZERO-A', total: 0),
+          sale(id: 'ZERO-B', total: 0),
+        ];
+        expect(SalesDedupHelper.dedupeBills(rows), hasLength(2));
+      },
+    );
 
     test('fractional amounts retain distinct fingerprints', () {
       final a = sale(id: 'F1', total: 10.01);

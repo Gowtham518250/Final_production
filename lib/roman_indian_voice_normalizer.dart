@@ -13,20 +13,42 @@
 // existing STT, NLP, catalog matching, confidence, or billing validation.
 // =============================================================================
 
-
 class RomanIndianVoiceNormalizer {
   static const Map<String, String> _teluguAsrVariants = <String, String>{
-    'ఇండు': 'రెండు', 'రెండూ': 'రెండు', 'రేండు': 'రెండు', 'రేణ్డు': 'రెండు',
-    'మూడూ': 'మూడు', 'నాల్గు': 'నాలుగు', 'నాలుగూ': 'నాలుగు',
-    'ఆయ్దు': 'ఐదు', 'అయ్దు': 'ఐదు', 'ఐదూ': 'ఐదు', 'ఆయిదు': 'ఐదు',
-    'ఆరవే': 'అరవై', 'అరవయ్': 'అరవై', 'అరవయి': 'అరవై', 'ఆరవై': 'అరవై',
-    'యాభయ్': 'యాభై', 'యాభయి': 'యాభై', 'డెబ్భై': 'డెబ్బై',
-    'ఉందలు': 'వందలు', 'ఒందలు': 'వందలు', 'వందాలు': 'వందలు',
-    'వందులు': 'వందలు', 'వందలూ': 'వందలు', 'వంద్లు': 'వందలు',
-    'పంచేదారా': 'పంచదార', 'పంచేదార': 'పంచదార', 'పంచదారా': 'పంచదార',
-    'పంచదరా': 'పంచదార', 'పంచదర': 'పంచదార',
-    'నూనే': 'నూనె', 'నూనై': 'నూనె',
-    'బిర్యాని': 'బిరియాని', 'బిర్యానీ': 'బిరియాని', 'బిరియానీ': 'బిరియాని',
+    'ఇండు': 'రెండు',
+    'రెండూ': 'రెండు',
+    'రేండు': 'రెండు',
+    'రేణ్డు': 'రెండు',
+    'మూడూ': 'మూడు',
+    'నాల్గు': 'నాలుగు',
+    'నాలుగూ': 'నాలుగు',
+    'ఆయ్దు': 'ఐదు',
+    'అయ్దు': 'ఐదు',
+    'ఐదూ': 'ఐదు',
+    'ఆయిదు': 'ఐదు',
+    'ఆరవే': 'అరవై',
+    'అరవయ్': 'అరవై',
+    'అరవయి': 'అరవై',
+    'ఆరవై': 'అరవై',
+    'యాభయ్': 'యాభై',
+    'యాభయి': 'యాభై',
+    'డెబ్భై': 'డెబ్బై',
+    'ఉందలు': 'వందలు',
+    'ఒందలు': 'వందలు',
+    'వందాలు': 'వందలు',
+    'వందులు': 'వందలు',
+    'వందలూ': 'వందలు',
+    'వంద్లు': 'వందలు',
+    'పంచేదారా': 'పంచదార',
+    'పంచేదార': 'పంచదార',
+    'పంచదారా': 'పంచదార',
+    'పంచదరా': 'పంచదార',
+    'పంచదర': 'పంచదార',
+    'నూనే': 'నూనె',
+    'నూనై': 'నూనె',
+    'బిర్యాని': 'బిరియాని',
+    'బిర్యానీ': 'బిరియాని',
+    'బిరియానీ': 'బిరియాని',
     'బిరియానీలు': 'బిరియాని',
   };
 
@@ -76,7 +98,12 @@ class RomanIndianVoiceNormalizer {
   // These English homophones are valid ordinary words, not reliable number
   // tokens. Never turn e.g. "for hundred" or "tree hundred" into a price.
   static const Set<String> _ambiguousNumberHomophones = {
-    'to', 'too', 'won', 'for', 'tree', 'free',
+    'to',
+    'too',
+    'won',
+    'for',
+    'tree',
+    'free',
   };
 
   static final Map<String, String> _aliases = <String, String>{
@@ -671,8 +698,7 @@ class RomanIndianVoiceNormalizer {
     'onbadhu': 9,
     'das': 10,
     'padi': 10,
-  
-};
+  };
 
   /// Convert spoken scale phrases to a single numeric token while preserving
   /// product names and every other word. Examples: "3 vandalu" -> "300",
@@ -683,7 +709,9 @@ class RomanIndianVoiceNormalizer {
   static String normalizeSpokenScalePhrases(String input) {
     if (input.trim().isEmpty) return input;
 
-    final tokens = _correctTeluguAsrVariants(input.trim()).split(RegExp(r'\s+'));
+    final tokens = _correctTeluguAsrVariants(
+      input.trim(),
+    ).split(RegExp(r'\s+'));
     final out = <String>[];
     var i = 0;
 
@@ -692,7 +720,8 @@ class RomanIndianVoiceNormalizer {
       if (i + 1 < tokens.length) {
         final scale = _spokenScaleWords[_cleanToken(tokens[i + 1])];
         final currentNumber = _numberFromToken(current);
-        final looksLikeNumber = double.tryParse(current) != null ||
+        final looksLikeNumber =
+            double.tryParse(current) != null ||
             (!_ambiguousNumberHomophones.contains(current) &&
                 currentNumber != null);
 
@@ -706,14 +735,19 @@ class RomanIndianVoiceNormalizer {
             // Support forms such as "three hundred and fifty" and
             // "moodu vandalu yabhai" without swallowing product words.
             if (remainderIndex < tokens.length &&
-                const {'and', 'aur', 'మరియు', 'mariyu'}
-                    .contains(_cleanToken(tokens[remainderIndex]))) {
+                const {
+                  'and',
+                  'aur',
+                  'మరియు',
+                  'mariyu',
+                }.contains(_cleanToken(tokens[remainderIndex]))) {
               remainderIndex++;
             }
             if (remainderIndex < tokens.length) {
               final remainderToken = _cleanToken(tokens[remainderIndex]);
               final remainder = _numberFromToken(remainderToken);
-              final remainderIsSafe = double.tryParse(remainderToken) != null ||
+              final remainderIsSafe =
+                  double.tryParse(remainderToken) != null ||
                   (!_ambiguousNumberHomophones.contains(remainderToken) &&
                       remainder != null);
               if (remainder != null &&
@@ -836,7 +870,16 @@ class RomanIndianVoiceNormalizer {
 
   static bool _isUnit(String value) {
     return <String>{
-      'kg', 'g', 'litre', 'liter', 'ml', 'packet', 'piece', 'box', 'bottle', 'dozen'
+      'kg',
+      'g',
+      'litre',
+      'liter',
+      'ml',
+      'packet',
+      'piece',
+      'box',
+      'bottle',
+      'dozen',
     }.contains(value);
   }
 

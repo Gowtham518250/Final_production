@@ -98,9 +98,12 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
     for (var sale in _sales) {
       final saleMap = Map<String, dynamic>.from(sale as Map);
       final created = _parseDate(saleMap['sale_date'] ?? saleMap['created_at']);
-      final amount = _toDouble(saleMap['total'] ?? saleMap['total_amount'] ?? saleMap['amount']);
+      final amount = _toDouble(
+        saleMap['total'] ?? saleMap['total_amount'] ?? saleMap['amount'],
+      );
       if (!created.isAfter(DateTime(1970))) continue;
-      if (!created.isAfter(todayStart.subtract(const Duration(days: 1)))) continue;
+      if (!created.isAfter(todayStart.subtract(const Duration(days: 1))))
+        continue;
       if (!created.toLocal().isBefore(todayStart)) {
         todayRevenue += amount;
       }
@@ -111,7 +114,9 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
 
     for (var expense in _expensesList) {
       final expMap = Map<String, dynamic>.from(expense as Map);
-      final created = _parseDate(expMap['date'] ?? expMap['expense_date'] ?? expMap['created_at']);
+      final created = _parseDate(
+        expMap['date'] ?? expMap['expense_date'] ?? expMap['created_at'],
+      );
       final cost = _toDouble(expMap['amount'] ?? expMap['cost']);
       if (!created.isAfter(DateTime(1970))) continue;
       if (!created.isBefore(monthStart)) {
@@ -120,7 +125,10 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
       if (!created.toLocal().isBefore(todayStart)) {
         todayExpenses += cost;
       }
-      final category = (expMap['category'] ?? '').toString().toUpperCase().replaceAll(' ', '_');
+      final category = (expMap['category'] ?? '')
+          .toString()
+          .toUpperCase()
+          .replaceAll(' ', '_');
       if (category == 'SALE_LOSS' || category == 'SALES_LOSS') {
         if (!created.isBefore(monthStart)) monthSaleLoss += cost;
         if (!created.toLocal().isBefore(todayStart)) todaySaleLoss += cost;
@@ -149,7 +157,10 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
   double _toDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is num) return value.toDouble();
-    return double.tryParse(value.toString().replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+    return double.tryParse(
+          value.toString().replaceAll(RegExp(r'[^0-9.]'), ''),
+        ) ??
+        0.0;
   }
 
   Widget _statCard(String title, String value, Color color) {
@@ -159,14 +170,34 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 14, offset: const Offset(0, 8))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LiveTranslatedText(title, style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w600)),
+            LiveTranslatedText(
+              title,
+              style: GoogleFonts.poppins(
+                color: Colors.grey[600],
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 10),
-            LiveTranslatedText(value, style: GoogleFonts.poppins(color: color, fontSize: 22, fontWeight: FontWeight.w700)),
+            LiveTranslatedText(
+              value,
+              style: GoogleFonts.poppins(
+                color: color,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
@@ -190,29 +221,80 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LiveTranslatedText('Revenue vs Expenses', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
+                    LiveTranslatedText(
+                      'Revenue vs Expenses',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 16),
-                    Row(children: [
-                      _statCard('Today Revenue', '₹${_todayRevenue.toStringAsFixed(0)}', const Color(0xFF0F766E)),
-                      const SizedBox(width: 12),
-                      _statCard('Today Expense', '₹${_todayExpenses.toStringAsFixed(0)}', const Color(0xFFEF4444)),
-                    ]),
+                    Row(
+                      children: [
+                        _statCard(
+                          'Today Revenue',
+                          '₹${_todayRevenue.toStringAsFixed(0)}',
+                          const Color(0xFF0F766E),
+                        ),
+                        const SizedBox(width: 12),
+                        _statCard(
+                          'Today Expense',
+                          '₹${_todayExpenses.toStringAsFixed(0)}',
+                          const Color(0xFFEF4444),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
-                    Row(children: [
-                      _statCard('Month Revenue', '₹${_monthRevenue.toStringAsFixed(0)}', const Color(0xFF0F766E)),
-                      const SizedBox(width: 12),
-                      _statCard('Net Profit', '₹${_netProfit.toStringAsFixed(0)}', _netProfit >= 0 ? const Color(0xFF15803D) : const Color(0xFFB91C1C)),
-                    ]),
+                    Row(
+                      children: [
+                        _statCard(
+                          'Month Revenue',
+                          '₹${_monthRevenue.toStringAsFixed(0)}',
+                          const Color(0xFF0F766E),
+                        ),
+                        const SizedBox(width: 12),
+                        _statCard(
+                          'Net Profit',
+                          '₹${_netProfit.toStringAsFixed(0)}',
+                          _netProfit >= 0
+                              ? const Color(0xFF15803D)
+                              : const Color(0xFFB91C1C),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 24),
-                    LiveTranslatedText('Top Details', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700)),
+                    LiveTranslatedText(
+                      'Top Details',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     _detailTile('Total sales records', '${_sales.length}'),
                     _detailTile('Expense entries', '${_expensesList.length}'),
-                    _detailTile('Sale loss today', '₹${_todaySaleLoss.toStringAsFixed(2)}'),
-                    _detailTile('Sale loss this month', '₹${_monthSaleLoss.toStringAsFixed(2)}'),
-                    _detailTile('Month profit percentage', _monthRevenue == 0.0 ? '0%' : '${((_netProfit / _monthRevenue) * 100).toStringAsFixed(1)}%'),
+                    _detailTile(
+                      'Sale loss today',
+                      '₹${_todaySaleLoss.toStringAsFixed(2)}',
+                    ),
+                    _detailTile(
+                      'Sale loss this month',
+                      '₹${_monthSaleLoss.toStringAsFixed(2)}',
+                    ),
+                    _detailTile(
+                      'Month profit percentage',
+                      _monthRevenue == 0.0
+                          ? '0%'
+                          : '${((_netProfit / _monthRevenue) * 100).toStringAsFixed(1)}%',
+                    ),
                     const SizedBox(height: 24),
-                    LiveTranslatedText('This page combines sales and expense data to give a real store-level profit view.', style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 13)),
+                    LiveTranslatedText(
+                      'This page combines sales and expense data to give a real store-level profit view.',
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey[600],
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -231,8 +313,17 @@ class _ProfitLossPageState extends State<ProfitLossPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          LiveTranslatedText(title, style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[700])),
-          LiveTranslatedText(value, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700)),
+          LiveTranslatedText(
+            title,
+            style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[700]),
+          ),
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );

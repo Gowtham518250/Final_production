@@ -22,7 +22,9 @@ class BatchTrackingService {
         'quantity': quantity,
         'expiry_date': expiryDate.toIso8601String().split('T')[0],
         if (manufacturingDate != null)
-          'manufacturing_date': manufacturingDate.toIso8601String().split('T')[0],
+          'manufacturing_date': manufacturingDate.toIso8601String().split(
+            'T',
+          )[0],
         if (supplier != null) 'supplier': supplier,
       };
 
@@ -33,7 +35,8 @@ class BatchTrackingService {
         return data['id'] ?? data['batch_id'];
       }
 
-      if (kDebugMode) debugPrint('❌ Batch creation failed: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('❌ Batch creation failed: ${response.statusCode}');
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Batch creation error: $e');
@@ -74,7 +77,8 @@ class BatchTrackingService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final List items = data['expiring_batches'] ?? data['batches'] ?? data['items'] ?? [];
+        final List items =
+            data['expiring_batches'] ?? data['batches'] ?? data['items'] ?? [];
 
         return items.map((item) => ProductBatch.fromJson(item)).toList();
       }
@@ -175,7 +179,9 @@ class ProductBatch {
           ? DateTime.parse(json['manufacturing_date'])
           : null,
       supplier: json['supplier'],
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toString()),
+      createdAt: DateTime.parse(
+        json['created_at'] ?? DateTime.now().toString(),
+      ),
     );
   }
 
@@ -191,16 +197,18 @@ class ProductBatch {
 
   String get expiryStatus {
     if (isExpired) return '❌ EXPIRED';
-    if (daysUntilExpiry.inDays <= 7) return '🚨 EXPIRING SOON (${daysUntilExpiry.inDays}d)';
-    if (isExpiringWithin30Days) return '⚠️ EXPIRING (${daysUntilExpiry.inDays}d)';
+    if (daysUntilExpiry.inDays <= 7)
+      return '🚨 EXPIRING SOON (${daysUntilExpiry.inDays}d)';
+    if (isExpiringWithin30Days)
+      return '⚠️ EXPIRING (${daysUntilExpiry.inDays}d)';
     return '✅ OK (${daysUntilExpiry.inDays}d)';
   }
 
   Color get expiryColor {
-    if (isExpired) return const Color(0xFFDC2626);  // Red
-    if (daysUntilExpiry.inDays <= 7) return const Color(0xFFDC2626);  // Red
-    if (isExpiringWithin30Days) return const Color(0xFFF97316);  // Orange
-    return const Color(0xFF16A34A);  // Green
+    if (isExpired) return const Color(0xFFDC2626); // Red
+    if (daysUntilExpiry.inDays <= 7) return const Color(0xFFDC2626); // Red
+    if (isExpiringWithin30Days) return const Color(0xFFF97316); // Orange
+    return const Color(0xFF16A34A); // Green
   }
 
   DateTime get batchAge {

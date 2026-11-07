@@ -44,18 +44,28 @@ class _DayClosingPageState extends State<DayClosingPage> {
 
   Future<void> _loadTodayData() async {
     final allSales = await LocalStorageService.loadSales();
-    
+
     // 🔒 FIX: Check if widget is still mounted before setState
     if (!mounted) return;
-    
+
     final now = DateTime.now();
-    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final todayStr =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
 
     setState(() {
-      _todaySales = allSales.where((s) {
-        final date = s['business_date'] ?? s['sale_date'] ?? s['invoice_date'] ?? s['created_at'] ?? '';
-        return date.toString().split('T').first.startsWith(todayStr);
-      }).map((e) => Map<String, dynamic>.from(e as Map)).toList().cast<Map<String, dynamic>>();
+      _todaySales = allSales
+          .where((s) {
+            final date =
+                s['business_date'] ??
+                s['sale_date'] ??
+                s['invoice_date'] ??
+                s['created_at'] ??
+                '';
+            return date.toString().split('T').first.startsWith(todayStr);
+          })
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList()
+          .cast<Map<String, dynamic>>();
 
       _totalCash = 0;
       _totalOnline = 0;
@@ -64,29 +74,44 @@ class _DayClosingPageState extends State<DayClosingPage> {
       for (var s in _todaySales) {
         // Try multiple field names for total amount (STRICT: must not be 0)
         double total = 0;
-        
+
         // Priority order: use first available non-zero value
-        if (s['total'] != null) total = double.tryParse(s['total'].toString()) ?? 0;
-        if (total == 0 && s['total_amount'] != null) total = double.tryParse(s['total_amount'].toString()) ?? 0;
-        if (total == 0 && s['amount'] != null) total = double.tryParse(s['amount'].toString()) ?? 0;
-        if (total == 0 && s['grandTotal'] != null) total = double.tryParse(s['grandTotal'].toString()) ?? 0;
+        if (s['total'] != null)
+          total = double.tryParse(s['total'].toString()) ?? 0;
+        if (total == 0 && s['total_amount'] != null)
+          total = double.tryParse(s['total_amount'].toString()) ?? 0;
+        if (total == 0 && s['amount'] != null)
+          total = double.tryParse(s['amount'].toString()) ?? 0;
+        if (total == 0 && s['grandTotal'] != null)
+          total = double.tryParse(s['grandTotal'].toString()) ?? 0;
         if (total == 0 && s['price'] != null && s['quantity'] != null) {
           final price = double.tryParse(s['price'].toString()) ?? 0;
           final qty = double.tryParse(s['quantity'].toString()) ?? 1;
           total = CurrencyManager.multiply(price, qty);
         }
-        
+
         // Skip invalid/zero amounts
         if (total <= 0) continue;
-        
-        final method = s['payment_method']?.toString().toUpperCase().trim() ?? 'CASH';
-        final status = s['payment_status']?.toString().toUpperCase().trim() ?? 'PAID';
 
-        if (status == 'BORROW' || method == 'BORROW' || method == 'CREDIT' || method == 'KHATA') {
+        final method =
+            s['payment_method']?.toString().toUpperCase().trim() ?? 'CASH';
+        final status =
+            s['payment_status']?.toString().toUpperCase().trim() ?? 'PAID';
+
+        if (status == 'BORROW' ||
+            method == 'BORROW' ||
+            method == 'CREDIT' ||
+            method == 'KHATA') {
           _totalBorrow += total;
-        } else if (method == 'CASH' || method == 'CASH PAYMENT' || method.isEmpty || method == 'CASH_PAYMENT') {
+        } else if (method == 'CASH' ||
+            method == 'CASH PAYMENT' ||
+            method.isEmpty ||
+            method == 'CASH_PAYMENT') {
           _totalCash += total;
-        } else if (method.contains('UPI') || method.contains('CARD') || method.contains('ONLINE') || method.contains('BANK')) {
+        } else if (method.contains('UPI') ||
+            method.contains('CARD') ||
+            method.contains('ONLINE') ||
+            method.contains('BANK')) {
           _totalOnline += total;
         } else {
           _totalCash += total; // Default to cash if unclear
@@ -103,115 +128,167 @@ class _DayClosingPageState extends State<DayClosingPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: LiveTranslatedText('Daily Closing', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Daily Closing',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body: _loading 
-        ? const Center(child: CircularProgressIndicator())
-        : SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Card(
-                  elevation: 0,
-                  color: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        LiveTranslatedText('Opening Cash Balance', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: _openingCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              prefixText: '₹ ',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            onChanged: (v) => setState(() => _openingBalance = double.tryParse(v) ?? 0),
-                          ),
-                        ),
-                      ],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Card(
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Card(
-                  elevation: 0,
-                  color: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: LiveTranslatedText('Actual Cash Being Handed Over', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                        ),
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: _cashHandoverCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              prefixText: '₹ ',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            onChanged: (v) => setState(() => _actualCashHandedOver = double.tryParse(v) ?? 0),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildSummaryCard(totalRevenue),
-                const SizedBox(height: 24),
-                _buildPaymentBreakdown(),
-                const SizedBox(height: 24),
-                _buildBillList(),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.green.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LiveTranslatedText('Closing Cash Balance', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.green.shade800)),
-                      const SizedBox(height: 12),
-                      Row(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          LiveTranslatedText('Opening + Cash Collected - Returned\n= ₹${(_openingBalance + _totalCash - _totalBorrow).toStringAsFixed(0)}', 
-                              style: GoogleFonts.poppins(fontSize: 12, color: Colors.green.shade700)),
-                          LiveTranslatedText('₹${(_openingBalance + _totalCash - _totalBorrow).toStringAsFixed(0)}', 
-                              style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                          LiveTranslatedText(
+                            'Opening Cash Balance',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          SizedBox(
+                            width: 120,
+                            child: TextField(
+                              controller: _openingCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                prefixText: '₹ ',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                              onChanged: (v) => setState(
+                                () => _openingBalance = double.tryParse(v) ?? 0,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 40),
-                _buildCloseButton(),
-                if (_showWhatsAppReport) ...[
+                  const SizedBox(height: 16),
+                  Card(
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: LiveTranslatedText(
+                              'Actual Cash Being Handed Over',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 120,
+                            child: TextField(
+                              controller: _cashHandoverCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                prefixText: '₹ ',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                              onChanged: (v) => setState(
+                                () => _actualCashHandedOver =
+                                    double.tryParse(v) ?? 0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
-                  _buildWhatsAppReport(),
+                  _buildSummaryCard(totalRevenue),
+                  const SizedBox(height: 24),
+                  _buildPaymentBreakdown(),
+                  const SizedBox(height: 24),
+                  _buildBillList(),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LiveTranslatedText(
+                          'Closing Cash Balance',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Colors.green.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            LiveTranslatedText(
+                              'Opening + Cash Collected - Returned\n= ₹${(_openingBalance + _totalCash - _totalBorrow).toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                            LiveTranslatedText(
+                              '₹${(_openingBalance + _totalCash - _totalBorrow).toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  _buildCloseButton(),
+                  if (_showWhatsAppReport) ...[
+                    const SizedBox(height: 24),
+                    _buildWhatsAppReport(),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
     );
   }
 
@@ -227,19 +304,45 @@ class _DayClosingPageState extends State<DayClosingPage> {
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF4F46E5).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
+          BoxShadow(
+            color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
         children: [
-          LiveTranslatedText('Today\'s Total Revenue', style: GoogleFonts.poppins(color: Colors.white.withValues(alpha: 0.8), fontSize: 14)),
+          LiveTranslatedText(
+            'Today\'s Total Revenue',
+            style: GoogleFonts.poppins(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 14,
+            ),
+          ),
           const SizedBox(height: 8),
-          LiveTranslatedText('₹${total.toStringAsFixed(0)}', style: GoogleFonts.poppins(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
+          LiveTranslatedText(
+            '₹${total.toStringAsFixed(0)}',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-            child: LiveTranslatedText('${_todaySales.length} Total Bills Generated', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w500)),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: LiveTranslatedText(
+              '${_todaySales.length} Total Bills Generated',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
         ],
       ),
@@ -250,27 +353,79 @@ class _DayClosingPageState extends State<DayClosingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText('Payment Breakdown', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1F2937))),
+        LiveTranslatedText(
+          'Payment Breakdown',
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF1F2937),
+          ),
+        ),
         const SizedBox(height: 16),
-        _buildMethodRow(Icons.money_rounded, 'Cash in Hand', _totalCash, Colors.green),
+        _buildMethodRow(
+          Icons.money_rounded,
+          'Cash in Hand',
+          _totalCash,
+          Colors.green,
+        ),
         const SizedBox(height: 12),
-        _buildMethodRow(Icons.account_balance_wallet_rounded, 'Online / UPI', _totalOnline, Colors.blue),
+        _buildMethodRow(
+          Icons.account_balance_wallet_rounded,
+          'Online / UPI',
+          _totalOnline,
+          Colors.blue,
+        ),
         const SizedBox(height: 12),
-        _buildMethodRow(Icons.hourglass_bottom_rounded, 'Borrows / Udhaar', _totalBorrow, Colors.orange),
+        _buildMethodRow(
+          Icons.hourglass_bottom_rounded,
+          'Borrows / Udhaar',
+          _totalBorrow,
+          Colors.orange,
+        ),
       ],
     );
   }
 
-  Widget _buildMethodRow(IconData icon, String label, double amount, Color color) {
+  Widget _buildMethodRow(
+    IconData icon,
+    String label,
+    double amount,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
       child: Row(
         children: [
-          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: color, size: 20)),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
           const SizedBox(width: 16),
-          Expanded(child: LiveTranslatedText(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w500, color: const Color(0xFF4B5563)))),
-          LiveTranslatedText('₹${amount.toStringAsFixed(0)}', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
+          Expanded(
+            child: LiveTranslatedText(
+              label,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF4B5563),
+              ),
+            ),
+          ),
+          LiveTranslatedText(
+            '₹${amount.toStringAsFixed(0)}',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+          ),
         ],
       ),
     );
@@ -281,14 +436,37 @@ class _DayClosingPageState extends State<DayClosingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText('Recent Sales', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF1F2937))),
+        LiveTranslatedText(
+          'Recent Sales',
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF1F2937),
+          ),
+        ),
         const SizedBox(height: 16),
-        ..._todaySales.take(5).map((s) => ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: LiveTranslatedText(s['customer_name'] ?? 'Guest Customer', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-          subtitle: LiveTranslatedText(s['created_at']?.toString().substring(11, 16) ?? '', style: GoogleFonts.poppins(fontSize: 12)),
-          trailing: LiveTranslatedText('₹${s['total_amount']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF4F46E5))),
-        )),
+        ..._todaySales
+            .take(5)
+            .map(
+              (s) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: LiveTranslatedText(
+                  s['customer_name'] ?? 'Guest Customer',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                ),
+                subtitle: LiveTranslatedText(
+                  s['created_at']?.toString().substring(11, 16) ?? '',
+                  style: GoogleFonts.poppins(fontSize: 12),
+                ),
+                trailing: LiveTranslatedText(
+                  '₹${s['total_amount']}',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF4F46E5),
+                  ),
+                ),
+              ),
+            ),
       ],
     );
   }
@@ -301,9 +479,18 @@ class _DayClosingPageState extends State<DayClosingPage> {
         onPressed: () => _confirmClosing(),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF111827),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
-        child: LiveTranslatedText('CLOSE DAY & PREPARE REPORT', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+        child: LiveTranslatedText(
+          'CLOSE DAY & PREPARE REPORT',
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }
@@ -332,7 +519,13 @@ class _DayClosingPageState extends State<DayClosingPage> {
             children: [
               Icon(Icons.message, color: Colors.green.shade700, size: 24),
               const SizedBox(width: 8),
-              LiveTranslatedText('WhatsApp Report Ready', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+              LiveTranslatedText(
+                'WhatsApp Report Ready',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -343,7 +536,10 @@ class _DayClosingPageState extends State<DayClosingPage> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.grey.shade300),
             ),
-            child: LiveTranslatedText(message, style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87)),
+            child: LiveTranslatedText(
+              message,
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87),
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -391,7 +587,11 @@ class _DayClosingPageState extends State<DayClosingPage> {
 
     if (ownerPhone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Add your phone number in Shop Settings first')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Add your phone number in Shop Settings first',
+          ),
+        ),
       );
       return;
     }
@@ -402,13 +602,13 @@ class _DayClosingPageState extends State<DayClosingPage> {
 
     // Build message — no API key needed, wa.me does this for free
     final summary =
-      '*$shopName — Daily Summary ($dateStr)*\n\n'
-      'Cash collected: Rs.${_totalCash.toStringAsFixed(0)}\n'
-      'UPI / Online:   Rs.${_totalOnline.toStringAsFixed(0)}\n'
-      'Udhar given:    Rs.${_totalBorrow.toStringAsFixed(0)}\n'
-      '─────────────────\n'
-      '*Total revenue: Rs.${total.toStringAsFixed(0)}*\n\n'
-      'Sent from Retail Mind';
+        '*$shopName — Daily Summary ($dateStr)*\n\n'
+        'Cash collected: Rs.${_totalCash.toStringAsFixed(0)}\n'
+        'UPI / Online:   Rs.${_totalOnline.toStringAsFixed(0)}\n'
+        'Udhar given:    Rs.${_totalBorrow.toStringAsFixed(0)}\n'
+        '─────────────────\n'
+        '*Total revenue: Rs.${total.toStringAsFixed(0)}*\n\n'
+        'Sent from Retail Mind';
 
     // Clean phone — remove +91, spaces, dashes
     final digits = ownerPhone.replaceAll(RegExp(r'[^0-9]'), '');
@@ -423,7 +623,11 @@ class _DayClosingPageState extends State<DayClosingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open WhatsApp automatically. You can use the Share/WhatsApp button from your phone.')),
+          const SnackBar(
+            content: LiveTranslatedText(
+              'Could not open WhatsApp automatically. You can use the Share/WhatsApp button from your phone.',
+            ),
+          ),
         );
       }
     }
@@ -432,7 +636,11 @@ class _DayClosingPageState extends State<DayClosingPage> {
   void _confirmClosing() {
     if (_actualCashHandedOver <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Please enter the actual cash being handed over')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Please enter the actual cash being handed over',
+          ),
+        ),
       );
       return;
     }
@@ -441,31 +649,53 @@ class _DayClosingPageState extends State<DayClosingPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: LiveTranslatedText('Verify Closing Amount?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Verify Closing Amount?',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LiveTranslatedText('Recorded Cash: ₹${_totalCash.toStringAsFixed(0)}', style: GoogleFonts.poppins()),
-            LiveTranslatedText('Cash Handed Over: ₹${_actualCashHandedOver.toStringAsFixed(0)}', style: GoogleFonts.poppins()),
-            LiveTranslatedText('Discrepancy: ₹${(_totalCash - _actualCashHandedOver).toStringAsFixed(0)}', 
+            LiveTranslatedText(
+              'Recorded Cash: ₹${_totalCash.toStringAsFixed(0)}',
+              style: GoogleFonts.poppins(),
+            ),
+            LiveTranslatedText(
+              'Cash Handed Over: ₹${_actualCashHandedOver.toStringAsFixed(0)}',
+              style: GoogleFonts.poppins(),
+            ),
+            LiveTranslatedText(
+              'Discrepancy: ₹${(_totalCash - _actualCashHandedOver).toStringAsFixed(0)}',
               style: GoogleFonts.poppins(
-                color: (_totalCash - _actualCashHandedOver).abs() > 10 ? Colors.red : Colors.green,
+                color: (_totalCash - _actualCashHandedOver).abs() > 10
+                    ? Colors.red
+                    : Colors.green,
                 fontWeight: FontWeight.bold,
-              )),
+              ),
+            ),
             const SizedBox(height: 16),
-            LiveTranslatedText('WhatsApp summary will be sent automatically to the owner.', style: GoogleFonts.poppins(fontSize: 12)),
+            LiveTranslatedText(
+              'WhatsApp summary will be sent automatically to the owner.',
+              style: GoogleFonts.poppins(fontSize: 12),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const LiveTranslatedText('CANCEL')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const LiveTranslatedText('CANCEL'),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               _autoSendDailySummary(); // FIX-7: Auto-send instead of showing UI
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const LiveTranslatedText('CONFIRM CLOSING', style: TextStyle(color: Colors.white)),
+            child: const LiveTranslatedText(
+              'CONFIRM CLOSING',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -478,10 +708,14 @@ class _DayClosingPageState extends State<DayClosingPage> {
       final prefs = await SharedPreferences.getInstance();
       final ownerPhone = prefs.getString('shop_phone') ?? '';
       final shopName = prefs.getString('shop_name') ?? 'Your Shop';
-      
+
       if (ownerPhone.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Owner phone not configured — day closed locally')),
+          const SnackBar(
+            content: LiveTranslatedText(
+              'Owner phone not configured — day closed locally',
+            ),
+          ),
         );
         Navigator.pop(context, true);
         return;
@@ -492,22 +726,25 @@ class _DayClosingPageState extends State<DayClosingPage> {
       final dateStr = '${now.day}/${now.month}/${now.year}';
 
       final message =
-        '📊 *$shopName — Day Summary ($dateStr)*\n\n'
-        '💵 Cash: ₹${_totalCash.toStringAsFixed(0)}\n'
-        '📱 UPI/Online: ₹${_totalOnline.toStringAsFixed(0)}\n'
-        '📒 Udhar: ₹${_totalBorrow.toStringAsFixed(0)}\n'
-        '━━━━━━━━━━━\n'
-        '💰 *Total: ₹${totalRevenue.toStringAsFixed(0)}*\n\n'
-        '_Sent by Retail Mind_';
+          '📊 *$shopName — Day Summary ($dateStr)*\n\n'
+          '💵 Cash: ₹${_totalCash.toStringAsFixed(0)}\n'
+          '📱 UPI/Online: ₹${_totalOnline.toStringAsFixed(0)}\n'
+          '📒 Udhar: ₹${_totalBorrow.toStringAsFixed(0)}\n'
+          '━━━━━━━━━━━\n'
+          '💰 *Total: ₹${totalRevenue.toStringAsFixed(0)}*\n\n'
+          '_Sent by Retail Mind_';
 
-      final url = 'https://wa.me/91$ownerPhone?text=${Uri.encodeComponent(message)}';
-      
+      final url =
+          'https://wa.me/91$ownerPhone?text=${Uri.encodeComponent(message)}';
+
       try {
         await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: LiveTranslatedText('✅ Day closed! WhatsApp summary sent.'),
+              content: LiveTranslatedText(
+                '✅ Day closed! WhatsApp summary sent.',
+              ),
               backgroundColor: Colors.green,
             ),
           );
@@ -516,11 +753,13 @@ class _DayClosingPageState extends State<DayClosingPage> {
         debugPrint('Error auto-sending WhatsApp: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: LiveTranslatedText('Day closed. WhatsApp error: $e')),
+            SnackBar(
+              content: LiveTranslatedText('Day closed. WhatsApp error: $e'),
+            ),
           );
         }
       }
-      
+
       await Future.delayed(const Duration(milliseconds: 500));
       Navigator.pop(context, true);
     } catch (e) {

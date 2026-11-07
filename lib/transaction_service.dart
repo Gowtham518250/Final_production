@@ -2,16 +2,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'sync_service.dart';  // ✅ Added for getAuthoritativeTime()
+import 'sync_service.dart'; // ✅ Added for getAuthoritativeTime()
 
 /// Transaction type classification
 enum TransactionType {
-  confirmed,      // Payment explicitly verified; see verificationStatus for method
-  partial,        // Partial payment (e.g., ₹750 of ₹1000 bill)
-  likely,         // Probable payment (notification-only, no SMS confirmation)
-  walletCredit,   // Cashback/wallet load (NOT to be counted in revenue)
-  pending,        // Payment initiated but not settled
-  failed,         // Transaction failed or reversed
+  confirmed, // Payment explicitly verified; see verificationStatus for method
+  partial, // Partial payment (e.g., ₹750 of ₹1000 bill)
+  likely, // Probable payment (notification-only, no SMS confirmation)
+  walletCredit, // Cashback/wallet load (NOT to be counted in revenue)
+  pending, // Payment initiated but not settled
+  failed, // Transaction failed or reversed
 }
 
 enum TransactionVerificationStatus {
@@ -66,7 +66,8 @@ class Transaction {
     'source': source,
     'name': name,
     'phone': phone,
-    'amount': amount, // Store as double — avoids locale-specific string parse errors
+    'amount':
+        amount, // Store as double — avoids locale-specific string parse errors
     'type': type,
     'transaction_type': transactionType?.toString(),
     'reference': reference,
@@ -85,15 +86,19 @@ class Transaction {
     TransactionType? txnType;
     if (txnTypeStr != null) {
       // Handle both 'confirmed' and 'TransactionType.confirmed' formats
-      final name = txnTypeStr.contains('.') ? txnTypeStr.split('.').last : txnTypeStr;
+      final name = txnTypeStr.contains('.')
+          ? txnTypeStr.split('.').last
+          : txnTypeStr;
       try {
         txnType = TransactionType.values.byName(name);
       } catch (e) {
         // Leave null if unrecognized
       }
     }
-    final verificationStatusName =
-        json['verification_status']?.toString().split('.').last;
+    final verificationStatusName = json['verification_status']
+        ?.toString()
+        .split('.')
+        .last;
     var verificationStatus = TransactionVerificationStatus.unverified;
     for (final status in TransactionVerificationStatus.values) {
       if (status.name == verificationStatusName) {
@@ -110,7 +115,9 @@ class Transaction {
       type: json['type'] as String? ?? 'PENDING',
       transactionType: txnType,
       reference: json['reference'] as String?,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
       notes: json['notes'] as String?,
       rawMessage: json['raw_message'] as String?,
       isCashback: json['is_cashback'] as bool? ?? false,
@@ -233,7 +240,7 @@ class TransactionService {
       return decoded
           .map((t) => Transaction.fromJson(t as Map<String, dynamic>))
           .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     } catch (e) {
       if (kDebugMode) print('❌ Error loading transactions: $e');
       return [];
@@ -254,13 +261,12 @@ class TransactionService {
     Transaction transaction,
   ) async {
     if (!isEligibleForMerchantConfirmation(transaction)) {
-      throw StateError(
-        'Only an unambiguous incoming credit can be confirmed.',
-      );
+      throw StateError('Only an unambiguous incoming credit can be confirmed.');
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.get('user_id') ??
+    final userId =
+        prefs.get('user_id') ??
         prefs.get('userId') ??
         prefs.getString('email') ??
         prefs.getString('user_name');
@@ -291,7 +297,7 @@ class TransactionService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final transactions = await loadTransactions();
-      
+
       final existingIndex = transactions.indexWhere((existing) {
         if (existing.id == txn.id) return true;
         return txn.reference?.trim().isNotEmpty == true &&
@@ -317,8 +323,9 @@ class TransactionService {
       if (!await prefs.setString(_transactionKey, encoded)) {
         throw StateError('Transaction storage did not confirm the write.');
       }
-      
-      if (kDebugMode) print('✅ Transaction saved: ${txn.name} - ₹${txn.amount}');
+
+      if (kDebugMode)
+        print('✅ Transaction saved: ${txn.name} - ₹${txn.amount}');
     } catch (e) {
       if (kDebugMode) print('❌ Error saving transaction: $e');
       rethrow;
@@ -329,12 +336,14 @@ class TransactionService {
     if (transaction.id.trim().isEmpty ||
         !transaction.amount.isFinite ||
         transaction.amount <= 0) {
-      throw StateError('A transaction requires a valid ID and positive amount.');
+      throw StateError(
+        'A transaction requires a valid ID and positive amount.',
+      );
     }
     if (transaction.verificationStatus ==
             TransactionVerificationStatus.unverified ||
         transaction.verificationStatus ==
-            TransactionVerificationStatus.merchantConfirmed &&
+                TransactionVerificationStatus.merchantConfirmed &&
             (transaction.verifiedAt == null ||
                 transaction.verifiedBy == null ||
                 transaction.verifiedBy!.isEmpty)) {
@@ -478,13 +487,15 @@ class TransactionService {
   static Future<double> getTodayTotal() async {
     final txns = await loadTransactions();
     final now = DateTime.now();
-    return txns.where((t) {
-      return t.createdAt.year == now.year &&
-          t.createdAt.month == now.month &&
-          t.createdAt.day == now.day &&
-          !t.isCashback &&
-          !t.isWalletCredit;
-    }).fold<double>(0.0, (sum, t) => sum + t.amount);
+    return txns
+        .where((t) {
+          return t.createdAt.year == now.year &&
+              t.createdAt.month == now.month &&
+              t.createdAt.day == now.day &&
+              !t.isCashback &&
+              !t.isWalletCredit;
+        })
+        .fold<double>(0.0, (sum, t) => sum + t.amount);
   }
 
   /// Get today's revenue (confirmed + partial payments only)
@@ -496,16 +507,19 @@ class TransactionService {
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(const Duration(days: 1));
 
-    return txns.where((t) {
-      return t.createdAt.isAfter(todayStart) &&
-          t.createdAt.isBefore(todayEnd) &&
-          t.type.toUpperCase() == 'RECEIVED' &&
-          (t.transactionType == TransactionType.confirmed ||
-              t.transactionType == TransactionType.partial) &&
-          t.verificationStatus != TransactionVerificationStatus.unverified &&
-          !t.isCashback &&
-          !t.isWalletCredit;
-    }).fold<double>(0.0, (sum, t) => sum + t.amount);
+    return txns
+        .where((t) {
+          return t.createdAt.isAfter(todayStart) &&
+              t.createdAt.isBefore(todayEnd) &&
+              t.type.toUpperCase() == 'RECEIVED' &&
+              (t.transactionType == TransactionType.confirmed ||
+                  t.transactionType == TransactionType.partial) &&
+              t.verificationStatus !=
+                  TransactionVerificationStatus.unverified &&
+              !t.isCashback &&
+              !t.isWalletCredit;
+        })
+        .fold<double>(0.0, (sum, t) => sum + t.amount);
   }
 
   /// Get transactions by date range
@@ -515,7 +529,10 @@ class TransactionService {
   ) async {
     final txns = await loadTransactions();
     return txns
-        .where((t) => t.createdAt.isAfter(startDate) && t.createdAt.isBefore(endDate))
+        .where(
+          (t) =>
+              t.createdAt.isAfter(startDate) && t.createdAt.isBefore(endDate),
+        )
         .toList();
   }
 

@@ -76,13 +76,19 @@ void main() {
       });
     }
 
-    test('a lone scale-sounding word with no number before it is not converted', () {
-      expect(te('నాకు ఉందలు రూపాయలు').text, 'నాకు ఉందలు రూపాయలు');
-    });
+    test(
+      'a lone scale-sounding word with no number before it is not converted',
+      () {
+        expect(te('నాకు ఉందలు రూపాయలు').text, 'నాకు ఉందలు రూపాయలు');
+      },
+    );
 
-    test('a number-sounding word with no price, unit or scale next to it stays', () {
-      expect(te('ఇండు ఆవి').text, 'ఇండు ఆవి');
-    });
+    test(
+      'a number-sounding word with no price, unit or scale next to it stays',
+      () {
+        expect(te('ఇండు ఆవి').text, 'ఇండు ఆవి');
+      },
+    );
   });
 
   group('other languages and edge cases', () {

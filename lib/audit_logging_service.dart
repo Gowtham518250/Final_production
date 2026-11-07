@@ -46,9 +46,9 @@ class AuditLoggingService {
       final decoded = json.decode(raw);
       final log = decoded is List
           ? decoded
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList()
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
           : <Map<String, dynamic>>[];
 
       final identity = await _identity();
@@ -191,11 +191,9 @@ class AuditLoggingService {
 
       final events = decoded is List
           ? decoded
-              .whereType<Map>()
-              .map((e) => AuditEvent.fromJson(
-                    Map<String, dynamic>.from(e),
-                  ))
-              .toList()
+                .whereType<Map>()
+                .map((e) => AuditEvent.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : <AuditEvent>[];
 
       if (startDate != null || endDate != null) {
@@ -223,10 +221,7 @@ class AuditLoggingService {
     }
   }
 
-  Future<List<AuditEvent>> getEventsByType(
-    AuditType type, {
-    int? limit,
-  }) async {
+  Future<List<AuditEvent>> getEventsByType(AuditType type, {int? limit}) async {
     final all = await getAuditLog();
     final filtered = all.where((e) => e.type == type).toList();
     return limit != null && filtered.length > limit
@@ -350,26 +345,27 @@ class AuditEvent {
   }
 
   Map<String, dynamic> toJson() => {
-        'event_id': eventId,
-        'type': type.toString(),
-        'action': action,
-        'description': description,
-        'timestamp': timestamp.toIso8601String(),
-        'success': success,
-        'error': error,
-        'context': context,
-        'details': details,
-        'data_type': dataType,
-        'user_id': userId,
-        'shop_id': shopId,
-      };
+    'event_id': eventId,
+    'type': type.toString(),
+    'action': action,
+    'description': description,
+    'timestamp': timestamp.toIso8601String(),
+    'success': success,
+    'error': error,
+    'context': context,
+    'details': details,
+    'data_type': dataType,
+    'user_id': userId,
+    'shop_id': shopId,
+  };
 
   static AuditEvent fromJson(Map<String, dynamic> json) {
     return AuditEvent(
       type: _parseAuditType(json['type']?.toString()),
       action: json['action']?.toString() ?? 'unknown',
       description: json['description']?.toString() ?? '',
-      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+      timestamp:
+          DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
           DateTime.now(),
       success: json['success'] is bool ? json['success'] as bool : null,
       error: json['error']?.toString(),

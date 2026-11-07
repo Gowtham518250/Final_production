@@ -16,15 +16,15 @@ const _stats = OnlineHubStats(
 );
 
 Widget _host(Widget child) => MaterialApp(
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      home: child,
-    );
+  supportedLocales: AppLocalizations.supportedLocales,
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  home: child,
+);
 
 OnlineStoreHubView _view({
   OnlineStoreStatus status = OnlineStoreStatus.live,
@@ -34,17 +34,16 @@ OnlineStoreHubView _view({
   VoidCallback? onOrders,
   VoidCallback? onSetup,
   Future<void> Function()? onRefresh,
-}) =>
-    OnlineStoreHubView(
-      status: status,
-      stats: stats,
-      loading: loading,
-      loadFailed: loadFailed,
-      onRefresh: onRefresh ?? () async {},
-      onOpenOrders: onOrders ?? () {},
-      onOpenInventory: () {},
-      onOpenSetup: onSetup ?? () {},
-    );
+}) => OnlineStoreHubView(
+  status: status,
+  stats: stats,
+  loading: loading,
+  loadFailed: loadFailed,
+  onRefresh: onRefresh ?? () async {},
+  onOpenOrders: onOrders ?? () {},
+  onOpenInventory: () {},
+  onOpenSetup: onSetup ?? () {},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -74,10 +73,9 @@ void main() {
 
   testWidgets('offline store offers one-tap setup', (tester) async {
     var setup = 0;
-    await tester.pumpWidget(_host(_view(
-      status: OnlineStoreStatus.offline,
-      onSetup: () => setup++,
-    )));
+    await tester.pumpWidget(
+      _host(_view(status: OnlineStoreStatus.offline, onSetup: () => setup++)),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Your online store is OFFLINE'), findsOneWidget);
     await tester.tap(find.text('Set up online store'));
@@ -85,32 +83,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('does not present failed analytics as zero revenue', (tester) async {
-    await tester.pumpWidget(_host(_view(
-      status: OnlineStoreStatus.unknown,
-      stats: null,
-      loading: false,
-      loadFailed: true,
-    )));
+  testWidgets('does not present failed analytics as zero revenue', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        _view(
+          status: OnlineStoreStatus.unknown,
+          stats: null,
+          loading: false,
+          loadFailed: true,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Online store status unavailable'), findsOneWidget);
-    expect(find.text('Some information could not be refreshed. Pull down to try again.'), findsOneWidget);
+    expect(
+      find.text(
+        'Some information could not be refreshed. Pull down to try again.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('₹0'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('inventory action opens the supplied callback', (tester) async {
     var opened = 0;
-    await tester.pumpWidget(_host(OnlineStoreHubView(
-      status: OnlineStoreStatus.live,
-      stats: _stats,
-      loading: false,
-      loadFailed: false,
-      onRefresh: () async {},
-      onOpenOrders: () {},
-      onOpenInventory: () => opened++,
-      onOpenSetup: () {},
-    )));
+    await tester.pumpWidget(
+      _host(
+        OnlineStoreHubView(
+          status: OnlineStoreStatus.live,
+          stats: _stats,
+          loading: false,
+          loadFailed: false,
+          onRefresh: () async {},
+          onOpenOrders: () {},
+          onOpenInventory: () => opened++,
+          onOpenSetup: () {},
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Manage inventory'), 240);
     await tester.tap(find.text('Manage inventory'));

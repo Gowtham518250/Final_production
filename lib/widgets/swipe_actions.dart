@@ -58,10 +58,7 @@ class SwipeToDelete extends StatelessWidget {
           color: backgroundColor ?? const Color(0xFFEF4444),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          Icons.delete_rounded,
-          color: iconColor ?? Colors.white,
-        ),
+        child: Icon(Icons.delete_rounded, color: iconColor ?? Colors.white),
       ),
       child: child,
     );
@@ -97,10 +94,7 @@ class SwipeToArchive extends StatelessWidget {
           color: backgroundColor ?? const Color(0xFF6366F1),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          Icons.archive_rounded,
-          color: iconColor ?? Colors.white,
-        ),
+        child: Icon(Icons.archive_rounded, color: iconColor ?? Colors.white),
       ),
       child: child,
     );
@@ -113,11 +107,7 @@ class SwipeActions extends StatelessWidget {
   final Widget child;
   final List<SwipeAction> actions;
 
-  const SwipeActions({
-    super.key,
-    required this.child,
-    required this.actions,
-  });
+  const SwipeActions({super.key, required this.child, required this.actions});
 
   @override
   Widget build(BuildContext context) {
@@ -189,10 +179,7 @@ class SwipeAction {
 }
 
 /// Swipe Position Enum
-enum SwipePosition {
-  left,
-  right,
-}
+enum SwipePosition { left, right }
 
 /// Swipe to Refresh with Actions
 /// Combines pull-to-refresh with swipe actions
@@ -216,10 +203,7 @@ class SwipeRefreshWithActions extends StatelessWidget {
       child: ListView.builder(
         itemCount: children.length,
         itemBuilder: (context, index) {
-          return SwipeActions(
-            actions: swipeActions,
-            child: children[index],
-          );
+          return SwipeActions(actions: swipeActions, child: children[index]);
         },
       ),
     );
@@ -255,10 +239,7 @@ class SwipeToEdit extends StatelessWidget {
           color: backgroundColor ?? const Color(0xFF10B981),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          Icons.edit_rounded,
-          color: iconColor ?? Colors.white,
-        ),
+        child: Icon(Icons.edit_rounded, color: iconColor ?? Colors.white),
       ),
       child: child,
     );

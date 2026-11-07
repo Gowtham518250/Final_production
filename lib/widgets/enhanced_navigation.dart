@@ -38,7 +38,7 @@ class _EnhancedNavigationState extends State<EnhancedNavigation> {
   void initState() {
     super.initState();
     _focusNodes = List.generate(widget.items.length, (_) => FocusNode());
-    
+
     // Add keyboard listener
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
   }
@@ -134,7 +134,7 @@ class _EnhancedNavigationState extends State<EnhancedNavigation> {
               final index = entry.key;
               final item = entry.value;
               final isActive = widget.currentIndex == index;
-              
+
               return Expanded(
                 child: AccessibilityHelper.accessibleButton(
                   semanticLabel: item.label,
@@ -172,7 +172,7 @@ class _EnhancedNavigationState extends State<EnhancedNavigation> {
             final index = entry.key;
             final item = entry.value;
             final isActive = widget.currentIndex == index;
-            
+
             return _buildNavItem(item, isActive, index);
           }).toList(),
         ),
@@ -182,7 +182,7 @@ class _EnhancedNavigationState extends State<EnhancedNavigation> {
 
   Widget _buildNavItem(NavItem item, bool isActive, int index) {
     final activeColor = widget.activeColor ?? const Color(0xFF6366F1);
-    
+
     return Focus(
       focusNode: _focusNodes[index],
       onFocusChange: (hasFocus) {
@@ -198,7 +198,9 @@ class _EnhancedNavigationState extends State<EnhancedNavigation> {
           vertical: widget.showLabels ? 8 : 12,
         ),
         decoration: BoxDecoration(
-          color: isActive ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
+          color: isActive
+              ? activeColor.withValues(alpha: 0.1)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -273,7 +275,7 @@ class EnhancedDrawer extends StatelessWidget {
               itemBuilder: (context, index) {
                 final item = items[index];
                 final isActive = currentIndex == index;
-                
+
                 return _DrawerTile(
                   item: item,
                   isActive: isActive,
@@ -362,28 +364,24 @@ class BreadcrumbNavigation extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: _buildBreadcrumbs(),
-      ),
+      child: Row(children: _buildBreadcrumbs()),
     );
   }
 
   List<Widget> _buildBreadcrumbs() {
     final List<Widget> breadcrumbs = [];
-    
+
     for (int i = 0; i < items.length; i++) {
       final item = items[i];
       final isLast = i == items.length - 1;
-      
+
       if (i > 0) {
         breadcrumbs.add(_buildSeparator());
       }
-      
-      breadcrumbs.add(
-        _buildBreadcrumbItem(item, isLast),
-      );
+
+      breadcrumbs.add(_buildBreadcrumbItem(item, isLast));
     }
-    
+
     return breadcrumbs;
   }
 
@@ -417,13 +415,27 @@ class BreadcrumbNavigation extends StatelessWidget {
   Widget _buildSeparator() {
     switch (style) {
       case BreadcrumbStyle.arrow:
-        return const Icon(Icons.chevron_right, size: 16, color: Color(0xFF94A3B8));
+        return const Icon(
+          Icons.chevron_right,
+          size: 16,
+          color: Color(0xFF94A3B8),
+        );
       case BreadcrumbStyle.slash:
-        return const LiveTranslatedText('/', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14));
+        return const LiveTranslatedText(
+          '/',
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+        );
       case BreadcrumbStyle.dot:
-        return const LiveTranslatedText('•', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14));
+        return const LiveTranslatedText(
+          '•',
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+        );
       case BreadcrumbStyle.greater:
-        return const Icon(Icons.arrow_forward_ios, size: 12, color: Color(0xFF94A3B8));
+        return const Icon(
+          Icons.arrow_forward_ios,
+          size: 12,
+          color: Color(0xFF94A3B8),
+        );
     }
   }
 
@@ -439,32 +451,18 @@ class BreadcrumbItem {
   final VoidCallback? onTap;
   final String? semanticLabel;
 
-  BreadcrumbItem({
-    this.label,
-    this.icon,
-    this.onTap,
-    this.semanticLabel,
-  });
+  BreadcrumbItem({this.label, this.icon, this.onTap, this.semanticLabel});
 }
 
 /// Breadcrumb style enum
-enum BreadcrumbStyle {
-  arrow,
-  slash,
-  dot,
-  greater,
-}
+enum BreadcrumbStyle { arrow, slash, dot, greater }
 
 /// Quick action chips for navigation shortcuts
 class QuickActionChips extends StatelessWidget {
   final List<QuickActionItem> actions;
   final ValueChanged<QuickActionItem>? onActionTap;
 
-  const QuickActionChips({
-    super.key,
-    required this.actions,
-    this.onActionTap,
-  });
+  const QuickActionChips({super.key, required this.actions, this.onActionTap});
 
   @override
   Widget build(BuildContext context) {
@@ -490,10 +488,7 @@ class _QuickActionChip extends StatelessWidget {
   final QuickActionItem action;
   final VoidCallback? onTap;
 
-  const _QuickActionChip({
-    required this.action,
-    required this.onTap,
-  });
+  const _QuickActionChip({required this.action, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

@@ -6,8 +6,6 @@ class EmptySearchState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: LiveTranslatedText('No Results Found'),
-    );
+    return const Center(child: LiveTranslatedText('No Results Found'));
   }
 }

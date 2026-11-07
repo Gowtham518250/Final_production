@@ -59,9 +59,10 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _animation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -74,7 +75,7 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator>
     if (_isRefreshing) return;
     setState(() => _isRefreshing = true);
     _controller.repeat();
-    
+
     try {
       await widget.onRefresh();
     } finally {
@@ -118,9 +119,7 @@ class PullToRefreshWithLoading extends StatelessWidget {
       backgroundColor: Colors.white,
       child: isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF6366F1),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF6366F1)),
             )
           : child,
     );

@@ -38,21 +38,20 @@ void main() {
     test('multi-item sales retain all line items', () {
       final items = List.generate(
         100,
-        (i) => {
-          'product_name': 'Product-$i',
-          'qty': 1,
-          'price': i + 1,
-        },
+        (i) => {'product_name': 'Product-$i', 'qty': 1, 'price': i + 1},
       );
       expect(items, hasLength(100));
       expect(items.first['product_name'], 'Product-0');
       expect(items.last['product_name'], 'Product-99');
     });
 
-    test('no generated placeholder product is accidentally accepted by contract logic', () {
-      final names = List.generate(100, (i) => 'Product-$i');
-      expect(names.every((n) => n.isNotEmpty), isTrue);
-    });
+    test(
+      'no generated placeholder product is accidentally accepted by contract logic',
+      () {
+        final names = List.generate(100, (i) => 'Product-$i');
+        expect(names.every((n) => n.isNotEmpty), isTrue);
+      },
+    );
 
     test('date-only strings remain valid ISO-like business dates', () {
       final regex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
@@ -64,20 +63,13 @@ void main() {
 
     test('timestamps remain parseable for common API shapes', () {
       for (var hour = 0; hour < 24; hour++) {
-        final s =
-            '2026-08-14T${hour.toString().padLeft(2, '0')}:00:00Z';
+        final s = '2026-08-14T${hour.toString().padLeft(2, '0')}:00:00Z';
         expect(DateTime.tryParse(s), isNotNull);
       }
     });
 
     test('payment methods are non-empty when populated', () {
-      for (final method in [
-        'CASH',
-        'UPI',
-        'CARD',
-        'CREDIT',
-        'PARTIAL',
-      ]) {
+      for (final method in ['CASH', 'UPI', 'CARD', 'CREDIT', 'PARTIAL']) {
         expect(method.trim(), isNotEmpty);
       }
     });

@@ -16,20 +16,29 @@ class BillPreviewDialog extends StatelessWidget {
 
   Future<String> _generatePdf(SalesEntryProvider provider) async {
     final items = provider.entries
-        .where((entry) => entry.itemName.trim().isNotEmpty && entry.quantity > 0 && entry.price >= 0)
-        .map((entry) => <String, dynamic>{
-              'product_name': entry.itemName.trim(),
-              'qty': entry.billableQuantity,
-              'price': entry.billablePrice,
-              'discount_amount': entry.discountAmount,
-              'gst_rate': entry.effectiveGstRate,
-              'line_total': entry.taxableAmount,
-              'tax_amount': provider.withTax ? entry.totalGstAmount : 0.0,
-              'total_with_tax': entry.taxableAmount +
-                  (provider.withTax ? entry.totalGstAmount : 0.0),
-            })
+        .where(
+          (entry) =>
+              entry.itemName.trim().isNotEmpty &&
+              entry.quantity > 0 &&
+              entry.price >= 0,
+        )
+        .map(
+          (entry) => <String, dynamic>{
+            'product_name': entry.itemName.trim(),
+            'qty': entry.billableQuantity,
+            'price': entry.billablePrice,
+            'discount_amount': entry.discountAmount,
+            'gst_rate': entry.effectiveGstRate,
+            'line_total': entry.taxableAmount,
+            'tax_amount': provider.withTax ? entry.totalGstAmount : 0.0,
+            'total_with_tax':
+                entry.taxableAmount +
+                (provider.withTax ? entry.totalGstAmount : 0.0),
+          },
+        )
         .toList();
-    if (items.isEmpty) throw Exception('Add at least one item before creating a bill.');
+    if (items.isEmpty)
+      throw Exception('Add at least one item before creating a bill.');
 
     final creditSale = provider.selectedPaymentMethod.toLowerCase() == 'credit';
     return BillGeneratorService.generateAndSaveBill(
@@ -42,16 +51,22 @@ class BillPreviewDialog extends StatelessWidget {
       totalAmount: provider.totalAmount,
       paidAmount: SalePaymentPolicy.resolvePaidAmount(
         totalAmount: provider.totalAmount,
-        enteredPaidAmount: provider.partialPaymentEnabled ? provider.paidAmount : 0,
+        enteredPaidAmount: provider.partialPaymentEnabled
+            ? provider.paidAmount
+            : 0,
         isBorrow: creditSale,
         isCashPayment: provider.selectedPaymentMethod != 'UPI',
-        paymentConfirmed: provider.selectedPaymentMethod != 'UPI' || provider.isOnlinePayment,
+        paymentConfirmed:
+            provider.selectedPaymentMethod != 'UPI' || provider.isOnlinePayment,
       ),
       withTax: provider.withTax,
     );
   }
 
-  Future<void> _printBill(BuildContext context, SalesEntryProvider provider) async {
+  Future<void> _printBill(
+    BuildContext context,
+    SalesEntryProvider provider,
+  ) async {
     try {
       final path = await _generatePdf(provider);
       final file = File(path);
@@ -63,12 +78,20 @@ class BillPreviewDialog extends StatelessWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText('Could not print bill: ' + error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: LiveTranslatedText(
+            'Could not print bill: ' +
+                error.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
       );
     }
   }
 
-  Future<void> _shareBill(BuildContext context, SalesEntryProvider provider) async {
+  Future<void> _shareBill(
+    BuildContext context,
+    SalesEntryProvider provider,
+  ) async {
     try {
       final path = await _generatePdf(provider);
       await BillGeneratorService.shareBill(
@@ -79,7 +102,12 @@ class BillPreviewDialog extends StatelessWidget {
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText('Could not share bill: ' + error.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: LiveTranslatedText(
+            'Could not share bill: ' +
+                error.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
       );
     }
   }
@@ -145,7 +173,10 @@ class BillPreviewDialog extends StatelessWidget {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _printBill(context, context.read<SalesEntryProvider>()),
+                          onPressed: () => _printBill(
+                            context,
+                            context.read<SalesEntryProvider>(),
+                          ),
                           icon: const Icon(Icons.print_rounded, size: 18),
                           label: const LiveTranslatedText('PRINT'),
                           style: ElevatedButton.styleFrom(
@@ -161,7 +192,10 @@ class BillPreviewDialog extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _shareBill(context, context.read<SalesEntryProvider>()),
+                          onPressed: () => _shareBill(
+                            context,
+                            context.read<SalesEntryProvider>(),
+                          ),
                           icon: const Icon(Icons.share_rounded, size: 18),
                           label: const LiveTranslatedText('SHARE'),
                           style: ElevatedButton.styleFrom(
@@ -226,16 +260,27 @@ class _ReceiptPaper extends StatelessWidget {
               const SizedBox(height: 10),
               LiveTranslatedText(
                 'Bill No: ' + invoiceNumber,
-                style: GoogleFonts.spaceMono(fontSize: 12, fontWeight: FontWeight.w900),
+                style: GoogleFonts.spaceMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               LiveTranslatedText(
                 'Date: ' + DateTime.now().toLocal().toString().split('.').first,
                 style: GoogleFonts.poppins(fontSize: 10, color: Colors.black54),
               ),
               LiveTranslatedText(
-                'Payment: ' + provider.selectedPaymentMethod +
-                    '  •  ' + (provider.selectedPaymentMethod.toLowerCase() == 'credit' ? 'UNPAID' : 'PAID'),
-                style: GoogleFonts.poppins(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.w600),
+                'Payment: ' +
+                    provider.selectedPaymentMethod +
+                    '  •  ' +
+                    (provider.selectedPaymentMethod.toLowerCase() == 'credit'
+                        ? 'UNPAID'
+                        : 'PAID'),
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 10),
               // Customer Details

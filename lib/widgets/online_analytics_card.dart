@@ -31,8 +31,9 @@ class OnlineAnalyticsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasPending = pendingOrders > 0;
     final localizations = AppLocalizations.of(context);
-    final statusColor =
-        hasPending ? const Color(0xFFF59E0B) : const Color(0xFF16A34A);
+    final statusColor = hasPending
+        ? const Color(0xFFF59E0B)
+        : const Color(0xFF16A34A);
 
     return Material(
       color: Colors.transparent,
@@ -94,7 +95,10 @@ class OnlineAnalyticsCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 7),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: statusColor.withValues(alpha: 0.09),
                             borderRadius: BorderRadius.circular(999),
@@ -105,7 +109,10 @@ class OnlineAnalyticsCard extends StatelessWidget {
                               Container(
                                 width: 6,
                                 height: 6,
-                                decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                               const SizedBox(width: 5),
                               hasPending
@@ -119,12 +126,12 @@ class OnlineAnalyticsCard extends StatelessWidget {
                                     )
                                   : LiveTranslatedText(
                                       'All caught up',
-                                style: GoogleFonts.poppins(
-                                  color: statusColor,
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
+                                      style: GoogleFonts.poppins(
+                                        color: statusColor,
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
                             ],
                           ),
                         ),
@@ -146,7 +153,10 @@ class OnlineAnalyticsCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF4F6FF),
                   borderRadius: BorderRadius.circular(11),
@@ -163,7 +173,11 @@ class OnlineAnalyticsCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward_rounded, color: Color(0xFF4F46E5), size: 15),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 15,
+                    ),
                   ],
                 ),
               ),

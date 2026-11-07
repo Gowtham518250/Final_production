@@ -13,11 +13,11 @@ class UtrDeduplicationService {
   // Build: flutter build apk --dart-define=REDIS_BASE_URL=... --dart-define=REDIS_API_KEY=...
   static const String _redisBaseUrl = String.fromEnvironment(
     'REDIS_BASE_URL',
-    defaultValue: '',  // empty = skip Redis, use local only
+    defaultValue: '', // empty = skip Redis, use local only
   );
   static const String _apiKey = String.fromEnvironment(
     'REDIS_API_KEY',
-    defaultValue: '',  // empty = local fallback
+    defaultValue: '', // empty = local fallback
   );
   static const int _localUtrCacheMax = 500;
 
@@ -33,10 +33,12 @@ class UtrDeduplicationService {
     if (_redisBaseUrl.isNotEmpty) {
       try {
         // Try Redis first for distributed dedup
-        final response = await http.get(
-          Uri.parse('$_redisBaseUrl/check-utr/$utr'),
-          headers: {'Authorization': 'Bearer $_apiKey'},
-        ).timeout(const Duration(seconds: 3));
+        final response = await http
+            .get(
+              Uri.parse('$_redisBaseUrl/check-utr/$utr'),
+              headers: {'Authorization': 'Bearer $_apiKey'},
+            )
+            .timeout(const Duration(seconds: 3));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);

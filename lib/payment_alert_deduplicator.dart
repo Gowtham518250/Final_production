@@ -1,12 +1,10 @@
 import 'package:retail_mind/payment_event.dart';
-import 'package:retail_mind/payment_identity_matcher.dart';
 
 /// Coalesces repeat *alerts* without collapsing distinct payments merely
 /// because the payer and amount happen to be the same.
 class PaymentAlertDeduplicator {
   static const Duration _referenceTtl = Duration(hours: 6);
   static const Duration _fallbackTtl = Duration(minutes: 15);
-  static const Duration _sameChannelReplayWindow = Duration(seconds: 10);
   static const int _maxEntries = 500;
 
   final List<_AlertObservation> _seen = <_AlertObservation>[];
@@ -32,14 +30,6 @@ class PaymentAlertDeduplicator {
     final amount = event.amount;
     final reference = event.normalizedReferenceId;
     final sourceFingerprint = event.sourceEventFingerprint;
-    final notificationStream = event.sourceNotificationStream;
-    final channel = _channelKey(event);
-    final text = _normalizeText(event.rawText);
-    final payer = _payerIdentity(event);
-    final account = _normalizeAccount(event.accountSuffix);
-    _AlertObservation? uniqueEchoCandidate;
-    var ambiguousCandidates = false;
-
     for (final previous in _seen.reversed) {
       if ((previous.amount - amount).abs() >= 0.01 ||
           previous.direction != direction) {
@@ -60,98 +50,13 @@ class PaymentAlertDeduplicator {
         return true;
       }
 
-      if (reference != null || previous.reference != null) {
-        if (reference != null && previous.reference == reference) return true;
-        continue;
-      }
-
-      final notificationAt = event.sourceTimestamp ?? event.timestamp;
-      final previousNotificationAt = previous.notificationAt;
-      final notificationAccountConflict =
-          account.isNotEmpty &&
-          previous.account.isNotEmpty &&
-          account != previous.account;
-      final updatePreviousPayer = previous.payer;
-      final notificationPayerConflict =
-          payer != null &&
-          updatePreviousPayer != null &&
-          !_payersCompatible(payer, updatePreviousPayer);
-      final notificationPayer = event.notificationPayerIdentity;
-      final previousNotificationPayer = previous.notificationPayer;
-      if (notificationStream != null &&
-          notificationStream == previous.notificationStream &&
-          notificationAt.difference(previousNotificationAt).abs() <=
-              PaymentIdentityMatcher.sameStreamRepostWindow &&
-          !notificationAccountConflict &&
-          !notificationPayerConflict) {
-        previous.notificationAt = notificationAt;
-        previous.notificationPayer = notificationPayer;
-        previous.seenAt = moment;
-        previous.expiresAt = moment.add(_fallbackTtl);
+      if (reference != null &&
+          previous.reference != null &&
+          reference == previous.reference) {
         return true;
       }
-
-      final age = moment.difference(previous.seenAt).abs();
-      if (age > _fallbackTtl) continue;
-
-      if (previous.channel == channel) {
-        final sameTruecallerReplay =
-            channel.startsWith('truecaller_notification|') &&
-            sourceFingerprint == null &&
-            previous.sourceFingerprint == null &&
-            age <= _sameChannelReplayWindow &&
-            ((account.isNotEmpty && account == previous.account) ||
-                (payer != null &&
-                    previous.payer != null &&
-                    _payersCompatible(payer, previous.payer!)));
-        if (sameTruecallerReplay) return true;
-
-        if (sourceFingerprint != null || previous.sourceFingerprint != null) {
-          // A missing or distinct native identity cannot be treated as a replay.
-          continue;
-        }
-        if (age <= _sameChannelReplayWindow &&
-            text.isNotEmpty &&
-            text == previous.text) {
-          return true;
-        }
-        continue;
-      }
-
-      if (previous.claimedChannels.contains(channel)) continue;
-
-      final differentAccounts =
-          account.isNotEmpty &&
-          previous.account.isNotEmpty &&
-          account != previous.account;
-      final previousPayer = previous.payer;
-      final differentPayers =
-          payer != null &&
-          previousPayer != null &&
-          !_payersCompatible(payer, previousPayer);
-      if (differentAccounts || differentPayers) continue;
-
-      final sameAccount = account.isNotEmpty && account == previous.account;
-      final samePayer =
-          payer != null &&
-          previousPayer != null &&
-          _payersCompatible(payer, previousPayer);
-      if (!sameAccount && !samePayer) continue;
-
-      if (uniqueEchoCandidate != null &&
-          !identical(uniqueEchoCandidate, previous)) {
-        ambiguousCandidates = true;
-        break;
-      }
-      uniqueEchoCandidate = previous;
     }
 
-    if (uniqueEchoCandidate != null && !ambiguousCandidates) {
-      uniqueEchoCandidate.claimedChannels.add(channel);
-      return true;
-    }
-
-    // Preserve an ambiguous cross-source event as its own alert candidate.
     _remember(event, direction, moment);
     return false;
   }
@@ -163,14 +68,6 @@ class PaymentAlertDeduplicator {
         direction: direction,
         reference: event.normalizedReferenceId,
         sourceFingerprint: event.sourceEventFingerprint,
-        notificationStream: event.sourceNotificationStream,
-        notificationAt: event.sourceTimestamp ?? event.timestamp,
-        notificationPayer: event.notificationPayerIdentity,
-        channel: _channelKey(event),
-        payer: _payerIdentity(event),
-        account: _normalizeAccount(event.accountSuffix),
-        text: _normalizeText(event.rawText),
-        seenAt: moment,
         expiresAt: moment.add(
           event.normalizedReferenceId != null ? _referenceTtl : _fallbackTtl,
         ),
@@ -213,86 +110,6 @@ class PaymentAlertDeduplicator {
         return 'unknown';
     }
   }
-
-  static String _channelKey(PaymentEvent event) =>
-      '${_eventOrigin(event.detectionSource)}|${event.app.name}';
-
-  static String _eventOrigin(String source) {
-    final value = source.toLowerCase();
-    if (value.startsWith('truecaller_notification')) {
-      return 'truecaller_notification';
-    }
-    if (value.startsWith('notification+sms')) return 'notification+sms';
-    if (value.startsWith('notification')) return 'notification';
-    if (value.startsWith('sms')) return 'sms';
-    if (value.startsWith('accessibility')) return 'accessibility';
-    return value.split(':').first;
-  }
-
-  static String _normalizeText(String value) => value
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9₹]+'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-
-  static String _normalizeAccount(String? value) =>
-      (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
-
-  static bool _payersCompatible(String current, String previous) =>
-      current == previous ||
-      current.contains(previous) ||
-      previous.contains(current);
-
-  static String? _payerIdentity(PaymentEvent event) {
-    final supplied = _normalizeName(event.payerName);
-    if (_isUsefulName(supplied)) return supplied;
-
-    final text = event.rawText;
-    final senderFirst = RegExp(
-      r"""^\s*([A-Za-z][A-Za-z .'-]{1,40}?)\s+(?:sent|paid|transferred)\b""",
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (senderFirst != null) {
-      final name = _normalizeName(senderFirst.group(1));
-      if (_isUsefulName(name)) return name;
-    }
-
-    final fromSender = RegExp(
-      r"""\bfrom\s+([A-Za-z][A-Za-z .'-]{1,40}?)(?=\s+(?:to|via|for|on|using|upi|utr|reference|ref|txn|id|credited|sent|paid)\b|[.,;]|₹|$)""",
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (fromSender != null) {
-      final name = _normalizeName(fromSender.group(1));
-      if (_isUsefulName(name)) return name;
-    }
-    return null;
-  }
-
-  static String? _normalizeName(String? value) => (value ?? '')
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-
-  static bool _isUsefulName(String? name) {
-    if (name == null || name.length < 2) return false;
-    return !const {
-      'bank',
-      'bank payment',
-      'customer',
-      'unknown',
-      'unknown payer',
-      'upi app',
-      'payment app',
-      'phonepe',
-      'google pay',
-      'gpay',
-      'paytm',
-      'bank sms',
-      'account',
-      'your account',
-    }.contains(name);
-  }
 }
 
 class _AlertObservation {
@@ -301,14 +118,6 @@ class _AlertObservation {
     required this.direction,
     required this.reference,
     required this.sourceFingerprint,
-    required this.notificationStream,
-    required this.notificationAt,
-    required this.notificationPayer,
-    required this.channel,
-    required this.payer,
-    required this.account,
-    required this.text,
-    required this.seenAt,
     required this.expiresAt,
   });
 
@@ -316,14 +125,5 @@ class _AlertObservation {
   final String direction;
   String? reference;
   final String? sourceFingerprint;
-  final String? notificationStream;
-  DateTime notificationAt;
-  String? notificationPayer;
-  final String channel;
-  final String? payer;
-  final String account;
-  final String text;
-  DateTime seenAt;
   DateTime expiresAt;
-  final Set<String> claimedChannels = <String>{};
 }

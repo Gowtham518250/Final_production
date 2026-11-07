@@ -21,7 +21,11 @@ PaymentEvent _payment(String id) {
   );
 }
 
-PaymentEvent _paymentWithRef(String id, String source, {String ref = 'UTR402518811234'}) {
+PaymentEvent _paymentWithRef(
+  String id,
+  String source, {
+  String ref = 'UTR402518811234',
+}) {
   return PaymentEvent(
     id: id,
     amount: 250,
@@ -69,93 +73,102 @@ void main() {
   });
 
   group('Payment announcement speech completion', () {
-    test('a successful TTS completion is remembered for that payment', () async {
-      final queue = PriorityVoiceQueue();
-      final event = _payment('tts-success-1');
-      final failures = <String>[];
-      var speechCalls = 0;
+    test(
+      'a successful TTS completion is remembered for that payment',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final event = _payment('tts-success-1');
+        final failures = <String>[];
+        var speechCalls = 0;
 
-      queue.speaker = (text, dedupeKey) async {
-        speechCalls++;
-        return true;
-      };
-      queue.onSpeakFailed = (text, failedEvent) {
-        if (failedEvent != null) failures.add(failedEvent.id);
-      };
+        queue.speaker = (text, dedupeKey) async {
+          speechCalls++;
+          return true;
+        };
+        queue.onSpeakFailed = (text, failedEvent) {
+          if (failedEvent != null) failures.add(failedEvent.id);
+        };
 
-      queue.enqueue(event, _ui(event));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      queue.enqueue(event, _ui(event));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+        queue.enqueue(event, _ui(event));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        queue.enqueue(event, _ui(event));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
 
-      expect(speechCalls, 1);
-      expect(failures, isEmpty);
-      queue.dispose();
-    });
+        expect(speechCalls, 1);
+        expect(failures, isEmpty);
+        queue.dispose();
+      },
+    );
 
-    test('failed TTS releases the spoken claim and requests audible fallback', () async {
-      final queue = PriorityVoiceQueue();
-      final event = _payment('tts-failure-retry-1');
-      final fallbackEvents = <String>[];
-      var speechCalls = 0;
+    test(
+      'failed TTS releases the spoken claim and requests audible fallback',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final event = _payment('tts-failure-retry-1');
+        final fallbackEvents = <String>[];
+        var speechCalls = 0;
 
-      queue.speaker = (text, dedupeKey) async {
-        speechCalls++;
-        return false;
-      };
-      queue.onSpeakFailed = (text, failedEvent) {
-        if (failedEvent != null) fallbackEvents.add(failedEvent.id);
-      };
+        queue.speaker = (text, dedupeKey) async {
+          speechCalls++;
+          return false;
+        };
+        queue.onSpeakFailed = (text, failedEvent) {
+          if (failedEvent != null) fallbackEvents.add(failedEvent.id);
+        };
 
-      queue.enqueue(event, _ui(event));
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+        queue.enqueue(event, _ui(event));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
 
-      expect(speechCalls, 1);
-      expect(fallbackEvents, ['tts-failure-retry-1']);
+        expect(speechCalls, 1);
+        expect(fallbackEvents, ['tts-failure-retry-1']);
 
-      // The same event must remain eligible for speech retry after failure.
-      queue.enqueue(event, _ui(event));
-      await Future<void>.delayed(
-        PdsConfig.voiceMinGap + const Duration(milliseconds: 180),
-      );
+        // The same event must remain eligible for speech retry after failure.
+        queue.enqueue(event, _ui(event));
+        await Future<void>.delayed(
+          PdsConfig.voiceMinGap + const Duration(milliseconds: 180),
+        );
 
-      expect(speechCalls, 2);
-      expect(fallbackEvents, ['tts-failure-retry-1', 'tts-failure-retry-1']);
-      queue.dispose();
-    });
+        expect(speechCalls, 2);
+        expect(fallbackEvents, ['tts-failure-retry-1', 'tts-failure-retry-1']);
+        queue.dispose();
+      },
+    );
 
-    test('echo of a payment whose speech failed is not announced again', () async {
-      final queue = PriorityVoiceQueue();
-      final notification = _paymentWithRef('echo-notif-1', 'notification');
-      final sms = _paymentWithRef('echo-sms-1', 'sms');
-      final spoken = <String>[];
-      final fallbackEvents = <String>[];
+    test(
+      'echo of a payment whose speech failed is not announced again',
+      () async {
+        final queue = PriorityVoiceQueue();
+        final notification = _paymentWithRef('echo-notif-1', 'notification');
+        final sms = _paymentWithRef('echo-sms-1', 'sms');
+        final spoken = <String>[];
+        final fallbackEvents = <String>[];
 
-      // TTS reports failure (timeout / engine error); an audible OS alert is
-      // posted through onSpeakFailed instead.
-      queue.speaker = (text, dedupeKey) async {
-        spoken.add(text);
-        return false;
-      };
-      queue.onSpeakFailed = (text, failedEvent) {
-        if (failedEvent != null) fallbackEvents.add(failedEvent.id);
-      };
+        // TTS reports failure (timeout / engine error); an audible OS alert is
+        // posted through onSpeakFailed instead.
+        queue.speaker = (text, dedupeKey) async {
+          spoken.add(text);
+          return false;
+        };
+        queue.onSpeakFailed = (text, failedEvent) {
+          if (failedEvent != null) fallbackEvents.add(failedEvent.id);
+        };
 
-      queue.enqueue(notification, _ui(notification));
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-      expect(fallbackEvents, ['echo-notif-1']);
+        queue.enqueue(notification, _ui(notification));
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        expect(fallbackEvents, ['echo-notif-1']);
 
-      // The SMS for the SAME payment (same UTR) arrives afterwards. The owner
-      // was already alerted by the fallback, so it must stay silent.
-      queue.enqueue(sms, _ui(sms));
-      await Future<void>.delayed(
-        PdsConfig.voiceMinGap + const Duration(milliseconds: 180),
-      );
+        // The SMS for the SAME payment (same UTR) arrives afterwards. The owner
+        // was already alerted by the fallback, so it must stay silent.
+        queue.enqueue(sms, _ui(sms));
+        await Future<void>.delayed(
+          PdsConfig.voiceMinGap + const Duration(milliseconds: 180),
+        );
 
-      expect(spoken.length, 1, reason: 'SMS echo must not be spoken again');
-      expect(fallbackEvents, ['echo-notif-1']);
-      queue.dispose();
-    });
+        expect(spoken.length, 1, reason: 'SMS echo must not be spoken again');
+        expect(fallbackEvents, ['echo-notif-1']);
+        queue.dispose();
+      },
+    );
 
     test('a different payment is still announced after a failed one', () async {
       final queue = PriorityVoiceQueue();
@@ -243,88 +256,109 @@ void main() {
   });
 
   group('QueueManager speech result delivery', () {
-    test('critical payment announcement jumps ahead of queued routine prompts', () async {
-      final queue = QueueManager();
-      final activeSpeechStarted = Completer<void>();
-      final releaseActiveSpeech = Completer<void>();
-      final order = <String>[];
+    test(
+      'critical payment announcement jumps ahead of queued routine prompts',
+      () async {
+        final queue = QueueManager();
+        final activeSpeechStarted = Completer<void>();
+        final releaseActiveSpeech = Completer<void>();
+        final order = <String>[];
 
-      queue.enqueue(QueueItem(
-        priority: AnnouncementPriority.normal,
-        ttsText: 'currently speaking',
-        timeoutSec: 5,
-        task: () async {
-          activeSpeechStarted.complete();
-          await releaseActiveSpeech.future;
-          order.add('active');
-        },
-      ));
-      await activeSpeechStarted.future;
+        queue.enqueue(
+          QueueItem(
+            priority: AnnouncementPriority.normal,
+            ttsText: 'currently speaking',
+            timeoutSec: 5,
+            task: () async {
+              activeSpeechStarted.complete();
+              await releaseActiveSpeech.future;
+              order.add('active');
+            },
+          ),
+        );
+        await activeSpeechStarted.future;
 
-      queue.enqueue(QueueItem(
-        priority: AnnouncementPriority.low,
-        ttsText: 'routine prompt',
-        timeoutSec: 5,
-        task: () async => order.add('routine'),
-      ));
-      queue.enqueue(QueueItem(
-        priority: AnnouncementPriority.critical,
-        ttsText: 'payment alert',
-        timeoutSec: 5,
-        task: () async => order.add('payment'),
-      ));
+        queue.enqueue(
+          QueueItem(
+            priority: AnnouncementPriority.low,
+            ttsText: 'routine prompt',
+            timeoutSec: 5,
+            task: () async => order.add('routine'),
+          ),
+        );
+        queue.enqueue(
+          QueueItem(
+            priority: AnnouncementPriority.critical,
+            ttsText: 'payment alert',
+            timeoutSec: 5,
+            task: () async => order.add('payment'),
+          ),
+        );
 
-      releaseActiveSpeech.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+        releaseActiveSpeech.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 150));
 
-      expect(order, ['active', 'payment', 'routine']);
-    });
+        expect(order, ['active', 'payment', 'routine']);
+      },
+    );
 
-    test('timeout reports failure and does not block the next queued item', () async {
-      final queue = QueueManager();
-      final results = <String, bool>{};
+    test(
+      'timeout reports failure and does not block the next queued item',
+      () async {
+        final queue = QueueManager();
+        final results = <String, bool>{};
 
-      queue.enqueue(QueueItem(
-        priority: AnnouncementPriority.low,
-        ttsText: 'stalled payment',
-        timeoutSec: 1,
-        task: () => Completer<void>().future,
-        onResult: (success) => results['stalled'] = success,
-      ));
-      queue.enqueue(QueueItem(
-        priority: AnnouncementPriority.low,
-        ttsText: 'next payment',
-        timeoutSec: 5,
-        task: () async {},
-        onResult: (success) => results['next'] = success,
-      ));
+        queue.enqueue(
+          QueueItem(
+            priority: AnnouncementPriority.low,
+            ttsText: 'stalled payment',
+            timeoutSec: 1,
+            task: () => Completer<void>().future,
+            onResult: (success) => results['stalled'] = success,
+          ),
+        );
+        queue.enqueue(
+          QueueItem(
+            priority: AnnouncementPriority.low,
+            ttsText: 'next payment',
+            timeoutSec: 5,
+            task: () async {},
+            onResult: (success) => results['next'] = success,
+          ),
+        );
 
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
 
-      expect(results['stalled'], isFalse);
-      expect(results['next'], isTrue);
-    });
+        expect(results['stalled'], isFalse);
+        expect(results['next'], isTrue);
+      },
+    );
 
-    test('expired queued payment speech reports failure without running', () async {
-      final queue = QueueManager();
-      var ran = false;
-      bool? result;
+    test(
+      'expired queued payment speech reports failure without running',
+      () async {
+        final queue = QueueManager();
+        var ran = false;
+        bool? result;
 
-      queue.enqueue(QueueItem(
-        priority: AnnouncementPriority.low,
-        ttsText: 'expired payment',
-        timeoutSec: 5,
-        expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
-        task: () async {
-          ran = true;
-        },
-        onResult: (success) => result = success,
-      ));
+        queue.enqueue(
+          QueueItem(
+            priority: AnnouncementPriority.low,
+            ttsText: 'expired payment',
+            timeoutSec: 5,
+            expiresAt: DateTime.now().subtract(const Duration(seconds: 1)),
+            task: () async {
+              ran = true;
+            },
+            onResult: (success) => result = success,
+          ),
+        );
 
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
 
-      expect(ran, isFalse);
-      expect(result, isFalse);
-    });
+        expect(ran, isFalse);
+        expect(result, isFalse);
+      },
+    );
   });
 }

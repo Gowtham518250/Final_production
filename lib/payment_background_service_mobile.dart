@@ -84,7 +84,6 @@ void _listenForBackgroundPayments(FlutterBackgroundService service) {
   });
 }
 
-
 Future<PaymentEvent?> _persistPaymentHistory(
   PaymentEvent event,
   PaymentDetectionService pds,
@@ -140,9 +139,7 @@ Future<PaymentEvent?> _persistPaymentHistory(
         'Payment history write attempt $attempt/3 failed: $error\\n$stackTrace',
       );
       if (attempt < 3) {
-        await Future<void>.delayed(
-          Duration(milliseconds: 250 * attempt),
-        );
+        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
       }
     }
   }
@@ -245,13 +242,7 @@ void _wirePaymentSpeech(PaymentDetectionService pds) {
 
   pds.onSpeakFailed = (text, event) {
     if (event == null) return;
-    unawaited(
-      _postBackgroundPaymentAlert(
-        pds,
-        event,
-        forceAudible: true,
-      ),
-    );
+    unawaited(_postBackgroundPaymentAlert(pds, event, forceAudible: true));
   };
 }
 
@@ -298,13 +289,15 @@ Future<void> _postBackgroundPaymentAlert(
     final isCredit =
         event.direction == PaymentTransactionDirection.incomingCredit;
     final conflict = event.hasReferenceConflict;
-    final merchantConfirmedCredit = isCredit &&
+    final merchantConfirmedCredit =
+        isCredit &&
         event.isMerchantConfirmed &&
         event.decision == PaymentDecision.confirmed &&
         !conflict;
     // Ask for owner input only when the classifier is uncertain, the direction
     // is missing, or evidence conflicts. Strong events must not ask every time.
-    final needsVerify = conflict ||
+    final needsVerify =
+        conflict ||
         event.decision != PaymentDecision.confirmed ||
         (!isCredit && !isDebit);
 
@@ -312,8 +305,8 @@ Future<void> _postBackgroundPaymentAlert(
         ? 'Payment review required'
         : isDebit
         ? needsVerify
-            ? 'Debit detected — review needed'
-            : 'Debit detected'
+              ? 'Debit detected — review needed'
+              : 'Debit detected'
         : merchantConfirmedCredit
         ? 'Payment received'
         : event.decision == PaymentDecision.confirmed && isCredit
@@ -328,12 +321,14 @@ Future<void> _postBackgroundPaymentAlert(
         ? '₹$amountText received via ${event.appDisplayName}'
         : '₹$amountText credit detected via ${event.appDisplayName}';
     if (lateAt != null) {
-      body += ' — notification received at ${_clock(lateAt)} while '
+      body +=
+          ' — notification received at ${_clock(lateAt)} while '
           'detection was stopped. Check your bank/UPI app.';
     } else if (conflict) {
       body += ' — transaction details conflict; check your bank history.';
     } else if (event.decision == PaymentDecision.confirmed && isCredit) {
-      body += ' — detector accepted this signal; verify in your bank history '
+      body +=
+          ' — detector accepted this signal; verify in your bank history '
           'before treating it as merchant-confirmed.';
     } else if (needsVerify) {
       body += ' — review this payment before recording.';
@@ -342,7 +337,8 @@ Future<void> _postBackgroundPaymentAlert(
     // Unverified incoming credits need an audible fallback: a background TTS
     // engine may be unavailable even though voice is enabled in preferences.
     // The alert remains deduplicated per payment by _backgroundAlertDeduplicator.
-    final audible = forceAudible ||
+    final audible =
+        forceAudible ||
         shouldUseAudiblePaymentAlert(
           isLate: lateAt != null,
           voiceEnabled: PdsConfig.isVoiceEnabled,
@@ -385,7 +381,8 @@ Future<void> _postBackgroundPaymentAlert(
         android: AndroidNotificationDetails(
           channelId,
           channelName,
-          channelDescription: 'Local payment-detection alerts from Retail Mind.',
+          channelDescription:
+              'Local payment-detection alerts from Retail Mind.',
           importance: Importance.high,
           priority: Priority.high,
           playSound: audible,
@@ -618,12 +615,15 @@ Future<bool> onStart(ServiceInstance service) async {
       }
     });
 
-    List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
+    List<Map<String, dynamic>> persistedPaymentHistory =
+        <Map<String, dynamic>>[];
     try {
       persistedPaymentHistory = await OnlinePaymentHistoryService.load();
     } catch (error) {
       // App may not have a signed-in owner profile during early startup.
-      debugPrint('ℹ️ Payment history cache not available during service startup: $error');
+      debugPrint(
+        'ℹ️ Payment history cache not available during service startup: $error',
+      );
     }
     await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     // Only update the heartbeat after detection channels started successfully;
@@ -731,10 +731,10 @@ Future<void>? _backgroundInitInFlight;
 bool _fallbackDetectorStarted = false;
 
 Future<void> initializeBackgroundService() {
-  return _backgroundInitInFlight ??=
-      _initializeBackgroundServiceOnce().whenComplete(() {
-    _backgroundInitInFlight = null;
-  });
+  return _backgroundInitInFlight ??= _initializeBackgroundServiceOnce()
+      .whenComplete(() {
+        _backgroundInitInFlight = null;
+      });
 }
 
 Future<void> _initializeBackgroundServiceOnce() async {
@@ -772,7 +772,9 @@ Future<void> _initializeBackgroundServiceOnce() async {
 
     _listenForBackgroundPayments(service);
     if (await service.isRunning()) {
-      debugPrint('ℹ️ Background payment service already running; not restarting');
+      debugPrint(
+        'ℹ️ Background payment service already running; not restarting',
+      );
       return;
     }
     await service.startService();
@@ -784,7 +786,9 @@ Future<void> _initializeBackgroundServiceOnce() async {
       serviceAlive = await FlutterBackgroundService().isRunning();
     } catch (_) {}
     if (serviceAlive) {
-      debugPrint('ℹ️ Service is alive despite the error; skipping UI-isolate fallback');
+      debugPrint(
+        'ℹ️ Service is alive despite the error; skipping UI-isolate fallback',
+      );
       return;
     }
     await _initializeFallback();
@@ -817,11 +821,14 @@ Future<void> _initializeFallback() async {
       unawaited(_persistPaymentHistoryFallback(event, pds));
     });
 
-    List<Map<String, dynamic>> persistedPaymentHistory = <Map<String, dynamic>>[];
+    List<Map<String, dynamic>> persistedPaymentHistory =
+        <Map<String, dynamic>>[];
     try {
       persistedPaymentHistory = await OnlinePaymentHistoryService.load();
     } catch (error) {
-      debugPrint('ℹ️ Payment history cache not available in fallback mode: $error');
+      debugPrint(
+        'ℹ️ Payment history cache not available in fallback mode: $error',
+      );
     }
     await pds.start(persistedPaymentHistory: persistedPaymentHistory);
     debugPrint('✅ Payment services initialized (fallback mode)');

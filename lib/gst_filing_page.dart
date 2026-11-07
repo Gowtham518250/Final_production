@@ -19,7 +19,7 @@ class GstFilingPage extends StatefulWidget {
 
 class _GstFilingPageState extends State<GstFilingPage> {
   static const Color _primary = Color(0xFF6366F1);
-  
+
   late Map<String, dynamic> _gstr1Data;
   String selectedMonth = '';
   List<Map<String, dynamic>> _invoices = [];
@@ -44,22 +44,30 @@ class _GstFilingPageState extends State<GstFilingPage> {
     try {
       final jsonString = GSTCompliance.exportGSTR1AsJSON(
         sellerGSTIN: _gstr1Data['seller_gstin'] ?? '',
-        period: _gstr1Data['period'] ?? '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}',
+        period:
+            _gstr1Data['period'] ??
+            '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}',
         invoices: _invoices,
       );
 
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/GSTR1_${DateTime.now().millisecondsSinceEpoch}.json');
+      final file = File(
+        '${tempDir.path}/GSTR1_${DateTime.now().millisecondsSinceEpoch}.json',
+      );
       await file.writeAsString(jsonString);
 
-      await Share.shareXFiles([XFile(file.path)],
+      await Share.shareXFiles(
+        [XFile(file.path)],
         text: 'GSTR-1 Export - Ready for filing',
         subject: 'GSTR-1 Filing Export',
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -77,12 +85,14 @@ class _GstFilingPageState extends State<GstFilingPage> {
           'B2C GST: ₹${(summary['total_b2c_gst'] ?? 0).toStringAsFixed(0)}\n\n'
           'Total Value: ₹${(summary['grand_total_value'] ?? 0).toStringAsFixed(0)}\n'
           'Total GST: ₹${(summary['grand_total_gst'] ?? 0).toStringAsFixed(0)}';
-      
+
       await Future.delayed(const Duration(milliseconds: 100));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: LiveTranslatedText('✅ Summary copied to clipboard (ready for CA)'),
+            content: LiveTranslatedText(
+              '✅ Summary copied to clipboard (ready for CA)',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -90,7 +100,10 @@ class _GstFilingPageState extends State<GstFilingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -122,7 +135,9 @@ class _GstFilingPageState extends State<GstFilingPage> {
                     decoration: BoxDecoration(
                       color: _primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _primary.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: _primary.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,33 +148,67 @@ class _GstFilingPageState extends State<GstFilingPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                LiveTranslatedText('Period', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600])),
+                                LiveTranslatedText(
+                                  'Period',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
-                                LiveTranslatedText(_gstr1Data['period']?.toString() ?? 'N/A',
-                                    style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: _primary)),
+                                LiveTranslatedText(
+                                  _gstr1Data['period']?.toString() ?? 'N/A',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: _primary,
+                                  ),
+                                ),
                               ],
                             ),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                LiveTranslatedText('Filing Date', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600])),
+                                LiveTranslatedText(
+                                  'Filing Date',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
-                                LiveTranslatedText(_gstr1Data['filing_date']?.toString().split('T').first ?? 'N/A',
-                                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600)),
+                                LiveTranslatedText(
+                                  _gstr1Data['filing_date']
+                                          ?.toString()
+                                          .split('T')
+                                          .first ??
+                                      'N/A',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.green.shade100,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: LiveTranslatedText(
                             _gstr1Data['status']?.toString() ?? 'READY',
-                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green.shade700),
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade700,
+                            ),
                           ),
                         ),
                       ],
@@ -168,9 +217,15 @@ class _GstFilingPageState extends State<GstFilingPage> {
                   const SizedBox(height: 24),
 
                   // Summary Cards
-                  LiveTranslatedText('Summary', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                  LiveTranslatedText(
+                    'Summary',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 12),
-                  
+
                   Row(
                     children: [
                       Expanded(
@@ -193,7 +248,7 @@ class _GstFilingPageState extends State<GstFilingPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  
+
                   Row(
                     children: [
                       Expanded(
@@ -228,19 +283,45 @@ class _GstFilingPageState extends State<GstFilingPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LiveTranslatedText('Financial Breakdown', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600)),
+                        LiveTranslatedText(
+                          'Financial Breakdown',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const SizedBox(height: 16),
-                        _breakdownRow('B2B Value', '₹${(summary['total_b2b_value'] ?? 0).toStringAsFixed(0)}'),
+                        _breakdownRow(
+                          'B2B Value',
+                          '₹${(summary['total_b2b_value'] ?? 0).toStringAsFixed(0)}',
+                        ),
                         const SizedBox(height: 8),
-                        _breakdownRow('B2B GST', '₹${(summary['total_b2b_gst'] ?? 0).toStringAsFixed(0)}'),
+                        _breakdownRow(
+                          'B2B GST',
+                          '₹${(summary['total_b2b_gst'] ?? 0).toStringAsFixed(0)}',
+                        ),
                         const Divider(height: 16),
-                        _breakdownRow('B2C Value', '₹${(summary['total_b2c_value'] ?? 0).toStringAsFixed(0)}'),
+                        _breakdownRow(
+                          'B2C Value',
+                          '₹${(summary['total_b2c_value'] ?? 0).toStringAsFixed(0)}',
+                        ),
                         const SizedBox(height: 8),
-                        _breakdownRow('B2C GST', '₹${(summary['total_b2c_gst'] ?? 0).toStringAsFixed(0)}'),
+                        _breakdownRow(
+                          'B2C GST',
+                          '₹${(summary['total_b2c_gst'] ?? 0).toStringAsFixed(0)}',
+                        ),
                         const Divider(height: 16),
-                        _breakdownRow('Total Turnover', '₹${(summary['grand_total_value'] ?? 0).toStringAsFixed(0)}', isTotal: true),
+                        _breakdownRow(
+                          'Total Turnover',
+                          '₹${(summary['grand_total_value'] ?? 0).toStringAsFixed(0)}',
+                          isTotal: true,
+                        ),
                         const SizedBox(height: 8),
-                        _breakdownRow('Total GST Liability', '₹${(summary['grand_total_gst'] ?? 0).toStringAsFixed(0)}', isTotal: true),
+                        _breakdownRow(
+                          'Total GST Liability',
+                          '₹${(summary['grand_total_gst'] ?? 0).toStringAsFixed(0)}',
+                          isTotal: true,
+                        ),
                       ],
                     ),
                   ),
@@ -287,25 +368,43 @@ class _GstFilingPageState extends State<GstFilingPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LiveTranslatedText('Compliance Checklist', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.green.shade800)),
-                        const SizedBox(height: 12),
-                        ...((_gstr1Data['compliance_validation'] as Map?)?.entries ?? []).map(
-                          (c) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              children: [
-                                Icon(Icons.check_circle_rounded, size: 18, color: Colors.green.shade600),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: LiveTranslatedText(
-                                    c.value?.toString() ?? 'All invoices are GST compliant',
-                                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.green.shade700),
-                                  ),
-                                ),
-                              ],
-                            ),
+                        LiveTranslatedText(
+                          'Compliance Checklist',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green.shade800,
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        ...((_gstr1Data['compliance_validation'] as Map?)
+                                    ?.entries ??
+                                [])
+                            .map(
+                              (c) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 18,
+                                      color: Colors.green.shade600,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: LiveTranslatedText(
+                                        c.value?.toString() ??
+                                            'All invoices are GST compliant',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          color: Colors.green.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                       ],
                     ),
                   ),
@@ -326,11 +425,23 @@ class _GstFilingPageState extends State<GstFilingPage> {
                     ),
                     child: Column(
                       children: [
-                        LiveTranslatedText('💰 CA Fee Saving', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.blue.shade800)),
+                        LiveTranslatedText(
+                          '💰 CA Fee Saving',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        LiveTranslatedText('You just saved ₹500 by auto-generating GSTR-1!', 
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(fontSize: 12, color: Colors.blue.shade700)),
+                        LiveTranslatedText(
+                          'You just saved ₹500 by auto-generating GSTR-1!',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -354,9 +465,19 @@ class _GstFilingPageState extends State<GstFilingPage> {
         children: [
           Icon(icon, color: color, size: 24),
           const SizedBox(height: 8),
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600]),
+          ),
           const SizedBox(height: 4),
-          LiveTranslatedText(value, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: color)),
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -366,18 +487,22 @@ class _GstFilingPageState extends State<GstFilingPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        LiveTranslatedText(label,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
-              color: isTotal ? Colors.black : Colors.grey[700],
-            )),
-        LiveTranslatedText(value,
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w600,
-              color: isTotal ? _primary : Colors.black,
-            )),
+        LiveTranslatedText(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
+            color: isTotal ? Colors.black : Colors.grey[700],
+          ),
+        ),
+        LiveTranslatedText(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: isTotal ? FontWeight.w700 : FontWeight.w600,
+            color: isTotal ? _primary : Colors.black,
+          ),
+        ),
       ],
     );
   }

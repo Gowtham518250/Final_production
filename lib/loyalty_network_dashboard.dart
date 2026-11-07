@@ -9,10 +9,8 @@ import 'tier_benefits_service.dart';
 class LoyaltyNetworkDashboard extends StatefulWidget {
   final int customerId;
 
-  const LoyaltyNetworkDashboard({
-    Key? key,
-    required this.customerId,
-  }) : super(key: key);
+  const LoyaltyNetworkDashboard({Key? key, required this.customerId})
+    : super(key: key);
 
   @override
   State<LoyaltyNetworkDashboard> createState() =>
@@ -58,11 +56,7 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildNetworkTab(),
-          _buildBenefitsTab(),
-          _buildMoatTab(),
-        ],
+        children: [_buildNetworkTab(), _buildBenefitsTab(), _buildMoatTab()],
       ),
     );
   }
@@ -80,8 +74,9 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
         }
 
         final shops = snapshot.data ?? [];
-        final metrics =
-            InterShopLoyaltyService.getNetworkMetrics().then((m) => m);
+        final metrics = InterShopLoyaltyService.getNetworkMetrics().then(
+          (m) => m,
+        );
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -118,7 +113,8 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
 
             FutureBuilder<List<Map<String, dynamic>>>(
               future: InterShopLoyaltyService.getTransferHistory(
-                  widget.customerId),
+                widget.customerId,
+              ),
               builder: (context, histSnapshot) {
                 if (!histSnapshot.hasData || histSnapshot.data!.isEmpty) {
                   return Container(
@@ -266,10 +262,7 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-          width: 1.5,
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
@@ -308,7 +301,10 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: shop['tier_discount'] == 0
                       ? const Color(0xFFF5F7FA)
@@ -343,8 +339,10 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
                 onPressed: () => _showTransferDialog(shop),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6366F1),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -440,8 +438,10 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
 
             // Tier lock-in status
             FutureBuilder<Map<String, dynamic>>(
-              future:
-                  InterShopLoyaltyService.checkTierLock(widget.customerId, currentTier),
+              future: InterShopLoyaltyService.checkTierLock(
+                widget.customerId,
+                currentTier,
+              ),
               builder: (context, lockSnapshot) {
                 if (!lockSnapshot.hasData) return const SizedBox();
                 final lock = lockSnapshot.data ?? {};
@@ -489,7 +489,8 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
 
             FutureBuilder<List<Map<String, dynamic>>>(
               future: TierBenefitsService.getBenefitRedemptions(
-                  widget.customerId),
+                widget.customerId,
+              ),
               builder: (context, redemptionSnapshot) {
                 if (!redemptionSnapshot.hasData ||
                     redemptionSnapshot.data!.isEmpty) {
@@ -526,7 +527,10 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
   }
 
   Widget _buildTierProgressCard(
-      String currentTier, int totalPoints, int pointsToNext) {
+    String currentTier,
+    int totalPoints,
+    int pointsToNext,
+  ) {
     final tiers = ['BRONZE', 'SILVER', 'GOLD'];
     final currentIndex = tiers.indexOf(currentTier);
 
@@ -621,8 +625,7 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
       decoration: BoxDecoration(
         color: isLocked ? const Color(0xFFFEF3C7) : const Color(0xFFDEF7EC),
         border: Border.all(
-          color:
-              isLocked ? const Color(0xFFFCD34D) : const Color(0xFF6EE7B7),
+          color: isLocked ? const Color(0xFFFCD34D) : const Color(0xFF6EE7B7),
         ),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -761,8 +764,7 @@ class _LoyaltyNetworkDashboardState extends State<LoyaltyNetworkDashboard>
 
   Widget _buildMoatTab() {
     return FutureBuilder<Map<String, dynamic>>(
-      future:
-          TierBenefitsService.analyzeRetentionMoat(widget.customerId),
+      future: TierBenefitsService.analyzeRetentionMoat(widget.customerId),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());

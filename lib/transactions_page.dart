@@ -14,7 +14,7 @@ class TransactionsPage extends StatefulWidget {
 
 class _TransactionsPageState extends State<TransactionsPage> {
   static const Color _primary = Color(0xFF6366F1);
-  
+
   List<Transaction> _transactions = [];
   bool _loading = true;
   String _filterType = 'ALL'; // ALL, PAID, RECEIVED, PENDING
@@ -31,7 +31,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     setState(() => _loading = true);
     try {
       final txns = await TransactionService.loadTransactions();
-      
+
       double total = 0;
       for (var t in txns) {
         total += t.amount;
@@ -44,7 +44,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: LiveTranslatedText('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: LiveTranslatedText('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
       setState(() => _loading = false);
     }
@@ -53,7 +56,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
   List<Transaction> get _filteredTransactions {
     return _transactions.where((t) {
       bool typeMatch = _filterType == 'ALL' || t.type == _filterType;
-      bool sourceMatch = _selectedSource == 'ALL' || t.source == _selectedSource;
+      bool sourceMatch =
+          _selectedSource == 'ALL' || t.source == _selectedSource;
       return typeMatch && sourceMatch;
     }).toList();
   }
@@ -63,7 +67,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const LiveTranslatedText('Delete Transaction?'),
-        content: LiveTranslatedText('Delete transaction of ₹${txn.amount} from ${txn.name ?? "Unknown"}?'),
+        content: LiveTranslatedText(
+          'Delete transaction of ₹${txn.amount} from ${txn.name ?? "Unknown"}?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -84,7 +90,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const LiveTranslatedText('Delete', style: TextStyle(color: Colors.white)),
+            child: const LiveTranslatedText(
+              'Delete',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -100,7 +109,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
       appBar: AppBar(
         title: LiveTranslatedText(
           'Transaction History',
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
         ),
         elevation: 0,
         backgroundColor: Colors.white,
@@ -128,15 +141,32 @@ class _TransactionsPageState extends State<TransactionsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      LiveTranslatedText('Total Transactions', style: GoogleFonts.poppins(fontSize: 12, color: Colors.black54)),
+                      LiveTranslatedText(
+                        'Total Transactions',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          LiveTranslatedText('₹${_totalAmount.toStringAsFixed(0)}', 
-                            style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)),
-                          LiveTranslatedText('${_transactions.length} entries',
-                            style: GoogleFonts.poppins(fontSize: 12, color: Colors.black54)),
+                          LiveTranslatedText(
+                            '₹${_totalAmount.toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          LiveTranslatedText(
+                            '${_transactions.length} entries',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -155,21 +185,41 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       _buildFilterChip('Type: Paid', _filterType == 'PAID', () {
                         setState(() => _filterType = 'PAID');
                       }),
-                      _buildFilterChip('Type: Received', _filterType == 'RECEIVED', () {
-                        setState(() => _filterType = 'RECEIVED');
-                      }),
-                      _buildFilterChip('Src: All', _selectedSource == 'ALL', () {
-                        setState(() => _selectedSource = 'ALL');
-                      }),
-                      _buildFilterChip('Src: Manual', _selectedSource == 'Manual', () {
-                        setState(() => _selectedSource = 'Manual');
-                      }),
-                      _buildFilterChip('Src: SMS', _selectedSource == 'SMS_BANK', () {
-                        setState(() => _selectedSource = 'SMS_BANK');
-                      }),
-                      _buildFilterChip('Src: UPI', _selectedSource == 'UPI', () {
-                        setState(() => _selectedSource = 'UPI');
-                      }),
+                      _buildFilterChip(
+                        'Type: Received',
+                        _filterType == 'RECEIVED',
+                        () {
+                          setState(() => _filterType = 'RECEIVED');
+                        },
+                      ),
+                      _buildFilterChip(
+                        'Src: All',
+                        _selectedSource == 'ALL',
+                        () {
+                          setState(() => _selectedSource = 'ALL');
+                        },
+                      ),
+                      _buildFilterChip(
+                        'Src: Manual',
+                        _selectedSource == 'Manual',
+                        () {
+                          setState(() => _selectedSource = 'Manual');
+                        },
+                      ),
+                      _buildFilterChip(
+                        'Src: SMS',
+                        _selectedSource == 'SMS_BANK',
+                        () {
+                          setState(() => _selectedSource = 'SMS_BANK');
+                        },
+                      ),
+                      _buildFilterChip(
+                        'Src: UPI',
+                        _selectedSource == 'UPI',
+                        () {
+                          setState(() => _selectedSource = 'UPI');
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -183,9 +233,16 @@ class _TransactionsPageState extends State<TransactionsPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.receipt_long, size: 64, color: Colors.grey[300]),
+                          Icon(
+                            Icons.receipt_long,
+                            size: 64,
+                            color: Colors.grey[300],
+                          ),
                           const SizedBox(height: 16),
-                          LiveTranslatedText('No transactions', style: GoogleFonts.poppins(color: Colors.grey[600])),
+                          LiveTranslatedText(
+                            'No transactions',
+                            style: GoogleFonts.poppins(color: Colors.grey[600]),
+                          ),
                         ],
                       ),
                     ),
@@ -253,7 +310,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
       child: Row(
         children: [
@@ -273,7 +332,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
               ),
             ),
           ),
-          
+
           const SizedBox(width: 12),
 
           // Details
@@ -283,19 +342,29 @@ class _TransactionsPageState extends State<TransactionsPage> {
               children: [
                 LiveTranslatedText(
                   txn.name ?? 'Unknown',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black),
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.black,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 LiveTranslatedText(
                   '${txn.phone ?? ''} • ${txn.source}',
-                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600]),
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                  ),
                 ),
                 const SizedBox(height: 4),
                 LiveTranslatedText(
                   DateFormat('MMM dd, hh:mm a').format(txn.createdAt),
-                  style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[500]),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: Colors.grey[500],
+                  ),
                 ),
               ],
             ),
@@ -309,7 +378,11 @@ class _TransactionsPageState extends State<TransactionsPage> {
             children: [
               LiveTranslatedText(
                 '₹${txn.amount.toStringAsFixed(0)}',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: color),
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: color,
+                ),
               ),
               const SizedBox(height: 4),
               PopupMenuButton(
@@ -321,7 +394,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
                     },
                   ),
                   PopupMenuItem(
-                    child: const LiveTranslatedText('Delete', style: TextStyle(color: Colors.red)),
+                    child: const LiveTranslatedText(
+                      'Delete',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     onTap: () {
                       _showDeleteDialog(txn);
                     },
@@ -340,7 +416,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: LiveTranslatedText('Transaction Details', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Transaction Details',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -352,11 +431,20 @@ class _TransactionsPageState extends State<TransactionsPage> {
               _detailRow('Type:', txn.type),
               _detailRow('Source:', txn.source),
               _detailRow('Reference:', txn.reference ?? 'N/A'),
-              _detailRow('Date:', DateFormat('MMM dd, yyyy hh:mm a').format(txn.createdAt)),
+              _detailRow(
+                'Date:',
+                DateFormat('MMM dd, yyyy hh:mm a').format(txn.createdAt),
+              ),
               if (txn.notes != null) _detailRow('Notes:', txn.notes!),
               if (txn.rawMessage != null) ...[
                 const SizedBox(height: 12),
-                LiveTranslatedText('Raw Message:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12)),
+                LiveTranslatedText(
+                  'Raw Message:',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -364,7 +452,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: LiveTranslatedText(txn.rawMessage!, style: const TextStyle(fontSize: 11)),
+                  child: LiveTranslatedText(
+                    txn.rawMessage!,
+                    style: const TextStyle(fontSize: 11),
+                  ),
                 ),
               ],
             ],
@@ -386,9 +477,21 @@ class _TransactionsPageState extends State<TransactionsPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 90, child: LiveTranslatedText(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12))),
+          SizedBox(
+            width: 90,
+            child: LiveTranslatedText(
+              label,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
           Expanded(
-            child: LiveTranslatedText(value, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700])),
+            child: LiveTranslatedText(
+              value,
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700]),
+            ),
           ),
         ],
       ),

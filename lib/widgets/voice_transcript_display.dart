@@ -142,7 +142,10 @@ class _VoiceTranscriptDisplayState extends State<VoiceTranscriptDisplay>
               ),
               // Confidence Badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: confidenceColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -183,7 +186,9 @@ class _VoiceTranscriptDisplayState extends State<VoiceTranscriptDisplay>
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: LiveTranslatedText(
-              widget.transcript.isEmpty ? 'Tap to start speaking...' : widget.transcript,
+              widget.transcript.isEmpty
+                  ? 'Tap to start speaking...'
+                  : widget.transcript,
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: widget.transcript.isEmpty
@@ -346,7 +351,10 @@ class VoiceDetectedProduct extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: confidenceColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),

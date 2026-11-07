@@ -20,7 +20,10 @@ void main() {
     for (final path in removed) {
       expect(File(path).existsSync(), isFalse, reason: path);
     }
-    expect(File('lib/screens/customer/customer_login_page.dart').existsSync(), isTrue);
+    expect(
+      File('lib/screens/customer/customer_login_page.dart').existsSync(),
+      isTrue,
+    );
   });
 
   test('replacement customer screens still exist', () {

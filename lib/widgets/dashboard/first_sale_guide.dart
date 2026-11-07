@@ -101,13 +101,7 @@ class _FirstSaleGuideState extends State<FirstSaleGuide>
                               : const Color(0xFFCBD5E1),
                         ),
                       ),
-                    Expanded(
-                      child: _buildStep(
-                        index,
-                        activeStep,
-                        pulse,
-                      ),
-                    ),
+                    Expanded(child: _buildStep(index, activeStep, pulse)),
                   ],
                 ],
               ),
@@ -167,8 +161,9 @@ class _FirstSaleGuideState extends State<FirstSaleGuide>
           boxShadow: isActive
               ? [
                   BoxShadow(
-                    color: const Color(0xFF6366F1)
-                        .withValues(alpha: 0.12 + pulse * 0.12),
+                    color: const Color(
+                      0xFF6366F1,
+                    ).withValues(alpha: 0.12 + pulse * 0.12),
                     blurRadius: 12,
                   ),
                 ]

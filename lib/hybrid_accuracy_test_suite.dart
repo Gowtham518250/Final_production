@@ -6,14 +6,14 @@ import 'payment_event.dart';
 import 'smart_payment_matcher_service.dart';
 
 /// Synthetic scenario regression suite for the hybrid payment system.
-/// 
+///
 /// Tests:
 /// 1. Same amount at same time (conflict resolution)
 /// 2. Same amount at different times (fuzzy matching)
 /// 3. Large batches of generated scenarios
 /// 4. Fraud blocking accuracy
 /// 5. Edge cases and corner scenarios
-/// 
+///
 /// These scenarios do not measure real-world payment accuracy.
 
 class HybridPaymentAccuracyTest {
@@ -120,8 +120,9 @@ class HybridPaymentAccuracyTest {
           payerName: scenario['name'] as String,
           decision: PaymentDecision.likely,
           confidenceScore: 0.65,
-          detectionSource:
-              scenario['app'] == PaymentApp.bankApp ? 'sms:bank' : 'notification',
+          detectionSource: scenario['app'] == PaymentApp.bankApp
+              ? 'sms:bank'
+              : 'notification',
           app: scenario['app'] as PaymentApp,
           referenceId: 'REF${DateTime.now().millisecondsSinceEpoch}',
           isFailed: false,
@@ -143,14 +144,16 @@ class HybridPaymentAccuracyTest {
 
         if (isCorrect) passed++;
 
-        results.add(TestResult(
-          testName: 'Conflict Resolution',
-          scenario: scenario['name'] as String,
-          expected: 'Score ≤ ${scenario["expectedMaxScore"]}%',
-          actual: 'Score = ${result.confidence.score.toStringAsFixed(1)}%',
-          passed: isCorrect,
-          confidence: result.confidence.score,
-        ));
+        results.add(
+          TestResult(
+            testName: 'Conflict Resolution',
+            scenario: scenario['name'] as String,
+            expected: 'Score ≤ ${scenario["expectedMaxScore"]}%',
+            actual: 'Score = ${result.confidence.score.toStringAsFixed(1)}%',
+            passed: isCorrect,
+            confidence: result.confidence.score,
+          ),
+        );
       }
     }
 
@@ -158,8 +161,10 @@ class HybridPaymentAccuracyTest {
     stats.test1Passed = passed;
     stats.test1Total = total * 3;
 
-    debugPrint('$_tag ✓ Test 1 Complete: ${stats.test1Accuracy.toStringAsFixed(1)}% '
-        '($passed/${total * 3})');
+    debugPrint(
+      '$_tag ✓ Test 1 Complete: ${stats.test1Accuracy.toStringAsFixed(1)}% '
+      '($passed/${total * 3})',
+    );
   }
 
   /// TEST 2: Same Amount at Different Times
@@ -232,14 +237,17 @@ class HybridPaymentAccuracyTest {
 
         if (isCorrect) passed++;
 
-        results.add(TestResult(
-          testName: 'Same Amount Different Times',
-          scenario: 'Offset ${offset}min (${result.matchedSaleId ?? "no_match"})',
-          expected: timeDiff <= 5 ? '≥70%' : '≥40%',
-          actual: '${result.confidence.score.toStringAsFixed(1)}%',
-          passed: isCorrect,
-          confidence: result.confidence.score,
-        ));
+        results.add(
+          TestResult(
+            testName: 'Same Amount Different Times',
+            scenario:
+                'Offset ${offset}min (${result.matchedSaleId ?? "no_match"})',
+            expected: timeDiff <= 5 ? '≥70%' : '≥40%',
+            actual: '${result.confidence.score.toStringAsFixed(1)}%',
+            passed: isCorrect,
+            confidence: result.confidence.score,
+          ),
+        );
       }
     }
 
@@ -247,8 +255,10 @@ class HybridPaymentAccuracyTest {
     stats.test2Passed = passed;
     stats.test2Total = total * 3;
 
-    debugPrint('$_tag ✓ Test 2 Complete: ${stats.test2Accuracy.toStringAsFixed(1)}% '
-        '($passed/${total * 3})');
+    debugPrint(
+      '$_tag ✓ Test 2 Complete: ${stats.test2Accuracy.toStringAsFixed(1)}% '
+      '($passed/${total * 3})',
+    );
   }
 
   /// TEST 3: Fuzzy Matching (±10% variance)
@@ -307,15 +317,18 @@ class HybridPaymentAccuracyTest {
 
         if (isCorrect) passed++;
 
-        results.add(TestResult(
-          testName: 'Fuzzy Matching',
-          scenario: 'Variance ${variance}% (₹${amount.toStringAsFixed(0)})',
-          expected: variance.abs() <= 10 ? 'Match' : 'No Match',
-          actual: '${result.confidence.score.toStringAsFixed(1)}% '
-              '(${result.matchedSaleId ?? "no_match"})',
-          passed: isCorrect,
-          confidence: result.confidence.score,
-        ));
+        results.add(
+          TestResult(
+            testName: 'Fuzzy Matching',
+            scenario: 'Variance ${variance}% (₹${amount.toStringAsFixed(0)})',
+            expected: variance.abs() <= 10 ? 'Match' : 'No Match',
+            actual:
+                '${result.confidence.score.toStringAsFixed(1)}% '
+                '(${result.matchedSaleId ?? "no_match"})',
+            passed: isCorrect,
+            confidence: result.confidence.score,
+          ),
+        );
       }
     }
 
@@ -323,8 +336,10 @@ class HybridPaymentAccuracyTest {
     stats.test3Passed = passed;
     stats.test3Total = amountVariations.length * 20;
 
-    debugPrint('$_tag ✓ Test 3 Complete: ${stats.test3Accuracy.toStringAsFixed(1)}% '
-        '($passed/${amountVariations.length * 20})');
+    debugPrint(
+      '$_tag ✓ Test 3 Complete: ${stats.test3Accuracy.toStringAsFixed(1)}% '
+      '($passed/${amountVariations.length * 20})',
+    );
   }
 
   /// TEST 4: Large Scale (10,000 random payment scenarios)
@@ -341,7 +356,9 @@ class HybridPaymentAccuracyTest {
     for (int i = 0; i < testCount; i++) {
       // Show progress
       if (i % 1000 == 0) {
-        debugPrint('$_tag  Processing: $i/$testCount (${(i / testCount * 100).toStringAsFixed(1)}%)');
+        debugPrint(
+          '$_tag  Processing: $i/$testCount (${(i / testCount * 100).toStringAsFixed(1)}%)',
+        );
       }
 
       // Create random payment
@@ -395,7 +412,8 @@ class HybridPaymentAccuracyTest {
         isCorrect = result.confidence.score >= 60;
       } else {
         // Random amount should not match or low confidence
-        isCorrect = result.confidence.score < 60 ||
+        isCorrect =
+            result.confidence.score < 60 ||
             result.action == HybridAction.manualReview;
       }
 
@@ -403,15 +421,18 @@ class HybridPaymentAccuracyTest {
 
       // Sampling: only keep some results to avoid memory overload
       if (i % 100 == 0) {
-        results.add(TestResult(
-          testName: 'Large Scale',
-          scenario: 'Payment $i (${isValidPayment ? "valid" : "random"})',
-          expected: isValidPayment ? 'Match' : 'No Match',
-          actual: '${result.confidence.score.toStringAsFixed(1)}% '
-              '(${result.action.name})',
-          passed: isCorrect,
-          confidence: result.confidence.score,
-        ));
+        results.add(
+          TestResult(
+            testName: 'Large Scale',
+            scenario: 'Payment $i (${isValidPayment ? "valid" : "random"})',
+            expected: isValidPayment ? 'Match' : 'No Match',
+            actual:
+                '${result.confidence.score.toStringAsFixed(1)}% '
+                '(${result.action.name})',
+            passed: isCorrect,
+            confidence: result.confidence.score,
+          ),
+        );
       }
     }
 
@@ -420,8 +441,10 @@ class HybridPaymentAccuracyTest {
     stats.test4Total = testCount;
     stats.test4Conflicts = conflicts;
 
-    debugPrint('$_tag ✓ Test 4 Complete: ${stats.test4Accuracy.toStringAsFixed(1)}% '
-        '($passed/$testCount) with $conflicts conflicts detected');
+    debugPrint(
+      '$_tag ✓ Test 4 Complete: ${stats.test4Accuracy.toStringAsFixed(1)}% '
+      '($passed/$testCount) with $conflicts conflicts detected',
+    );
   }
 
   /// TEST 5: Edge Cases
@@ -487,15 +510,18 @@ class HybridPaymentAccuracyTest {
         if (isCorrect) passed++;
 
         if (i == 0) {
-          results.add(TestResult(
-            testName: 'Edge Cases',
-            scenario: name,
-            expected: shouldProcess ? 'Process' : 'Reject',
-            actual: '${result.decision.name} '
-                '(${result.confidence.score.toStringAsFixed(1)}%)',
-            passed: isCorrect,
-            confidence: result.confidence.score,
-          ));
+          results.add(
+            TestResult(
+              testName: 'Edge Cases',
+              scenario: name,
+              expected: shouldProcess ? 'Process' : 'Reject',
+              actual:
+                  '${result.decision.name} '
+                  '(${result.confidence.score.toStringAsFixed(1)}%)',
+              passed: isCorrect,
+              confidence: result.confidence.score,
+            ),
+          );
         }
       }
     }
@@ -504,12 +530,17 @@ class HybridPaymentAccuracyTest {
     stats.test5Passed = passed;
     stats.test5Total = total * edgeCases.length;
 
-    debugPrint('$_tag ✓ Test 5 Complete: ${stats.test5Accuracy.toStringAsFixed(1)}% '
-        '($passed/${total * edgeCases.length})');
+    debugPrint(
+      '$_tag ✓ Test 5 Complete: ${stats.test5Accuracy.toStringAsFixed(1)}% '
+      '($passed/${total * edgeCases.length})',
+    );
   }
 
   /// Generate random sales data
-  List<Map<String, dynamic>> _generateRandomSales(int count, math.Random random) {
+  List<Map<String, dynamic>> _generateRandomSales(
+    int count,
+    math.Random random,
+  ) {
     final sales = <Map<String, dynamic>>[];
     for (int i = 0; i < count; i++) {
       sales.add({
@@ -551,38 +582,60 @@ class HybridPaymentAccuracyTest {
         : stats.totalPassed * 100 / stats.totalTests;
 
     debugPrint('$_tag TEST RESULTS:\n');
-    debugPrint('$_tag [1] Conflict Resolution pass rate... '
-        '${stats.test1Accuracy.toStringAsFixed(1)}% '
-        '(${stats.test1Passed}/${stats.test1Total} passed)');
-    debugPrint('$_tag [2] Same Amount Diff Times pass rate '
-        '${stats.test2Accuracy.toStringAsFixed(1)}% '
-        '(${stats.test2Passed}/${stats.test2Total} passed)');
-    debugPrint('$_tag [3] Fuzzy Matching pass rate........ '
-        '${stats.test3Accuracy.toStringAsFixed(1)}% '
-        '(${stats.test3Passed}/${stats.test3Total} passed)');
-    debugPrint('$_tag [4] Large Scale scenario pass rate... '
-        '${stats.test4Accuracy.toStringAsFixed(1)}% '
-        '(${stats.test4Passed}/${stats.test4Total} passed)');
-    debugPrint('$_tag       └─ Conflicts detected....... '
-        '${stats.test4Conflicts}');
-    debugPrint('$_tag [5] Edge Cases pass rate............ '
-        '${stats.test5Accuracy.toStringAsFixed(1)}% '
-        '(${stats.test5Passed}/${stats.test5Total} passed)');
+    debugPrint(
+      '$_tag [1] Conflict Resolution pass rate... '
+      '${stats.test1Accuracy.toStringAsFixed(1)}% '
+      '(${stats.test1Passed}/${stats.test1Total} passed)',
+    );
+    debugPrint(
+      '$_tag [2] Same Amount Diff Times pass rate '
+      '${stats.test2Accuracy.toStringAsFixed(1)}% '
+      '(${stats.test2Passed}/${stats.test2Total} passed)',
+    );
+    debugPrint(
+      '$_tag [3] Fuzzy Matching pass rate........ '
+      '${stats.test3Accuracy.toStringAsFixed(1)}% '
+      '(${stats.test3Passed}/${stats.test3Total} passed)',
+    );
+    debugPrint(
+      '$_tag [4] Large Scale scenario pass rate... '
+      '${stats.test4Accuracy.toStringAsFixed(1)}% '
+      '(${stats.test4Passed}/${stats.test4Total} passed)',
+    );
+    debugPrint(
+      '$_tag       └─ Conflicts detected....... '
+      '${stats.test4Conflicts}',
+    );
+    debugPrint(
+      '$_tag [5] Edge Cases pass rate............ '
+      '${stats.test5Accuracy.toStringAsFixed(1)}% '
+      '(${stats.test5Passed}/${stats.test5Total} passed)',
+    );
 
     debugPrint('\n$_tag ═══════════════════════════════════════════');
-    debugPrint('$_tag 🎯 OVERALL SCENARIO PASS RATE: ${scenarioPassRate.toStringAsFixed(2)}%');
+    debugPrint(
+      '$_tag 🎯 OVERALL SCENARIO PASS RATE: ${scenarioPassRate.toStringAsFixed(2)}%',
+    );
     debugPrint('$_tag ═══════════════════════════════════════════\n');
 
     // Summary statistics
     debugPrint('$_tag SUMMARY STATISTICS:');
-    debugPrint('$_tag • Total tests run.......... '
-        '${stats.totalTests}');
-    debugPrint('$_tag • Total passed............ '
-        '${stats.totalPassed}');
-    debugPrint('$_tag • Total failed............ '
-        '${stats.totalFailed}');
+    debugPrint(
+      '$_tag • Total tests run.......... '
+      '${stats.totalTests}',
+    );
+    debugPrint(
+      '$_tag • Total passed............ '
+      '${stats.totalPassed}',
+    );
+    debugPrint(
+      '$_tag • Total failed............ '
+      '${stats.totalFailed}',
+    );
     debugPrint('$_tag • Ground truth: synthetic test expectations only');
-    debugPrint('$_tag • Real-world payment accuracy is not measured by this suite');
+    debugPrint(
+      '$_tag • Real-world payment accuracy is not measured by this suite',
+    );
 
     debugPrint('$_tag ═══════════════════════════════════════════\n');
   }
@@ -637,5 +690,4 @@ class TestStats {
       test1Passed + test2Passed + test3Passed + test4Passed + test5Passed;
 
   int get totalFailed => totalTests - totalPassed;
-
 }

@@ -13,7 +13,7 @@ import 'dart:async';
 
 class ProductionSecuritySuite {
   // ============ TRANSACTION SAFETY ============
-  
+
   /// Show transaction confirmation with amount verification
   static Future<bool> confirmTransaction({
     required BuildContext context,
@@ -39,7 +39,10 @@ class ProductionSecuritySuite {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LiveTranslatedText(description, style: const TextStyle(fontSize: 14)),
+            LiveTranslatedText(
+              description,
+              style: const TextStyle(fontSize: 14),
+            ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -51,7 +54,10 @@ class ProductionSecuritySuite {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const LiveTranslatedText('Amount:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const LiveTranslatedText(
+                    'Amount:',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   LiveTranslatedText(
                     '₹${currentAmount.toStringAsFixed(2)}',
                     style: TextStyle(
@@ -159,102 +165,97 @@ class ProductionSecuritySuite {
   /// Enhanced email validation
   static String? validateEmail(String? email) {
     if (email == null || email.isEmpty) return 'Email is required';
-    
+
     final emailRegex = RegExp(
       r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
     );
-    
+
     if (!emailRegex.hasMatch(email)) {
       return 'Please enter a valid email address';
     }
-    
+
     if (email.length > 254) {
       return 'Email address too long';
     }
-    
+
     return null;
   }
 
   /// Enhanced password validation
   static String? validatePassword(String? password) {
     if (password == null || password.isEmpty) return 'Password is required';
-    
+
     if (password.length < 8) {
       return 'Password must be at least 8 characters';
     }
-    
+
     if (!password.contains(RegExp(r'[A-Z]'))) {
       return 'Password must contain uppercase letter';
     }
-    
+
     if (!password.contains(RegExp(r'[a-z]'))) {
       return 'Password must contain lowercase letter';
     }
-    
+
     if (!password.contains(RegExp(r'[0-9]'))) {
       return 'Password must contain number';
     }
-    
+
     // Special chars validation - check for common ones
     if (!password.contains(RegExp(r'[!@#\$%\^&*(),.?":{}|<>]'))) {
       return r'Password must contain special character: !@#$%^&*';
     }
-    
+
     return null;
   }
 
   /// Enhanced phone validation (Indian format)
   static String? validatePhone(String? phone) {
     if (phone == null || phone.isEmpty) return 'Phone is required';
-    
+
     final cleaned = phone.replaceAll(RegExp(r'[^\d]'), '');
-    
+
     if (cleaned.length != 10) {
       return 'Phone must be exactly 10 digits';
     }
-    
+
     if (!RegExp(r'^[6-9]').hasMatch(cleaned)) {
       return 'Phone must start with 6-9';
     }
-    
+
     return null;
   }
 
   /// Name validation
   static String? validateName(String? name) {
     if (name == null || name.isEmpty) return 'Name is required';
-    
+
     if (name.trim().length < 2) {
       return 'Name must be at least 2 characters';
     }
-    
+
     if (name.length > 100) {
       return 'Name too long (max 100 chars)';
     }
-    
+
     if (name.contains(RegExp(r'[<>\"%;]'))) {
       return 'Name contains invalid characters';
     }
-    
+
     return null;
   }
 
   // ============ OFFLINE DATA PROTECTION ============
 
   /// Encrypt sensitive data before storing using flutter_secure_storage
-  static Future<void> saveProtectedData(
-    String key,
-    String value,
-  ) async {
+  static Future<void> saveProtectedData(String key, String value) async {
     try {
       // 🔒 SECURITY FIX: Use flutter_secure_storage instead of fake XOR encryption
       // flutter_secure_storage provides proper encryption with platform-specific secure storage
       const secureStorage = FlutterSecureStorage(
-        aOptions: AndroidOptions(
-          encryptedSharedPreferences: true,
-        ),
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
       );
-      
+
       await secureStorage.write(key: '_protected_$key', value: value);
     } catch (e) {
       if (kDebugMode) debugPrint('Error saving protected data: $e');
@@ -266,11 +267,9 @@ class ProductionSecuritySuite {
     try {
       // 🔒 SECURITY FIX: Use flutter_secure_storage instead of fake XOR decryption
       const secureStorage = FlutterSecureStorage(
-        aOptions: AndroidOptions(
-          encryptedSharedPreferences: true,
-        ),
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
       );
-      
+
       return await secureStorage.read(key: '_protected_$key');
     } catch (e) {
       if (kDebugMode) debugPrint('Error reading protected data: $e');
@@ -292,7 +291,7 @@ class ProductionSecuritySuite {
     while (_operationMutex[operationKey] == true) {
       await Future.delayed(const Duration(milliseconds: 10));
     }
-    
+
     try {
       _operationMutex[operationKey] = true;
       return await operation();
@@ -369,10 +368,10 @@ class ProductionSecuritySuite {
     try {
       final prefs = await SharedPreferences.getInstance();
       final data = prefs.getString(dataKey) ?? '';
-      
+
       // Simple hash (use crypto library for production)
       final hash = data.hashCode.toString();
-      
+
       return hash == expectedHash;
     } catch (e) {
       return false;
@@ -389,7 +388,7 @@ class ProductionSecuritySuite {
   }) async {
     final actualTimeout = timeout ?? const Duration(seconds: 30);
     final opName = operationName ?? 'Operation';
-    
+
     try {
       return await future.timeout(
         actualTimeout,

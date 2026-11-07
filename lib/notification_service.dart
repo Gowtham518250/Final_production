@@ -10,7 +10,8 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   // Notification IDs must not be based on DateTime.now().millisecond (0-999),
   // because closely spaced notifications would overwrite one another.
@@ -22,10 +23,9 @@ class NotificationService {
     if (nowId > _lastAllocatedNotificationId) {
       _lastAllocatedNotificationId = nowId;
     } else {
-      _lastAllocatedNotificationId =
-          _lastAllocatedNotificationId >= 0x7ffffffe
-              ? 1000
-              : _lastAllocatedNotificationId + 1;
+      _lastAllocatedNotificationId = _lastAllocatedNotificationId >= 0x7ffffffe
+          ? 1000
+          : _lastAllocatedNotificationId + 1;
     }
     return _lastAllocatedNotificationId;
   }
@@ -44,9 +44,10 @@ class NotificationService {
       if (kDebugMode) debugPrint('✅ NotificationService already initialized');
       return;
     }
-    
+
     if (_isInitializing) {
-      if (kDebugMode) debugPrint('⏳ NotificationService initialization in progress...');
+      if (kDebugMode)
+        debugPrint('⏳ NotificationService initialization in progress...');
       // Wait for initialization to complete
       while (_isInitializing) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -60,30 +61,36 @@ class NotificationService {
       const AndroidInitializationSettings initializationSettingsAndroid =
           AndroidInitializationSettings('@mipmap/ic_launcher');
 
-      const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      );
+      const DarwinInitializationSettings initializationSettingsIOS =
+          DarwinInitializationSettings(
+            requestAlertPermission: true,
+            requestBadgePermission: true,
+            requestSoundPermission: true,
+          );
 
-      const InitializationSettings initializationSettings = InitializationSettings(
-        android: initializationSettingsAndroid,
-        iOS: initializationSettingsIOS,
-      );
+      const InitializationSettings initializationSettings =
+          InitializationSettings(
+            android: initializationSettingsAndroid,
+            iOS: initializationSettingsIOS,
+          );
 
       await _notificationsPlugin.initialize(
         initializationSettings,
-        onDidReceiveNotificationResponse: (NotificationResponse response) async {
-          if (kDebugMode) debugPrint('📢 Notification clicked: ${response.payload}');
-        },
+        onDidReceiveNotificationResponse:
+            (NotificationResponse response) async {
+              if (kDebugMode)
+                debugPrint('📢 Notification clicked: ${response.payload}');
+            },
       );
 
       // Create notification channel for Android 8.0+
       if (!kIsWeb && Platform.isAndroid) {
         try {
           final androidPlugin = _notificationsPlugin
-              .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-          
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >();
+
           const AndroidNotificationChannel channel = AndroidNotificationChannel(
             'export_channel',
             'Data Exports',
@@ -92,25 +99,30 @@ class NotificationService {
           );
 
           await androidPlugin?.createNotificationChannel(channel);
-          
+
           if (kDebugMode) debugPrint('✅ Android notification channel created');
         } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Error creating notification channel: $e');
+          if (kDebugMode)
+            debugPrint('⚠️ Error creating notification channel: $e');
         }
-        
+
         // Request permission explicitly for Android 13+ using permission_handler
         try {
           final status = await Permission.notification.request();
-          if (kDebugMode) debugPrint('📱 Notification permission status: $status');
+          if (kDebugMode)
+            debugPrint('📱 Notification permission status: $status');
         } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Error requesting notification permission: $e');
+          if (kDebugMode)
+            debugPrint('⚠️ Error requesting notification permission: $e');
         }
       }
 
       _isInitialized = true;
-      if (kDebugMode) debugPrint('✅ NotificationService initialized successfully');
+      if (kDebugMode)
+        debugPrint('✅ NotificationService initialized successfully');
     } catch (e, st) {
-      if (kDebugMode) debugPrint('❌ Error initializing NotificationService: $e\n$st');
+      if (kDebugMode)
+        debugPrint('❌ Error initializing NotificationService: $e\n$st');
       _isInitialized = false;
       rethrow;
     } finally {
@@ -118,7 +130,11 @@ class NotificationService {
     }
   }
 
-  Future<void> showDownloadNotification(String title, String body, String filePath) async {
+  Future<void> showDownloadNotification(
+    String title,
+    String body,
+    String filePath,
+  ) async {
     try {
       await show(title, body, payload: filePath);
     } catch (e) {
@@ -137,20 +153,24 @@ class NotificationService {
         if (kDebugMode) debugPrint('⚠️ Error getting SharedPreferences: $e');
       }
 
-      final whatsappOnly = prefs?.getBool('whatsapp_only_notifications') ?? true;
+      final whatsappOnly =
+          prefs?.getBool('whatsapp_only_notifications') ?? true;
 
       // Try WhatsApp-only notification if enabled
       if (whatsappOnly && prefs != null) {
         try {
           final shopPhone =
-              (prefs.getString('shop_phone') ?? prefs.getString('contact_phone') ?? '').trim();
+              (prefs.getString('shop_phone') ??
+                      prefs.getString('contact_phone') ??
+                      '')
+                  .trim();
           final digits = shopPhone.replaceAll(RegExp(r'\D'), '');
-          
+
           if (digits.isNotEmpty) {
             try {
               final msg = Uri.encodeComponent('$title\n$body');
               final uri = Uri.parse('https://wa.me/$digits?text=$msg');
-              
+
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
                 if (kDebugMode) debugPrint('✅ WhatsApp notification sent');
@@ -169,19 +189,19 @@ class NotificationService {
 
       // Show local notification as fallback
       try {
-        const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
-          'export_channel',
-          'Data Exports',
-          channelDescription: 'Notifications for completed data exports',
-          importance: Importance.max,
-          priority: Priority.high,
-          showWhen: true,
-          styleInformation: BigTextStyleInformation(''),
-        );
+        const AndroidNotificationDetails androidPlatformChannelSpecifics =
+            AndroidNotificationDetails(
+              'export_channel',
+              'Data Exports',
+              channelDescription: 'Notifications for completed data exports',
+              importance: Importance.max,
+              priority: Priority.high,
+              showWhen: true,
+              styleInformation: BigTextStyleInformation(''),
+            );
 
-        const NotificationDetails platformChannelSpecifics = NotificationDetails(
-          android: androidPlatformChannelSpecifics,
-        );
+        const NotificationDetails platformChannelSpecifics =
+            NotificationDetails(android: androidPlatformChannelSpecifics);
 
         await NotificationService()._notificationsPlugin.show(
           _nextLocalNotificationId(),
@@ -190,7 +210,7 @@ class NotificationService {
           platformChannelSpecifics,
           payload: payload,
         );
-        
+
         if (kDebugMode) debugPrint('✅ Local notification shown');
       } catch (e) {
         if (kDebugMode) debugPrint('❌ Error showing local notification: $e');
@@ -217,9 +237,10 @@ class NotificationService {
           : 'payment_detection_alerts_audible';
 
       if (!kIsWeb && Platform.isAndroid) {
-        final android = plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
+        final android = plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         await android?.createNotificationChannel(
           AndroidNotificationChannel(
             channelId,
@@ -265,7 +286,11 @@ class NotificationService {
     }
   }
 
-  static Future<void> showNotification({required String title, required String body, String? payload}) async {
+  static Future<void> showNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
     try {
       await show(title, body, payload: payload);
     } catch (e) {

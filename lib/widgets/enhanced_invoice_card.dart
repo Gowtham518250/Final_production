@@ -41,9 +41,10 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -58,9 +59,11 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
     final totalAmount = widget.invoice['total_amount'] ?? 0.0;
     final items = widget.invoice['line_items'] as List<dynamic>? ?? [];
     final paymentMethod = widget.invoice['payment_method'] ?? 'Cash';
-    final invoiceDate = widget.invoice['invoice_date'] ?? DateTime.now().toString().split('T')[0];
+    final invoiceDate =
+        widget.invoice['invoice_date'] ??
+        DateTime.now().toString().split('T')[0];
     final status = widget.invoice['status'] ?? 'PAID';
-    
+
     return Dismissible(
       key: Key(widget.invoice['id'].toString()),
       direction: DismissDirection.endToStart,
@@ -88,7 +91,10 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
         child: ScaleTransition(
           scale: _scaleAnimation,
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            margin: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -189,7 +195,7 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                
+
                 // Date and payment method
                 Row(
                   children: [
@@ -223,7 +229,7 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                
+
                 // Amount
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -333,7 +339,7 @@ class InvoiceItemsBreakdown extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          
+
           // Items list
           Expanded(
             child: ListView.separated(
@@ -346,7 +352,7 @@ class InvoiceItemsBreakdown extends StatelessWidget {
                 final quantity = item['quantity'] ?? 1;
                 final unitPrice = item['unit_price'] ?? 0.0;
                 final lineTotal = quantity * unitPrice;
-                
+
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   child: Row(
@@ -387,7 +393,7 @@ class InvoiceItemsBreakdown extends StatelessWidget {
               },
             ),
           ),
-          
+
           // Total
           const Divider(),
           Padding(
@@ -443,12 +449,13 @@ class _InvoiceFilterChipsState extends State<InvoiceFilterChips> {
       height: 50,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        separatorBuilder: (context, index) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (context, index) =>
+            const SizedBox(width: AppSpacing.sm),
         itemCount: widget.availableFilters.length,
         itemBuilder: (context, index) {
           final filter = widget.availableFilters[index];
           final isSelected = _selectedFilter == filter;
-          
+
           return GestureDetector(
             onTap: () {
               setState(() => _selectedFilter = filter);
@@ -461,9 +468,7 @@ class _InvoiceFilterChipsState extends State<InvoiceFilterChips> {
                 vertical: AppSpacing.sm,
               ),
               decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF6366F1)
-                    : Colors.white,
+                color: isSelected ? const Color(0xFF6366F1) : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected
@@ -494,10 +499,7 @@ class _InvoiceFilterChipsState extends State<InvoiceFilterChips> {
 class InvoiceThumbnail extends StatelessWidget {
   final String? thumbnailUrl;
 
-  const InvoiceThumbnail({
-    super.key,
-    this.thumbnailUrl,
-  });
+  const InvoiceThumbnail({super.key, this.thumbnailUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -507,9 +509,7 @@ class InvoiceThumbnail extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: thumbnailUrl != null && thumbnailUrl!.isNotEmpty
           ? ClipRRect(
@@ -519,13 +519,21 @@ class InvoiceThumbnail extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return const Center(
-                    child: Icon(Icons.receipt_long, size: 24, color: Color(0xFF94A3B8)),
+                    child: Icon(
+                      Icons.receipt_long,
+                      size: 24,
+                      color: Color(0xFF94A3B8),
+                    ),
                   );
                 },
               ),
             )
           : const Center(
-              child: Icon(Icons.receipt_long, size: 24, color: Color(0xFF94A3B8)),
+              child: Icon(
+                Icons.receipt_long,
+                size: 24,
+                color: Color(0xFF94A3B8),
+              ),
             ),
     );
   }
@@ -551,8 +559,14 @@ class InvoiceSwipeActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(12),

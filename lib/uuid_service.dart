@@ -4,51 +4,51 @@ import 'package:uuid/uuid.dart';
 /// This service ensures no duplicate IDs across devices and time
 class UuidService {
   static final Uuid _uuid = Uuid();
-  
+
   /// Generate a new UUID v4
   static String generate() {
     return _uuid.v4();
   }
-  
+
   /// Generate multiple UUIDs at once
   static List<String> generateBatch(int count) {
     return List.generate(count, (_) => generate());
   }
-  
+
   /// Validate if a string is a valid UUID
   static bool isValid(String? uuid) {
     if (uuid == null || uuid.isEmpty) return false;
-    
+
     try {
       final regex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
       );
       return regex.hasMatch(uuid);
     } catch (e) {
       return false;
     }
   }
-  
+
   /// Generate a UUID with a specific prefix for operation IDs
   /// Example: "create_sale_abc123-def456-..."
   static String generateWithPrefix(String prefix) {
     return '${prefix}_${generate()}';
   }
-  
+
   /// Extract the prefix from a prefixed UUID
   static String? extractPrefix(String prefixedUuid) {
     if (!prefixedUuid.contains('_')) return null;
-    
+
     final parts = prefixedUuid.split('_');
     if (parts.length < 2) return null;
-    
+
     return parts.sublist(0, parts.length - 1).join('_');
   }
-  
+
   /// Get the base UUID from a prefixed UUID
   static String getBaseUuid(String prefixedUuid) {
     if (!prefixedUuid.contains('_')) return prefixedUuid;
-    
+
     final parts = prefixedUuid.split('_');
     return parts.last;
   }
@@ -57,16 +57,16 @@ class UuidService {
 /// Sync Metadata for all database entities
 /// This ensures proper synchronization and conflict resolution
 class SyncMetadata {
-  final String uuid;              // Global UUID (primary key)
-  final int version;              // Version number for conflict resolution
-  final DateTime updatedAt;       // Last update timestamp
-  final DateTime createdAt;       // Creation timestamp
-  final bool deleted;             // Soft delete flag
-  final DateTime? deletedAt;      // Deletion timestamp
-  final SyncStatus syncStatus;    // Current sync status
-  final String deviceId;          // Device that created/modified
-  final DateTime? lastSyncedAt;   // Last successful sync timestamp
-  
+  final String uuid; // Global UUID (primary key)
+  final int version; // Version number for conflict resolution
+  final DateTime updatedAt; // Last update timestamp
+  final DateTime createdAt; // Creation timestamp
+  final bool deleted; // Soft delete flag
+  final DateTime? deletedAt; // Deletion timestamp
+  final SyncStatus syncStatus; // Current sync status
+  final String deviceId; // Device that created/modified
+  final DateTime? lastSyncedAt; // Last successful sync timestamp
+
   SyncMetadata({
     required this.uuid,
     this.version = 1,
@@ -78,7 +78,7 @@ class SyncMetadata {
     required this.deviceId,
     this.lastSyncedAt,
   });
-  
+
   /// Convert to JSON for storage
   Map<String, dynamic> toJson() {
     return {
@@ -93,7 +93,7 @@ class SyncMetadata {
       'last_synced_at': lastSyncedAt?.toIso8601String(),
     };
   }
-  
+
   /// Create from JSON
   factory SyncMetadata.fromJson(Map<String, dynamic> json) {
     return SyncMetadata(
@@ -102,8 +102,8 @@ class SyncMetadata {
       updatedAt: DateTime.parse(json['updated_at'] as String),
       createdAt: DateTime.parse(json['created_at'] as String),
       deleted: json['deleted'] as bool? ?? false,
-      deletedAt: json['deleted_at'] != null 
-          ? DateTime.parse(json['deleted_at'] as String) 
+      deletedAt: json['deleted_at'] != null
+          ? DateTime.parse(json['deleted_at'] as String)
           : null,
       syncStatus: _parseSyncStatus(json['sync_status'] as String?),
       deviceId: json['device_id'] as String,
@@ -112,7 +112,7 @@ class SyncMetadata {
           : null,
     );
   }
-  
+
   static SyncStatus _parseSyncStatus(String? status) {
     switch (status) {
       case 'SyncStatus.synced':
@@ -127,7 +127,7 @@ class SyncMetadata {
         return SyncStatus.pending;
     }
   }
-  
+
   /// Create a copy with updated version
   SyncMetadata incrementVersion() {
     return SyncMetadata(
@@ -142,7 +142,7 @@ class SyncMetadata {
       lastSyncedAt: lastSyncedAt,
     );
   }
-  
+
   /// Mark as deleted
   SyncMetadata markDeleted() {
     return SyncMetadata(
@@ -157,7 +157,7 @@ class SyncMetadata {
       lastSyncedAt: lastSyncedAt,
     );
   }
-  
+
   /// Mark as synced
   SyncMetadata markSynced() {
     return SyncMetadata(
@@ -176,10 +176,10 @@ class SyncMetadata {
 
 /// Sync status enum
 enum SyncStatus {
-  synced,      // Successfully synced with cloud
-  pending,     // Pending sync (local changes not yet uploaded)
-  conflict,    // Conflict detected (requires resolution)
-  error,       // Sync error (will retry)
+  synced, // Successfully synced with cloud
+  pending, // Pending sync (local changes not yet uploaded)
+  conflict, // Conflict detected (requires resolution)
+  error, // Sync error (will retry)
 }
 
 /// Operation types for the operation queue
@@ -255,7 +255,7 @@ extension OperationTypeExtension on OperationType {
         return 'edit_invoice';
     }
   }
-  
+
   static OperationType fromString(String operationString) {
     switch (operationString) {
       case 'create_sale':
@@ -304,7 +304,7 @@ extension OperationTypeExtension on OperationType {
         throw ArgumentError('Unknown operation type: $operationString');
     }
   }
-  
+
   /// Get priority level for this operation type
   OperationPriority getPriority() {
     switch (this) {
@@ -338,16 +338,16 @@ extension OperationTypeExtension on OperationType {
 
 /// Operation priority for sync queue
 enum OperationPriority {
-  high,    // Sync immediately (sales, stock, returns)
-  medium,  // Sync within minutes (customers, invoices, expenses)
-  low,     // Sync in background (products, suppliers)
+  high, // Sync immediately (sales, stock, returns)
+  medium, // Sync within minutes (customers, invoices, expenses)
+  low, // Sync in background (products, suppliers)
 }
 
 /// Operation status
 enum OperationStatus {
-  pending,      // Waiting to be processed
-  inProgress,   // Currently being processed
-  completed,    // Successfully completed
-  failed,       // Failed (will retry)
-  cancelled,    // Cancelled by user
+  pending, // Waiting to be processed
+  inProgress, // Currently being processed
+  completed, // Successfully completed
+  failed, // Failed (will retry)
+  cancelled, // Cancelled by user
 }

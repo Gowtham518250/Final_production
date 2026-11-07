@@ -31,10 +31,10 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
 
   Future<void> _loadCart() async {
     setState(() => _isLoading = true);
-    
+
     final items = await CartService.getCartItems();
     final total = await CartService.getCartTotal();
-    
+
     setState(() {
       _cartItems = items;
       _cartTotal = total;
@@ -57,7 +57,7 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
     if (couponCode.isEmpty) return;
 
     final result = await CartService.applyCoupon(couponCode, _cartTotal);
-    
+
     setState(() {
       _couponSuccess = result['success'] as bool;
       _couponMessage = result['message'] as String;
@@ -81,7 +81,10 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
       appBar: AppBar(
         title: LiveTranslatedText(
           'Shopping Cart',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: const Color(0xFF1F2937)),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF1F2937),
+          ),
         ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1F2937),
@@ -97,7 +100,10 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
               icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
               label: LiveTranslatedText(
                 'Clear',
-                style: GoogleFonts.poppins(color: const Color(0xFFEF4444), fontWeight: FontWeight.w600),
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFFEF4444),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
         ],
@@ -105,25 +111,25 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _cartItems.isEmpty
-              ? _buildEmptyCart()
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          // 🔧 FLIPKART-LEVEL: Cart items list
-                          ..._cartItems.map((item) => _buildCartItem(item)),
-                          const SizedBox(height: 16),
-                          // 🔧 FLIPKART-LEVEL: Coupon code section
-                          _buildCouponSection(),
-                        ],
-                      ),
-                    ),
-                    // 🔧 FLIPKART-LEVEL: Price summary and checkout
-                    _buildPriceSummary(),
-                  ],
+          ? _buildEmptyCart()
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // 🔧 FLIPKART-LEVEL: Cart items list
+                      ..._cartItems.map((item) => _buildCartItem(item)),
+                      const SizedBox(height: 16),
+                      // 🔧 FLIPKART-LEVEL: Coupon code section
+                      _buildCouponSection(),
+                    ],
+                  ),
                 ),
+                // 🔧 FLIPKART-LEVEL: Price summary and checkout
+                _buildPriceSummary(),
+              ],
+            ),
     );
   }
 
@@ -179,131 +185,151 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
       child: GlassContainer(
         padding: const EdgeInsets.all(16),
         child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Product image
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: imageUrl.isNotEmpty
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Center(
-                          child: Icon(Icons.image_not_supported, color: Colors.grey[400]),
-                        );
-                      },
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Product image
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: imageUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Icon(
+                              Icons.image_not_supported,
+                              color: Colors.grey[400],
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 32,
+                        color: Colors.grey[300],
+                      ),
                     ),
-                  )
-                : Center(
-                    child: Icon(Icons.shopping_bag_outlined, size: 32, color: Colors.grey[300]),
+            ),
+            const SizedBox(width: 16),
+            // Product details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LiveTranslatedText(
+                    name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1F2937),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-          ),
-          const SizedBox(width: 16),
-          // Product details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 4),
+                  LiveTranslatedText(
+                    '₹${price.toString()}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Stock warning
+                  if (stock < quantity)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: LiveTranslatedText(
+                        'Only $stock available',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: const Color(0xFFDC2626),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Quantity controls and remove
+            Column(
               children: [
-                LiveTranslatedText(
-                  name,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF1F2937),
+                // Quantity controls
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                LiveTranslatedText(
-                  '₹${price.toString()}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF6366F1),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove, size: 18),
+                        onPressed: quantity > 1
+                            ? () => _updateQuantity(productId, quantity - 1)
+                            : null,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                      LiveTranslatedText(
+                        quantity.toString(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add, size: 18),
+                        onPressed: quantity < stock
+                            ? () => _updateQuantity(productId, quantity + 1)
+                            : null,
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Stock warning
-                if (stock < quantity)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEE2E2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: LiveTranslatedText(
-                      'Only $stock available',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: const Color(0xFFDC2626),
-                        fontWeight: FontWeight.w600,
-                      ),
+                // Remove button
+                InkWell(
+                  onTap: () => _removeItem(productId),
+                  child: LiveTranslatedText(
+                    'REMOVE',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFFEF4444),
                     ),
                   ),
+                ),
               ],
             ),
-          ),
-          // Quantity controls and remove
-          Column(
-            children: [
-              // Quantity controls
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove, size: 18),
-                      onPressed: quantity > 1 ? () => _updateQuantity(productId, quantity - 1) : null,
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                    LiveTranslatedText(
-                      quantity.toString(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1F2937),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add, size: 18),
-                      onPressed: quantity < stock ? () => _updateQuantity(productId, quantity + 1) : null,
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Remove button
-              InkWell(
-                onTap: () => _removeItem(productId),
-                child: LiveTranslatedText(
-                  'REMOVE',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFFEF4444),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -335,14 +361,19 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
                   controller: _couponController,
                   decoration: InputDecoration(
                     hint: LiveTranslatedText('Enter coupon code'),
-                    hintStyle: GoogleFonts.poppins(color: const Color(0xFF9CA3AF)),
+                    hintStyle: GoogleFonts.poppins(
+                      color: const Color(0xFF9CA3AF),
+                    ),
                     filled: true,
                     fillColor: const Color(0xFFF3F4F6),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
                   textCapitalization: TextCapitalization.characters,
                 ),
@@ -353,7 +384,10 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6366F1),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -371,7 +405,9 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
               _couponMessage,
               style: GoogleFonts.poppins(
                 fontSize: 12,
-                color: _couponSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                color: _couponSuccess
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFEF4444),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -383,7 +419,7 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
 
   Widget _buildPriceSummary() {
     final finalTotal = _cartTotal - _discount;
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -409,7 +445,8 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
           ),
           const SizedBox(height: 16),
           _buildPriceRow('Price (${_cartItems.length} items)', _cartTotal),
-          if (_discount > 0) _buildPriceRow('Discount', -_discount, isDiscount: true),
+          if (_discount > 0)
+            _buildPriceRow('Discount', -_discount, isDiscount: true),
           _buildPriceRow('Delivery Charges', 0.0),
           const Divider(height: 24, color: Color(0xFFE5E7EB)),
           _buildPriceRow('Total Amount', finalTotal, isTotal: true),
@@ -421,7 +458,9 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
               onPressed: () {
                 // Navigate to checkout
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: LiveTranslatedText('Proceeding to checkout...')),
+                  const SnackBar(
+                    content: LiveTranslatedText('Proceeding to checkout...'),
+                  ),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -447,7 +486,12 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
     );
   }
 
-  Widget _buildPriceRow(String label, double value, {bool isDiscount = false, bool isTotal = false}) {
+  Widget _buildPriceRow(
+    String label,
+    double value, {
+    bool isDiscount = false,
+    bool isTotal = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -458,15 +502,23 @@ class _ShoppingCartPageState extends State<ShoppingCartPage> {
             style: GoogleFonts.poppins(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: isTotal ? const Color(0xFF1F2937) : const Color(0xFF6B7280),
+              color: isTotal
+                  ? const Color(0xFF1F2937)
+                  : const Color(0xFF6B7280),
             ),
           ),
           LiveTranslatedText(
-            isDiscount ? '-₹${value.abs().toStringAsFixed(2)}' : '₹${value.toStringAsFixed(2)}',
+            isDiscount
+                ? '-₹${value.abs().toStringAsFixed(2)}'
+                : '₹${value.toStringAsFixed(2)}',
             style: GoogleFonts.poppins(
               fontSize: isTotal ? 18 : 14,
               fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
-              color: isDiscount ? const Color(0xFF10B981) : (isTotal ? const Color(0xFF1F2937) : const Color(0xFF1F2937)),
+              color: isDiscount
+                  ? const Color(0xFF10B981)
+                  : (isTotal
+                        ? const Color(0xFF1F2937)
+                        : const Color(0xFF1F2937)),
             ),
           ),
         ],

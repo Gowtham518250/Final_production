@@ -13,12 +13,12 @@ import 'sync_queue_manager.dart';
 class OperationQueueService {
   static const String _operationsBox = 'sync_operations_v2';
   static const String _queueMetadataBox = 'sync_queue_metadata';
-  
+
   static final Lock _lock = Lock();
   static OperationQueueService? _instance;
-  
+
   OperationQueueService._();
-  
+
   static OperationQueueService get instance {
     _instance ??= OperationQueueService._();
     return _instance!;
@@ -29,12 +29,13 @@ class OperationQueueService {
     if (userId == null || userId <= 0) return null;
 
     final prefs = await SharedPreferences.getInstance();
-    final String role = (prefs.getString('user_role') ??
-            prefs.getString('user_type') ??
-            prefs.getString('role') ??
-            '')
-        .trim()
-        .toUpperCase();
+    final String role =
+        (prefs.getString('user_role') ??
+                prefs.getString('user_type') ??
+                prefs.getString('role') ??
+                '')
+            .trim()
+            .toUpperCase();
     if (role.isEmpty) return null;
 
     return (userId: userId, userRole: role);
@@ -46,16 +47,16 @@ class OperationQueueService {
   ) =>
       operation.userId == identity.userId &&
       operation.userRole == identity.userRole;
-  
+
   /// Initialize the operation queue
   static Future<void> initialize() async {
     await Hive.openBox(_operationsBox);
     await Hive.openBox(_queueMetadataBox);
-    
+
     // Clean up any orphaned operations on startup
     await _cleanupOrphanedOperations();
   }
-  
+
   /// Enqueue a new operation
   Future<String> enqueueOperation({
     required OperationType type,
@@ -84,12 +85,9 @@ class OperationQueueService {
           },
         );
         if (!queued) {
-          throw StateError(
-            'Durable sync outbox rejected $operationType',
-          );
+          throw StateError('Durable sync outbox rejected $operationType');
         }
-        final operationId =
-            UuidService.generateWithPrefix(operationType);
+        final operationId = UuidService.generateWithPrefix(operationType);
         if (kDebugMode) {
           debugPrint(
             '📦 Canonical SyncQueueManager enqueue: $operationId ($operationType)',
@@ -105,7 +103,7 @@ class OperationQueueService {
           'Cannot enqueue an operation without an authenticated account and role.',
         );
       }
-      
+
       final operation = Operation(
         operationId: operationId,
         type: type,
@@ -119,28 +117,30 @@ class OperationQueueService {
         userId: identity.userId,
         userRole: identity.userRole,
       );
-      
+
       final box = Hive.box(_operationsBox);
       await box.put(operationId, operation.toJson());
-      
+
       // Update queue metadata
       await _updateQueueMetadata();
-      
+
       if (kDebugMode) {
-        debugPrint('📝 Operation enqueued: $operationId (${type.toOperationString()})');
+        debugPrint(
+          '📝 Operation enqueued: $operationId (${type.toOperationString()})',
+        );
       }
-      
+
       return operationId;
     });
   }
-  
+
   /// Get next pending operation (high priority first)
   Future<Operation?> getNextOperation() async {
     return await _lock.synchronized(() async {
       final identity = await _currentIdentity();
       if (identity == null) return null;
       final box = Hive.box(_operationsBox);
-      
+
       final pendingOps = box.values
           .map((json) => Operation.fromJson(json as Map<String, dynamic>))
           .where(
@@ -149,20 +149,22 @@ class OperationQueueService {
                 _belongsToIdentity(op, identity),
           )
           .toList();
-      
+
       if (pendingOps.isEmpty) return null;
-      
+
       // Sort by priority (high first) and then by created time
       pendingOps.sort((a, b) {
-        final priorityCompare = _priorityOrder(a.priority).compareTo(_priorityOrder(b.priority));
+        final priorityCompare = _priorityOrder(
+          a.priority,
+        ).compareTo(_priorityOrder(b.priority));
         if (priorityCompare != 0) return priorityCompare;
         return a.createdTime.compareTo(b.createdTime);
       });
-      
+
       return pendingOps.first;
     });
   }
-  
+
   /// Mark operation as in progress
   Future<void> markInProgress(String operationId) async {
     return await _lock.synchronized(() async {
@@ -170,70 +172,71 @@ class OperationQueueService {
       if (operation == null) return;
       final box = Hive.box(_operationsBox);
       final json = box.get(operationId);
-      
+
       if (json != null) {
         final operation = Operation.fromJson(json as Map<String, dynamic>);
-        final updated = operation.copyWith(
-          status: OperationStatus.inProgress,
-        );
+        final updated = operation.copyWith(status: OperationStatus.inProgress);
         await box.put(operationId, updated.toJson());
       }
     });
   }
-  
+
   /// Mark operation as completed
   Future<void> markCompleted(String operationId) async {
     return await _lock.synchronized(() async {
       if (await getOperation(operationId) == null) return;
       final box = Hive.box(_operationsBox);
       await box.delete(operationId);
-      
+
       await _updateQueueMetadata();
-      
+
       if (kDebugMode) {
         debugPrint('✅ Operation completed: $operationId');
       }
     });
   }
-  
+
   /// Mark operation as failed (will retry)
   Future<void> markFailed(String operationId, {String? error}) async {
     return await _lock.synchronized(() async {
       if (await getOperation(operationId) == null) return;
       final box = Hive.box(_operationsBox);
       final json = box.get(operationId);
-      
+
       if (json != null) {
         final operation = Operation.fromJson(json as Map<String, dynamic>);
-        
+
         // Check if max retries exceeded
-        if (operation.retryCount >= _maxRetriesForPriority(operation.priority)) {
+        if (operation.retryCount >=
+            _maxRetriesForPriority(operation.priority)) {
           // Cancel operation
           await markCancelled(operationId, error: 'Max retries exceeded');
           return;
         }
-        
+
         final updated = operation.copyWith(
           status: OperationStatus.failed,
           retryCount: operation.retryCount + 1,
           lastError: error,
         );
         await box.put(operationId, updated.toJson());
-        
+
         if (kDebugMode) {
-          debugPrint('❌ Operation failed: $operationId (Retry ${updated.retryCount})');
+          debugPrint(
+            '❌ Operation failed: $operationId (Retry ${updated.retryCount})',
+          );
         }
       }
     });
   }
-  
+
   /// Mark operation as cancelled
   Future<void> markCancelled(String operationId, {String? error}) async {
     return await _lock.synchronized(() async {
       if (await getOperation(operationId) == null) return;
       final box = Hive.box(_operationsBox);
       final json = box.get(operationId);
-      
+
       if (json != null) {
         final operation = Operation.fromJson(json as Map<String, dynamic>);
         final updated = operation.copyWith(
@@ -241,21 +244,21 @@ class OperationQueueService {
           lastError: error,
         );
         await box.put(operationId, updated.toJson());
-        
+
         if (kDebugMode) {
           debugPrint('🚫 Operation cancelled: $operationId');
         }
       }
     });
   }
-  
+
   /// Get operation by ID
   Future<Operation?> getOperation(String operationId) async {
     final identity = await _currentIdentity();
     if (identity == null) return null;
     final box = Hive.box(_operationsBox);
     final json = box.get(operationId);
-    
+
     if (json == null) return null;
     final operation = Operation.fromJson(json as Map<String, dynamic>);
     return _belongsToIdentity(operation, identity) ? operation : null;
@@ -265,13 +268,13 @@ class OperationQueueService {
     final identity = await _currentIdentity();
     return identity != null && _belongsToIdentity(operation, identity);
   }
-  
+
   /// Get all pending operations
   Future<List<Operation>> getPendingOperations() async {
     final identity = await _currentIdentity();
     if (identity == null) return [];
     final box = Hive.box(_operationsBox);
-    
+
     return box.values
         .map((json) => Operation.fromJson(json as Map<String, dynamic>))
         .where(
@@ -281,7 +284,7 @@ class OperationQueueService {
         )
         .toList();
   }
-  
+
   /// Get queue statistics
   Future<QueueStats> getQueueStats() async {
     final identity = await _currentIdentity();
@@ -297,38 +300,53 @@ class OperationQueueService {
     }
     final box = Hive.box(_operationsBox);
     final metadataBox = Hive.box(_queueMetadataBox);
-    
+
     final operations = box.values
         .map((json) => Operation.fromJson(json as Map<String, dynamic>))
         .where((op) => _belongsToIdentity(op, identity))
         .toList();
-    
-    final pending = operations.where((op) => op.status == OperationStatus.pending).length;
-    final inProgress = operations.where((op) => op.status == OperationStatus.inProgress).length;
-    final failed = operations.where((op) => op.status == OperationStatus.failed).length;
-    final cancelled = operations.where((op) => op.status == OperationStatus.cancelled).length;
-    
+
+    final pending = operations
+        .where((op) => op.status == OperationStatus.pending)
+        .length;
+    final inProgress = operations
+        .where((op) => op.status == OperationStatus.inProgress)
+        .length;
+    final failed = operations
+        .where((op) => op.status == OperationStatus.failed)
+        .length;
+    final cancelled = operations
+        .where((op) => op.status == OperationStatus.cancelled)
+        .length;
+
     return QueueStats(
       totalOperations: operations.length,
       pendingOperations: pending,
       inProgressOperations: inProgress,
       failedOperations: failed,
       cancelledOperations: cancelled,
-      highPriorityPending: operations.where((op) => 
-          op.status == OperationStatus.pending && op.priority == OperationPriority.high).length,
-      lastSyncTime: metadataBox.get(
+      highPriorityPending: operations
+          .where(
+            (op) =>
+                op.status == OperationStatus.pending &&
+                op.priority == OperationPriority.high,
+          )
+          .length,
+      lastSyncTime:
+          metadataBox.get(
                 'last_sync_time_${identity.userRole}_${identity.userId}',
               ) !=
               null
           ? DateTime.parse(
               metadataBox.get(
-                'last_sync_time_${identity.userRole}_${identity.userId}',
-              ) as String,
+                    'last_sync_time_${identity.userRole}_${identity.userId}',
+                  )
+                  as String,
             )
           : null,
     );
   }
-  
+
   /// Clear all operations (use with caution)
   Future<void> clearAll() async {
     return await _lock.synchronized(() async {
@@ -338,32 +356,30 @@ class OperationQueueService {
       for (final key in box.keys.toList()) {
         final raw = box.get(key);
         if (raw is! Map) continue;
-        final operation = Operation.fromJson(
-          Map<String, dynamic>.from(raw),
-        );
+        final operation = Operation.fromJson(Map<String, dynamic>.from(raw));
         if (_belongsToIdentity(operation, identity)) {
           await box.delete(key);
         }
       }
-      
+
       final metadataBox = Hive.box(_queueMetadataBox);
       await metadataBox.delete(
         'last_sync_time_${identity.userRole}_${identity.userId}',
       );
-      
+
       if (kDebugMode) {
         debugPrint('🧹 Operation queue cleared');
       }
     });
   }
-  
+
   /// Retry failed operations
   Future<void> retryFailedOperations() async {
     return await _lock.synchronized(() async {
       final identity = await _currentIdentity();
       if (identity == null) return;
       final box = Hive.box(_operationsBox);
-      
+
       final failedOps = box.values
           .map((json) => Operation.fromJson(json as Map<String, dynamic>))
           .where(
@@ -372,7 +388,7 @@ class OperationQueueService {
                 _belongsToIdentity(op, identity),
           )
           .toList();
-      
+
       for (final op in failedOps) {
         final updated = op.copyWith(
           status: OperationStatus.pending,
@@ -380,71 +396,77 @@ class OperationQueueService {
         );
         await box.put(op.operationId, updated.toJson());
       }
-      
+
       if (kDebugMode) {
         debugPrint('🔄 Retried ${failedOps.length} failed operations');
       }
     });
   }
-  
+
   /// Clean up old completed/cancelled operations
-  Future<void> cleanupOldOperations({Duration maxAge = const Duration(days: 7)}) async {
+  Future<void> cleanupOldOperations({
+    Duration maxAge = const Duration(days: 7),
+  }) async {
     return await _lock.synchronized(() async {
       final identity = await _currentIdentity();
       if (identity == null) return;
       final box = Hive.box(_operationsBox);
       final cutoff = DateTime.now().subtract(maxAge);
-      
+
       final keysToDelete = <String>[];
-      
+
       for (final key in box.keys) {
         final json = box.get(key);
         if (json == null) continue;
-        
+
         final operation = Operation.fromJson(json as Map<String, dynamic>);
-        
+
         // Clean up completed/cancelled operations older than maxAge
-        if ((operation.status == OperationStatus.completed || 
-             operation.status == OperationStatus.cancelled) &&
+        if ((operation.status == OperationStatus.completed ||
+                operation.status == OperationStatus.cancelled) &&
             _belongsToIdentity(operation, identity) &&
             operation.createdTime.isBefore(cutoff)) {
           keysToDelete.add(key as String);
         }
       }
-      
+
       for (final key in keysToDelete) {
         await box.delete(key);
       }
-      
+
       if (kDebugMode && keysToDelete.isNotEmpty) {
         debugPrint('🧹 Cleaned up ${keysToDelete.length} old operations');
       }
     });
   }
-  
+
   /// Clean up orphaned operations (stuck in in_progress)
   static Future<void> _cleanupOrphanedOperations() async {
     final identity = await _currentIdentity();
     if (identity == null) return;
     final box = Hive.box(_operationsBox);
-    
+
     final orphanedOps = box.values
         .map((json) => Operation.fromJson(json as Map<String, dynamic>))
         .where((op) => _belongsToIdentity(op, identity))
         .where((op) => op.status == OperationStatus.inProgress)
-        .where((op) => DateTime.now().difference(op.createdTime) > const Duration(minutes: 5))
+        .where(
+          (op) =>
+              DateTime.now().difference(op.createdTime) >
+              const Duration(minutes: 5),
+        )
         .toList();
-    
+
     for (final op in orphanedOps) {
       final updated = op.copyWith(status: OperationStatus.pending);
       await box.put(op.operationId, updated.toJson());
-      
+
       if (kDebugMode) {
         debugPrint('🔄 Reset orphaned operation: ${op.operationId}');
       }
     }
   }
-  
+
   /// Update queue metadata
   static Future<void> _updateQueueMetadata() async {
     final identity = await _currentIdentity();
@@ -455,7 +477,7 @@ class OperationQueueService {
       DateTime.now().toIso8601String(),
     );
   }
-  
+
   /// Priority order for sorting (lower number = higher priority)
   static int _priorityOrder(OperationPriority priority) {
     switch (priority) {
@@ -467,7 +489,7 @@ class OperationQueueService {
         return 2;
     }
   }
-  
+
   /// Max retries based on priority
   static int _maxRetriesForPriority(OperationPriority priority) {
     switch (priority) {
@@ -483,19 +505,19 @@ class OperationQueueService {
 
 /// Operation model
 class Operation {
-  final String operationId;      // Unique operation ID (with prefix)
-  final OperationType type;      // Type of operation
-  final Map<String, dynamic> payload;  // Operation data
-  final String? entityId;        // Affected entity UUID
-  final OperationStatus status;  // Current status
-  final int retryCount;          // Number of retries attempted
-  final DateTime createdTime;    // When operation was created
+  final String operationId; // Unique operation ID (with prefix)
+  final OperationType type; // Type of operation
+  final Map<String, dynamic> payload; // Operation data
+  final String? entityId; // Affected entity UUID
+  final OperationStatus status; // Current status
+  final int retryCount; // Number of retries attempted
+  final DateTime createdTime; // When operation was created
   final OperationPriority priority; // Priority level
-  final String deviceId;         // Device that created the operation
-  final int userId;              // User who created the operation
+  final String deviceId; // Device that created the operation
+  final int userId; // User who created the operation
   final String userRole;
-  final String? lastError;       // Last error message
-  
+  final String? lastError; // Last error message
+
   Operation({
     required this.operationId,
     required this.type,
@@ -510,7 +532,7 @@ class Operation {
     this.userRole = '',
     this.lastError,
   });
-  
+
   /// Convert to JSON
   Map<String, dynamic> toJson() {
     return {
@@ -528,7 +550,7 @@ class Operation {
       'last_error': lastError,
     };
   }
-  
+
   /// Create from JSON
   factory Operation.fromJson(Map<String, dynamic> json) {
     return Operation(
@@ -546,7 +568,7 @@ class Operation {
       lastError: json['last_error'] as String?,
     );
   }
-  
+
   /// Create a copy with updated fields
   Operation copyWith({
     OperationStatus? status,
@@ -568,7 +590,7 @@ class Operation {
       lastError: lastError ?? this.lastError,
     );
   }
-  
+
   static OperationStatus _parseStatus(String? status) {
     switch (status) {
       case 'OperationStatus.pending':
@@ -585,7 +607,7 @@ class Operation {
         return OperationStatus.pending;
     }
   }
-  
+
   static OperationPriority _parsePriority(String? priority) {
     switch (priority) {
       case 'OperationPriority.high':
@@ -609,7 +631,7 @@ class QueueStats {
   final int cancelledOperations;
   final int highPriorityPending;
   final DateTime? lastSyncTime;
-  
+
   QueueStats({
     required this.totalOperations,
     required this.pendingOperations,
@@ -619,7 +641,7 @@ class QueueStats {
     required this.highPriorityPending,
     this.lastSyncTime,
   });
-  
+
   /// Get queue health status
   QueueHealth get health {
     if (failedOperations > 10) return QueueHealth.critical;
@@ -630,8 +652,4 @@ class QueueStats {
 }
 
 /// Queue health status
-enum QueueHealth {
-  healthy,
-  warning,
-  critical,
-}
+enum QueueHealth { healthy, warning, critical }

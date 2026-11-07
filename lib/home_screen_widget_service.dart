@@ -9,21 +9,21 @@ class HomeScreenWidgetData {
   final int transactionCount;
   final double pendingUdhar;
   final DateTime timestamp;
-  
+
   HomeScreenWidgetData({
     required this.totalSales,
     required this.transactionCount,
     required this.pendingUdhar,
     required this.timestamp,
   });
-  
+
   Map<String, dynamic> toJson() => {
     'totalSales': totalSales,
     'transactionCount': transactionCount,
     'pendingUdhar': pendingUdhar,
     'timestamp': timestamp.toIso8601String(),
   };
-  
+
   factory HomeScreenWidgetData.fromJson(Map<String, dynamic> json) {
     return HomeScreenWidgetData(
       totalSales: (json['totalSales'] as num?)?.toDouble() ?? 0.0,
@@ -41,18 +41,18 @@ class HomeScreenWidgetService {
   static const String _tag = '🏠 HOME_WIDGET';
   static const String _dataKey = 'home_screen_widget_data';
   static const Duration _refreshInterval = Duration(minutes: 15);
-  
+
   late FlutterTts _tts;
-  
+
   HomeScreenWidgetService() {
     _initTts();
   }
-  
+
   void _initTts() {
     _tts = FlutterTts();
     _tts.setLanguage('en-US');
   }
-  
+
   /// Update widget data
   Future<void> updateWidgetData(
     double totalSales,
@@ -66,23 +66,23 @@ class HomeScreenWidgetService {
         pendingUdhar: pendingUdhar,
         timestamp: DateTime.now(),
       );
-      
+
       // FIX-5: Use home_widget package to update (now functional)
       await HomeWidget.saveWidgetData('today_sales', totalSales);
       await HomeWidget.saveWidgetData('transaction_count', transactionCount);
       await HomeWidget.saveWidgetData('pending_udhar', pendingUdhar);
-      
+
       await HomeWidget.updateWidget(
         name: 'DailySummaryWidget',
         qualifiedAndroidName: 'com.retail_mind.home_widget.DailySummaryWidget',
       );
-      
+
       debugPrint('$_tag Widget data updated: $data');
     } catch (e) {
       debugPrint('$_tag Error updating widget: $e');
     }
   }
-  
+
   /// Build voice summary text
   String buildVoiceSummary(
     double totalSales,
@@ -96,29 +96,29 @@ class HomeScreenWidgetService {
             '${transactionCount} बिक्री। '
             '₹${pendingUdhar.toStringAsFixed(0)} उधार बाकी। '
             'सुखी और फलदायक दिन हो!';
-      
+
       case VoiceLanguage.tamil:
         return 'இன்று ₹${totalSales.toStringAsFixed(0)} சம்பாதித்தீர்கள்। '
             '${transactionCount} விற்பனை। '
             '₹${pendingUdhar.toStringAsFixed(0)} கடன் பாக்கியாக உள்ளது।';
-      
+
       case VoiceLanguage.telugu:
         return 'ఈ రోజు ₹${totalSales.toStringAsFixed(0)} సంపాదించారు। '
             '${transactionCount} విక్రయాలు। '
             '₹${pendingUdhar.toStringAsFixed(0)} సాధన భాకీ ఉంది।';
-      
+
       case VoiceLanguage.kannada:
         return 'ಇಂದು ₹${totalSales.toStringAsFixed(0)} ಸಂಪಾದಿಸಿದ್ದೀರಿ। '
             '${transactionCount} ಮಾರಾಟ। '
             '₹${pendingUdhar.toStringAsFixed(0)} ಸಾಲ ಬಾಕಿ ಇದೆ।';
-      
+
       default:
         return 'Today ₹${totalSales.toStringAsFixed(2)}. '
             '${transactionCount} sales. '
             '₹${pendingUdhar.toStringAsFixed(2)} credit pending.';
     }
   }
-  
+
   /// Speak voice summary
   Future<void> speakSummary(
     double totalSales,
@@ -133,7 +133,7 @@ class HomeScreenWidgetService {
         pendingUdhar,
         language,
       );
-      
+
       // Set language for TTS
       switch (language) {
         case VoiceLanguage.hindi:
@@ -151,14 +151,14 @@ class HomeScreenWidgetService {
         default:
           await _tts.setLanguage('en-US');
       }
-      
+
       await _tts.speak(text);
       debugPrint('$_tag Voice summary spoken');
     } catch (e) {
       debugPrint('$_tag Error speaking summary: $e');
     }
   }
-  
+
   /// Stop speaking
   Future<void> stopSpeaking() async {
     try {
@@ -167,7 +167,7 @@ class HomeScreenWidgetService {
       debugPrint('$_tag Error stopping voice: $e');
     }
   }
-  
+
   /// Dispose TTS
   void dispose() {
     _tts.stop();
@@ -177,16 +177,18 @@ class HomeScreenWidgetService {
 /// Widget launch helper
 class WidgetLaunchHelper {
   static const String _tag = '🏠 WIDGET_LAUNCH';
-  
+
   /// Get voice summary text for widget tap action
   static String getWidgetTapSummary(
     Map<String, dynamic> widgetData,
     VoiceLanguage language,
   ) {
     final totalSales = (widgetData['totalSales'] as num?)?.toDouble() ?? 0.0;
-    final transactionCount = (widgetData['transactionCount'] as num?)?.toInt() ?? 0;
-    final pendingUdhar = (widgetData['pendingUdhar'] as num?)?.toDouble() ?? 0.0;
-    
+    final transactionCount =
+        (widgetData['transactionCount'] as num?)?.toInt() ?? 0;
+    final pendingUdhar =
+        (widgetData['pendingUdhar'] as num?)?.toDouble() ?? 0.0;
+
     final service = HomeScreenWidgetService();
     return service.buildVoiceSummary(
       totalSales,

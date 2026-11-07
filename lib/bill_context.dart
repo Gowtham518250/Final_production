@@ -111,7 +111,8 @@ class BillContext {
 
   bool canAbsorbAnother(double amount, {String? excludingId, DateTime? now}) {
     if (!isActive || isExpired) return false;
-    return tentativeRemaining(excludingId: excludingId, now: now) >= amount - 0.5;
+    return tentativeRemaining(excludingId: excludingId, now: now) >=
+        amount - 0.5;
   }
 
   Duration weakPairWindow(

@@ -8,8 +8,8 @@ class FestivalEntry {
   final DateTime date;
   final int daysWarningBefore;
   final String hindiName;
-  final Map<String, int> productMultipliers;  // category -> multiplier
-  
+  final Map<String, int> productMultipliers; // category -> multiplier
+
   FestivalEntry({
     required this.name,
     required this.date,
@@ -17,11 +17,11 @@ class FestivalEntry {
     required this.hindiName,
     required this.productMultipliers,
   });
-  
+
   int get daysUntil {
     return date.difference(DateTime.now()).inDays;
   }
-  
+
   bool get isUpcoming {
     return daysUntil >= 0 && daysUntil <= daysWarningBefore;
   }
@@ -36,7 +36,7 @@ class StockAlert {
   final int currentStock;
   final int recommendedStock;
   final double estimatedDailyDemand;
-  
+
   StockAlert({
     required this.itemName,
     required this.itemCategory,
@@ -46,7 +46,7 @@ class StockAlert {
     required this.recommendedStock,
     required this.estimatedDailyDemand,
   });
-  
+
   int get stockShortage => (recommendedStock - currentStock).clamp(0, 9999);
   bool get isUrgent => stockShortage > 0;
 }
@@ -54,7 +54,7 @@ class StockAlert {
 /// Festival Calendar for Indian kirana shops
 class FestivalCalendar {
   static const String _tag = '🪔 FESTIVAL_CALENDAR';
-  
+
   static List<FestivalEntry> get festivals => [
     // Ganesh Chaturthi (August/September)
     FestivalEntry(
@@ -70,7 +70,7 @@ class FestivalCalendar {
         'puja_items': 8,
       },
     ),
-    
+
     // Diwali (October/November)
     FestivalEntry(
       name: 'Diwali',
@@ -86,7 +86,7 @@ class FestivalCalendar {
         'namkeen': 6,
       },
     ),
-    
+
     // Eid
     FestivalEntry(
       name: 'Eid',
@@ -101,7 +101,7 @@ class FestivalCalendar {
         'meat': 3,
       },
     ),
-    
+
     // Holi (March/April)
     FestivalEntry(
       name: 'Holi',
@@ -116,7 +116,7 @@ class FestivalCalendar {
         'milk': 3,
       },
     ),
-    
+
     // Navratri (September/October)
     FestivalEntry(
       name: 'Navratri',
@@ -131,7 +131,7 @@ class FestivalCalendar {
         'potatoes': 4,
       },
     ),
-    
+
     // Christmas (December)
     FestivalEntry(
       name: 'Christmas',
@@ -146,7 +146,7 @@ class FestivalCalendar {
         'gifts': 8,
       },
     ),
-    
+
     // Pongal / Makar Sankranti (January)
     FestivalEntry(
       name: 'Makar Sankranti / Pongal',
@@ -162,15 +162,13 @@ class FestivalCalendar {
       },
     ),
   ];
-  
+
   /// Get upcoming festivals within N days
   static List<FestivalEntry> getUpcomingFestivals({int days = 15}) {
-    return festivals
-        .where((f) => f.isUpcoming && f.daysUntil <= days)
-        .toList()
-        ..sort((a, b) => a.daysUntil.compareTo(b.daysUntil));
+    return festivals.where((f) => f.isUpcoming && f.daysUntil <= days).toList()
+      ..sort((a, b) => a.daysUntil.compareTo(b.daysUntil));
   }
-  
+
   /// Get stock alerts for inventory items
   static List<StockAlert> getFestivalAlerts({
     required List<InventoryItem> stock,
@@ -178,87 +176,83 @@ class FestivalCalendar {
   }) {
     final alerts = <StockAlert>[];
     final upcoming = getUpcomingFestivals();
-    
+
     if (upcoming.isEmpty) return alerts;
-    
+
     for (final festival in upcoming) {
       for (final item in stock) {
         // Check if item category has multiplier for this festival
-        final multiplier = festival.productMultipliers[item.category ?? 'general'] ?? 0;
+        final multiplier =
+            festival.productMultipliers[item.category ?? 'general'] ?? 0;
         if (multiplier == 0) continue;
-        
+
         // Calculate average daily sales from history
         final avgDailySales = _calculateAvgDailySales(item.sku, salesHistory);
-        
+
         // Expected demand = avg × multiplier × 7 days (typical festive week)
         final expectedDemand = avgDailySales * multiplier * 7;
-        final minSafeStock = (expectedDemand * 0.5).toInt();  // 50% as minimum safe
-        
+        final minSafeStock = (expectedDemand * 0.5)
+            .toInt(); // 50% as minimum safe
+
         if (item.currentStock < minSafeStock) {
-          alerts.add(StockAlert(
-            itemName: item.name,
-            itemCategory: item.category ?? 'general',
-            festivalName: festival.name,
-            daysUntilFestival: festival.daysUntil,
-            currentStock: item.currentStock,
-            recommendedStock: minSafeStock,
-            estimatedDailyDemand: avgDailySales * multiplier,
-          ));
+          alerts.add(
+            StockAlert(
+              itemName: item.name,
+              itemCategory: item.category ?? 'general',
+              festivalName: festival.name,
+              daysUntilFestival: festival.daysUntil,
+              currentStock: item.currentStock,
+              recommendedStock: minSafeStock,
+              estimatedDailyDemand: avgDailySales * multiplier,
+            ),
+          );
         }
       }
     }
-    
+
     // Sort by urgency and days
     alerts.sort((a, b) {
       if (a.isUrgent && !b.isUrgent) return -1;
       if (!a.isUrgent && b.isUrgent) return 1;
       return a.daysUntilFestival.compareTo(b.daysUntilFestival);
     });
-    
+
     return alerts;
   }
-  
+
   /// Calculate average daily sales for an item
-  static double _calculateAvgDailySales(
-    String sku,
-    List<Sale> salesHistory,
-  ) {
+  static double _calculateAvgDailySales(String sku, List<Sale> salesHistory) {
     if (salesHistory.isEmpty) return 1.0;
-    
-    final relevant = salesHistory
-        .where((s) => s.sku == sku)
-        .toList();
-    
+
+    final relevant = salesHistory.where((s) => s.sku == sku).toList();
+
     if (relevant.isEmpty) return 1.0;
-    
+
     final total = relevant.fold<int>(0, (sum, s) => sum + (s.quantity ?? 1));
     final days = relevant
         .map((s) => (s.date as DateTime).day)
         .toSet()
         .length
         .clamp(1, 365);
-    
+
     return total / days;
   }
-  
+
   /// Build festival alert message for UI
-  static String buildAlertMessage(
-    StockAlert alert,
-    VoiceLanguage language,
-  ) {
+  static String buildAlertMessage(StockAlert alert, VoiceLanguage language) {
     switch (language) {
       case VoiceLanguage.hindi:
         return '🎉 ${alert.festivalName} में ${alert.daysUntilFestival} दिन बाकी\n'
             '${alert.itemName} स्टॉक करें!\n'
             'अभी: ${alert.currentStock}, सुझाव: ${alert.recommendedStock}\n'
             'रोज़ाना की उम्मीद: ${alert.estimatedDailyDemand.toStringAsFixed(0)} यूनिट';
-      
+
       case VoiceLanguage.tamil:
         return '🎉 ${alert.festivalName}க்கு ${alert.daysUntilFestival} நாட்கள் உள்ளது\n'
             '${alert.itemName} சேகரிக்க வேண்டும்!\n'
             'தற்போது: ${alert.currentStock}, பரிந்துரை: ${alert.recommendedStock}\n'
             'நாளை: ${alert.estimatedDailyDemand.toStringAsFixed(0)} யூனிட்';
-      
+
       default:
         return '🎉 ${alert.festivalName} in ${alert.daysUntilFestival} days\n'
             'Stock up ${alert.itemName}!\n'
@@ -274,7 +268,7 @@ class InventoryItem {
   final String name;
   final String? category;
   final int currentStock;
-  
+
   InventoryItem({
     required this.sku,
     required this.name,
@@ -287,10 +281,6 @@ class Sale {
   final String sku;
   final int? quantity;
   final DateTime date;
-  
-  Sale({
-    required this.sku,
-    this.quantity = 1,
-    required this.date,
-  });
+
+  Sale({required this.sku, this.quantity = 1, required this.date});
 }

@@ -103,43 +103,43 @@ void main() {
       );
     });
 
-    test('two identical lines in one invoice stay two lines after mirror merge', () {
-      final local = <String, dynamic>{
-        'sale_id': 'SALE_REPEAT_1',
-        'invoice_number': 'BILL-REPEAT-1',
-        'total_amount': 200,
-        'items': [
-          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
-          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
-        ],
-        'updated_at': '2026-11-01T10:00:00Z',
-        'sync_status': 'synced',
-      };
-      final remote = <String, dynamic>{
-        'invoice_number': 'BILL-REPEAT-1',
-        'invoice_id': 501,
-        'total_amount': 200,
-        'line_items': [
-          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
-          {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
-        ],
-        'updated_at': '2026-11-01T09:00:00Z',
-        'sync_status': 'synced',
-      };
+    test(
+      'two identical lines in one invoice stay two lines after mirror merge',
+      () {
+        final local = <String, dynamic>{
+          'sale_id': 'SALE_REPEAT_1',
+          'invoice_number': 'BILL-REPEAT-1',
+          'total_amount': 200,
+          'items': [
+            {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+            {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+          ],
+          'updated_at': '2026-11-01T10:00:00Z',
+          'sync_status': 'synced',
+        };
+        final remote = <String, dynamic>{
+          'invoice_number': 'BILL-REPEAT-1',
+          'invoice_id': 501,
+          'total_amount': 200,
+          'line_items': [
+            {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+            {'product_name': 'Rice', 'quantity': 1, 'unit_price': 100},
+          ],
+          'updated_at': '2026-11-01T09:00:00Z',
+          'sync_status': 'synced',
+        };
 
-      final result = CacheConsistencyService.mergeLists(
-        [local],
-        [remote],
-        dataset: 'sales',
-      );
+        final result = CacheConsistencyService.mergeLists(
+          [local],
+          [remote],
+          dataset: 'sales',
+        );
 
-      expect(result, hasLength(1));
-      expect(
-        (result.single['items'] as List),
-        hasLength(2),
-      );
-      expect(result.single['invoice_id'], 501);
-    });
+        expect(result, hasLength(1));
+        expect((result.single['items'] as List), hasLength(2));
+        expect(result.single['invoice_id'], 501);
+      },
+    );
 
     test('both items and line_items contribute unique partial lines', () {
       final row = <String, dynamic>{
@@ -184,8 +184,10 @@ void main() {
       );
 
       expect(result, hasLength(2));
-      expect(result.map((row) => row['invoice_number']).toSet(),
-          containsAll(['BILL-A', 'BILL-B']));
+      expect(
+        result.map((row) => row['invoice_number']).toSet(),
+        containsAll(['BILL-A', 'BILL-B']),
+      );
     });
 
     test('customers sharing a phone remain separate without stable IDs', () {
@@ -207,8 +209,10 @@ void main() {
       );
 
       expect(result, hasLength(2));
-      expect(result.map((row) => row['name']).toSet(),
-          containsAll(['Anita', 'Ravi']));
+      expect(
+        result.map((row) => row['name']).toSet(),
+        containsAll(['Anita', 'Ravi']),
+      );
     });
 
     test('customer local and server aliases merge when stable IDs match', () {
@@ -255,20 +259,23 @@ void main() {
       expect(result, hasLength(2));
     });
 
-    test('incomplete but identified sale is retained by persistence dedupe', () {
-      final incomplete = <String, dynamic>{
-        'sale_id': 'SALE_INCOMPLETE_1',
-        'invoice_number': 'BILL-INCOMPLETE-1',
-        'status': 'PENDING',
-        'customer_phone': '9876543210',
-        'items': <dynamic>[],
-      };
+    test(
+      'incomplete but identified sale is retained by persistence dedupe',
+      () {
+        final incomplete = <String, dynamic>{
+          'sale_id': 'SALE_INCOMPLETE_1',
+          'invoice_number': 'BILL-INCOMPLETE-1',
+          'status': 'PENDING',
+          'customer_phone': '9876543210',
+          'items': <dynamic>[],
+        };
 
-      final result = SalesDedupHelper.dedupeBills([incomplete]);
+        final result = SalesDedupHelper.dedupeBills([incomplete]);
 
-      expect(result, hasLength(1));
-      expect(result.single['sale_id'], 'SALE_INCOMPLETE_1');
-    });
+        expect(result, hasLength(1));
+        expect(result.single['sale_id'], 'SALE_INCOMPLETE_1');
+      },
+    );
 
     test('distinct stable invoice aliases stay as separate transactions', () {
       final rows = <Map<String, dynamic>>[

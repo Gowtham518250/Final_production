@@ -47,8 +47,9 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
       _error = null;
     });
     try {
-      final response = await ApiClient.getJson('/api/reports/daily')
-          .timeout(const Duration(seconds: 12));
+      final response = await ApiClient.getJson(
+        '/api/reports/daily',
+      ).timeout(const Duration(seconds: 12));
       final report = _asMap(_asMap(response)['report']);
       if (report.isEmpty || report['report_date'] == null) {
         throw const FormatException('Daily summary response is incomplete.');
@@ -57,7 +58,10 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
       setState(() => _report = report);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Daily summary is unavailable. Check connection and retry.');
+      setState(
+        () => _error =
+            'Daily summary is unavailable. Check connection and retry.',
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -164,29 +168,40 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
           'Credit invoices',
           dueInvoices.isEmpty
               ? 'None outstanding'
-              : dueInvoices.take(8).map((row) {
-                  final item = _asMap(row);
-                  return '${item['invoice_number'] ?? item['invoice_id']}: ${_money(item['outstanding_amount'])}';
-                }).join(' · '),
+              : dueInvoices
+                    .take(8)
+                    .map((row) {
+                      final item = _asMap(row);
+                      return '${item['invoice_number'] ?? item['invoice_id']}: ${_money(item['outstanding_amount'])}';
+                    })
+                    .join(' · '),
         ),
         _sourceLine(
           'Low stock items',
           lowStock.isEmpty
               ? 'None'
-              : lowStock.take(8).map((row) {
-                  final item = _asMap(row);
-                  return '${item['product_name'] ?? item['product_id']} (${item['current_stock']}/${item['minimum_stock']})';
-                }).join(' · '),
+              : lowStock
+                    .take(8)
+                    .map((row) {
+                      final item = _asMap(row);
+                      return '${item['product_name'] ?? item['product_id']} (${item['current_stock']}/${item['minimum_stock']})';
+                    })
+                    .join(' · '),
         ),
         _sourceLine(
           'Expiry / batch alerts',
           expiryAlerts.isEmpty
               ? 'None within 30 days'
-              : expiryAlerts.take(8).map((row) {
-                  final item = _asMap(row);
-                  final state = item['expired'] == true ? 'EXPIRED' : 'expires ${item['expiry_date']}';
-                  return '${item['product_name'] ?? item['product_id']}: $state, qty ${item['quantity']}';
-                }).join(' · '),
+              : expiryAlerts
+                    .take(8)
+                    .map((row) {
+                      final item = _asMap(row);
+                      final state = item['expired'] == true
+                          ? 'EXPIRED'
+                          : 'expires ${item['expiry_date']}';
+                      return '${item['product_name'] ?? item['product_id']}: $state, qty ${item['quantity']}';
+                    })
+                    .join(' · '),
         ),
         _sourceLine(
           'Expired stock units',
@@ -274,7 +289,10 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
                       SizedBox(height: 2),
                       Text(
                         'From invoices, payments, expenses and inventory',
-                        style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                        ),
                       ),
                     ],
                   ),
@@ -305,7 +323,10 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
                   children: [
                     Text(
                       _error ?? 'Loading daily summary…',
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
                     ),
                     if (_error != null)
                       TextButton.icon(
@@ -383,7 +404,10 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
                     value: '${_number(report['stock_alert_count']).toInt()}',
                     detail: _asList(report['low_stock_products'])
                         .take(2)
-                        .map((row) => _asMap(row)['product_name']?.toString() ?? '')
+                        .map(
+                          (row) =>
+                              _asMap(row)['product_name']?.toString() ?? '',
+                        )
                         .where((name) => name.isNotEmpty)
                         .join(', '),
                     tint: const Color(0xFFDC2626),
@@ -402,7 +426,11 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.event_busy_rounded, size: 17, color: Color(0xFFB45309)),
+                      const Icon(
+                        Icons.event_busy_rounded,
+                        size: 17,
+                        color: Color(0xFFB45309),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -420,12 +448,19 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.receipt_long_outlined, size: 14, color: Color(0xFF64748B)),
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 14,
+                    color: Color(0xFF64748B),
+                  ),
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
                       '${_number(report['bill_count']).toInt()} recognized invoices · Cash ${_money(collections['cash'])} · UPI/transfer ${_money(collections['upi'])} · Card ${_money(collections['card'])}',
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                   ),
                 ],
@@ -446,7 +481,10 @@ class _DailyBusinessSummaryCardState extends State<DailyBusinessSummaryCard> {
               if (_error != null)
                 Text(
                   'Showing the last loaded figures; refresh failed.',
-                  style: const TextStyle(fontSize: 10, color: Color(0xFFB45309)),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFFB45309),
+                  ),
                 ),
             ],
           ],

@@ -10,10 +10,10 @@ import 'local_storage_service.dart';
 /// No extra packages needed — uses a repeating daily timer approach.
 class DailySummaryNotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
-  static const _channelId   = 'daily_summary_channel';
+  static const _channelId = 'daily_summary_channel';
   static const _channelName = '\u0c30ోజూ స్టేట్మెంట్ | Daily Summary';
-  static const _notifId     = 9900;
-  static const _prefKey     = 'daily_summary_last_scheduled_date';
+  static const _notifId = 9900;
+  static const _prefKey = 'daily_summary_last_scheduled_date';
 
   static bool _channelCreated = false;
 
@@ -27,8 +27,8 @@ class DailySummaryNotificationService {
     try {
       await _ensureChannel();
 
-      final prefs  = await SharedPreferences.getInstance();
-      final today  = DateTime.now();
+      final prefs = await SharedPreferences.getInstance();
+      final today = DateTime.now();
       final todayStr = '${today.year}-${today.month}-${today.day}';
 
       // Only schedule once per day
@@ -43,7 +43,9 @@ class DailySummaryNotificationService {
       final delay = target.difference(today);
 
       if (kDebugMode) {
-        debugPrint('\u2705 Daily summary notification scheduled in \${delay.inMinutes} min');
+        debugPrint(
+          '\u2705 Daily summary notification scheduled in \${delay.inMinutes} min',
+        );
       }
 
       // Do not capture dashboard values at scheduling time. The shop can
@@ -65,7 +67,8 @@ class DailySummaryNotificationService {
               '\${bestProduct.isNotEmpty ? " | Best: $bestProduct" : ""}';
 
           await _showNow(
-            title: '\u0c2a\u0c4d\u0c30\u0c24\u0c3f\u0c30\u0c4b\u0c1c\u0c42 \u0c30\u0c3f\u0c2a\u0c4b\u0c30\u0c4d\u0c1f\u0c4d \ud83d\udcca | Daily Report',
+            title:
+                '\u0c2a\u0c4d\u0c30\u0c24\u0c3f\u0c30\u0c4b\u0c1c\u0c42 \u0c30\u0c3f\u0c2a\u0c4b\u0c30\u0c4d\u0c1f\u0c4d \ud83d\udcca | Daily Report',
             body: teluguBody,
           );
 
@@ -83,7 +86,10 @@ class DailySummaryNotificationService {
     }
   }
 
-  static Future<void> _showNow({required String title, required String body}) async {
+  static Future<void> _showNow({
+    required String title,
+    required String body,
+  }) async {
     const androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
@@ -105,7 +111,8 @@ class DailySummaryNotificationService {
 
     final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidPlugin != null) {
       const channel = AndroidNotificationChannel(
         _channelId,
@@ -120,7 +127,7 @@ class DailySummaryNotificationService {
 
   static String _formatAmount(double v) {
     if (v >= 100000) return '${(v / 100000).toStringAsFixed(1)}L';
-    if (v >= 1000)   return '${(v / 1000).toStringAsFixed(1)}K';
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
     return v.toStringAsFixed(0);
   }
 }

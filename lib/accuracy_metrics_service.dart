@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AccuracyMetricsService {
   static const String _metricsKey = 'voice_accuracy_metrics_v2';
   static const String _testResultsKey = 'voice_test_results_v2';
-  
+
   /// Record a voice recognition session
   static Future<void> recordSession({
     required String languageCode,
@@ -24,7 +24,7 @@ class AccuracyMetricsService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final metrics = prefs.getStringList(_metricsKey) ?? [];
-      
+
       final session = json.encode({
         'timestamp': DateTime.now().toIso8601String(),
         'language': languageCode,
@@ -38,35 +38,39 @@ class AccuracyMetricsService {
         if (transcript != null) 'transcript': transcript,
         if (parsedItems != null) 'parsed_items': parsedItems,
       });
-      
+
       metrics.add(session);
-      
+
       // Keep only last 1000 sessions
       if (metrics.length > 1000) {
         metrics.removeRange(0, metrics.length - 1000);
       }
-      
+
       await prefs.setStringList(_metricsKey, metrics);
-      
+
       if (kDebugMode) {
-        debugPrint('📊 Recorded session: $languageCode, accuracy: ${((itemsParsed > 0 ? itemsCorrect / itemsParsed : 0.0) * 100).toInt()}%');
+        debugPrint(
+          '📊 Recorded session: $languageCode, accuracy: ${((itemsParsed > 0 ? itemsCorrect / itemsParsed : 0.0) * 100).toInt()}%',
+        );
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to record session: $e');
     }
   }
-  
+
   /// Get accuracy statistics for a language
-  static Future<Map<String, dynamic>> getLanguageStats(String languageCode) async {
+  static Future<Map<String, dynamic>> getLanguageStats(
+    String languageCode,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final metrics = prefs.getStringList(_metricsKey) ?? [];
-      
+
       final languageMetrics = metrics.where((entry) {
         final data = json.decode(entry);
         return data['language'] == languageCode;
       }).toList();
-      
+
       if (languageMetrics.isEmpty) {
         return {
           'language': languageCode,
@@ -78,7 +82,7 @@ class AccuracyMetricsService {
           'cloud_usage_rate': 0.0,
         };
       }
-      
+
       double totalSTTConfidence = 0.0;
       double totalNLPConfidence = 0.0;
       double totalAccuracy = 0.0;
@@ -86,7 +90,7 @@ class AccuracyMetricsService {
       int cloudUsage = 0;
       int totalItemsParsed = 0;
       int totalItemsCorrect = 0;
-      
+
       for (final entry in languageMetrics) {
         final data = json.decode(entry);
         totalSTTConfidence += (data['stt_confidence'] as num).toDouble();
@@ -97,9 +101,9 @@ class AccuracyMetricsService {
         totalItemsParsed += (data['items_parsed'] as int);
         totalItemsCorrect += (data['items_correct'] as int);
       }
-      
+
       final count = languageMetrics.length;
-      
+
       return {
         'language': languageCode,
         'total_sessions': count,
@@ -110,20 +114,22 @@ class AccuracyMetricsService {
         'cloud_usage_rate': cloudUsage / count,
         'total_items_parsed': totalItemsParsed,
         'total_items_correct': totalItemsCorrect,
-        'items_accuracy': totalItemsParsed > 0 ? totalItemsCorrect / totalItemsParsed : 0.0,
+        'items_accuracy': totalItemsParsed > 0
+            ? totalItemsCorrect / totalItemsParsed
+            : 0.0,
       };
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to get language stats: $e');
       return {};
     }
   }
-  
+
   /// Get overall statistics across all languages
   static Future<Map<String, dynamic>> getOverallStats() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final metrics = prefs.getStringList(_metricsKey) ?? [];
-      
+
       if (metrics.isEmpty) {
         return {
           'total_sessions': 0,
@@ -131,11 +137,11 @@ class AccuracyMetricsService {
           'overall_avg_accuracy': 0.0,
         };
       }
-      
+
       final Map<String, int> languageCount = {};
       double totalAccuracy = 0.0;
       int cloudUsage = 0;
-      
+
       for (final entry in metrics) {
         final data = json.decode(entry);
         final lang = data['language'] as String? ?? 'unknown';
@@ -143,7 +149,7 @@ class AccuracyMetricsService {
         totalAccuracy += (data['overall_accuracy'] as num).toDouble();
         if (data['used_cloud_stt'] == true) cloudUsage++;
       }
-      
+
       return {
         'total_sessions': metrics.length,
         'languages_used': languageCount.length,
@@ -156,7 +162,7 @@ class AccuracyMetricsService {
       return {};
     }
   }
-  
+
   /// Record a controlled test result
   static Future<void> recordTestResult({
     required String testId,
@@ -169,20 +175,20 @@ class AccuracyMetricsService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final testResults = prefs.getStringList(_testResultsKey) ?? [];
-      
+
       // Calculate word error rate
       final expectedWords = expectedTranscript.toLowerCase().split(' ');
       final actualWords = actualTranscript.toLowerCase().split(' ');
       int correctWords = 0;
-      
+
       for (final word in actualWords) {
         if (expectedWords.contains(word)) correctWords++;
       }
-      
-      final wordErrorRate = expectedWords.isNotEmpty 
-          ? (expectedWords.length - correctWords) / expectedWords.length 
+
+      final wordErrorRate = expectedWords.isNotEmpty
+          ? (expectedWords.length - correctWords) / expectedWords.length
           : 0.0;
-      
+
       final testResult = json.encode({
         'test_id': testId,
         'timestamp': DateTime.now().toIso8601String(),
@@ -194,35 +200,39 @@ class AccuracyMetricsService {
         'word_error_rate': wordErrorRate,
         'accuracy': 1.0 - wordErrorRate,
       });
-      
+
       testResults.add(testResult);
-      
+
       // Keep only last 500 test results
       if (testResults.length > 500) {
         testResults.removeRange(0, testResults.length - 500);
       }
-      
+
       await prefs.setStringList(_testResultsKey, testResults);
-      
+
       if (kDebugMode) {
-        debugPrint('🧪 Recorded test: $testId, accuracy: ${((1.0 - wordErrorRate) * 100).toInt()}%');
+        debugPrint(
+          '🧪 Recorded test: $testId, accuracy: ${((1.0 - wordErrorRate) * 100).toInt()}%',
+        );
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to record test result: $e');
     }
   }
-  
+
   /// Get test results for a language
-  static Future<Map<String, dynamic>> getTestResults(String languageCode) async {
+  static Future<Map<String, dynamic>> getTestResults(
+    String languageCode,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final testResults = prefs.getStringList(_testResultsKey) ?? [];
-      
+
       final languageTests = testResults.where((entry) {
         final data = json.decode(entry);
         return data['language'] == languageCode;
       }).toList();
-      
+
       if (languageTests.isEmpty) {
         return {
           'language': languageCode,
@@ -231,20 +241,20 @@ class AccuracyMetricsService {
           'avg_word_error_rate': 0.0,
         };
       }
-      
+
       double totalAccuracy = 0.0;
       double totalWER = 0.0;
       int cloudTests = 0;
-      
+
       for (final entry in languageTests) {
         final data = json.decode(entry);
         totalAccuracy += (data['accuracy'] as num).toDouble();
         totalWER += (data['word_error_rate'] as num).toDouble();
         if (data['used_cloud_stt'] == true) cloudTests++;
       }
-      
+
       final count = languageTests.length;
-      
+
       return {
         'language': languageCode,
         'total_tests': count,
@@ -257,18 +267,29 @@ class AccuracyMetricsService {
       return {};
     }
   }
-  
+
   /// Generate accuracy report
   static Future<Map<String, dynamic>> generateAccuracyReport() async {
     try {
       final overallStats = await getOverallStats();
-      
+
       final languageReports = <String, dynamic>{};
-      
-      for (final lang in ['en-IN', 'hi-IN', 'ta-IN', 'te-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'bn-IN', 'gu-IN', 'pa-IN']) {
+
+      for (final lang in [
+        'en-IN',
+        'hi-IN',
+        'ta-IN',
+        'te-IN',
+        'kn-IN',
+        'ml-IN',
+        'mr-IN',
+        'bn-IN',
+        'gu-IN',
+        'pa-IN',
+      ]) {
         final langStats = await getLanguageStats(lang);
         final testResults = await getTestResults(lang);
-        
+
         if (langStats['total_sessions'] > 0 || testResults['total_tests'] > 0) {
           languageReports[lang] = {
             'session_stats': langStats,
@@ -276,7 +297,7 @@ class AccuracyMetricsService {
           };
         }
       }
-      
+
       return {
         'generated_at': DateTime.now().toIso8601String(),
         'overall_stats': overallStats,
@@ -287,16 +308,16 @@ class AccuracyMetricsService {
       return {};
     }
   }
-  
+
   /// Clear all metrics (for testing)
   static Future<void> clearMetrics() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_metricsKey);
     await prefs.remove(_testResultsKey);
-    
+
     if (kDebugMode) debugPrint('🗑️ Cleared accuracy metrics');
   }
-  
+
   /// Export metrics as JSON string
   static Future<String> exportMetrics() async {
     final report = await generateAccuracyReport();

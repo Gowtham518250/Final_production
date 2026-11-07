@@ -39,7 +39,8 @@ class RetentionSnapshot {
     final today = DateTime(now.year, now.month, now.day);
     final days = today.difference(lastDate).inDays;
     if (days == 0) return 'You recorded a bill today. Strong retention signal.';
-    if (days == 1) return 'You billed yesterday. One more today keeps momentum.';
+    if (days == 1)
+      return 'You billed yesterday. One more today keeps momentum.';
     return 'Last bill was $days days ago — open Sales when you have a moment.';
   }
 }
@@ -87,7 +88,8 @@ class RetailGrowthKit {
     final p = await SharedPreferences.getInstance();
     await ensureFirstOpenStamp();
     return RetentionSnapshot(
-      firstOpenMs: p.getInt(kFirstOpenMs) ?? DateTime.now().millisecondsSinceEpoch,
+      firstOpenMs:
+          p.getInt(kFirstOpenMs) ?? DateTime.now().millisecondsSinceEpoch,
       billsCompleted: p.getInt(kBillCount) ?? 0,
       lastBillMs: p.getInt(kLastBillMs),
       lastAppOpenMs: p.getInt(kLastOpenMs),
@@ -110,7 +112,10 @@ class RetailGrowthKit {
     await p.setBool(kFocusOnboardingDone, true);
   }
 
-  static Future<void> presentFocusSetupSheet(BuildContext context, {bool locking = false}) async {
+  static Future<void> presentFocusSetupSheet(
+    BuildContext context, {
+    bool locking = false,
+  }) async {
     final initial = await getShopFocus();
     if (!context.mounted) return;
     await showModalBottomSheet<void>(
@@ -139,16 +144,25 @@ class RetailGrowthKit {
                   children: [
                     Text(
                       'What do you run?',
-                      style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w800),
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'We highlight the flows that usually matter most for your type of shop. You can change this anytime.',
-                      style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[700], height: 1.35),
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        height: 1.35,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.42),
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(ctx).size.height * 0.42,
+                      ),
                       child: ListView(
                         shrinkWrap: true,
                         children: focusLabels.entries
@@ -160,7 +174,10 @@ class RetailGrowthKit {
                                 onChanged: (v) => setSt(() => selected = v!),
                                 title: Text(
                                   e.value,
-                                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             )
@@ -223,4 +240,3 @@ class RetailGrowthKit {
     }
   }
 }
-

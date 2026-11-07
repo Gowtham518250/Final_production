@@ -39,15 +39,17 @@ class OnlineOrdersListener {
     _started = true;
 
     final prefs = await SharedPreferences.getInstance();
-    final role = (prefs.getString('role') ??
-            prefs.getString('user_role') ??
-            prefs.getString('user_type') ??
-            '')
-        .trim()
-        .toLowerCase();
+    final role =
+        (prefs.getString('role') ??
+                prefs.getString('user_role') ??
+                prefs.getString('user_type') ??
+                '')
+            .trim()
+            .toLowerCase();
     if (role == 'customer') return;
 
-    _shopId = (prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0).toString();
+    _shopId = (prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0)
+        .toString();
     if (_shopId.isEmpty || _shopId == '0') {
       _started = false;
       return;
@@ -66,7 +68,8 @@ class OnlineOrdersListener {
       OnlineOrderService.tryMatchOnlineOrderPayment(event, _shopId);
     });
 
-    if (kDebugMode) debugPrint('✅ OnlineOrdersListener started for shop $_shopId');
+    if (kDebugMode)
+      debugPrint('✅ OnlineOrdersListener started for shop $_shopId');
   }
 
   void _onPendingOrders(QuerySnapshot snap) {
@@ -81,11 +84,13 @@ class OnlineOrdersListener {
 
       final total = (d['total_amount'] as num?)?.toDouble() ?? 0;
       final email = d['customer_email']?.toString() ?? 'Customer';
-      unawaited(OnlineOrderService.notifyNewOrderForOwner(
-        orderId: id,
-        total: total,
-        customerEmail: email,
-      ));
+      unawaited(
+        OnlineOrderService.notifyNewOrderForOwner(
+          orderId: id,
+          total: total,
+          customerEmail: email,
+        ),
+      );
     }
   }
 

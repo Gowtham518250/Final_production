@@ -19,22 +19,32 @@ class ShopLocationsMap extends StatelessWidget {
   static List<Map<String, dynamic>> shopsWithCoordinates(
     List<Map<String, dynamic>> shops,
   ) {
-    return shops.where((shop) {
-      final latitude = _coordinate(shop, const ['latitude', 'shop_latitude']);
-      final longitude = _coordinate(shop, const ['longitude', 'shop_longitude']);
-      return latitude != null &&
-          longitude != null &&
-          latitude >= -90 &&
-          latitude <= 90 &&
-          longitude >= -180 &&
-          longitude <= 180;
-    }).toList(growable: false);
+    return shops
+        .where((shop) {
+          final latitude = _coordinate(shop, const [
+            'latitude',
+            'shop_latitude',
+          ]);
+          final longitude = _coordinate(shop, const [
+            'longitude',
+            'shop_longitude',
+          ]);
+          return latitude != null &&
+              longitude != null &&
+              latitude >= -90 &&
+              latitude <= 90 &&
+              longitude >= -180 &&
+              longitude <= 180;
+        })
+        .toList(growable: false);
   }
 
   static double? _coordinate(Map<String, dynamic> shop, List<String> keys) {
     for (final key in keys) {
       final value = shop[key];
-      final parsed = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
+      final parsed = value is num
+          ? value.toDouble()
+          : double.tryParse(value?.toString() ?? '');
       if (parsed != null) return parsed;
     }
     return null;
@@ -45,31 +55,39 @@ class ShopLocationsMap extends StatelessWidget {
     final located = shopsWithCoordinates(shops);
     if (located.isEmpty) return const SizedBox.shrink();
 
-    final points = located.map((shop) {
-      return LatLng(
-        _coordinate(shop, const ['latitude', 'shop_latitude'])!,
-        _coordinate(shop, const ['longitude', 'shop_longitude'])!,
-      );
-    }).toList(growable: false);
+    final points = located
+        .map((shop) {
+          return LatLng(
+            _coordinate(shop, const ['latitude', 'shop_latitude'])!,
+            _coordinate(shop, const ['longitude', 'shop_longitude'])!,
+          );
+        })
+        .toList(growable: false);
 
-    final latitude = points.map((point) => point.latitude).reduce((a, b) => a + b) / points.length;
-    final longitude = points.map((point) => point.longitude).reduce((a, b) => a + b) / points.length;
-    final latSpan = points.map((point) => point.latitude).reduce((a, b) => a > b ? a : b) -
+    final latitude =
+        points.map((point) => point.latitude).reduce((a, b) => a + b) /
+        points.length;
+    final longitude =
+        points.map((point) => point.longitude).reduce((a, b) => a + b) /
+        points.length;
+    final latSpan =
+        points.map((point) => point.latitude).reduce((a, b) => a > b ? a : b) -
         points.map((point) => point.latitude).reduce((a, b) => a < b ? a : b);
-    final lngSpan = points.map((point) => point.longitude).reduce((a, b) => a > b ? a : b) -
+    final lngSpan =
+        points.map((point) => point.longitude).reduce((a, b) => a > b ? a : b) -
         points.map((point) => point.longitude).reduce((a, b) => a < b ? a : b);
     final span = latSpan > lngSpan ? latSpan : lngSpan;
     final zoom = points.length == 1
         ? 15.0
         : span > 1.5
-            ? 6.5
-            : span > 0.5
-                ? 8.5
-                : span > 0.15
-                    ? 10.5
-                    : span > 0.04
-                        ? 12.0
-                        : 13.5;
+        ? 6.5
+        : span > 0.5
+        ? 8.5
+        : span > 0.15
+        ? 10.5
+        : span > 0.04
+        ? 12.0
+        : 13.5;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -125,7 +143,11 @@ class ShopLocationsMap extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const Icon(Icons.location_on, size: 16, color: Color(0xFF1D4ED8)),
+                          const Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Color(0xFF1D4ED8),
+                          ),
                         ],
                       ),
                     ),

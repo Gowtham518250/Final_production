@@ -299,7 +299,9 @@ void main() {
         decision: PaymentDecision.confirmed,
       );
 
-      final guarded = PaymentDetectionService.requireMerchantConfirmation(event);
+      final guarded = PaymentDetectionService.requireMerchantConfirmation(
+        event,
+      );
 
       expect(guarded.decision, PaymentDecision.likely);
       expect(guarded.hasReferenceConflict, isTrue);
@@ -319,8 +321,9 @@ void main() {
         decision: PaymentDecision.confirmed,
       );
 
-      final guarded =
-          PaymentDetectionService.requireMerchantConfirmation(event);
+      final guarded = PaymentDetectionService.requireMerchantConfirmation(
+        event,
+      );
 
       expect(guarded.decision, PaymentDecision.rejected);
       expect(guarded.isMerchantConfirmed, isFalse);

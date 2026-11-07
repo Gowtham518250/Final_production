@@ -71,7 +71,7 @@ void main() {
     });
 
     test(
-      'coalesces cross-source alerts when payer, amount and direction match',
+      'payer, amount and direction alone do not suppress a cross-source alert',
       () {
         final deduper = PaymentAlertDeduplicator();
         final first = event(
@@ -92,13 +92,13 @@ void main() {
             second,
             now: now.add(const Duration(seconds: 2)),
           ),
-          isTrue,
+          isFalse,
         );
       },
     );
 
     test(
-      'same native notification update with a changed payload is suppressed',
+      'same native notification identity with changed payload is suppressed',
       () {
         final deduper = PaymentAlertDeduplicator();
         final postedAt = now.millisecondsSinceEpoch;
@@ -124,35 +124,32 @@ void main() {
       },
     );
 
-    test(
-      'same Truecaller replay without native identity is suppressed briefly',
-      () {
-        final deduper = PaymentAlertDeduplicator();
-        final first = event(
-          id: 'truecaller-first',
-          payerName: 'Anna Devi',
-          accountSuffix: '4222',
-          rawText: 'Anna sent ₹500 to account 4222',
-          detectionSource: 'truecaller_notification',
-        );
-        final replay = event(
-          id: 'truecaller-updated',
-          payerName: 'Anna Devi',
-          accountSuffix: '4222',
-          rawText: '₹500 credited to your account 4222',
-          detectionSource: 'truecaller_notification',
-        );
+    test('same Truecaller replay without native identity remains visible', () {
+      final deduper = PaymentAlertDeduplicator();
+      final first = event(
+        id: 'truecaller-first',
+        payerName: 'Anna Devi',
+        accountSuffix: '4222',
+        rawText: 'Anna sent ₹500 to account 4222',
+        detectionSource: 'truecaller_notification',
+      );
+      final replay = event(
+        id: 'truecaller-updated',
+        payerName: 'Anna Devi',
+        accountSuffix: '4222',
+        rawText: '₹500 credited to your account 4222',
+        detectionSource: 'truecaller_notification',
+      );
 
-        expect(deduper.shouldSuppress(first, now: now), isFalse);
-        expect(
-          deduper.shouldSuppress(
-            replay,
-            now: now.add(const Duration(seconds: 2)),
-          ),
-          isTrue,
-        );
-      },
-    );
+      expect(deduper.shouldSuppress(first, now: now), isFalse);
+      expect(
+        deduper.shouldSuppress(
+          replay,
+          now: now.add(const Duration(seconds: 2)),
+        ),
+        isFalse,
+      );
+    });
 
     test(
       'distinct same-value native notifications from the same payer remain eligible',
@@ -206,7 +203,7 @@ void main() {
     });
 
     test(
-      'two same-value payments pair with two cross-source echoes one-to-one',
+      'same-value cross-source candidates stay visible without shared identity',
       () {
         final deduper = PaymentAlertDeduplicator();
         final postedAt = now.millisecondsSinceEpoch;
@@ -240,7 +237,7 @@ void main() {
             ),
             now: now.add(const Duration(seconds: 2)),
           ),
-          isTrue,
+          isFalse,
         );
         expect(
           deduper.shouldSuppress(
@@ -253,7 +250,7 @@ void main() {
             ),
             now: now.add(const Duration(seconds: 3)),
           ),
-          isTrue,
+          isFalse,
         );
       },
     );
@@ -339,7 +336,7 @@ void main() {
     });
 
     test(
-      'coalesces no-reference alert bursts for fifteen minutes then allows a reminder',
+      'no-reference alert bursts remain visible regardless of matching payer',
       () {
         final deduper = PaymentAlertDeduplicator();
         expect(
@@ -351,7 +348,7 @@ void main() {
             event(payerName: 'Anna', app: PaymentApp.unknown),
             now: now.add(const Duration(minutes: 10)),
           ),
-          isTrue,
+          isFalse,
         );
         expect(
           deduper.shouldSuppress(

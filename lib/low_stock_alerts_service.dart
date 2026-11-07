@@ -39,8 +39,9 @@ class LowStockAlertsService {
   static Future<List<Map<String, dynamic>>> fetchLowStockProductRows({
     int limit = 50,
   }) async {
-    final response =
-        await ApiClient.getJson('/api/inventory/low-stock?limit=$limit');
+    final response = await ApiClient.getJson(
+      '/api/inventory/low-stock?limit=$limit',
+    );
     if (response.statusCode != 200) {
       throw StateError(
         'Low-stock request failed with status ${response.statusCode}.',
@@ -54,7 +55,9 @@ class LowStockAlertsService {
 
     final items = decoded['low_stock_products'] ?? decoded['items'];
     if (items is! List) {
-      throw const FormatException('Low-stock response is missing its item list.');
+      throw const FormatException(
+        'Low-stock response is missing its item list.',
+      );
     }
 
     return items
@@ -77,13 +80,15 @@ class LowStockAlertsService {
   /// Get stock alert details for a product
   static Future<StockAlertDetails?> getStockAlert(int productId) async {
     try {
-      final response = await ApiClient.getJson('/api/inventory/stock-alerts?product_id=$productId');
-      
+      final response = await ApiClient.getJson(
+        '/api/inventory/stock-alerts?product_id=$productId',
+      );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return StockAlertDetails.fromJson(data);
       }
-      
+
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Stock alert details error: $e');
@@ -146,12 +151,10 @@ class LowStockProduct {
   factory LowStockProduct.fromJson(Map<String, dynamic> json) {
     return LowStockProduct(
       productId: _asInteger(json['id'] ?? json['product_id']),
-      productName: json['product_name']?.toString() ??
-          json['name']?.toString() ?? '',
+      productName:
+          json['product_name']?.toString() ?? json['name']?.toString() ?? '',
       sku: json['sku']?.toString() ?? '',
-      currentStock: _asStockNumber(
-        json['current_stock'] ?? json['stock'],
-      ),
+      currentStock: _asStockNumber(json['current_stock'] ?? json['stock']),
       minStock: _asStockNumber(json['min_stock'], fallback: 10),
       reorderLevel: _asStockNumber(json['reorder_level']),
       maxStock: _asStockNumber(json['max_stock']),
@@ -170,9 +173,12 @@ class LowStockProduct {
 
   Color get urgencyColor {
     switch (urgencyLevel) {
-      case 'CRITICAL': return const Color(0xFFDC2626);  // Red
-      case 'HIGH': return const Color(0xFFF97316);      // Orange
-      default: return const Color(0xFFFBBF24);          // Yellow
+      case 'CRITICAL':
+        return const Color(0xFFDC2626); // Red
+      case 'HIGH':
+        return const Color(0xFFF97316); // Orange
+      default:
+        return const Color(0xFFFBBF24); // Yellow
     }
   }
 
@@ -216,9 +222,7 @@ class StockAlertDetails {
     return StockAlertDetails(
       productId: _asInteger(json['id'] ?? json['product_id']),
       productName: json['product_name']?.toString() ?? '',
-      currentStock: _asStockNumber(
-        json['current_stock'] ?? json['stock'],
-      ),
+      currentStock: _asStockNumber(json['current_stock'] ?? json['stock']),
       minStock: _asStockNumber(json['min_stock'], fallback: 10),
       reorderLevel: _asStockNumber(json['reorder_level']),
       lastRestockDate: json['last_restock_date'] != null

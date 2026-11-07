@@ -34,7 +34,6 @@ void main() {
       );
     });
 
-
     test('conflicting transaction reference cannot update the sale ledger', () {
       expect(
         SalePaymentPolicy.resolveDetectedReceiptAmount(
@@ -175,12 +174,15 @@ void main() {
       expect(SalePaymentPolicy.remainingDue(99.51, 100), 0.49);
     });
 
-    test('treats a one-paisa remainder as unpaid and an exact match as paid', () {
-      expect(SalePaymentPolicy.isFullyPaid(99.99, 100), isFalse);
-      expect(SalePaymentPolicy.remainingDue(99.99, 100), 0.01);
-      expect(SalePaymentPolicy.isFullyPaid(100, 100), isTrue);
-      expect(SalePaymentPolicy.remainingDue(100, 100), 0);
-    });
+    test(
+      'treats a one-paisa remainder as unpaid and an exact match as paid',
+      () {
+        expect(SalePaymentPolicy.isFullyPaid(99.99, 100), isFalse);
+        expect(SalePaymentPolicy.remainingDue(99.99, 100), 0.01);
+        expect(SalePaymentPolicy.isFullyPaid(100, 100), isTrue);
+        expect(SalePaymentPolicy.remainingDue(100, 100), 0);
+      },
+    );
 
     test('rejects non-finite or negative POS amounts', () {
       expect(SalePaymentPolicy.isFullyPaid(double.nan, 100), isFalse);

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'local_storage_service.dart';
 import 'sync_service.dart';
+import 'transaction_reconciliation_helper.dart';
 
 class PaidInvoicesPage extends StatefulWidget {
   const PaidInvoicesPage({super.key});
@@ -53,15 +54,23 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
   }
 
   DateTime _dateOf(Map<String, dynamic> invoice) {
-    return DateTime.tryParse(
-          (invoice['paid_at'] ??
-                  invoice['payment_date'] ??
-                  invoice['updated_at'] ??
-                  invoice['business_date'] ??
-                  invoice['invoice_date'] ??
-                  invoice['created_at'] ??
-                  '')
-              .toString(),
+    for (final field in const [
+      'paid_at',
+      'payment_date',
+      'sale_timestamp',
+      'invoice_timestamp',
+      'created_at',
+      'createdAt',
+      'timestamp',
+      'event_timestamp',
+    ]) {
+      final value = invoice[field]?.toString().trim() ?? '';
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) continue;
+      final date = TransactionReconciliationHelper.parseEventTime(value);
+      if (date != null) return date;
+    }
+    return TransactionReconciliationHelper.parseEventTime(
+          invoice['business_date'] ?? invoice['invoice_date'],
         ) ??
         DateTime(1970);
   }

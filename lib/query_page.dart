@@ -51,13 +51,14 @@ class _QueryPageState extends State<QueryPage> {
     try {
       if (selectedFile != null) {
         // Use RAG with file
-        final streamed = await ApiClient.postMultipart(ApiClient.ragEndpoint, {
-          'query': queryController.text.trim(),
-        }, headers: {
-          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
-        }, files: [
-          await http.MultipartFile.fromPath('file', selectedFile!.path),
-        ]);
+        final streamed = await ApiClient.postMultipart(
+          ApiClient.ragEndpoint,
+          {'query': queryController.text.trim()},
+          headers: {if (token.isNotEmpty) 'Authorization': 'Bearer $token'},
+          files: [
+            await http.MultipartFile.fromPath('file', selectedFile!.path),
+          ],
+        );
 
         final body = await streamed.stream.bytesToString();
         if (streamed.statusCode == 200) {
@@ -68,17 +69,22 @@ class _QueryPageState extends State<QueryPage> {
         }
       } else {
         // Query database directly without file
-        final response = await ApiClient.postForm(ApiClient.sqlAnalystEndpoint, {
-          'query': queryController.text.trim(),
-        }, headers: {
-          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
-        }).timeout(const Duration(seconds: 60));
+        final response = await ApiClient.postForm(
+          ApiClient.sqlAnalystEndpoint,
+          {'query': queryController.text.trim()},
+          headers: {if (token.isNotEmpty) 'Authorization': 'Bearer $token'},
+        ).timeout(const Duration(seconds: 60));
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
-          setState(() => reply = 'SQL Query: ${data['Query']}\n\nResult: ${data['Data']}');
+          setState(
+            () => reply =
+                'SQL Query: ${data['Query']}\n\nResult: ${data['Data']}',
+          );
         } else {
-          setState(() => reply = 'Error: ${response.statusCode} - ${response.body}');
+          setState(
+            () => reply = 'Error: ${response.statusCode} - ${response.body}',
+          );
         }
       }
     } catch (e) {
@@ -94,7 +100,9 @@ class _QueryPageState extends State<QueryPage> {
       extendBodyBehindAppBar: true,
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: LiveTranslatedText(AppLocalizations.of(context).askSimpleLanguage),
+        title: LiveTranslatedText(
+          AppLocalizations.of(context).askSimpleLanguage,
+        ),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
@@ -119,10 +127,12 @@ class _QueryPageState extends State<QueryPage> {
                         controller: queryController,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          labelText:
-                              AppLocalizations.of(context).askQuestionHint,
-                          labelStyle:
-                              TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                          labelText: AppLocalizations.of(
+                            context,
+                          ).askQuestionHint,
+                          labelStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
@@ -151,18 +161,24 @@ class _QueryPageState extends State<QueryPage> {
                                     : '${AppLocalizations.of(context).selectFile} (Optional)',
                                 overflow: TextOverflow.ellipsis,
                               ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                                  foregroundColor: const Color(0xFF6366F1),
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                    side: BorderSide(
-                                        color: const Color(0xFF6366F1).withValues(alpha: 0.5)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(
+                                  0xFF6366F1,
+                                ).withValues(alpha: 0.2),
+                                foregroundColor: const Color(0xFF6366F1),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  side: BorderSide(
+                                    color: const Color(
+                                      0xFF6366F1,
+                                    ).withValues(alpha: 0.5),
                                   ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
                                 ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -179,8 +195,9 @@ class _QueryPageState extends State<QueryPage> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                               ),
                               child: isLoading
                                   ? const SizedBox(
@@ -194,7 +211,8 @@ class _QueryPageState extends State<QueryPage> {
                                   : LiveTranslatedText(
                                       AppLocalizations.of(context).askButton,
                                       style: const TextStyle(
-                                          fontWeight: FontWeight.w700),
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                             ),
                           ),
@@ -218,7 +236,9 @@ class _QueryPageState extends State<QueryPage> {
                     borderRadius: BorderRadius.circular(20),
                     child: SingleChildScrollView(
                       child: LiveTranslatedText(
-                        reply.isEmpty ? AppLocalizations.of(context).responseHint : reply,
+                        reply.isEmpty
+                            ? AppLocalizations.of(context).responseHint
+                            : reply,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.9),
                           height: 1.4,

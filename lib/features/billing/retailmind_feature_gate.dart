@@ -192,9 +192,7 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
                             ),
                             child: LiveTranslatedText(
                               'PAID PLAN FEATURE',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
+                              style: Theme.of(context).textTheme.labelSmall
                                   ?.copyWith(
                                     color: colors.onSecondaryContainer,
                                     fontWeight: FontWeight.w800,
@@ -205,16 +203,15 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
                           LiveTranslatedText(
                             featureMessage,
                             textAlign: TextAlign.center,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
+                            style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 10),
                           LiveTranslatedText(
                             'Choose a plan that includes this feature to unlock it.',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(
                                   color: colors.onSurfaceVariant,
                                   height: 1.45,
                                 ),

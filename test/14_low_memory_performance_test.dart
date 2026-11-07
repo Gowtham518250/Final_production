@@ -16,7 +16,10 @@ void main() {
     LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
 
     final cache = PaintingBinding.instance.imageCache;
-    expect(cache.maximumSize, LowMemoryPerformance.lowMemoryMaximumCachedImages);
+    expect(
+      cache.maximumSize,
+      LowMemoryPerformance.lowMemoryMaximumCachedImages,
+    );
     expect(
       cache.maximumSizeBytes,
       LowMemoryPerformance.lowMemoryMaximumDecodedImageCacheBytes,
@@ -44,7 +47,10 @@ void main() {
     );
 
     LowMemoryPerformance.applyDeviceProfile(lowMemory: true);
-    expect(cache.maximumSize, LowMemoryPerformance.lowMemoryMaximumCachedImages);
+    expect(
+      cache.maximumSize,
+      LowMemoryPerformance.lowMemoryMaximumCachedImages,
+    );
     expect(
       cache.maximumSizeBytes,
       LowMemoryPerformance.lowMemoryMaximumDecodedImageCacheBytes,

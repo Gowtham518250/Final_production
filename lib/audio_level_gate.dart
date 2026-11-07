@@ -69,15 +69,19 @@ class AudioLevelGate {
       final nextElapsedMs = index + 1 < _samples.length
           ? _samples[index + 1].elapsedMs
           : elapsedMs;
-      final sampleDurationMs = (nextElapsedMs - sample.elapsedMs)
-          .clamp(0, maxSampleGapMs);
+      final sampleDurationMs = (nextElapsedMs - sample.elapsedMs).clamp(
+        0,
+        maxSampleGapMs,
+      );
       activeMs += sampleDurationMs;
     }
 
     final hasSignal = activeMs >= minActiveMs;
     return AudioLevelVerdict(
       hasSignal: hasSignal,
-      reason: hasSignal ? AudioLevelReason.speechLevel : AudioLevelReason.lowSignal,
+      reason: hasSignal
+          ? AudioLevelReason.speechLevel
+          : AudioLevelReason.lowSignal,
       activeMs: activeMs,
       peakDb: peakDb,
     );

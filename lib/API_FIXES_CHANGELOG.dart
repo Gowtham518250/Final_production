@@ -4,9 +4,9 @@
 
 /// Issue #1: LOGIN ENDPOINT - FIELD NAME MISMATCH
 /// ============================================================================
-/// 
+///
 /// File: decent_login_page.dart
-/// 
+///
 /// ❌ BEFORE (INCORRECT):
 /// ```dart
 /// final response = await ApiClient.postForm('/auth/login', {
@@ -46,7 +46,7 @@
 /// final accessToken = data['access_token'];      // ✅ Correct field
 /// final tokenType = data['token_type'];          // ✅ 'bearer'
 /// final role = data['role'];                     // ✅ 'OWNER', 'STAFF', etc.
-/// 
+///
 /// // Extract userId from JWT 'sub' claim
 /// final payload = json.decode(
 ///   utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
@@ -103,7 +103,7 @@
 /// final accessToken = data['access_token']; // ✅ Correct field
 /// final tokenType = data['token_type'];     // ✅ 'bearer'
 /// final role = data['role'];                // ✅ User role
-/// 
+///
 /// // Extract userId from JWT payload
 /// final payload = json.decode(
 ///   utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
@@ -119,7 +119,7 @@
 /// curl -X 'POST' 'https://retail-mind-vkbp.onrender.com/auth/login' \
 ///   -H 'Content-Type: application/json' \
 ///   -d '{ "username": "TEST_USERNAME_FROM_SECRET_MANAGER", "password": "TEST_PASSWORD_FROM_SECRET_MANAGER" }'
-/// 
+///
 /// Expected Response (200 OK):
 /// {
 ///   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -135,7 +135,7 @@
 ///     "email": "newuser@example.com",
 ///     "password": "SecurePassword123"
 ///   }'
-/// 
+///
 /// Expected Response (200 OK):
 /// {
 ///   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",

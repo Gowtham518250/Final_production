@@ -5,13 +5,16 @@ class InputValidator {
   /// Sanitize user input - remove suspicious characters
   static String sanitizeInput(String? value, {int maxLength = 255}) {
     if (value == null || value.isEmpty) return '';
-    
+
     // Remove potentially dangerous characters (& is allowed for product names like "Salt & Pepper")
     final cleaned = value
-        .replaceAll(RegExp(r'[<>\";%+]'), '') // & removed - legitimate in Indian product names
+        .replaceAll(
+          RegExp(r'[<>\";%+]'),
+          '',
+        ) // & removed - legitimate in Indian product names
         .replaceAll(RegExp(r'\s+'), ' ') // Normalize whitespace
         .trim();
-    
+
     // FIX: Use cleaned.length instead of value.length to avoid RangeError
     // when dangerous characters are removed and string becomes shorter
     return cleaned.substring(0, _min(cleaned.length, maxLength));
@@ -22,10 +25,10 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return 'Price is required';
     }
-    
+
     // Remove non-numeric characters
     final sanitized = value.replaceAll(RegExp(r'[^\d.]'), '');
-    
+
     try {
       final price = double.parse(sanitized);
       if (price <= 0) {
@@ -48,9 +51,9 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return 'Quantity is required';
     }
-    
+
     final sanitized = value.replaceAll(RegExp(r'[^\d.]'), '');
-    
+
     try {
       final qty = double.parse(sanitized);
       if (qty <= 0) {
@@ -73,9 +76,9 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return 'Amount is required';
     }
-    
+
     final sanitized = value.replaceAll(RegExp(r'[^\d.]'), '');
-    
+
     try {
       final amount = double.parse(sanitized);
       if (amount < 0) {
@@ -95,16 +98,16 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return 'Customer name is required';
     }
-    
+
     final sanitized = sanitizeInput(value, maxLength: 100);
-    
+
     if (sanitized.length < 2) {
       return 'Name must be at least 2 characters';
     }
     if (sanitized.length > 100) {
       return 'Name too long (max 100 characters)';
     }
-    
+
     // Allow only letters, numbers, spaces, and basic punctuation
     if (!RegExp(r"^[a-zA-Z0-9\s.,\-']+$").hasMatch(sanitized)) {
       return 'Name contains invalid characters';
@@ -117,10 +120,10 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return null; // Optional field
     }
-    
+
     final sanitized = value.replaceAll(RegExp(r'[^\d+\-\(\)\s]'), '');
     final digitsOnly = sanitized.replaceAll(RegExp(r'[^\d]'), '');
-    
+
     if (digitsOnly.length < 10) {
       return 'Phone must be at least 10 digits';
     }
@@ -138,9 +141,9 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return null; // Optional field
     }
-    
+
     final sanitized = sanitizeInput(value, maxLength: 255);
-    
+
     // UPI ID format: username@bankname
     if (!RegExp(r'^[a-zA-Z0-9._-]+@[a-zA-Z]+$').hasMatch(sanitized)) {
       return 'Invalid UPI ID format (e.g., user@bank)';
@@ -153,11 +156,13 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return null; // Optional field
     }
-    
+
     final sanitized = sanitizeInput(value, maxLength: 255);
-    
+
     // Basic email validation
-    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(sanitized)) {
+    if (!RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    ).hasMatch(sanitized)) {
       return 'Invalid email address';
     }
     return null;
@@ -168,9 +173,9 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return null; // Optional field
     }
-    
+
     final sanitized = sanitizeInput(value, maxLength: 15);
-    
+
     if (!RegExp(r'^[0-9A-Z]{15}$').hasMatch(sanitized)) {
       return 'Invalid GST format (15 alphanumeric characters)';
     }
@@ -182,9 +187,9 @@ class InputValidator {
     if (value == null || value.isEmpty) {
       return null; // Optional field
     }
-    
+
     final sanitized = value.replaceAll(RegExp(r'[^\d]'), '');
-    
+
     if (sanitized.length < 8 || sanitized.length > 15) {
       return 'Barcode must be 8-15 digits';
     }
@@ -232,19 +237,20 @@ class DateTimeValidator {
   /// Safely parse DateTime from string
   static DateTime? safeParse(String? dateString, [DateTime? defaultValue]) {
     if (dateString == null || dateString.isEmpty) return defaultValue;
-    
+
     try {
       final parsed = DateTime.tryParse(dateString);
       if (parsed == null) return defaultValue;
-      
+
       // Check if date is reasonable (not in far future/past)
       if (parsed.year < 1900 || parsed.year > 2100) {
         return defaultValue;
       }
-      
+
       return parsed;
     } catch (e) {
-    if (kDebugMode) debugPrint('⚠️ DateTime parse error for "$dateString": $e');
+      if (kDebugMode)
+        debugPrint('⚠️ DateTime parse error for "$dateString": $e');
       return defaultValue;
     }
   }
@@ -262,8 +268,8 @@ class DateTimeValidator {
     if (date == null) return false;
     final now = DateTime.now();
     return date.year == now.year &&
-           date.month == now.month &&
-           date.day == now.day;
+        date.month == now.month &&
+        date.day == now.day;
   }
 
   /// Format date for display
@@ -272,6 +278,3 @@ class DateTimeValidator {
     return '${date.day}/${date.month}/${date.year}';
   }
 }
-
-
-

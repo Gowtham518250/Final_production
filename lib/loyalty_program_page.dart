@@ -6,7 +6,7 @@ import 'loyalty_program_service.dart';
 class LoyaltyProgramPage extends StatefulWidget {
   final String customerId;
   final String customerName;
-  
+
   const LoyaltyProgramPage({
     required this.customerId,
     required this.customerName,
@@ -27,7 +27,9 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
   }
 
   void _loadDetails() {
-    _detailsFuture = LoyaltyProgramService.getCustomerDetails(widget.customerId);
+    _detailsFuture = LoyaltyProgramService.getCustomerDetails(
+      widget.customerId,
+    );
   }
 
   @override
@@ -35,8 +37,10 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: LiveTranslatedText('Loyalty Program',
-            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Loyalty Program',
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF635BFF),
         elevation: 0,
       ),
@@ -46,7 +50,7 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
           if (!snapshot.hasData || snapshot.data == null) {
             return const Center(child: CircularProgressIndicator());
           }
-          
+
           final details = snapshot.data!;
           final tier = details['tier'] as String;
           final points = details['points'] as int;
@@ -54,7 +58,7 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
           final benefits = details['tierBenefits'] as Map<String, dynamic>;
           final nextTier = details['nextTier'] as String;
           final pointsToNext = details['pointsToNextTier'] as int;
-          
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -74,9 +78,10 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                         child: LiveTranslatedText(
                           widget.customerName[0].toUpperCase(),
                           style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold),
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -85,21 +90,30 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          LiveTranslatedText(widget.customerName,
-                              style: GoogleFonts.poppins(
-                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                          LiveTranslatedText(
+                            widget.customerName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: _getTierColor(tier),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: LiveTranslatedText(tier.toUpperCase(),
-                                style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
+                            child: LiveTranslatedText(
+                              tier.toUpperCase(),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -107,36 +121,48 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                
+
                 // ⭐ Points Card
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      const Color(0xFF635BFF),
-                      const Color(0xFF635BFF).withOpacity(0.8),
-                    ]),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF635BFF),
+                        const Color(0xFF635BFF).withOpacity(0.8),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      LiveTranslatedText('Available Points',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: Colors.white70)),
+                      LiveTranslatedText(
+                        'Available Points',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          LiveTranslatedText('$points',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white)),
-                          LiveTranslatedText('₹${redeemValue.toStringAsFixed(0)}',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  color: Colors.white70)),
+                          LiveTranslatedText(
+                            '$points',
+                            style: GoogleFonts.poppins(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          LiveTranslatedText(
+                            '₹${redeemValue.toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              color: Colors.white70,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -147,12 +173,17 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                               onPressed: _showRedeemDialog,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
                               ),
-                              child: LiveTranslatedText('Redeem',
-                                  style: GoogleFonts.poppins(
-                                      color: const Color(0xFF635BFF),
-                                      fontWeight: FontWeight.bold)),
+                              child: LiveTranslatedText(
+                                'Redeem',
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFF635BFF),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -161,21 +192,29 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // 📊 Tier Progress
-                LiveTranslatedText('Tier Progress',
-                    style: GoogleFonts.poppins(
-                        fontSize: 14, fontWeight: FontWeight.bold)),
+                LiveTranslatedText(
+                  'Tier Progress',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        LiveTranslatedText(tier,
-                            style: GoogleFonts.poppins(fontSize: 12)),
-                        LiveTranslatedText(nextTier,
-                            style: GoogleFonts.poppins(fontSize: 12)),
+                        LiveTranslatedText(
+                          tier,
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
+                        LiveTranslatedText(
+                          nextTier,
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -186,20 +225,30 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                         value: pointsToNext > 0 ? 0.5 : 1.0,
                         backgroundColor: Colors.grey[200],
                         valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF635BFF)),
+                          Color(0xFF635BFF),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    LiveTranslatedText('$pointsToNext points to $nextTier',
-                        style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey)),
+                    LiveTranslatedText(
+                      '$pointsToNext points to $nextTier',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
-                
+
                 // 🎁 Tier Benefits
-                LiveTranslatedText('Your Benefits',
-                    style: GoogleFonts.poppins(
-                        fontSize: 14, fontWeight: FontWeight.bold)),
+                LiveTranslatedText(
+                  'Your Benefits',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 ..._buildBenefitsList(benefits),
               ],
@@ -233,32 +282,45 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
         'value': '${(benefits['birthdayBonus'] as num).toInt()} pts',
       },
     ];
-    
-    return benefitItems.map((item) => Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        border: Border.all(color: Colors.grey[200]!),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              LiveTranslatedText(item['icon']!, style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 12),
-              LiveTranslatedText(item['title']!,
-                  style: GoogleFonts.poppins(fontSize: 12)),
-            ],
+
+    return benefitItems
+        .map(
+          (item) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              border: Border.all(color: Colors.grey[200]!),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    LiveTranslatedText(
+                      item['icon']!,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    LiveTranslatedText(
+                      item['title']!,
+                      style: GoogleFonts.poppins(fontSize: 12),
+                    ),
+                  ],
+                ),
+                LiveTranslatedText(
+                  item['value']!,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-          LiveTranslatedText(item['value']!,
-              style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold, fontSize: 12)),
-        ],
-      ),
-    )).toList();
+        )
+        .toList();
   }
 
   Color _getTierColor(String tier) {
@@ -278,11 +340,14 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
 
   void _showRedeemDialog() {
     final pointsController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: LiveTranslatedText('Redeem Points', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Redeem Points',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -291,7 +356,9 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 hint: LiveTranslatedText('Points to redeem'),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
@@ -313,8 +380,13 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                 setState(() => _loadDetails());
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF635BFF)),
-            child: const LiveTranslatedText('Redeem', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF635BFF),
+            ),
+            child: const LiveTranslatedText(
+              'Redeem',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

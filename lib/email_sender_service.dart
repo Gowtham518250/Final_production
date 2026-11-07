@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show kDebugMode, kReleaseMode, debugPrint;
+import 'package:flutter/foundation.dart'
+    show kDebugMode, kReleaseMode, debugPrint;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -95,7 +96,8 @@ class EmailSenderService {
     required String otp,
     required String userName,
     String title = '🔐 Password Reset',
-    String bodyText = 'You requested to reset your password. Use the OTP below:',
+    String bodyText =
+        'You requested to reset your password. Use the OTP below:',
     String? confirmationUrl,
   }) async {
     if (!_clientSmtpAllowed) {
@@ -124,7 +126,8 @@ class EmailSenderService {
       final safeBody = _safeHtml(bodyText);
       final safeOtp = _safeHtml(otp);
 
-      final confirmationSection = (confirmationUrl == null || confirmationUrl.isEmpty)
+      final confirmationSection =
+          (confirmationUrl == null || confirmationUrl.isEmpty)
           ? ''
           : '''
       <div style="margin:24px 0;padding:18px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;">
@@ -133,7 +136,8 @@ class EmailSenderService {
         <a href="${_safeHtml(confirmationUrl)}" style="display:inline-block;background:#10B981;color:#fff;text-decoration:none;padding:11px 16px;border-radius:8px;font-weight:700;font-size:13px;">CONFIRM EMAIL</a>
       </div>''';
 
-      final htmlBody = '''<html>
+      final htmlBody =
+          '''<html>
   <body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;">
     <div style="max-width:520px;margin:0 auto;background:#fff;padding:30px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.08);">
       <h2 style="color:#111827;text-align:center;">$safeTitle</h2>
@@ -180,7 +184,8 @@ class EmailSenderService {
 
     try {
       final smtpServer = gmail(email, password);
-      final htmlBody = '''<html><body style="font-family:Arial;background:#f5f5f5;padding:20px;">
+      final htmlBody =
+          '''<html><body style="font-family:Arial;background:#f5f5f5;padding:20px;">
 <div style="max-width:500px;margin:auto;background:white;padding:30px;border-radius:8px;">
 <h2 style="color:#FF6B35;text-align:center;">⚠️ Low Stock Alert</h2>
 <p>Product <strong>${_safeHtml(productName)}</strong>: $currentStock left (min $minStock)</p>
@@ -204,7 +209,8 @@ class EmailSenderService {
     if (!_clientSmtpAllowed) {
       return {
         'success': false,
-        'message': 'Device SMTP is disabled. OTPs and alerts are sent by the Retail Mind backend.',
+        'message':
+            'Device SMTP is disabled. OTPs and alerts are sent by the Retail Mind backend.',
       };
     }
     await initialize();
@@ -229,10 +235,7 @@ class EmailSenderService {
         'details': sendReport.toString(),
       };
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Failed to send test email: $e',
-      };
+      return {'success': false, 'message': 'Failed to send test email: $e'};
     }
   }
 }

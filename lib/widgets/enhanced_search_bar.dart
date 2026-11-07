@@ -58,9 +58,9 @@ class _EnhancedSearchBarState extends State<EnhancedSearchBar> {
 
   void _performSearch(String query) {
     if (query.isEmpty) return;
-    
+
     setState(() => _isSearching = true);
-    
+
     // Simulate search delay
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
@@ -158,7 +158,7 @@ class _EnhancedSearchBarState extends State<EnhancedSearchBar> {
             ],
           ),
         ),
-        
+
         // Filter chips
         if (widget.onFilterChanged != null)
           Padding(
@@ -180,7 +180,9 @@ class _EnhancedSearchBarState extends State<EnhancedSearchBar> {
           ),
 
         // Search suggestions
-        if (_focusNode.hasFocus && widget.suggestions != null && widget.suggestions!.isNotEmpty)
+        if (_focusNode.hasFocus &&
+            widget.suggestions != null &&
+            widget.suggestions!.isNotEmpty)
           Container(
             margin: const EdgeInsets.only(top: 8),
             decoration: BoxDecoration(
@@ -204,7 +206,9 @@ class _EnhancedSearchBarState extends State<EnhancedSearchBar> {
                 return AccessibilityHelper.accessibleListTile(
                   title: LiveTranslatedText(
                     suggestion.text,
-                    style: GoogleFonts.poppins(fontSize: AccessibilityHelper.minFontSize),
+                    style: GoogleFonts.poppins(
+                      fontSize: AccessibilityHelper.minFontSize,
+                    ),
                   ),
                   subtitle: suggestion.subtitle != null
                       ? LiveTranslatedText(
@@ -216,7 +220,11 @@ class _EnhancedSearchBarState extends State<EnhancedSearchBar> {
                         )
                       : null,
                   leading: suggestion.icon != null
-                      ? Icon(suggestion.icon, size: 20, color: const Color(0xFF6366F1))
+                      ? Icon(
+                          suggestion.icon,
+                          size: 20,
+                          color: const Color(0xFF6366F1),
+                        )
                       : null,
                   onTap: () {
                     _controller.text = suggestion.text;
@@ -230,8 +238,8 @@ class _EnhancedSearchBarState extends State<EnhancedSearchBar> {
           ),
 
         // Search history
-        if (_focusNode.hasFocus && 
-            widget.searchHistory != null && 
+        if (_focusNode.hasFocus &&
+            widget.searchHistory != null &&
             widget.searchHistory!.isNotEmpty &&
             _controller.text.isEmpty)
           Container(
@@ -314,9 +322,7 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF6366F1)
-              : Colors.white,
+          color: isSelected ? const Color(0xFF6366F1) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
@@ -344,11 +350,7 @@ class _HistoryChip extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onDelete;
 
-  const _HistoryChip({
-    required this.text,
-    required this.onTap,
-    this.onDelete,
-  });
+  const _HistoryChip({required this.text, required this.onTap, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -405,11 +407,7 @@ class SearchSuggestion {
   final String? subtitle;
   final IconData? icon;
 
-  SearchSuggestion({
-    required this.text,
-    this.subtitle,
-    this.icon,
-  });
+  SearchSuggestion({required this.text, this.subtitle, this.icon});
 }
 
 /// Search history item
@@ -417,10 +415,7 @@ class SearchHistoryItem {
   final String query;
   final DateTime timestamp;
 
-  SearchHistoryItem({
-    required this.query,
-    required this.timestamp,
-  });
+  SearchHistoryItem({required this.query, required this.timestamp});
 }
 
 /// Advanced filter bottom sheet
@@ -486,7 +481,7 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
             ],
           ),
           const SizedBox(height: 24),
-          
+
           // Stock filter
           LiveTranslatedText(
             'Stock Status',
@@ -509,9 +504,9 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
               );
             }).toList(),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Price range
           LiveTranslatedText(
             'Price Range',
@@ -548,9 +543,9 @@ class _AdvancedFilterSheetState extends State<AdvancedFilterSheet> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Apply button
           SizedBox(
             width: double.infinity,

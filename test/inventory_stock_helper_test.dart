@@ -145,18 +145,28 @@ void main() {
 
   group('InventoryStockHelper.findDuplicateProducts', () {
     final book = <String, dynamic>{
-      'id': 42, 'product_name': 'Classmate Notebook',
-      'sku': '8901234567890', 'unit_price': 45,
-      'current_stock': 12, 'min_stock': 2.5,
-      'unit': 'pcs', 'category': 'Stationery', 'is_active': true,
+      'id': 42,
+      'product_name': 'Classmate Notebook',
+      'sku': '8901234567890',
+      'unit_price': 45,
+      'current_stock': 12,
+      'min_stock': 2.5,
+      'unit': 'pcs',
+      'category': 'Stationery',
+      'is_active': true,
     };
 
     test('returns existing details for exact name and barcode matches', () {
       final matches = InventoryStockHelper.findDuplicateProducts(
-        [book], productName: ' CLASSMATE   NOTEBOOK ', sku: '8901234567890',
+        [book],
+        productName: ' CLASSMATE   NOTEBOOK ',
+        sku: '8901234567890',
       );
       expect(matches, hasLength(1));
-      expect(matches.single['match_types'], containsAll(['PRODUCT_NAME', 'BARCODE']));
+      expect(
+        matches.single['match_types'],
+        containsAll(['PRODUCT_NAME', 'BARCODE']),
+      );
       expect(matches.single['product']['product_name'], 'Classmate Notebook');
       expect(matches.single['product']['current_stock'], 12);
       expect(matches.single['product']['min_stock'], 2.5);
@@ -164,15 +174,19 @@ void main() {
 
     test('allows editing the same product', () {
       final matches = InventoryStockHelper.findDuplicateProducts(
-        [book], productName: 'Classmate Notebook',
-        sku: '8901234567890', excludeProductId: 42,
+        [book],
+        productName: 'Classmate Notebook',
+        sku: '8901234567890',
+        excludeProductId: 42,
       );
       expect(matches, isEmpty);
     });
 
     test('barcode match works when product names differ', () {
       final matches = InventoryStockHelper.findDuplicateProducts(
-        [book], productName: 'Another book', sku: '8901234567890',
+        [book],
+        productName: 'Another book',
+        sku: '8901234567890',
       );
       expect(matches.single['match_types'], ['BARCODE']);
     });
@@ -199,25 +213,25 @@ void main() {
       );
     });
 
-    test('removes an acknowledged legacy record using barcode when SKU is absent', () {
-      final remaining = InventoryStockHelper.removeLocalProductAfterCreate(
-        {
-          '8901234567890': {
-            'name': 'Soap',
-            'price': '25',
-            'barcode': '8901234567890',
-            'source': 'Self-Learned (Direct Entry)',
+    test(
+      'removes an acknowledged legacy record using barcode when SKU is absent',
+      () {
+        final remaining = InventoryStockHelper.removeLocalProductAfterCreate(
+          {
+            '8901234567890': {
+              'name': 'Soap',
+              'price': '25',
+              'barcode': '8901234567890',
+              'source': 'Self-Learned (Direct Entry)',
+            },
+            '8901111111111': {'name': 'Rice', 'barcode': '8901111111111'},
           },
-          '8901111111111': {
-            'name': 'Rice',
-            'barcode': '8901111111111',
-          },
-        },
-        {'barcode': '8901234567890'},
-      );
+          {'barcode': '8901234567890'},
+        );
 
-      expect(remaining.keys, ['8901111111111']);
-    });
+        expect(remaining.keys, ['8901111111111']);
+      },
+    );
   });
 
   group('Inventory visible product deduplication', () {
@@ -250,16 +264,8 @@ void main() {
 
     test('preserves same-name products when their barcodes differ', () {
       final result = InventoryStockHelper.deduplicateProductsForDisplay([
-        {
-          'id': 1,
-          'product_name': 'Water Bottle',
-          'sku': 'BOTTLE-500',
-        },
-        {
-          'id': 2,
-          'product_name': 'Water Bottle',
-          'sku': 'BOTTLE-1000',
-        },
+        {'id': 1, 'product_name': 'Water Bottle', 'sku': 'BOTTLE-500'},
+        {'id': 2, 'product_name': 'Water Bottle', 'sku': 'BOTTLE-1000'},
       ]);
 
       expect(result, hasLength(2));
@@ -276,12 +282,7 @@ void main() {
           'local_updated_at': '2026-11-05T09:00:00.000Z',
           'is_offline': true,
         },
-        {
-          'id': 17,
-          'product_name': 'Soap',
-          'sku': 'SOAP-1',
-          'unit_price': 18,
-        },
+        {'id': 17, 'product_name': 'Soap', 'sku': 'SOAP-1', 'unit_price': 18},
       ]);
 
       expect(result, hasLength(1));

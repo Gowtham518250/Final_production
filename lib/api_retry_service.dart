@@ -5,13 +5,13 @@ import 'package:flutter/foundation.dart';
 /// API Retry Service - Handles exponential backoff and retry logic
 class ApiRetryService {
   static const String _tag = '🔄 RETRY_SERVICE';
-  
+
   // Retry configuration
   static const int maxRetries = 3;
   static const Duration initialDelay = Duration(milliseconds: 500);
   static const Duration maxDelay = Duration(seconds: 30);
   static const double backoffMultiplier = 2.0;
-  
+
   /// Execute request with retry logic
   static Future<http.Response> executeWithRetry(
     Future<http.Response> Function() request, {
@@ -20,15 +20,15 @@ class ApiRetryService {
     String? endpoint,
   }) async {
     int attempt = 0;
-    
+
     while (attempt <= retries) {
       try {
         if (kDebugMode) {
-          print('$_tag Attempt ${attempt + 1}/${ retries + 1} for $endpoint');
+          print('$_tag Attempt ${attempt + 1}/${retries + 1} for $endpoint');
         }
-        
+
         final response = await request();
-        
+
         if (response.statusCode == 200 || response.statusCode == 201) {
           if (kDebugMode) print('✅ Success on attempt ${attempt + 1}');
           return response;
@@ -41,7 +41,8 @@ class ApiRetryService {
             attempt++;
             await Future.delayed(delay);
             delay = Duration(
-              milliseconds: (delay.inMilliseconds * backoffMultiplier).toInt()
+              milliseconds: (delay.inMilliseconds * backoffMultiplier)
+                  .toInt()
                   .clamp(0, maxDelay.inMilliseconds),
             );
           } else {
@@ -57,7 +58,8 @@ class ApiRetryService {
           attempt++;
           await Future.delayed(delay);
           delay = Duration(
-            milliseconds: (delay.inMilliseconds * backoffMultiplier).toInt()
+            milliseconds: (delay.inMilliseconds * backoffMultiplier)
+                .toInt()
                 .clamp(0, maxDelay.inMilliseconds),
           );
         } else {
@@ -69,7 +71,8 @@ class ApiRetryService {
           attempt++;
           await Future.delayed(delay);
           delay = Duration(
-            milliseconds: (delay.inMilliseconds * backoffMultiplier).toInt()
+            milliseconds: (delay.inMilliseconds * backoffMultiplier)
+                .toInt()
                 .clamp(0, maxDelay.inMilliseconds),
           );
         } else {
@@ -77,10 +80,10 @@ class ApiRetryService {
         }
       }
     }
-    
+
     throw Exception('Max retries exceeded for $endpoint');
   }
-  
+
   /// Check if error is retryable
   static bool isRetryable(dynamic error) {
     if (error is http.ClientException) return true;
@@ -93,7 +96,7 @@ class ApiRetryService {
 class SocketException implements Exception {
   final String message;
   SocketException(this.message);
-  
+
   @override
   String toString() => message;
 }

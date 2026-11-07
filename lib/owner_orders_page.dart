@@ -34,7 +34,9 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
     super.initState();
     _fetchOrders();
     _connectRealtime();
-    _durableEventsSubscription = SyncService.durableEventsStream.listen((events) {
+    _durableEventsSubscription = SyncService.durableEventsStream.listen((
+      events,
+    ) {
       if (!mounted) return;
       final hasOrderChange = events.any((event) {
         final type = event['type']?.toString();
@@ -68,8 +70,7 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
   Future<void> _handleRealtimeMessage(Map<String, dynamic> message) async {
     final eventType = message['type']?.toString();
-    if (eventType != 'order.created' &&
-        eventType != 'order.status_changed') {
+    if (eventType != 'order.created' && eventType != 'order.status_changed') {
       return;
     }
     await _fetchOrders(showLoading: false);
@@ -106,16 +107,25 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
     }
   }
 
-  Future<void> _updateOrder(dynamic orderId, String action, {String? reason}) async {
+  Future<void> _updateOrder(
+    dynamic orderId,
+    String action, {
+    String? reason,
+  }) async {
     try {
-      String url = '/store/owner/orders/$orderId/action?action=${action.toUpperCase()}';
+      String url =
+          '/store/owner/orders/$orderId/action?action=${action.toUpperCase()}';
       await ApiClient.postJson(url, {});
       await _fetchOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: LiveTranslatedText('Order #$orderId ${action.toUpperCase()}!'),
-            backgroundColor: action.toUpperCase() == 'ACCEPT' ? Colors.green : Colors.redAccent,
+            content: LiveTranslatedText(
+              'Order #$orderId ${action.toUpperCase()}!',
+            ),
+            backgroundColor: action.toUpperCase() == 'ACCEPT'
+                ? Colors.green
+                : Colors.redAccent,
           ),
         );
       }
@@ -144,7 +154,11 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         debugPrint('Cannot launch WhatsApp');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: LiveTranslatedText('WhatsApp not available on this device.')),
+            const SnackBar(
+              content: LiveTranslatedText(
+                'WhatsApp not available on this device.',
+              ),
+            ),
           );
         }
       }
@@ -167,7 +181,10 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: LiveTranslatedText(
           '✅ Accept Order #$orderId?',
-          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: LiveTranslatedText(
           'The customer will be notified via WhatsApp that their order has been accepted.',
@@ -176,12 +193,18 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: LiveTranslatedText('Cancel', style: GoogleFonts.poppins(color: Colors.white38)),
+            child: LiveTranslatedText(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.white38),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: LiveTranslatedText('Accept & Notify', style: GoogleFonts.poppins(color: Colors.white)),
+            child: LiveTranslatedText(
+              'Accept & Notify',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -192,9 +215,12 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
     await _updateOrder(orderId, 'ACCEPT');
 
     // Build item summary
-    final itemSummary = items.map((it) =>
-      '• ${it['product_name']} x${it['quantity']} — ₹${it['line_total']}'
-    ).join('\n');
+    final itemSummary = items
+        .map(
+          (it) =>
+              '• ${it['product_name']} x${it['quantity']} — ₹${it['line_total']}',
+        )
+        .join('\n');
 
     // WhatsApp message
     if (phone.isNotEmpty) {
@@ -214,7 +240,9 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
     if (orderId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Unable to identify this order.')),
+          const SnackBar(
+            content: LiveTranslatedText('Unable to identify this order.'),
+          ),
         );
       }
       return;
@@ -276,7 +304,8 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
             setDialogState(() {
               verifying = false;
-              dialogError = result['message']?.toString() ??
+              dialogError =
+                  result['message']?.toString() ??
                   'Invalid or expired customer delivery OTP.';
             });
           }
@@ -444,7 +473,10 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: LiveTranslatedText(
           '❌ Reject Order #$orderId',
-          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -460,8 +492,13 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
               maxLines: 3,
               style: GoogleFonts.poppins(color: Colors.white),
               decoration: InputDecoration(
-                hint: LiveTranslatedText('e.g. Out of stock, Shop closed, Item unavailable...'),
-                hintStyle: GoogleFonts.poppins(color: Colors.white30, fontSize: 12),
+                hint: LiveTranslatedText(
+                  'e.g. Out of stock, Shop closed, Item unavailable...',
+                ),
+                hintStyle: GoogleFonts.poppins(
+                  color: Colors.white30,
+                  fontSize: 12,
+                ),
                 filled: true,
                 fillColor: _cardLight,
                 border: OutlineInputBorder(
@@ -479,12 +516,18 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, null),
-            child: LiveTranslatedText('Cancel', style: GoogleFonts.poppins(color: Colors.white38)),
+            child: LiveTranslatedText(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.white38),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: LiveTranslatedText('Reject & Notify', style: GoogleFonts.poppins(color: Colors.white)),
+            child: LiveTranslatedText(
+              'Reject & Notify',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -496,7 +539,9 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
     // WhatsApp message with reason
     if (phone.isNotEmpty) {
-      final reasonText = reason.isEmpty ? 'Operational issue at the shop.' : reason;
+      final reasonText = reason.isEmpty
+          ? 'Operational issue at the shop.'
+          : reason;
       final message =
           '❌ *Order Update*\n\n'
           'Sorry! Your order #$orderId has been *rejected* by the shop.\n\n'
@@ -508,21 +553,31 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
   Color _statusColor(String s) {
     switch (s.toUpperCase()) {
-      case 'ACCEPTED': return Colors.greenAccent;
-      case 'REJECTED': return Colors.redAccent;
-      case 'DISPATCHED': return Colors.blueAccent;
-      case 'DELIVERED': return Colors.tealAccent;
-      default: return Colors.orangeAccent;
+      case 'ACCEPTED':
+        return Colors.greenAccent;
+      case 'REJECTED':
+        return Colors.redAccent;
+      case 'DISPATCHED':
+        return Colors.blueAccent;
+      case 'DELIVERED':
+        return Colors.tealAccent;
+      default:
+        return Colors.orangeAccent;
     }
   }
 
   IconData _statusIcon(String s) {
     switch (s.toUpperCase()) {
-      case 'ACCEPTED': return Icons.check_circle_rounded;
-      case 'REJECTED': return Icons.cancel_rounded;
-      case 'DISPATCHED': return Icons.delivery_dining_rounded;
-      case 'DELIVERED': return Icons.done_all_rounded;
-      default: return Icons.hourglass_top_rounded;
+      case 'ACCEPTED':
+        return Icons.check_circle_rounded;
+      case 'REJECTED':
+        return Icons.cancel_rounded;
+      case 'DISPATCHED':
+        return Icons.delivery_dining_rounded;
+      case 'DELIVERED':
+        return Icons.done_all_rounded;
+      default:
+        return Icons.hourglass_top_rounded;
     }
   }
 
@@ -534,7 +589,10 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         backgroundColor: _card,
         title: LiveTranslatedText(
           'Incoming Orders',
-          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -551,7 +609,9 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.orangeAccent))
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.orangeAccent),
+            )
           : RefreshIndicator(
               onRefresh: _fetchOrders,
               color: Colors.orangeAccent,
@@ -560,16 +620,27 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.inbox_rounded, size: 80, color: Colors.white12),
+                          const Icon(
+                            Icons.inbox_rounded,
+                            size: 80,
+                            color: Colors.white12,
+                          ),
                           const SizedBox(height: 16),
                           LiveTranslatedText(
                             'No orders yet',
-                            style: GoogleFonts.poppins(color: Colors.white38, fontSize: 18, fontWeight: FontWeight.bold),
+                            style: GoogleFonts.poppins(
+                              color: Colors.white38,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           LiveTranslatedText(
                             'Share your QR code to start receiving orders!',
-                            style: GoogleFonts.poppins(color: Colors.white24, fontSize: 13),
+                            style: GoogleFonts.poppins(
+                              color: Colors.white24,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -579,33 +650,63 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                       itemCount: _orders.length,
                       itemBuilder: (ctx, i) {
                         final o = _orders[i];
-                        final status = (o['status'] ?? 'PENDING').toString().toUpperCase();
+                        final status = (o['status'] ?? 'PENDING')
+                            .toString()
+                            .toUpperCase();
                         final isPending = status == 'PENDING';
                         final isAccepted = status == 'ACCEPTED';
                         final isDispatched = status == 'DISPATCHED';
                         final items = o['items'] as List<dynamic>? ?? [];
                         final orderId = o['id'] ?? o['order_id'] ?? i + 1;
                         final phone = o['customer_phone']?.toString() ?? '';
-                        final paymentMethod =
-                            (o['payment_method'] ?? '').toString().trim().toUpperCase();
-                        final paymentStatus =
-                            (o['payment_status'] ?? '').toString().trim().toUpperCase();
+                        final paymentMethod = (o['payment_method'] ?? '')
+                            .toString()
+                            .trim()
+                            .toUpperCase();
+                        final paymentStatus = (o['payment_status'] ?? '')
+                            .toString()
+                            .trim()
+                            .toUpperCase();
                         final paymentConfirmationSource =
-                            (o['payment_confirmation_source'] ?? '').toString().trim().toUpperCase();
+                            (o['payment_confirmation_source'] ?? '')
+                                .toString()
+                                .trim()
+                                .toUpperCase();
                         final localizations = AppLocalizations.of(context);
-                        final paymentStatusLabel = <String, String>{
-                          'PAID': localizations.translate('paymentStatusPaid'),
-                          'PENDING': localizations.translate('paymentStatusPending'),
-                          'UNPAID': localizations.translate('paymentStatusPending'),
-                          'COD': localizations.translate('paymentStatusCodDue'),
-                          'COD_DUE': localizations.translate('paymentStatusCodDue'),
-                          'FAILED': localizations.translate('paymentStatusFailed'),
-                          'REFUND': localizations.translate('paymentStatusRefund'),
-                          'REFUNDED': localizations.translate('paymentStatusRefund'),
-                          'PARTIAL': localizations.translate('paymentStatusPartial'),
-                        }[paymentStatus] ??
+                        final paymentStatusLabel =
+                            <String, String>{
+                              'PAID': localizations.translate(
+                                'paymentStatusPaid',
+                              ),
+                              'PENDING': localizations.translate(
+                                'paymentStatusPending',
+                              ),
+                              'UNPAID': localizations.translate(
+                                'paymentStatusPending',
+                              ),
+                              'COD': localizations.translate(
+                                'paymentStatusCodDue',
+                              ),
+                              'COD_DUE': localizations.translate(
+                                'paymentStatusCodDue',
+                              ),
+                              'FAILED': localizations.translate(
+                                'paymentStatusFailed',
+                              ),
+                              'REFUND': localizations.translate(
+                                'paymentStatusRefund',
+                              ),
+                              'REFUNDED': localizations.translate(
+                                'paymentStatusRefund',
+                              ),
+                              'PARTIAL': localizations.translate(
+                                'paymentStatusPartial',
+                              ),
+                            }[paymentStatus] ??
                             (paymentStatus.isEmpty
-                                ? localizations.translate('paymentStatusPending')
+                                ? localizations.translate(
+                                    'paymentStatusPending',
+                                  )
                                 : paymentStatus);
 
                         return Container(
@@ -614,12 +715,16 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                             color: _cardLight,
                             borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                              color: _statusColor(status).withValues(alpha: 0.3),
+                              color: _statusColor(
+                                status,
+                              ).withValues(alpha: 0.3),
                               width: 1,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: _statusColor(status).withValues(alpha: 0.08),
+                                color: _statusColor(
+                                  status,
+                                ).withValues(alpha: 0.08),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -629,9 +734,15 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                             children: [
                               // Header
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  16,
+                                  0,
+                                ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     LiveTranslatedText(
                                       'Order #$orderId',
@@ -642,15 +753,24 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: _statusColor(status).withValues(alpha: 0.15),
+                                        color: _statusColor(
+                                          status,
+                                        ).withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(_statusIcon(status), color: _statusColor(status), size: 12),
+                                          Icon(
+                                            _statusIcon(status),
+                                            color: _statusColor(status),
+                                            size: 12,
+                                          ),
                                           const SizedBox(width: 4),
                                           LiveTranslatedText(
                                             status,
@@ -669,22 +789,42 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
                               // Customer Info
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  8,
+                                  16,
+                                  0,
+                                ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.person_rounded, color: Colors.white38, size: 14),
+                                    const Icon(
+                                      Icons.person_rounded,
+                                      color: Colors.white38,
+                                      size: 14,
+                                    ),
                                     const SizedBox(width: 6),
                                     LiveTranslatedText(
-                                      o['customer_name']?.toString() ?? 'Guest Customer',
-                                      style: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
+                                      o['customer_name']?.toString() ??
+                                          'Guest Customer',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white60,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                     if (phone.isNotEmpty) ...[
                                       const SizedBox(width: 8),
-                                      const Icon(Icons.phone_rounded, color: Colors.white24, size: 14),
+                                      const Icon(
+                                        Icons.phone_rounded,
+                                        color: Colors.white24,
+                                        size: 14,
+                                      ),
                                       const SizedBox(width: 4),
                                       LiveTranslatedText(
                                         phone,
-                                        style: GoogleFonts.poppins(color: Colors.white38, fontSize: 12),
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white38,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ],
                                   ],
@@ -695,7 +835,12 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                               // provider settlement confirmations, so make that distinction visible.
                               if (paymentMethod.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    8,
+                                    16,
+                                    0,
+                                  ),
                                   child: Container(
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(10),
@@ -705,35 +850,52 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                       border: Border.all(color: Colors.white10),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         LiveTranslatedText(
                                           localizations
                                               .translate('paymentStatusLine')
-                                              .replaceAll('{method}', paymentMethod)
-                                              .replaceAll('{status}', paymentStatusLabel),
+                                              .replaceAll(
+                                                '{method}',
+                                                paymentMethod,
+                                              )
+                                              .replaceAll(
+                                                '{status}',
+                                                paymentStatusLabel,
+                                              ),
                                           style: GoogleFonts.poppins(
                                             color: Colors.white70,
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
-                                        if (paymentConfirmationSource == 'OWNER_DEVICE_NOTIFICATION_MATCH')
+                                        if (paymentConfirmationSource ==
+                                            'OWNER_DEVICE_NOTIFICATION_MATCH')
                                           Padding(
-                                            padding: const EdgeInsets.only(top: 4),
+                                            padding: const EdgeInsets.only(
+                                              top: 4,
+                                            ),
                                             child: LiveTranslatedText(
-                                              localizations.translate('paymentMatchedNotificationHint'),
+                                              localizations.translate(
+                                                'paymentMatchedNotificationHint',
+                                              ),
                                               style: GoogleFonts.poppins(
                                                 color: Colors.orangeAccent,
                                                 fontSize: 11,
                                               ),
                                             ),
                                           )
-                                        else if (paymentMethod == 'UPI' && paymentStatus != 'PAID')
+                                        else if (paymentMethod == 'UPI' &&
+                                            paymentStatus != 'PAID')
                                           Padding(
-                                            padding: const EdgeInsets.only(top: 4),
+                                            padding: const EdgeInsets.only(
+                                              top: 4,
+                                            ),
                                             child: LiveTranslatedText(
-                                              localizations.translate('paymentPendingHint'),
+                                              localizations.translate(
+                                                'paymentPendingHint',
+                                              ),
                                               style: GoogleFonts.poppins(
                                                 color: Colors.orangeAccent,
                                                 fontSize: 11,
@@ -748,16 +910,29 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                               // Delivery address
                               if (o['delivery_address'] != null)
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    4,
+                                    16,
+                                    0,
+                                  ),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.location_on_rounded, color: Colors.white24, size: 14),
+                                      const Icon(
+                                        Icons.location_on_rounded,
+                                        color: Colors.white24,
+                                        size: 14,
+                                      ),
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: LiveTranslatedText(
                                           o['delivery_address'].toString(),
-                                          style: GoogleFonts.poppins(color: Colors.white38, fontSize: 12),
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.white38,
+                                            fontSize: 12,
+                                          ),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -769,7 +944,12 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                               // Items List
                               if (items.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    10,
+                                    16,
+                                    0,
+                                  ),
                                   child: Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
@@ -779,14 +959,20 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                     child: Column(
                                       children: items.map((it) {
                                         return Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 3),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 3,
+                                          ),
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
                                                 child: LiveTranslatedText(
                                                   '• ${it['product_name']} x${it['quantity']}',
-                                                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.white70,
+                                                    fontSize: 12,
+                                                  ),
                                                 ),
                                               ),
                                               LiveTranslatedText(
@@ -807,13 +993,22 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
 
                               // Total
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  10,
+                                  16,
+                                  14,
+                                ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     LiveTranslatedText(
                                       'Total Amount',
-                                      style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white54,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                     LiveTranslatedText(
                                       '₹${o['total_amount'] ?? 0}',
@@ -837,16 +1032,26 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                       Expanded(
                                         child: ElevatedButton.icon(
                                           onPressed: () => _handleAccept(o),
-                                          icon: const Icon(Icons.check_rounded, size: 16),
+                                          icon: const Icon(
+                                            Icons.check_rounded,
+                                            size: 16,
+                                          ),
                                           label: LiveTranslatedText(
                                             'Accept',
-                                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.green,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -854,16 +1059,26 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                       Expanded(
                                         child: ElevatedButton.icon(
                                           onPressed: () => _handleReject(o),
-                                          icon: const Icon(Icons.close_rounded, size: 16),
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 16,
+                                          ),
                                           label: LiveTranslatedText(
                                             'Reject',
-                                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.redAccent,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -883,27 +1098,36 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                       // Notify customer
                                       if (phone.isNotEmpty) {
                                         final message =
-                                          '🚚 *Order Dispatched!*\n\n'
-                                          'Your order #$orderId is on the way! 🎉\n\n'
-                                          'Please keep your phone handy for delivery. Thank you! 🙏';
+                                            '🚚 *Order Dispatched!*\n\n'
+                                            'Your order #$orderId is on the way! 🎉\n\n'
+                                            'Please keep your phone handy for delivery. Thank you! 🙏';
                                         await _sendWhatsApp(phone, message);
                                       }
                                     },
-                                    icon: const Icon(Icons.delivery_dining_rounded, size: 18),
+                                    icon: const Icon(
+                                      Icons.delivery_dining_rounded,
+                                      size: 18,
+                                    ),
                                     label: LiveTranslatedText(
                                       'Mark as Dispatched & Notify',
-                                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blueAccent,
                                       foregroundColor: Colors.white,
-                                      minimumSize: const Size(double.infinity, 44),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      minimumSize: const Size(
+                                        double.infinity,
+                                        44,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ],
-
 
                               // Delivered requires customer OTP verification.
                               if (isDispatched) ...[
@@ -925,7 +1149,10 @@ class _OwnerOrdersPageState extends State<OwnerOrdersPage> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.teal,
                                       foregroundColor: Colors.white,
-                                      minimumSize: const Size(double.infinity, 44),
+                                      minimumSize: const Size(
+                                        double.infinity,
+                                        44,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),

@@ -124,10 +124,14 @@ class _ModernSearchBarState extends State<ModernSearchBar> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _selectedFilters.map((filter) => _FilterChip(
-              filter: filter,
-              onRemove: () => _toggleFilter(filter),
-            )).toList(),
+            children: _selectedFilters
+                .map(
+                  (filter) => _FilterChip(
+                    filter: filter,
+                    onRemove: () => _toggleFilter(filter),
+                  ),
+                )
+                .toList(),
           ),
         ],
       ],
@@ -177,18 +181,20 @@ class _ModernSearchBarState extends State<ModernSearchBar> {
               ],
             ),
             const SizedBox(height: 16),
-            ...widget.filters!.map((filter) => CheckboxListTile(
-              value: _selectedFilters.contains(filter),
-              onChanged: (_) => _toggleFilter(filter),
-              title: LiveTranslatedText(
-                filter.label,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: const Color(0xFF1E293B),
+            ...widget.filters!.map(
+              (filter) => CheckboxListTile(
+                value: _selectedFilters.contains(filter),
+                onChanged: (_) => _toggleFilter(filter),
+                title: LiveTranslatedText(
+                  filter.label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: const Color(0xFF1E293B),
+                  ),
                 ),
+                activeColor: const Color(0xFF6366F1),
               ),
-              activeColor: const Color(0xFF6366F1),
-            )),
+            ),
           ],
         ),
       ),
@@ -206,7 +212,9 @@ class FilterOption {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is FilterOption && runtimeType == other.runtimeType && value == other.value;
+      other is FilterOption &&
+          runtimeType == other.runtimeType &&
+          value == other.value;
 
   @override
   int get hashCode => value.hashCode;
@@ -217,10 +225,7 @@ class _FilterChip extends StatelessWidget {
   final FilterOption filter;
   final VoidCallback onRemove;
 
-  const _FilterChip({
-    required this.filter,
-    required this.onRemove,
-  });
+  const _FilterChip({required this.filter, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {

@@ -49,8 +49,10 @@ class FmcgBarcodeService {
       if (response.statusCode != 200) {
         if (kDebugMode) {
           debugPrint(
-            'Barcode lookup failed: ' + response.statusCode.toString() +
-                ' ' + response.body,
+            'Barcode lookup failed: ' +
+                response.statusCode.toString() +
+                ' ' +
+                response.body,
           );
         }
         return null;
@@ -63,7 +65,9 @@ class FmcgBarcodeService {
             'No real product match for barcode ' +
                 clean +
                 ': ' +
-                (decoded is Map ? (decoded['message']?.toString() ?? 'unknown') : 'unknown'),
+                (decoded is Map
+                    ? (decoded['message']?.toString() ?? 'unknown')
+                    : 'unknown'),
           );
         }
         return null;

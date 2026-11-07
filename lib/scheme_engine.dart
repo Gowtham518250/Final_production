@@ -13,10 +13,13 @@ class SchemeEngine {
   /// Load all active schemes from local storage
   static Future<List<Map<String, dynamic>>> loadSchemes() async {
     try {
-      final raw = await ScopedSharedPreferences.getString('active_schemes') ?? '[]';
+      final raw =
+          await ScopedSharedPreferences.getString('active_schemes') ?? '[]';
       final decoded = jsonDecode(raw) as List?;
-      return decoded != null 
-          ? List<Map<String, dynamic>>.from(decoded.map((e) => Map<String, dynamic>.from(e as Map)))
+      return decoded != null
+          ? List<Map<String, dynamic>>.from(
+              decoded.map((e) => Map<String, dynamic>.from(e as Map)),
+            )
           : [];
     } catch (e) {
       return [];
@@ -33,7 +36,10 @@ class SchemeEngine {
         'active': true,
         'created_at': DateTime.now().toIso8601String(),
       });
-      await ScopedSharedPreferences.setString('active_schemes', jsonEncode(schemes));
+      await ScopedSharedPreferences.setString(
+        'active_schemes',
+        jsonEncode(schemes),
+      );
     } catch (e) {
       rethrow;
     }
@@ -44,7 +50,10 @@ class SchemeEngine {
     try {
       final schemes = await loadSchemes();
       schemes.removeWhere((s) => s['id'] == schemeId);
-      await ScopedSharedPreferences.setString('active_schemes', jsonEncode(schemes));
+      await ScopedSharedPreferences.setString(
+        'active_schemes',
+        jsonEncode(schemes),
+      );
     } catch (e) {
       rethrow;
     }
@@ -96,7 +105,8 @@ class SchemeEngine {
         // BOGO: buy one get one free
         else if (type == BOGO) {
           final triggerQty = (scheme['trigger_qty'] as num?)?.toInt() ?? 0;
-          final freeItemPrice = (scheme['free_item_price'] as num?)?.toDouble() ?? 0;
+          final freeItemPrice =
+              (scheme['free_item_price'] as num?)?.toDouble() ?? 0;
           discount = applyBogoScheme(
             items: items,
             triggerQty: triggerQty,
@@ -106,7 +116,8 @@ class SchemeEngine {
         // MIN_QTY_FREE: free items after minimum quantity
         else if (type == MIN_QTY_FREE) {
           final minQty = (scheme['min_qty'] as num?)?.toInt() ?? 0;
-          final pricePerUnit = (scheme['price_per_unit'] as num?)?.toDouble() ?? 0;
+          final pricePerUnit =
+              (scheme['price_per_unit'] as num?)?.toDouble() ?? 0;
           discount = applyMinQtyFreeScheme(
             items: items,
             minQty: minQty,

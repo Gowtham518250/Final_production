@@ -11,7 +11,9 @@ class QrScannerPage extends StatelessWidget {
       body: const Center(
         child: Padding(
           padding: EdgeInsets.all(16.0),
-          child: LiveTranslatedText('QR scanner is not available on web. Use a mobile device to scan or use the "Show QR" option to display the code.'),
+          child: LiveTranslatedText(
+            'QR scanner is not available on web. Use a mobile device to scan or use the "Show QR" option to display the code.',
+          ),
         ),
       ),
     );

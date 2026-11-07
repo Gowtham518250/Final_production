@@ -24,7 +24,7 @@ enum NotificationAccessDisclosureResult {
 /// screen. The feature is optional; callers must retain a manual-billing path
 /// for all non-success results.
 Future<NotificationAccessDisclosureResult>
-    requestNotificationAccessWithDisclosure(BuildContext context) async {
+requestNotificationAccessWithDisclosure(BuildContext context) async {
   if (kIsWeb || !Platform.isAndroid) {
     return NotificationAccessDisclosureResult.unavailable;
   }
@@ -53,7 +53,9 @@ Future<NotificationAccessDisclosureResult>
               children: [
                 Icon(Icons.notifications_active_outlined),
                 SizedBox(width: 10),
-                Expanded(child: LiveTranslatedText('Allow notification access?')),
+                Expanded(
+                  child: LiveTranslatedText('Allow notification access?'),
+                ),
               ],
             ),
             content: SizedBox(
@@ -276,7 +278,7 @@ Future<SmsAccessDisclosureResult> requestSmsAccessWithDisclosure(
 
 /// Restricted to bank/UPI packages in accessibilityservice.xml. No gestures.
 Future<AccessibilityAccessDisclosureResult>
-    requestAccessibilityAccessWithDisclosure(BuildContext context) async {
+requestAccessibilityAccessWithDisclosure(BuildContext context) async {
   if (kIsWeb || !Platform.isAndroid) {
     return AccessibilityAccessDisclosureResult.unavailable;
   }

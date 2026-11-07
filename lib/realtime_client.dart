@@ -8,10 +8,7 @@ typedef RealtimeMessageHandler = void Function(Map<String, dynamic> message);
 typedef RealtimeStatusHandler = void Function(bool connected, String message);
 
 class _RealtimeSubscriber {
-  _RealtimeSubscriber({
-    required this.onMessage,
-    required this.onStatus,
-  });
+  _RealtimeSubscriber({required this.onMessage, required this.onStatus});
 
   final RealtimeMessageHandler onMessage;
   final RealtimeStatusHandler onStatus;
@@ -47,7 +44,8 @@ class RealtimeClient {
 
     final previousUserId = _userId;
     final previousShopId = _shopId;
-    final connectionChanged = previousUserId != null &&
+    final connectionChanged =
+        previousUserId != null &&
         (previousUserId != userId || previousShopId != shopId);
 
     _subscribers[subscriberId] = _RealtimeSubscriber(
@@ -94,10 +92,9 @@ class RealtimeClient {
       }
 
       final uri = _wsUri(userId, shopId, ticket);
-      final socket =
-          await WebSocket.connect(uri.toString()).timeout(
-            const Duration(seconds: 15),
-          );
+      final socket = await WebSocket.connect(
+        uri.toString(),
+      ).timeout(const Duration(seconds: 15));
 
       if (_closing || generation != _generation || _subscribers.isEmpty) {
         await socket.close(
@@ -131,8 +128,9 @@ class RealtimeClient {
 
   static Future<String?> _ticket(int shopId) async {
     try {
-      final ticketReply =
-          await ApiClient.getJson('/api/ws/token?shop_id=$shopId');
+      final ticketReply = await ApiClient.getJson(
+        '/api/ws/token?shop_id=$shopId',
+      );
       if (ticketReply.statusCode != 200) return null;
       final body = jsonDecode(ticketReply.body);
       return body is Map<String, dynamic> ? body['token']?.toString() : null;
@@ -184,10 +182,7 @@ class RealtimeClient {
     _socket = null;
     if (socket != null) {
       try {
-        await socket.close(
-          WebSocketStatus.normalClosure,
-          'Realtime reconnect',
-        );
+        await socket.close(WebSocketStatus.normalClosure, 'Realtime reconnect');
       } catch (_) {}
     }
     _cancelHeartbeat();
@@ -197,8 +192,7 @@ class RealtimeClient {
     try {
       final body = jsonDecode(raw.toString());
       if (body is Map<String, dynamic>) {
-        final snapshot =
-            List<_RealtimeSubscriber>.from(_subscribers.values);
+        final snapshot = List<_RealtimeSubscriber>.from(_subscribers.values);
         for (final subscriber in snapshot) {
           try {
             subscriber.onMessage(body);

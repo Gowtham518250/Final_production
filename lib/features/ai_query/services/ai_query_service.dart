@@ -7,8 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../api_client.dart';
-import '../../../secure_token_storage.dart';
 import '../../../bank_reconciliation.dart';
+import '../../../session_management.dart';
 import '../../../sync_queue_manager.dart';
 import '../../../sync_service.dart';
 import '../models/ai_query_response.dart';
@@ -25,9 +25,8 @@ class AIQueryVoiceResult {
     this.englishQuery = '',
   });
 
-  factory AIQueryVoiceResult.error(String message) => AIQueryVoiceResult(
-        response: AIQueryResponse.error(message),
-      );
+  factory AIQueryVoiceResult.error(String message) =>
+      AIQueryVoiceResult(response: AIQueryResponse.error(message));
 }
 
 /// Result of the backend's guarded voice transcription endpoint.
@@ -56,8 +55,9 @@ class AiQueryService {
 
   static bool _isWorkerPayrollQuestion(String query) {
     final normalized = query.toLowerCase();
-    final hasPayIntent = RegExp(r'\b(pay|paying|paid|salary|salaries|wage|wages|payroll)\b')
-        .hasMatch(normalized);
+    final hasPayIntent = RegExp(
+      r'\b(pay|paying|paid|salary|salaries|wage|wages|payroll)\b',
+    ).hasMatch(normalized);
     final hasWorkerContext = RegExp(
       r'\b(worker|workers|employee|employees|staff|labou?rers?|salary|payroll|wage|wages)\b',
     ).hasMatch(normalized);
@@ -67,9 +67,10 @@ class AiQueryService {
   /// Before asking the backend for a worker estimate, attempt to flush locally
   /// queued attendance and refuse to return a false zero while those writes remain.
   static Future<bool> _syncPendingAttendanceForPayroll() async {
-    await SyncQueueManager.makeActionsRetryableNow(
-      {'attendance_check_in', 'attendance_check_out'},
-    );
+    await SyncQueueManager.makeActionsRetryableNow({
+      'attendance_check_in',
+      'attendance_check_out',
+    });
     await SyncService.processQueueSafe(waitForActiveSync: true);
     final pending = await SyncQueueManager.getAll();
     return pending.any((item) {
@@ -88,7 +89,9 @@ class AiQueryService {
 
     if (normalized.contains('open-source voice service is not configured') ||
         normalized.contains('indic_speech_service_url') ||
-        normalized.contains('indic_speech_service_api_key must be configured')) {
+        normalized.contains(
+          'indic_speech_service_api_key must be configured',
+        )) {
       return 'Multilingual speech recognition is not configured on the server yet. '
           'Please ask the app administrator to finish the speech-service setup. '
           'Your phone does not need to support the selected language.';
@@ -137,7 +140,9 @@ class AiQueryService {
     required String languageCode,
   }) async {
     if (audioPath.trim().isEmpty) {
-      throw Exception('No voice recording was saved. Please record your question again.');
+      throw Exception(
+        'No voice recording was saved. Please record your question again.',
+      );
     }
 
     final fileName = audioPath.split(Platform.pathSeparator).last;
@@ -154,8 +159,9 @@ class AiQueryService {
         files: [audioFile],
         timeout: const Duration(minutes: 2),
       );
-      final response = await http.Response.fromStream(streamedResponse)
-          .timeout(const Duration(minutes: 2));
+      final response = await http.Response.fromStream(
+        streamedResponse,
+      ).timeout(const Duration(minutes: 2));
 
       dynamic decoded;
       try {
@@ -166,7 +172,8 @@ class AiQueryService {
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         final detail = decoded is Map
-            ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])?.toString()
+            ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])
+                  ?.toString()
             : null;
         throw Exception(
           _friendlyVoiceServiceError(detail, response.statusCode),
@@ -178,7 +185,9 @@ class AiQueryService {
       }
       final transcript = (decoded['transcript'] ?? '').toString().trim();
       if (transcript.isEmpty) {
-        throw Exception('No clear speech was detected. Please record your question again.');
+        throw Exception(
+          'No clear speech was detected. Please record your question again.',
+        );
       }
       final rawQuality = decoded['speech_quality'];
       final quality = rawQuality is Map
@@ -189,13 +198,16 @@ class AiQueryService {
           .trim();
       return AIQueryTranscription(
         transcript: transcript,
-        detectedLanguageCode:
-            detectedLanguage.isEmpty ? null : detectedLanguage,
+        detectedLanguageCode: detectedLanguage.isEmpty
+            ? null
+            : detectedLanguage,
         speechQuality: quality,
         asrModel: (decoded['asr_model'] ?? '').toString(),
       );
     } on TimeoutException {
-      throw Exception('Speech recognition timed out. Please try a shorter recording.');
+      throw Exception(
+        'Speech recognition timed out. Please try a shorter recording.',
+      );
     } on SocketException {
       throw Exception('No internet connection. Please check your connection.');
     }
@@ -210,7 +222,9 @@ class AiQueryService {
     required String languageCode,
   }) async {
     if (audioPath.trim().isEmpty) {
-      return AIQueryVoiceResult.error('No voice recording was saved. Please record your question again.');
+      return AIQueryVoiceResult.error(
+        'No voice recording was saved. Please record your question again.',
+      );
     }
 
     try {
@@ -238,7 +252,8 @@ class AiQueryService {
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         final detail = decoded is Map
-            ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])?.toString()
+            ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])
+                  ?.toString()
             : null;
         return AIQueryVoiceResult.error(
           _friendlyVoiceServiceError(detail, response.statusCode),
@@ -246,16 +261,29 @@ class AiQueryService {
       }
 
       if (decoded is! Map) {
-        return AIQueryVoiceResult.error('The voice service returned an invalid response. Please try again.');
+        return AIQueryVoiceResult.error(
+          'The voice service returned an invalid response. Please try again.',
+        );
       }
       final payload = Map<String, dynamic>.from(decoded);
       final rawVoice = payload['voice'];
       final voice = rawVoice is Map ? rawVoice : const <String, dynamic>{};
-      final transcript = (voice['transcript'] ?? payload['original_query'] ?? '').toString().trim();
-      final englishQuery = (voice['translated_query'] ?? payload['translated_query'] ?? payload['query'] ?? '').toString().trim();
+      final transcript =
+          (voice['transcript'] ?? payload['original_query'] ?? '')
+              .toString()
+              .trim();
+      final englishQuery =
+          (voice['translated_query'] ??
+                  payload['translated_query'] ??
+                  payload['query'] ??
+                  '')
+              .toString()
+              .trim();
 
       if (transcript.isEmpty || englishQuery.isEmpty) {
-        return AIQueryVoiceResult.error('Speech was captured, but no clear question was recognized. Please speak once more and try again.');
+        return AIQueryVoiceResult.error(
+          'Speech was captured, but no clear question was recognized. Please speak once more and try again.',
+        );
       }
 
       final queryResponse = AIQueryResponse.fromJson(
@@ -269,10 +297,14 @@ class AiQueryService {
         englishQuery: englishQuery,
       );
     } on TimeoutException {
-      return AIQueryVoiceResult.error('Voice processing took too long. Please try a shorter question or retry.');
+      return AIQueryVoiceResult.error(
+        'Voice processing took too long. Please try a shorter question or retry.',
+      );
     } catch (error) {
       if (kDebugMode) debugPrint('AI voice query upload failed: $error');
-      return AIQueryVoiceResult.error('Could not reach the open-source speech service. Check the connection and speech-service configuration, then retry.');
+      return AIQueryVoiceResult.error(
+        'Could not reach the open-source speech service. Check the connection and speech-service configuration, then retry.',
+      );
     }
   }
 
@@ -292,10 +324,7 @@ class AiQueryService {
 
     final response = await ApiClient.postForm(
       ApiClient.askQueryTranslateAnswerEndpoint,
-      {
-        'text': cleanAnswer,
-        'language_code': languageCode,
-      },
+      {'text': cleanAnswer, 'language_code': languageCode},
     ).timeout(const Duration(seconds: 45));
 
     dynamic decoded;
@@ -307,7 +336,8 @@ class AiQueryService {
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       final detail = decoded is Map
-          ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])?.toString()
+          ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])
+                ?.toString()
           : null;
       throw Exception(
         detail != null && detail.trim().isNotEmpty
@@ -326,7 +356,6 @@ class AiQueryService {
     return translated;
   }
 
-
   /// Answer bank-statement questions from the latest PDF uploaded on this
   /// device. Transaction content is never sent to the backend or Groq.
   static Future<AIQueryResponse?> _answerUploadedBankStatementQuestion(
@@ -334,7 +363,8 @@ class AiQueryService {
   ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final rawUserId = (prefs.get('user_id') ?? prefs.get('userId') ?? 'default').toString();
+      final rawUserId =
+          (prefs.get('user_id') ?? prefs.get('userId') ?? 'default').toString();
       final raw = prefs.getString(
         BankStatementQueryHelper.storageKeyForUserId(rawUserId),
       );
@@ -346,7 +376,10 @@ class AiQueryService {
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
-      final localResult = BankStatementQueryHelper.answerQuestion(question, rows);
+      final localResult = BankStatementQueryHelper.answerQuestion(
+        question,
+        rows,
+      );
       if (localResult == null) return null;
 
       final answer = (localResult['answer'] ?? '').toString();
@@ -363,7 +396,8 @@ class AiQueryService {
       );
     } catch (error) {
       // A bad/missing local cache must not prevent normal business queries.
-      if (kDebugMode) debugPrint('Local bank statement query unavailable: $error');
+      if (kDebugMode)
+        debugPrint('Local bank statement query unavailable: $error');
       return null;
     }
   }
@@ -371,13 +405,15 @@ class AiQueryService {
   /// Reads the server-side subscription usage. This is display-only; the backend
   /// must enforce limits and calculate remaining credits.
   static Future<Map<String, dynamic>> fetchDailyAiUsage() async {
-    final response = await ApiClient.getJson(ApiClient.billingUsageEndpoint)
-        .timeout(const Duration(seconds: 15));
+    final response = await ApiClient.getJson(
+      ApiClient.billingUsageEndpoint,
+    ).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw Exception('Unable to load AI usage (${response.statusCode}).');
     }
     final decoded = json.decode(response.body);
-    if (decoded is! Map) throw const FormatException('Invalid AI usage response.');
+    if (decoded is! Map)
+      throw const FormatException('Invalid AI usage response.');
     return Map<String, dynamic>.from(decoded);
   }
 
@@ -399,7 +435,9 @@ class AiQueryService {
     // IMPORTANT: Ask Retail Mind is business-data-only. Never infer product-shopping
     // intent here. Product discovery has its own explicit endpoint and is only
     // called from the Purchase Orders shopping assistant.
-    final statementAnswer = await _answerUploadedBankStatementQuestion(trimmedQuery);
+    final statementAnswer = await _answerUploadedBankStatementQuestion(
+      trimmedQuery,
+    );
     if (statementAnswer != null) return statementAnswer;
 
     final stopwatch = Stopwatch()..start();
@@ -439,13 +477,10 @@ class AiQueryService {
       // /askquery has a form-data contract. Send exactly one request per
       // user action; retrying the same query as JSON after a 422 caused duplicate
       // backend hits on validation errors and older deployments.
-      final response = await ApiClient.postForm(
-        ApiClient.askQueryEndpoint,
-        {
-          'query': trimmedQuery,
-          'language_code': languageCode,
-        },
-      ).timeout(_requestTimeout);
+      final response = await ApiClient.postForm(ApiClient.askQueryEndpoint, {
+        'query': trimmedQuery,
+        'language_code': languageCode,
+      }).timeout(_requestTimeout);
 
       stopwatch.stop();
       statusCode = response.statusCode;
@@ -496,7 +531,8 @@ class AiQueryService {
           final errBody = json.decode(response.body);
           if (errBody is Map && errBody['detail'] != null) {
             final detail = errBody['detail'].toString().trim();
-            if (detail.isNotEmpty && !detail.toLowerCase().contains('traceback')) {
+            if (detail.isNotEmpty &&
+                !detail.toLowerCase().contains('traceback')) {
               message = detail;
             }
           }
@@ -512,15 +548,18 @@ class AiQueryService {
         return AIQueryResponse.error(message, query: trimmedQuery);
       } else if (response.statusCode == 401) {
         // _withTokenRefresh in ApiClient already attempted a silent refresh + retry.
-        final sessionValid = await SecureTokenStorage.isSessionValid();
-        if (kDebugMode)
+        final refreshRejected = SessionManagementService.lastRefreshWasRejected;
+        if (kDebugMode) {
           debugPrint(
-            '[AUTH] /askquery still 401 after refresh attempt — sessionValid=$sessionValid',
+            '[AUTH] /askquery still 401 after refresh attempt — refreshRejected=$refreshRejected',
           );
+        }
         return AIQueryResponse.error(
-          sessionValid
-              ? 'Could not complete this question. Please try again.'
-              : 'Your session has expired. Please sign in again.',
+          refreshRejected
+              ? 'Your session has expired. Please sign in again.'
+              : 'Retail Mind could not verify your saved session with the server. '
+                    'Your login is still saved; check your connection and try again. '
+                    'If this keeps happening, sign out and sign back in.',
           query: trimmedQuery,
         );
       } else if (response.statusCode == 403) {
@@ -542,7 +581,9 @@ class AiQueryService {
         try {
           final errBody = json.decode(response.body);
           if (errBody is Map) {
-            final detail = (errBody['detail'] ?? errBody['message'] ?? '').toString().trim();
+            final detail = (errBody['detail'] ?? errBody['message'] ?? '')
+                .toString()
+                .trim();
             final lowerDetail = detail.toLowerCase();
             if (detail.isNotEmpty &&
                 !lowerDetail.contains('traceback') &&
@@ -670,7 +711,9 @@ class AiQueryService {
     required String languageCode,
   }) async {
     if (!await audioFile.exists() || await audioFile.length() == 0) {
-      throw Exception('The recording is empty. Please record your question again.');
+      throw Exception(
+        'The recording is empty. Please record your question again.',
+      );
     }
 
     final streamed = await ApiClient.postMultipart(
@@ -679,9 +722,9 @@ class AiQueryService {
       files: [await http.MultipartFile.fromPath('audio', audioFile.path)],
       timeout: const Duration(minutes: 3),
     );
-    final body = await streamed.stream
-        .bytesToString()
-        .timeout(const Duration(minutes: 3));
+    final body = await streamed.stream.bytesToString().timeout(
+      const Duration(minutes: 3),
+    );
 
     dynamic decoded;
     try {
@@ -694,9 +737,7 @@ class AiQueryService {
       final detail = decoded is Map
           ? (decoded['detail'] ?? decoded['message'])?.toString()
           : null;
-      throw Exception(
-        _friendlyVoiceServiceError(detail, streamed.statusCode),
-      );
+      throw Exception(_friendlyVoiceServiceError(detail, streamed.statusCode));
     }
 
     if (decoded is! Map<String, dynamic>) {
@@ -706,17 +747,22 @@ class AiQueryService {
     final voice = decoded['voice'] is Map
         ? Map<String, dynamic>.from(decoded['voice'] as Map)
         : decoded;
-    final transcript = (voice['transcript'] ?? voice['source_transcript'] ?? '').toString().trim();
-    final englishQuery = (voice['translated_query'] ??
-            voice['english_query'] ??
-            decoded['translated_query'] ??
-            decoded['query'] ??
-            '')
+    final transcript = (voice['transcript'] ?? voice['source_transcript'] ?? '')
         .toString()
         .trim();
+    final englishQuery =
+        (voice['translated_query'] ??
+                voice['english_query'] ??
+                decoded['translated_query'] ??
+                decoded['query'] ??
+                '')
+            .toString()
+            .trim();
 
     if (englishQuery.isEmpty) {
-      throw Exception('No English question was produced. Try speaking more slowly and clearly.');
+      throw Exception(
+        'No English question was produced. Try speaking more slowly and clearly.',
+      );
     }
 
     final response = AIQueryResponse.fromJson(
@@ -749,7 +795,9 @@ class AiQueryService {
 
     return raw
         .whereType<Map>()
-        .map((row) => AIQueryHistoryItem.fromJson(Map<String, dynamic>.from(row)))
+        .map(
+          (row) => AIQueryHistoryItem.fromJson(Map<String, dynamic>.from(row)),
+        )
         .toList();
   }
 

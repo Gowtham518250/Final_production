@@ -137,8 +137,7 @@ class ApiClient {
   static const String billingCurrentSubscriptionEndpoint =
       '/api/billing/subscriptions/current';
   static const String billingUsageEndpoint = '/api/billing/usage';
-  static const String billingEntitlementsEndpoint =
-      '/api/billing/entitlements';
+  static const String billingEntitlementsEndpoint = '/api/billing/entitlements';
   static const String billingCreateSubscriptionEndpoint =
       '/api/billing/subscriptions';
 
@@ -426,8 +425,7 @@ class ApiClient {
   static Map<String, String> buildOwnerLoginFallbackPayload(
     String identifier,
     String password,
-  ) =>
-      buildOwnerLoginPayload(identifier, password);
+  ) => buildOwnerLoginPayload(identifier, password);
 
   static int extractUserIdFromJwtToken(
     String? accessToken, {
@@ -531,12 +529,15 @@ class ApiClient {
     }
     const maxReplayBytes = 8 * 1024 * 1024;
     if (files.any((file) => file.length > maxReplayBytes)) return null;
-    final snapshots = <({
-      String field,
-      List<int> bytes,
-      String? filename,
-      MediaType? contentType,
-    })>[];
+    final snapshots =
+        <
+          ({
+            String field,
+            List<int> bytes,
+            String? filename,
+            MediaType? contentType,
+          })
+        >[];
     for (final file in files) {
       snapshots.add((
         field: file.field,
@@ -921,17 +922,18 @@ class ApiClient {
               debugPrint('🟢 Trying path: $_lastSuccessfulBase$currentPath');
             }
             Future<http.Response> req() => _retryWithBackoff(
-                  () => _makePostJsonRequest(
-                    _lastSuccessfulBase!,
-                    currentPath,
-                    sanitizedBody,
-                    headers,
-                  ),
-                );
-            final resp = await (_shouldSkipRefresh(currentPath)
-                    ? req()
-                    : _withTokenRefresh(req, currentPath))
-                .timeout(_timeoutWithRefresh(currentPath));
+              () => _makePostJsonRequest(
+                _lastSuccessfulBase!,
+                currentPath,
+                sanitizedBody,
+                headers,
+              ),
+            );
+            final resp =
+                await (_shouldSkipRefresh(currentPath)
+                        ? req()
+                        : _withTokenRefresh(req, currentPath))
+                    .timeout(_timeoutWithRefresh(currentPath));
 
             // 🔒 RESPONSE VALIDATION: Validate response before returning
             if (!_validateResponse(resp)) {
@@ -1014,17 +1016,18 @@ class ApiClient {
               debugPrint('🟢 Trying path: $base$currentPath');
             }
             Future<http.Response> req() => _retryWithBackoff(
-                  () => _makePostJsonRequest(
-                    base,
-                    currentPath,
-                    sanitizedBody,
-                    headers,
-                  ),
-                );
-            final resp = await (_shouldSkipRefresh(currentPath)
-                    ? req()
-                    : _withTokenRefresh(req, currentPath))
-                .timeout(_timeoutWithRefresh(currentPath));
+              () => _makePostJsonRequest(
+                base,
+                currentPath,
+                sanitizedBody,
+                headers,
+              ),
+            );
+            final resp =
+                await (_shouldSkipRefresh(currentPath)
+                        ? req()
+                        : _withTokenRefresh(req, currentPath))
+                    .timeout(_timeoutWithRefresh(currentPath));
 
             // 🔒 RESPONSE VALIDATION: Validate response before returning
             if (!_validateResponse(resp)) {
@@ -1324,10 +1327,11 @@ class ApiClient {
         // token at all) ends the session. An expired access token plus a 5xx or
         // network timeout must not trigger a logout while the server is unavailable.
         final hasLocalSession = await SecureTokenStorage.isSessionValid();
-        final authRejected = SessionManagementService.shouldTreatRefreshAsRejected(
-          response.statusCode,
-        );
-        if (!hasLocalSession && ownsRefresh && authRejected && !_sessionExpiryNotified) {
+        final authRejected = SessionManagementService.lastRefreshWasRejected;
+        if (!hasLocalSession &&
+            ownsRefresh &&
+            authRejected &&
+            !_sessionExpiryNotified) {
           _sessionExpiryNotified = true;
           if (kDebugMode)
             debugPrint(
@@ -1485,8 +1489,7 @@ class ApiClient {
     final replayableFiles = await _replayableMultipartFiles(files);
 
     Future<http.StreamedResponse> send(String base) {
-      final outgoingFiles =
-          replayableFiles != null ? replayableFiles() : files;
+      final outgoingFiles = replayableFiles != null ? replayableFiles() : files;
       return _makeMultipartRequest(
         base,
         path,

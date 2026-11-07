@@ -5,8 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 class PrivacyPolicyPage extends StatelessWidget {
   const PrivacyPolicyPage({super.key});
 
-  static const publicUrl =
-      'https://retail-mind-web.onrender.com/privacy.html';
+  static const publicUrl = 'https://retail-mind-web.onrender.com/privacy.html';
 
   @override
   Widget build(BuildContext context) {

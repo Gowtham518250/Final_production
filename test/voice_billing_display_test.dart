@@ -7,8 +7,14 @@ const _langs = ['te', 'hi', 'ta', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa'];
 void main() {
   group('product names (display only)', () {
     test('items from the screenshot', () {
-      expect(VoiceBillingDisplay.productName('Chicken Biryani', 'te'), 'చికెన్ బిర్యానీ');
-      expect(VoiceBillingDisplay.productName('Mutton Biryani', 'te'), 'మటన్ బిర్యానీ');
+      expect(
+        VoiceBillingDisplay.productName('Chicken Biryani', 'te'),
+        'చికెన్ బిర్యానీ',
+      );
+      expect(
+        VoiceBillingDisplay.productName('Mutton Biryani', 'te'),
+        'మటన్ బిర్యానీ',
+      );
     });
 
     test('every supported language gives a non-English result', () {
@@ -27,7 +33,10 @@ void main() {
 
     test('plurals, spelling variants and quantities', () {
       expect(VoiceBillingDisplay.productName('Eggs', 'hi'), 'अंडा');
-      expect(VoiceBillingDisplay.productName('Chicken Biriyani', 'hi'), 'चिकन बिरयानी');
+      expect(
+        VoiceBillingDisplay.productName('Chicken Biriyani', 'hi'),
+        'चिकन बिरयानी',
+      );
       expect(VoiceBillingDisplay.productName('Milk 500ml', 'te'), 'పాలు 500ml');
     });
 
@@ -36,7 +45,10 @@ void main() {
     });
 
     test('spoken potato phrases and oil map into the selected language', () {
-      expect(VoiceBillingDisplay.productName('Bungalow Dumpa', 'te'), 'బంగాళాదుంప');
+      expect(
+        VoiceBillingDisplay.productName('Bungalow Dumpa', 'te'),
+        'బంగాళాదుంప',
+      );
       expect(VoiceBillingDisplay.productName('dumpa', 'hi'), 'आलू');
       expect(VoiceBillingDisplay.productName('Sunflower Oil', 'te'), 'నూనె');
       expect(VoiceBillingDisplay.productName('Oil', 'te'), 'నూనె');
@@ -123,19 +135,28 @@ void main() {
           expect(t != null, true);
           expect(t!.contains('{name}') || t.contains('{value}'), false);
           expect(t.contains('catalogue'), false);
-          expect(t.contains('Groq'), false); // developer wording never reaches the shopkeeper
+          expect(
+            t.contains('Groq'),
+            false,
+          ); // developer wording never reaches the shopkeeper
         }
       }
     });
 
     test('the heard words and the repaired number are filled in', () {
-      final t = VoiceBillingDisplay.warning('Spoken amount "రేణు ఉందలు" was read as 200. Please verify.', 'te')!;
+      final t = VoiceBillingDisplay.warning(
+        'Spoken amount "రేణు ఉందలు" was read as 200. Please verify.',
+        'te',
+      )!;
       expect(t.contains('రేణు ఉందలు'), true);
       expect(t.contains('200'), true);
     });
 
     test('an unknown sentence returns null so the translator can try', () {
-      expect(VoiceBillingDisplay.warning('Something completely new happened.', 'te'), null);
+      expect(
+        VoiceBillingDisplay.warning('Something completely new happened.', 'te'),
+        null,
+      );
     });
 
     test('English is left alone', () {
@@ -146,10 +167,43 @@ void main() {
   group('dictionary integrity', () {
     test('every product word has a result for every language', () {
       const words = [
-        'chicken', 'mutton', 'fish', 'egg', 'biryani', 'rice', 'sugar', 'salt', 'oil', 'milk', 'curd',
-        'tea', 'coffee', 'wheat', 'flour', 'dal', 'onion', 'potato', 'tomato', 'ghee', 'butter', 'bread',
-        'biscuit', 'soap', 'water', 'juice', 'paneer', 'masala', 'chilli', 'turmeric', 'ginger', 'garlic',
-        'banana', 'apple', 'coconut', 'idli', 'dosa',
+        'chicken',
+        'mutton',
+        'fish',
+        'egg',
+        'biryani',
+        'rice',
+        'sugar',
+        'salt',
+        'oil',
+        'milk',
+        'curd',
+        'tea',
+        'coffee',
+        'wheat',
+        'flour',
+        'dal',
+        'onion',
+        'potato',
+        'tomato',
+        'ghee',
+        'butter',
+        'bread',
+        'biscuit',
+        'soap',
+        'water',
+        'juice',
+        'paneer',
+        'masala',
+        'chilli',
+        'turmeric',
+        'ginger',
+        'garlic',
+        'banana',
+        'apple',
+        'coconut',
+        'idli',
+        'dosa',
       ];
       for (final lang in _langs) {
         for (final w in words) {
@@ -161,7 +215,17 @@ void main() {
 
     test('every unit has a result for every language', () {
       for (final lang in _langs) {
-        for (final u in ['kg', 'g', 'L', 'mL', 'pc', 'pkt', 'btl', 'box', 'doz']) {
+        for (final u in [
+          'kg',
+          'g',
+          'L',
+          'mL',
+          'pc',
+          'pkt',
+          'btl',
+          'box',
+          'doz',
+        ]) {
           expect(VoiceBillingDisplay.unit(u, lang) != u, true);
         }
       }

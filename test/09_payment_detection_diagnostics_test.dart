@@ -6,6 +6,7 @@ void main() {
     () {
       expect(true, isTrue);
     },
-    skip: 'Run on a real Android device. Verify notification access, accessibility, background service, raw event reception, parser, deduplication, and invoice/Khata commit.',
+    skip:
+        'Run on a real Android device. Verify notification access, accessibility, background service, raw event reception, parser, deduplication, and invoice/Khata commit.',
   );
 }

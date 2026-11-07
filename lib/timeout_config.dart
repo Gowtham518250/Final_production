@@ -11,7 +11,7 @@ class TimeoutConfig {
   static const Duration authTimeout = Duration(seconds: 65);
   static const Duration uploadTimeout = Duration(seconds: 120);
   static const Duration downloadTimeout = Duration(seconds: 120);
-  
+
   /// Get timeout for specific operation type
   static Duration getTimeoutForOperation(String operation) {
     switch (operation.toLowerCase()) {
@@ -42,56 +42,52 @@ class TimeoutConfig {
         return defaultTimeout;
     }
   }
-  
+
   /// Get timeout for specific API endpoint
   static Duration getTimeoutForEndpoint(String endpoint) {
     // Auth endpoints
-    if (endpoint.contains('/auth/login') || 
+    if (endpoint.contains('/auth/login') ||
         endpoint.contains('/auth/register') ||
         endpoint.contains('/auth/refresh')) {
       return authTimeout;
     }
-    
+
     // Sync endpoints
-    if (endpoint.contains('/sync') || 
-        endpoint.contains('/invoices/sync')) {
+    if (endpoint.contains('/sync') || endpoint.contains('/invoices/sync')) {
       return syncTimeout;
     }
-    
+
     // Upload endpoints
-    if (endpoint.contains('/upload') || 
-        endpoint.contains('/import')) {
+    if (endpoint.contains('/upload') || endpoint.contains('/import')) {
       return uploadTimeout;
     }
-    
+
     // Export endpoints
-    if (endpoint.contains('/export') || 
-        endpoint.contains('/report')) {
+    if (endpoint.contains('/export') || endpoint.contains('/report')) {
       return longTimeout;
     }
-    
+
     // Quick operations
-    if (endpoint.contains('/health') || 
-        endpoint.contains('/validate')) {
+    if (endpoint.contains('/health') || endpoint.contains('/validate')) {
       return quickTimeout;
     }
-    
+
     return defaultTimeout;
   }
-  
+
   /// Apply timeout to a Future with operation-specific timeout
   static Future<T> withTimeout<T>(
-    Future<T> future, 
+    Future<T> future,
     String operation, {
     Duration? customTimeout,
   }) {
     final timeout = customTimeout ?? getTimeoutForOperation(operation);
     return future.timeout(timeout);
   }
-  
+
   /// Apply timeout to a Future with endpoint-specific timeout
   static Future<T> withEndpointTimeout<T>(
-    Future<T> future, 
+    Future<T> future,
     String endpoint, {
     Duration? customTimeout,
   }) {

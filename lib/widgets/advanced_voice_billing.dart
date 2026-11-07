@@ -23,7 +23,8 @@ class AdvancedVoiceBillingWidget extends StatefulWidget {
   });
 
   @override
-  State<AdvancedVoiceBillingWidget> createState() => _AdvancedVoiceBillingWidgetState();
+  State<AdvancedVoiceBillingWidget> createState() =>
+      _AdvancedVoiceBillingWidgetState();
 }
 
 class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
@@ -151,7 +152,7 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
 
   void _simulateRecognitionResult() {
     if (!_isListening) return;
-    
+
     setState(() {
       _isListening = false;
       _isProcessing = true;
@@ -235,7 +236,11 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
                     color: const Color(0xFF6366F1),
                     fontWeight: FontWeight.w600,
                   ),
-                  icon: const Icon(Icons.expand_more, size: 16, color: Color(0xFF6366F1)),
+                  icon: const Icon(
+                    Icons.expand_more,
+                    size: 16,
+                    color: Color(0xFF6366F1),
+                  ),
                   items: _languages.entries.map((entry) {
                     return DropdownMenuItem(
                       value: entry.key,
@@ -275,8 +280,8 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
                         color: _isListening
                             ? const Color(0xFF6366F1)
                             : _isProcessing
-                                ? const Color(0xFFF59E0B)
-                                : const Color(0xFF6366F1).withValues(alpha: 0.1),
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF6366F1).withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: _isListening
@@ -286,7 +291,9 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                            color: const Color(
+                              0xFF6366F1,
+                            ).withValues(alpha: 0.3),
                             blurRadius: 20,
                             spreadRadius: _isListening ? 10 : 0,
                           ),
@@ -298,13 +305,17 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
                               height: 30,
                               child: CircularProgressIndicator(
                                 strokeWidth: 3,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
                             )
                           : Icon(
                               Icons.mic,
                               size: 36,
-                              color: _isListening ? Colors.white : const Color(0xFF6366F1),
+                              color: _isListening
+                                  ? Colors.white
+                                  : const Color(0xFF6366F1),
                             ),
                     ),
                   ),
@@ -320,8 +331,8 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
             _isListening
                 ? 'Listening... Say a command'
                 : _isProcessing
-                    ? 'Processing...'
-                    : 'Tap to speak',
+                ? 'Processing...'
+                : 'Tap to speak',
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: 14,
@@ -345,9 +356,7 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -387,7 +396,11 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
         children: [
           Row(
             children: [
-              Icon(Icons.check_circle, color: const Color(0xFF10B981), size: 20),
+              Icon(
+                Icons.check_circle,
+                color: const Color(0xFF10B981),
+                size: 20,
+              ),
               const SizedBox(width: AppSpacing.sm),
               LiveTranslatedText(
                 'Recognized',
@@ -420,7 +433,11 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
                       ),
                     ),
                     const SizedBox(width: 4),
-                    Icon(Icons.trending_up, size: 12, color: const Color(0xFF10B981)),
+                    Icon(
+                      Icons.trending_up,
+                      size: 12,
+                      color: const Color(0xFF10B981),
+                    ),
                   ],
                 ),
               ),
@@ -491,9 +508,7 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,63 +522,65 @@ class _AdvancedVoiceBillingWidgetState extends State<AdvancedVoiceBillingWidget>
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          ..._commands.map((command) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(command.icon, color: const Color(0xFF6366F1), size: 20),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          LiveTranslatedText(
-                            command.command,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF1E293B),
-                            ),
+          ..._commands.map(
+            (command) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(command.icon, color: const Color(0xFF6366F1), size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LiveTranslatedText(
+                          command.command,
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF1E293B),
                           ),
-                          const SizedBox(height: 2),
-                          LiveTranslatedText(
-                            command.description,
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              color: const Color(0xFF64748B),
-                            ),
+                        ),
+                        const SizedBox(height: 2),
+                        LiveTranslatedText(
+                          command.description,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: const Color(0xFF64748B),
                           ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: AppSpacing.sm,
-                            children: command.examples.map((example) {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.sm,
-                                  vertical: 2,
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          children: command.examples.map((example) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: LiveTranslatedText(
+                                '"$example"',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: const Color(0xFF64748B),
+                                  fontStyle: FontStyle.italic,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF8FAFC),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: LiveTranslatedText(
-                                  '"$example"',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 10,
-                                    color: const Color(0xFF64748B),
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              )),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -600,8 +617,8 @@ class ConfidenceIndicator extends StatelessWidget {
     final color = confidence >= 0.8
         ? const Color(0xFF10B981)
         : confidence >= 0.5
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFFEF4444);
+        ? const Color(0xFFF59E0B)
+        : const Color(0xFFEF4444);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,10 +670,7 @@ class ConfidenceIndicator extends StatelessWidget {
 class MultiLanguageIndicator extends StatelessWidget {
   final List<String> activeLanguages;
 
-  const MultiLanguageIndicator({
-    super.key,
-    required this.activeLanguages,
-  });
+  const MultiLanguageIndicator({super.key, required this.activeLanguages});
 
   @override
   Widget build(BuildContext context) {

@@ -47,7 +47,8 @@ Future<List<String>> translateTextBatchRemotely(
         final boundary = text.lastIndexOf(RegExp(r'\s'), end);
         if (boundary > start) end = boundary;
       }
-      if (end <= start) end = math.min(start + _maxRemoteItemChars, text.length);
+      if (end <= start)
+        end = math.min(start + _maxRemoteItemChars, text.length);
       final piece = text.substring(start, end).trim();
       if (piece.isNotEmpty) {
         segments.add(_TextSegment(index, piece));

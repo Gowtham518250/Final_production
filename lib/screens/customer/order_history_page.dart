@@ -22,7 +22,8 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _filteredOrders = [];
   bool _isLoading = true;
-  String _selectedFilter = 'ALL'; // ALL, PLACED, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED
+  String _selectedFilter =
+      'ALL'; // ALL, PLACED, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -39,15 +40,17 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
     // authenticated customer's server history whenever the backend is reachable.
     try {
       final prefs = await SharedPreferences.getInstance();
-      final role = (prefs.getString('user_role') ??
-              prefs.getString('user_type') ??
-              prefs.getString('role') ??
-              '')
-          .trim()
-          .toUpperCase();
+      final role =
+          (prefs.getString('user_role') ??
+                  prefs.getString('user_type') ??
+                  prefs.getString('role') ??
+                  '')
+              .trim()
+              .toUpperCase();
       if (role == 'CUSTOMER') {
-        final response = await ApiClient.getJson('/store/my-orders')
-            .timeout(const Duration(seconds: 12));
+        final response = await ApiClient.getJson(
+          '/store/my-orders',
+        ).timeout(const Duration(seconds: 12));
         if (response.statusCode == 200) {
           final body = jsonDecode(response.body);
           final rawOrders = body is Map ? body['orders'] : null;
@@ -59,11 +62,16 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
             await OrderHistoryService.mergeRemoteOrders(remoteOrders);
           }
         } else if (kDebugMode) {
-          debugPrint('Customer order refresh returned a non-success HTTP response.');
+          debugPrint(
+            'Customer order refresh returned a non-success HTTP response.',
+          );
         }
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('Customer order refresh unavailable; showing cached orders: $e');
+      if (kDebugMode)
+        debugPrint(
+          'Customer order refresh unavailable; showing cached orders: $e',
+        );
     }
 
     final orders = await OrderHistoryService.getAllOrders();
@@ -79,7 +87,8 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
     final query = _searchController.text.trim().toLowerCase();
     _filteredOrders = _orders.where((order) {
       final status = (order['status'] ?? 'PENDING').toString().toUpperCase();
-      final matchesStatus = _selectedFilter == 'ALL' || status == _selectedFilter;
+      final matchesStatus =
+          _selectedFilter == 'ALL' || status == _selectedFilter;
       final searchable = [
         order['order_id'],
         order['server_order_id'],
@@ -105,16 +114,31 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: LiveTranslatedText('Cancel Order', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-        content: LiveTranslatedText('Are you sure you want to cancel this order?', style: GoogleFonts.poppins()),
+        title: LiveTranslatedText(
+          'Cancel Order',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
+        content: LiveTranslatedText(
+          'Are you sure you want to cancel this order?',
+          style: GoogleFonts.poppins(),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: LiveTranslatedText('No', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            child: LiveTranslatedText(
+              'No',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: LiveTranslatedText('Yes', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: const Color(0xFFEF4444))),
+            child: LiveTranslatedText(
+              'Yes',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFFEF4444),
+              ),
+            ),
           ),
         ],
       ),
@@ -125,14 +149,20 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
       if (success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: LiveTranslatedText('Order cancelled successfully'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: LiveTranslatedText('Order cancelled successfully'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
         await _loadOrders();
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: LiveTranslatedText('Cannot cancel this order'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: LiveTranslatedText('Cannot cancel this order'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -146,7 +176,10 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
       appBar: AppBar(
         title: LiveTranslatedText(
           'My Orders',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: const Color(0xFF1F2937)),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF1F2937),
+          ),
         ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1F2937),
@@ -216,7 +249,10 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
         onChanged: _searchOrders,
       ),
@@ -225,7 +261,7 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
 
   Widget _buildFilterChips() {
     final filters = ['ALL', ...OrderHistoryService.orderStatuses];
-    
+
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -293,25 +329,36 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final orderId = order['order_id'] ?? 'Unknown';
     final status = order['status'] ?? 'PLACED';
-    final total = order['total_amount'] ?? order['total'] ?? order['amount'] ?? 0;
+    final total =
+        order['total_amount'] ?? order['total'] ?? order['amount'] ?? 0;
     final createdAt = order['created_at'] ?? '';
     final items = order['items'] as List<dynamic>? ?? [];
-    final paymentMethod = (order['payment_method'] ?? '').toString().trim().toUpperCase();
-    final paymentStatus = (order['payment_status'] ?? '').toString().trim().toUpperCase();
+    final paymentMethod = (order['payment_method'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final paymentStatus = (order['payment_status'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
     final paymentConfirmationSource =
-        (order['payment_confirmation_source'] ?? '').toString().trim().toUpperCase();
+        (order['payment_confirmation_source'] ?? '')
+            .toString()
+            .trim()
+            .toUpperCase();
     final localizations = AppLocalizations.of(context);
-    final paymentStatusLabel = <String, String>{
-      'PAID': localizations.translate('paymentStatusPaid'),
-      'PENDING': localizations.translate('paymentStatusPending'),
-      'UNPAID': localizations.translate('paymentStatusPending'),
-      'COD': localizations.translate('paymentStatusCodDue'),
-      'COD_DUE': localizations.translate('paymentStatusCodDue'),
-      'FAILED': localizations.translate('paymentStatusFailed'),
-      'REFUND': localizations.translate('paymentStatusRefund'),
-      'REFUNDED': localizations.translate('paymentStatusRefund'),
-      'PARTIAL': localizations.translate('paymentStatusPartial'),
-    }[paymentStatus] ??
+    final paymentStatusLabel =
+        <String, String>{
+          'PAID': localizations.translate('paymentStatusPaid'),
+          'PENDING': localizations.translate('paymentStatusPending'),
+          'UNPAID': localizations.translate('paymentStatusPending'),
+          'COD': localizations.translate('paymentStatusCodDue'),
+          'COD_DUE': localizations.translate('paymentStatusCodDue'),
+          'FAILED': localizations.translate('paymentStatusFailed'),
+          'REFUND': localizations.translate('paymentStatusRefund'),
+          'REFUNDED': localizations.translate('paymentStatusRefund'),
+          'PARTIAL': localizations.translate('paymentStatusPartial'),
+        }[paymentStatus] ??
         (paymentStatus.isEmpty
             ? localizations.translate('paymentStatusPending')
             : paymentStatus);
@@ -321,130 +368,139 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
       child: GlassContainer(
         padding: const EdgeInsets.all(16),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveTranslatedText(
+                        orderId,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      LiveTranslatedText(
+                        _formatDate(createdAt),
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildStatusChip(status),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Items preview
+            if (items.isNotEmpty)
+              LiveTranslatedText(
+                '${items.length} item${items.length > 1 ? 's' : ''}',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: const Color(0xFF6B7280),
+                ),
+              ),
+            if (paymentMethod.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     LiveTranslatedText(
-                      orderId,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    LiveTranslatedText(
-                      _formatDate(createdAt),
+                      localizations
+                          .translate('paymentStatusLine')
+                          .replaceAll('{method}', paymentMethod)
+                          .replaceAll('{status}', paymentStatusLabel),
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        color: const Color(0xFF6B7280),
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
                       ),
                     ),
+                    if (paymentConfirmationSource ==
+                        'OWNER_DEVICE_NOTIFICATION_MATCH')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: LiveTranslatedText(
+                          localizations.translate(
+                            'paymentMatchedNotificationHint',
+                          ),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: const Color(0xFF92400E),
+                          ),
+                        ),
+                      )
+                    else if (paymentMethod == 'UPI' && paymentStatus != 'PAID')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: LiveTranslatedText(
+                          localizations.translate('paymentPendingHint'),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: const Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              _buildStatusChip(status),
+              const SizedBox(height: 12),
             ],
-          ),
-          const SizedBox(height: 12),
-          // Items preview
-          if (items.isNotEmpty)
-            LiveTranslatedText(
-              '${items.length} item${items.length > 1 ? 's' : ''}',
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: const Color(0xFF6B7280),
-              ),
-            ),
-          if (paymentMethod.isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LiveTranslatedText(
-                    localizations
-                        .translate('paymentStatusLine')
-                        .replaceAll('{method}', paymentMethod)
-                        .replaceAll('{status}', paymentStatusLabel),
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF334155),
-                    ),
+            // Total and actions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                LiveTranslatedText(
+                  '₹${total.toString()}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1F2937),
                   ),
-                  if (paymentConfirmationSource == 'OWNER_DEVICE_NOTIFICATION_MATCH')
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: LiveTranslatedText(
-                        localizations.translate('paymentMatchedNotificationHint'),
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: const Color(0xFF92400E),
-                        ),
-                      ),
-                    )
-                  else if (paymentMethod == 'UPI' && paymentStatus != 'PAID')
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: LiveTranslatedText(
-                        localizations.translate('paymentPendingHint'),
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: const Color(0xFF92400E),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          // Total and actions
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              LiveTranslatedText(
-                '₹${total.toString()}',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF1F2937),
                 ),
-              ),
-              Row(
-                children: [
-                  // Cancel button (only for cancellable orders)
-                  if (_isCancellable(status))
-                    OutlinedButton.icon(
-                      onPressed: () => _cancelOrder(orderId),
-                      icon: const Icon(Icons.cancel, size: 16),
-                      label: const LiveTranslatedText('Cancel'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFEF4444),
-                        side: const BorderSide(color: Color(0xFFEF4444)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        textStyle: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+                Row(
+                  children: [
+                    // Cancel button (only for cancellable orders)
+                    if (_isCancellable(status))
+                      OutlinedButton.icon(
+                        onPressed: () => _cancelOrder(orderId),
+                        icon: const Icon(Icons.cancel, size: 16),
+                        label: const LiveTranslatedText('Cancel'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                          side: const BorderSide(color: Color(0xFFEF4444)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -513,10 +569,14 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: completed ? const Color(0xFF10B981) : const Color(0xFFE5E7EB),
+              color: completed
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFFE5E7EB),
               shape: BoxShape.circle,
               border: Border.all(
-                color: completed ? const Color(0xFF10B981) : const Color(0xFFE5E7EB),
+                color: completed
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFE5E7EB),
                 width: 2,
               ),
             ),
@@ -535,7 +595,9 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: completed ? const Color(0xFF1F2937) : const Color(0xFF9CA3AF),
+                    color: completed
+                        ? const Color(0xFF1F2937)
+                        : const Color(0xFF9CA3AF),
                   ),
                 ),
                 if (timestamp != null) ...[

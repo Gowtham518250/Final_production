@@ -18,10 +18,12 @@ class RetailMindSubscriptionPage extends StatefulWidget {
   const RetailMindSubscriptionPage({super.key});
 
   @override
-  State<RetailMindSubscriptionPage> createState() => _RetailMindSubscriptionPageState();
+  State<RetailMindSubscriptionPage> createState() =>
+      _RetailMindSubscriptionPageState();
 }
 
-class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage> {
+class _RetailMindSubscriptionPageState
+    extends State<RetailMindSubscriptionPage> {
   late Future<List<RetailMindSubscriptionPlan>> _plansFuture;
   late Future<Map<String, dynamic>> _subscriptionFuture;
   late Future<AiUsageSnapshot> _usageFuture;
@@ -52,7 +54,6 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       // Each FutureBuilder renders its own error state; keep pull-to-refresh usable.
     }
   }
-
 
   Future<void> _showCheckoutError(Object error) async {
     if (!mounted) return;
@@ -107,30 +108,47 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
 
   void _onSubscriptionVerify(String subscriptionId) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Mandate authorization completed. Retail Mind is confirming the subscription payment.'),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Mandate authorization completed. Retail Mind is confirming the subscription payment.',
+        ),
+      ),
+    );
     _refresh();
   }
 
   void _onSubscriptionFailure(CFErrorResponse errorResponse, String data) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(errorResponse.getMessage() ?? 'Subscription failed. Please try again.'),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          errorResponse.getMessage() ??
+              'Subscription failed. Please try again.',
+        ),
+      ),
+    );
   }
 
   Future<void> _selectPlan(RetailMindSubscriptionPlan plan) async {
     if (plan.code == 'FREE') {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Free Starter is available automatically for every shop.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Free Starter is available automatically for every shop.',
+          ),
+        ),
+      );
       return;
     }
     if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Cashfree subscription checkout is currently available in the Android/iOS app.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cashfree subscription checkout is currently available in the Android/iOS app.',
+          ),
+        ),
+      );
       return;
     }
     setState(() => _busyPlan = plan.code);
@@ -141,15 +159,28 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       );
       if (!mounted) return;
 
-      final planChanged = result['plan_changed'] == true || result['planChanged'] == true;
-      final requiresCheckout = result['requires_checkout'] != false && result['requiresCheckout'] != false;
-      final successValue = result['success'] == true || (result['status'] ?? '').toString().toUpperCase() == 'ACTIVE';
-      final planStatus = (result['status'] ?? result['subscription_status'] ?? '').toString().toUpperCase();
+      final planChanged =
+          result['plan_changed'] == true || result['planChanged'] == true;
+      final requiresCheckout =
+          result['requires_checkout'] != false &&
+          result['requiresCheckout'] != false;
+      final successValue =
+          result['success'] == true ||
+          (result['status'] ?? '').toString().toUpperCase() == 'ACTIVE';
+      final planStatus =
+          (result['status'] ?? result['subscription_status'] ?? '')
+              .toString()
+              .toUpperCase();
 
-      if ((successValue && planChanged && !requiresCheckout) || (planStatus == 'ACTIVE' && !requiresCheckout && !planChanged)) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Plan updated successfully. Your subscription status is being refreshed.'),
-        ));
+      if ((successValue && planChanged && !requiresCheckout) ||
+          (planStatus == 'ACTIVE' && !requiresCheckout && !planChanged)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Plan updated successfully. Your subscription status is being refreshed.',
+            ),
+          ),
+        );
         await _refresh();
         return;
       }
@@ -157,11 +188,17 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       final subscriptionId = (result['subscription_id'] ?? '').toString();
       final sessionId = (result['subscription_session_id'] ?? '').toString();
       if (subscriptionId.isEmpty || sessionId.isEmpty) {
-        final message = (result['message'] ?? result['detail'] ?? 'Cashfree did not return a valid subscription checkout session.').toString();
+        final message =
+            (result['message'] ??
+                    result['detail'] ??
+                    'Cashfree did not return a valid subscription checkout session.')
+                .toString();
         throw Exception(message);
       }
-      final rawEnvironment =
-          (result['environment'] ?? '').toString().trim().toLowerCase();
+      final rawEnvironment = (result['environment'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
       if (rawEnvironment != 'production' && rawEnvironment != 'sandbox') {
         throw Exception(
           'Cashfree checkout was not started because billing did not specify production or sandbox.',
@@ -198,7 +235,13 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       backgroundColor: const Color(0xFFF4F6FB),
       appBar: AppBar(
         title: const LiveTranslatedText('Retail Mind Plans'),
-        actions: [IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded), tooltip: 'Refresh billing')],
+        actions: [
+          IconButton(
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh billing',
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -209,30 +252,78 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
             const SizedBox(height: 14),
             _currentSubscriptionCard(),
             const SizedBox(height: 22),
-            LiveTranslatedText('Choose a plan', style: GoogleFonts.inter(fontSize: 21, fontWeight: FontWeight.w800, color: const Color(0xFF172554))),
+            LiveTranslatedText(
+              'Choose a plan',
+              style: GoogleFonts.inter(
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF172554),
+              ),
+            ),
             const SizedBox(height: 5),
-            LiveTranslatedText('Plans and included features are managed by Retail Mind.', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+            LiveTranslatedText(
+              'Plans and included features are managed by Retail Mind.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: const Color(0xFF64748B),
+              ),
+            ),
             const SizedBox(height: 12),
-            Align(alignment: Alignment.centerLeft, child: ToggleButtons(
-              isSelected: [_billingInterval == 'MONTHLY', _billingInterval == 'YEARLY'],
-              onPressed: (index) => setState(() => _billingInterval = index == 0 ? 'MONTHLY' : 'YEARLY'),
-              borderRadius: BorderRadius.circular(12),
-              constraints: const BoxConstraints(minHeight: 40, minWidth: 112),
-              children: [Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: LiveTranslatedText('Monthly')), Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: LiveTranslatedText('Yearly'))],
-            )),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ToggleButtons(
+                isSelected: [
+                  _billingInterval == 'MONTHLY',
+                  _billingInterval == 'YEARLY',
+                ],
+                onPressed: (index) => setState(
+                  () => _billingInterval = index == 0 ? 'MONTHLY' : 'YEARLY',
+                ),
+                borderRadius: BorderRadius.circular(12),
+                constraints: const BoxConstraints(minHeight: 40, minWidth: 112),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: LiveTranslatedText('Monthly'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: LiveTranslatedText('Yearly'),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 12),
             FutureBuilder<List<RetailMindSubscriptionPlan>>(
               future: _plansFuture,
               builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) return const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()));
-                if (snapshot.hasError) return _errorCard('Unable to load plans. Check your connection and refresh.');
-                final plans = snapshot.data ?? const <RetailMindSubscriptionPlan>[];
-                if (plans.isEmpty) return _errorCard('No plans are currently available. Please try again later.');
+                if (snapshot.connectionState != ConnectionState.done)
+                  return const Padding(
+                    padding: EdgeInsets.all(28),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                if (snapshot.hasError)
+                  return _errorCard(
+                    'Unable to load plans. Check your connection and refresh.',
+                  );
+                final plans =
+                    snapshot.data ?? const <RetailMindSubscriptionPlan>[];
+                if (plans.isEmpty)
+                  return _errorCard(
+                    'No plans are currently available. Please try again later.',
+                  );
                 return Column(children: plans.map(_planCard).toList());
               },
             ),
             const SizedBox(height: 14),
-            const LiveTranslatedText('All subscriptions are attached to the signed-in shop. Daily AI credits are shared by text and voice questions and reset according to the billing service clock.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.5)),
+            const LiveTranslatedText(
+              'All subscriptions are attached to the signed-in shop. Daily AI credits are shared by text and voice questions and reset according to the billing service clock.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                height: 1.5,
+              ),
+            ),
           ],
         ),
       ),
@@ -249,16 +340,84 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       final progress = limit <= 0 ? 0.0 : (used / limit).clamp(0.0, 1.0);
       return Container(
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF273B92), Color(0xFF6246C7)]), borderRadius: BorderRadius.circular(22)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [const Icon(Icons.auto_awesome_rounded, color: Colors.white), const SizedBox(width: 8), const Expanded(child: LiveTranslatedText('Daily AI allowance', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16))), Text('$remaining ', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w800)), const LiveTranslatedText('left', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800))]),
-          const SizedBox(height: 14),
-          ClipRRect(borderRadius: BorderRadius.circular(20), child: LinearProgressIndicator(value: progress, minHeight: 9, backgroundColor: Colors.white24, valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF9BE7C4)))),
-          const SizedBox(height: 9),
-          Text('$used of $limit successful queries used today', style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-          if (snapshot.hasError) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Usage could not be refreshed.', style: TextStyle(color: Colors.white70, fontSize: 11))),
-          if (usage?.resetsAt != null) Padding(padding: const EdgeInsets.only(top: 5), child: Text('Resets ${DateFormat('dd MMM, hh:mm a').format(usage!.resetsAt!.toLocal())}', style: GoogleFonts.inter(color: Colors.white70, fontSize: 11))),
-        ]),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF273B92), Color(0xFF6246C7)],
+          ),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: LiveTranslatedText(
+                    'Daily AI allowance',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$remaining ',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const LiveTranslatedText(
+                  'left',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 9,
+                backgroundColor: Colors.white24,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF9BE7C4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              '$used of $limit successful queries used today',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (snapshot.hasError)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Usage could not be refreshed.',
+                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ),
+            if (usage?.resetsAt != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text(
+                  'Resets ${DateFormat('dd MMM, hh:mm a').format(usage!.resetsAt!.toLocal())}',
+                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
+                ),
+              ),
+          ],
+        ),
       );
     },
   );
@@ -268,17 +427,38 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel subscription?'),
-        content: const Text('Cashfree will be asked to stop future renewals. Your paid access should remain until the current paid period ends.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep plan')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+        content: const Text(
+          'Cashfree will be asked to stop future renewals. Your paid access should remain until the current paid period ends.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep plan'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
       ),
     );
     if (confirmed != true) return;
     try {
       await RetailMindBillingService.cancelSubscription(id);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cancellation request sent to Cashfree.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cancellation request sent to Cashfree.'),
+          ),
+        );
       await _refresh();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
     }
   }
 
@@ -336,15 +516,15 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
       }
 
       final data = snapshot.data ?? const <String, dynamic>{};
-      final statusCode = (data['status'] ??
-              data['subscription_status'] ??
-              'FREE')
-          .toString()
-          .toUpperCase();
+      final statusCode =
+          (data['status'] ?? data['subscription_status'] ?? 'FREE')
+              .toString()
+              .toUpperCase();
       final status = statusCode.replaceAll('_', ' ');
       final plan = (data['plan_name'] ?? data['name'] ?? 'Free Starter')
           .toString();
-      final renewal = data['next_charge_at'] ??
+      final renewal =
+          data['next_charge_at'] ??
           data['current_period_end'] ??
           data['renewal_at'];
       final rawId = data['id'];
@@ -443,10 +623,7 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
               const SizedBox(height: 6),
               Text(
                 'Paid-through / renewal date: $renewal',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF64748B),
-                ),
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
               ),
             ],
             if ((statusCode == 'ACTIVE' || statusCode == 'GRACE_PERIOD') &&
@@ -479,20 +656,143 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
 
   Widget _planCard(RetailMindSubscriptionPlan plan) {
     final intervalLabel = _billingInterval == 'YEARLY' ? '/ year' : '/ month';
-    final price = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(plan.amountFor(_billingInterval));
-    return Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(17), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: plan.recommended ? const Color(0xFF7161D8) : const Color(0xFFE2E8F0), width: plan.recommended ? 1.7 : 1)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Expanded(child: Text(plan.name, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: const Color(0xFF172554)))), if (plan.recommended) const Chip(label: LiveTranslatedText('Popular', style: TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact)]),
-      const SizedBox(height: 4),
-      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [Text(price, style: GoogleFonts.inter(fontSize: 29, fontWeight: FontWeight.w900, color: const Color(0xFF1E2D68))), Padding(padding: const EdgeInsets.only(bottom: 5), child: LiveTranslatedText(intervalLabel, style: const TextStyle(color: Color(0xFF64748B))))]),
-      const SizedBox(height: 9),
-      _featureLine(Icons.auto_awesome, '${plan.dailyAiQueryLimit} ', suffix: 'AI queries per day'),
-      for (final feature in plan.features) _featureLine(Icons.check_circle_outline, feature),
-      const SizedBox(height: 13),
-      SizedBox(width: double.infinity, child: FilledButton(onPressed: _busyPlan == null ? () => _selectPlan(plan) : null, child: _busyPlan == plan.code ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : LiveTranslatedText(plan.code == 'FREE' ? 'Included' : 'Continue to checkout'))),
-    ]));
+    final price = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    ).format(plan.amountFor(_billingInterval));
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: plan.recommended
+              ? const Color(0xFF7161D8)
+              : const Color(0xFFE2E8F0),
+          width: plan.recommended ? 1.7 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  plan.name,
+                  style: GoogleFonts.inter(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF172554),
+                  ),
+                ),
+              ),
+              if (plan.recommended)
+                const Chip(
+                  label: LiveTranslatedText(
+                    'Popular',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                price,
+                style: GoogleFonts.inter(
+                  fontSize: 29,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF1E2D68),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: LiveTranslatedText(
+                  intervalLabel,
+                  style: const TextStyle(color: Color(0xFF64748B)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          _featureLine(
+            Icons.auto_awesome,
+            '${plan.dailyAiQueryLimit} ',
+            suffix: 'AI queries per day',
+          ),
+          for (final feature in plan.features)
+            _featureLine(Icons.check_circle_outline, feature),
+          const SizedBox(height: 13),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _busyPlan == null ? () => _selectPlan(plan) : null,
+              child: _busyPlan == plan.code
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : LiveTranslatedText(
+                      plan.code == 'FREE' ? 'Included' : 'Continue to checkout',
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _featureLine(IconData icon, String text, {String? suffix}) => Padding(padding: const EdgeInsets.only(top: 5), child: Row(children: [Icon(icon, size: 16, color: const Color(0xFF23845D)), const SizedBox(width: 8), Expanded(child: suffix == null ? LiveTranslatedText(text, style: const TextStyle(fontSize: 12, color: Color(0xFF53627C))) : Row(children: [Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF53627C))), LiveTranslatedText(suffix, style: const TextStyle(fontSize: 12, color: Color(0xFF53627C))) ]))]));
+  Widget _featureLine(IconData icon, String text, {String? suffix}) => Padding(
+    padding: const EdgeInsets.only(top: 5),
+    child: Row(
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF23845D)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: suffix == null
+              ? LiveTranslatedText(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF53627C),
+                  ),
+                )
+              : Row(
+                  children: [
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF53627C),
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      suffix,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF53627C),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ],
+    ),
+  );
 
-  Widget _errorCard(String message) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: Text(message, style: const TextStyle(color: Color(0xFF64748B))));
+  Widget _errorCard(String message) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Text(message, style: const TextStyle(color: Color(0xFF64748B))),
+  );
 }

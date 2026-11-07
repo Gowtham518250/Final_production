@@ -45,9 +45,10 @@ class _EnhancedDashboardCardState extends State<EnhancedDashboardCard>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1, end: 1.02).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1,
+      end: 1.02,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
   }
 
   @override
@@ -89,7 +90,9 @@ class _EnhancedDashboardCardState extends State<EnhancedDashboardCard>
                       ],
                     )
                   : null,
-              color: widget.backgroundColor ?? (isDarkMode ? Colors.grey[900] : Colors.white),
+              color:
+                  widget.backgroundColor ??
+                  (isDarkMode ? Colors.grey[900] : Colors.white),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: widget.primaryColor.withValues(alpha: 0.2),
@@ -97,7 +100,9 @@ class _EnhancedDashboardCardState extends State<EnhancedDashboardCard>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: widget.primaryColor.withValues(alpha: _isHovered ? 0.15 : 0.05),
+                  color: widget.primaryColor.withValues(
+                    alpha: _isHovered ? 0.15 : 0.05,
+                  ),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -199,9 +204,10 @@ class _ProgressCardState extends State<ProgressCard>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    _animation = Tween<double>(begin: 0, end: widget.progress).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _animation = Tween<double>(
+      begin: 0,
+      end: widget.progress,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
   }
 
@@ -299,9 +305,7 @@ class StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDarkMode ? Colors.grey[900] : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,10 +378,7 @@ class AnimatedCounter extends StatefulWidget {
     Key? key,
     required this.targetValue,
     this.duration = const Duration(milliseconds: 1500),
-    this.textStyle = const TextStyle(
-      fontSize: 32,
-      fontWeight: FontWeight.bold,
-    ),
+    this.textStyle = const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
     this.suffix = '',
   }) : super(key: key);
 
@@ -394,9 +395,10 @@ class _AnimatedCounterState extends State<AnimatedCounter>
   void initState() {
     super.initState();
     _controller = AnimationController(duration: widget.duration, vsync: this);
-    _animation = IntTween(begin: 0, end: widget.targetValue).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _animation = IntTween(
+      begin: 0,
+      end: widget.targetValue,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
   }
 
@@ -441,9 +443,7 @@ class GlassCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: opacity),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),

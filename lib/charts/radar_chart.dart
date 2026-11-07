@@ -1,4 +1,5 @@
 import '../live_translated_text.dart';
+
 /// 📡 RevenueRadarChart
 /// Most sold products by QUANTITY — spider web polygon radar
 /// Dark premium card with glowing fills + horizontal bar legend
@@ -9,7 +10,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../analytics_engine.dart';
 import 'product_price_analytics.dart';
-
 
 class RevenueRadarChart extends StatelessWidget {
   final AnalyticsEngine engine;
@@ -33,29 +33,33 @@ class RevenueRadarChart extends StatelessWidget {
   ];
 
   Widget _empty() => Container(
-        height: 200,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(24),
+    height: 200,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: const Color(0xFF0F172A),
+      borderRadius: BorderRadius.circular(24),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.radar, size: 48, color: Colors.white.withValues(alpha: 0.2)),
+        const SizedBox(height: 12),
+        LiveTranslatedText(
+          'No quantity data',
+          style: GoogleFonts.poppins(color: Colors.white38, fontSize: 13),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.radar, size: 48, color: Colors.white.withValues(alpha: 0.2)),
-            const SizedBox(height: 12),
-            LiveTranslatedText('No quantity data', style: GoogleFonts.poppins(color: Colors.white38, fontSize: 13)),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     try {
-      final allItems = ProductPriceAnalytics.aggregateSales(
-        engine.filteredSalesCache,
-      ).where((row) => row.quantity > 0).toList()
-        ..sort((a, b) => b.quantity.compareTo(a.quantity));
+      final allItems =
+          ProductPriceAnalytics.aggregateSales(
+              engine.filteredSalesCache,
+            ).where((row) => row.quantity > 0).toList()
+            ..sort((a, b) => b.quantity.compareTo(a.quantity));
 
       if (allItems.isEmpty) return _empty();
 
@@ -77,7 +81,12 @@ class RevenueRadarChart extends StatelessWidget {
       }
 
       // Normalise relative to the max (so the top product fills the polygon)
-      final radarVals = radarItems.map((e) => maxQty > 0 ? (e.value / maxQty * 100).clamp(0.0, 100.0) : 0.0).toList();
+      final radarVals = radarItems
+          .map(
+            (e) =>
+                maxQty > 0 ? (e.value / maxQty * 100).clamp(0.0, 100.0) : 0.0,
+          )
+          .toList();
 
       return AnimatedBuilder(
         animation: fadeAnimation,
@@ -113,7 +122,11 @@ class RevenueRadarChart extends StatelessWidget {
                             ),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.radar, color: Colors.white, size: 18),
+                          child: const Icon(
+                            Icons.radar,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Column(
@@ -129,13 +142,19 @@ class RevenueRadarChart extends StatelessWidget {
                             ),
                             LiveTranslatedText(
                               'Product / price groups by quantity',
-                              style: GoogleFonts.poppins(fontSize: 11, color: Colors.white38),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.white38,
+                              ),
                             ),
                           ],
                         ),
                         const Spacer(),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E293B),
                             borderRadius: BorderRadius.circular(20),
@@ -159,13 +178,18 @@ class RevenueRadarChart extends StatelessWidget {
                       padding: const EdgeInsets.all(12),
                       child: RadarChart(
                         RadarChartData(
-                          radarBackgroundColor: const Color(0xFF1E293B).withValues(alpha: 0.5),
+                          radarBackgroundColor: const Color(
+                            0xFF1E293B,
+                          ).withValues(alpha: 0.5),
                           borderData: FlBorderData(show: false),
                           radarBorderData: BorderSide(
                             color: Colors.white.withValues(alpha: 0.05),
                           ),
                           tickCount: 4,
-                          ticksTextStyle: const TextStyle(color: Colors.transparent, fontSize: 0),
+                          ticksTextStyle: const TextStyle(
+                            color: Colors.transparent,
+                            fontSize: 0,
+                          ),
                           tickBorderData: BorderSide(
                             color: Colors.white.withValues(alpha: 0.07),
                             width: 1,
@@ -179,8 +203,14 @@ class RevenueRadarChart extends StatelessWidget {
                             try {
                               if (index < radarItems.length) {
                                 final name = radarItems[index].key;
-                                if (name == '—') return RadarChartTitle(text: '', angle: angle);
-                                final short = name.length > 10 ? '${name.substring(0, 9)}..' : name;
+                                if (name == '—')
+                                  return RadarChartTitle(
+                                    text: '',
+                                    angle: angle,
+                                  );
+                                final short = name.length > 10
+                                    ? '${name.substring(0, 9)}..'
+                                    : name;
                                 return RadarChartTitle(
                                   text: short,
                                   angle: angle,
@@ -198,23 +228,39 @@ class RevenueRadarChart extends StatelessWidget {
                           dataSets: [
                             // Primary glow layer
                             RadarDataSet(
-                              fillColor: const Color(0xFF6366F1).withValues(alpha: 0.30),
+                              fillColor: const Color(
+                                0xFF6366F1,
+                              ).withValues(alpha: 0.30),
                               borderColor: const Color(0xFF6366F1),
                               entryRadius: 5,
                               borderWidth: 2.5,
-                              dataEntries: radarVals.map((v) => RadarEntry(value: v)).toList(),
+                              dataEntries: radarVals
+                                  .map((v) => RadarEntry(value: v))
+                                  .toList(),
                             ),
                             // Inner accent layer
                             RadarDataSet(
-                              fillColor: const Color(0xFF06B6D4).withValues(alpha: 0.12),
-                              borderColor: const Color(0xFF06B6D4).withValues(alpha: 0.65),
+                              fillColor: const Color(
+                                0xFF06B6D4,
+                              ).withValues(alpha: 0.12),
+                              borderColor: const Color(
+                                0xFF06B6D4,
+                              ).withValues(alpha: 0.65),
                               entryRadius: 3,
                               borderWidth: 1.5,
-                              dataEntries: radarVals.map((v) => RadarEntry(value: (v * 0.55).clamp(0.0, 100.0))).toList(),
+                              dataEntries: radarVals
+                                  .map(
+                                    (v) => RadarEntry(
+                                      value: (v * 0.55).clamp(0.0, 100.0),
+                                    ),
+                                  )
+                                  .toList(),
                             ),
                           ],
                         ),
-                        swapAnimationDuration: const Duration(milliseconds: 800),
+                        swapAnimationDuration: const Duration(
+                          milliseconds: 800,
+                        ),
                         swapAnimationCurve: Curves.easeOutQuint,
                       ),
                     ),
@@ -223,10 +269,14 @@ class RevenueRadarChart extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                     child: Column(
-                      children: items.take(5).toList().asMap().entries.map((entry) {
+                      children: items.take(5).toList().asMap().entries.map((
+                        entry,
+                      ) {
                         final i = entry.key;
                         final item = entry.value;
-                        final pct = maxQty > 0 ? (item.value / maxQty).clamp(0.0, 1.0) : 0.0;
+                        final pct = maxQty > 0
+                            ? (item.value / maxQty).clamp(0.0, 1.0)
+                            : 0.0;
                         final color = _palette[i % _palette.length];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -252,7 +302,9 @@ class RevenueRadarChart extends StatelessWidget {
                                     Container(
                                       height: 6,
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.07),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.07,
+                                        ),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
@@ -262,9 +314,14 @@ class RevenueRadarChart extends StatelessWidget {
                                         height: 6,
                                         decoration: BoxDecoration(
                                           gradient: LinearGradient(
-                                            colors: [color, color.withValues(alpha: 0.55)],
+                                            colors: [
+                                              color,
+                                              color.withValues(alpha: 0.55),
+                                            ],
                                           ),
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                       ),
                                     ),

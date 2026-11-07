@@ -9,12 +9,16 @@ void main() {
     expect(source, contains('source: ImageSource.camera'));
     expect(source, contains("label: const LiveTranslatedText('Take photo')"));
     expect(source, contains("label: const LiveTranslatedText('Choose photo')"));
-    expect(source, contains("label: const LiveTranslatedText('Hear photo steps')"));
+    expect(
+      source,
+      contains("label: const LiveTranslatedText('Hear photo steps')"),
+    );
     expect(source, contains('80 * 1024'));
     expect(
       source,
       isNot(contains("label: LiveTranslatedText('Image URL (optional)')")),
-      reason: 'Image entry should use camera/photo actions rather than requiring a URL.',
+      reason:
+          'Image entry should use camera/photo actions rather than requiring a URL.',
     );
   });
 }

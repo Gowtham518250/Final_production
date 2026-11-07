@@ -49,23 +49,16 @@ class WorkerVerificationPolicy {
     return status == 'ACTIVE' || status == 'ON_LEAVE';
   }
 
-  static Future<bool?> hasActiveWorkersForShop({
-    required int userId,
-  }) async {
+  static Future<bool?> hasActiveWorkersForShop({required int userId}) async {
     final snapshot = await loadRoster(userId: userId);
     return snapshot.confirmedHasActiveWorkers;
   }
 
   /// Reads the authenticated backend first. A successful empty response is
   /// authoritative; network/auth/API failures are not treated as "no workers".
-  static Future<WorkerRosterSnapshot> loadRoster({
-    required int userId,
-  }) async {
+  static Future<WorkerRosterSnapshot> loadRoster({required int userId}) async {
     if (userId <= 0) {
-      return const WorkerRosterSnapshot(
-        workers: null,
-        isAuthoritative: false,
-      );
+      return const WorkerRosterSnapshot(workers: null, isAuthoritative: false);
     }
 
     try {
@@ -82,10 +75,7 @@ class WorkerVerificationPolicy {
         final workers = _decodeRoster(decoded);
         if (workers != null) {
           await _cacheRoster(userId, workers);
-          return WorkerRosterSnapshot(
-            workers: workers,
-            isAuthoritative: true,
-          );
+          return WorkerRosterSnapshot(workers: workers, isAuthoritative: true);
         }
       }
     } catch (_) {
@@ -94,10 +84,7 @@ class WorkerVerificationPolicy {
     }
 
     final cached = await _readCachedRoster(userId);
-    return WorkerRosterSnapshot(
-      workers: cached,
-      isAuthoritative: false,
-    );
+    return WorkerRosterSnapshot(workers: cached, isAuthoritative: false);
   }
 
   static List<Map<String, dynamic>>? _decodeRoster(dynamic decoded) {

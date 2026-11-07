@@ -13,10 +13,7 @@ import '../../../visual_widgets.dart';
 class AIAnswerCard extends StatefulWidget {
   final AIQueryResponse response;
 
-  const AIAnswerCard({
-    super.key,
-    required this.response,
-  });
+  const AIAnswerCard({super.key, required this.response});
 
   @override
   State<AIAnswerCard> createState() => _AIAnswerCardState();
@@ -32,7 +29,10 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
       SnackBar(
         content: LiveTranslatedText(
           '$label copied to clipboard',
-          style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         backgroundColor: const Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
@@ -50,7 +50,9 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
     final locale = Localizations.localeOf(context);
     final queryText = widget.response.query ?? 'Your Question';
     final answerText = widget.response.displayAnswer;
-    final timeStr = DateFormat('dd MMM, hh:mm a').format(widget.response.timestamp);
+    final timeStr = DateFormat(
+      'dd MMM, hh:mm a',
+    ).format(widget.response.timestamp);
     final hasSql = widget.response.hasSql;
     final effectiveSql = widget.response.effectiveSql;
     final version = widget.response.queryEngineVersion;
@@ -180,10 +182,14 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                             size: 16,
                             color: AppColors.textTertiary,
                           ),
-                          onPressed: () => _copyToClipboard(context, answerText, 'Answer'),
+                          onPressed: () =>
+                              _copyToClipboard(context, answerText, 'Answer'),
                           tooltip: 'Copy Answer',
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
                           splashRadius: 16,
                         ),
                       ],
@@ -275,9 +281,14 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                           ),
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                              color: const Color(
+                                0xFF6366F1,
+                              ).withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: LiveTranslatedText(
@@ -308,12 +319,20 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                             ),
                           ),
                           InkWell(
-                            onTap: () => _copyToClipboard(context, effectiveSql, 'SQL Query'),
+                            onTap: () => _copyToClipboard(
+                              context,
+                              effectiveSql,
+                              'SQL Query',
+                            ),
                             child: Padding(
                               padding: const EdgeInsets.all(4),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.copy_rounded, size: 13, color: Color(0xFF818CF8)),
+                                  const Icon(
+                                    Icons.copy_rounded,
+                                    size: 13,
+                                    color: Color(0xFF818CF8),
+                                  ),
                                   const SizedBox(width: 4),
                                   LiveTranslatedText(
                                     'Copy SQL',
@@ -336,7 +355,9 @@ class _AIAnswerCardState extends State<AIAnswerCard> {
                         decoration: BoxDecoration(
                           color: const Color(0xFF090D16),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
                         ),
                         child: SelectableText(
                           effectiveSql,

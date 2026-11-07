@@ -6,7 +6,7 @@ import 'dart:math';
 
 /// 🔒 SECURITY SERVICE: Secure storage for sensitive shop data
 /// Replaces unencrypted SharedPreferences usage for payment credentials, PINs, etc.
-/// 
+///
 /// Usage:
 /// ```dart
 /// await SecurePreferencesService.setUpiId('upi@bank');
@@ -14,7 +14,7 @@ import 'dart:math';
 /// ```
 class SecurePreferencesService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
-  
+
   // Keys for sensitive data
   static const String _upiIdKey = 'shop_upi_id_enc';
   static const String _masterPinKey = 'master_pin_hash_enc';
@@ -56,7 +56,7 @@ class SecurePreferencesService {
   }
 
   // ========= UPI ID MANAGEMENT =========
-  
+
   /// Save UPI ID securely (encrypted)
   static Future<void> setUpiId(String upiId) async {
     if (upiId.isEmpty) {
@@ -80,7 +80,7 @@ class SecurePreferencesService {
   }
 
   // ========= MASTER PIN MANAGEMENT =========
-  
+
   /// Save Master PIN hash (NEVER store plaintext)
   /// Hash the PIN before calling this: bcrypt.hashpw(pin.encode(), bcrypt.gensalt())
   static Future<void> setMasterPinHash(String pinHash) async {
@@ -111,7 +111,7 @@ class SecurePreferencesService {
   }
 
   // ========= PAYMENT QR CODE MANAGEMENT =========
-  
+
   /// Save Payment QR (base64 encoded) securely
   static Future<void> setPaymentQrB64(String qrBase64) async {
     if (qrBase64.isEmpty) {
@@ -135,17 +135,16 @@ class SecurePreferencesService {
   }
 
   // ========= BULK OPERATIONS =========
-  
+
   /// Clear ALL sensitive payment data (call on logout)
   static Future<void> clearAllPaymentData() async {
     try {
-      await Future.wait([
-        clearUpiId(),
-        clearMasterPin(),
-        clearPaymentQr(),
-      ]);
+      await Future.wait([clearUpiId(), clearMasterPin(), clearPaymentQr()]);
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ SecurePreferencesService.clearAllPaymentData failed: $e');
+      if (kDebugMode)
+        debugPrint(
+          '⚠️ SecurePreferencesService.clearAllPaymentData failed: $e',
+        );
     }
   }
 

@@ -8,7 +8,8 @@ class TransactionRecorderPage extends StatefulWidget {
   const TransactionRecorderPage({super.key});
 
   @override
-  State<TransactionRecorderPage> createState() => _TransactionRecorderPageState();
+  State<TransactionRecorderPage> createState() =>
+      _TransactionRecorderPageState();
 }
 
 class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
@@ -44,15 +45,20 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         source: _selectedSource,
         name: _nameController.text.trim(),
-        phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
-        amount: double.tryParse(_amountController.text.trim()) ??
+        phone: _phoneController.text.trim().isEmpty
+            ? null
+            : _phoneController.text.trim(),
+        amount:
+            double.tryParse(_amountController.text.trim()) ??
             (throw const FormatException('Please enter a valid amount')),
         type: _selectedType,
         transactionType: _selectedType == 'RECEIVED'
             ? TransactionType.confirmed
             : TransactionType.pending,
         createdAt: _selectedDate,
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
         reference: null,
         verificationStatus: TransactionVerificationStatus.manualEntry,
       );
@@ -71,7 +77,10 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('❌ Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: LiveTranslatedText('❌ Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -86,7 +95,11 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
       appBar: AppBar(
         title: LiveTranslatedText(
           'Record Transaction',
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
         ),
         elevation: 0,
         backgroundColor: Colors.white,
@@ -100,26 +113,45 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Transaction Type
-              LiveTranslatedText('Type', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black)),
+              LiveTranslatedText(
+                'Type',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: Colors.black,
+                ),
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: _buildTypeButton('PAID', _selectedType == 'PAID', () {
-                      setState(() => _selectedType = 'PAID');
-                    }),
+                    child: _buildTypeButton(
+                      'PAID',
+                      _selectedType == 'PAID',
+                      () {
+                        setState(() => _selectedType = 'PAID');
+                      },
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _buildTypeButton('RECEIVED', _selectedType == 'RECEIVED', () {
-                      setState(() => _selectedType = 'RECEIVED');
-                    }),
+                    child: _buildTypeButton(
+                      'RECEIVED',
+                      _selectedType == 'RECEIVED',
+                      () {
+                        setState(() => _selectedType = 'RECEIVED');
+                      },
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _buildTypeButton('PENDING', _selectedType == 'PENDING', () {
-                      setState(() => _selectedType = 'PENDING');
-                    }),
+                    child: _buildTypeButton(
+                      'PENDING',
+                      _selectedType == 'PENDING',
+                      () {
+                        setState(() => _selectedType = 'PENDING');
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -127,7 +159,14 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
               const SizedBox(height: 20),
 
               // Source
-              LiveTranslatedText('Source', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black)),
+              LiveTranslatedText(
+                'Source',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: Colors.black,
+                ),
+              ),
               const SizedBox(height: 10),
               Container(
                 decoration: BoxDecoration(
@@ -139,13 +178,18 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
                   isExpanded: true,
                   underline: const SizedBox(),
                   items: ['Manual', 'SMS_BANK', 'UPI', 'WhatsApp', 'Other']
-                      .map((src) => DropdownMenuItem(
-                            value: src,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: LiveTranslatedText(src, style: GoogleFonts.poppins(fontSize: 13)),
+                      .map(
+                        (src) => DropdownMenuItem(
+                          value: src,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: LiveTranslatedText(
+                              src,
+                              style: GoogleFonts.poppins(fontSize: 13),
                             ),
-                          ))
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (val) {
                     if (val != null) setState(() => _selectedSource = val);
@@ -156,14 +200,25 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
               const SizedBox(height: 20),
 
               // Customer Name
-              LiveTranslatedText('Customer Name', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+              LiveTranslatedText(
+                'Customer Name',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
                   hint: LiveTranslatedText('e.g. Raj Kumar, Family Store'),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 validator: (val) {
                   if (val == null || val.isEmpty) {
@@ -176,15 +231,26 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
               const SizedBox(height: 15),
 
               // Phone
-              LiveTranslatedText('Phone Number', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+              LiveTranslatedText(
+                'Phone Number',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
                   hint: LiveTranslatedText('10-digit phone number'),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 validator: (val) {
                   if (val != null && val.isNotEmpty && val.length != 10) {
@@ -197,16 +263,29 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
               const SizedBox(height: 15),
 
               // Amount
-              LiveTranslatedText('Amount (₹)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+              LiveTranslatedText(
+                'Amount (₹)',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   prefixText: '₹ ',
                   hint: LiveTranslatedText('0.00'),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 validator: (val) {
                   if (val == null || val.isEmpty) {
@@ -225,7 +304,13 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
               const SizedBox(height: 15),
 
               // Date
-              LiveTranslatedText('Date & Time', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+              LiveTranslatedText(
+                'Date & Time',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 10),
               GestureDetector(
                 onTap: () async {
@@ -247,7 +332,10 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
                   ),
                   child: LiveTranslatedText(
                     DateFormat('MMM dd, yyyy hh:mm a').format(_selectedDate),
-                    style: GoogleFonts.poppins(color: Colors.black, fontSize: 13),
+                    style: GoogleFonts.poppins(
+                      color: Colors.black,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ),
@@ -255,15 +343,28 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
               const SizedBox(height: 15),
 
               // Notes
-              LiveTranslatedText('Notes (Optional)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+              LiveTranslatedText(
+                'Notes (Optional)',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _notesController,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  hint: LiveTranslatedText('Add any notes about this transaction...'),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  hint: LiveTranslatedText(
+                    'Add any notes about this transaction...',
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
               ),
 
@@ -277,17 +378,25 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _primary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: _isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
                         )
                       : LiveTranslatedText(
                           'Save Transaction',
-                          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white),
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
                         ),
                 ),
               ),
@@ -302,11 +411,16 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey[200],
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: LiveTranslatedText(
                     'Cancel',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.black),
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
               ),
@@ -331,7 +445,10 @@ class _TransactionRecorderPageState extends State<TransactionRecorderPage> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isSelected ? color.withValues(alpha: 0.1) : Colors.grey[50],
-          border: Border.all(color: isSelected ? color : Colors.grey[300]!, width: isSelected ? 2 : 1),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Center(

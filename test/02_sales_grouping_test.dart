@@ -30,27 +30,32 @@ void main() {
       expect(result.single['total'], 100.0);
     });
 
-    test('different sale IDs remain separate bills even with identical content', () {
-      final result = SalesDedupHelper.groupApiLinesIntoBills([
-        {
-          'sale_id': 'INV-1',
-          'product_name': 'Rice',
-          'quantity': 1,
-          'price': 50,
-          'total': 50,
-        },
-        {
-          'sale_id': 'INV-2',
-          'product_name': 'Rice',
-          'quantity': 1,
-          'price': 50,
-          'total': 50,
-        },
-      ]);
+    test(
+      'different sale IDs remain separate bills even with identical content',
+      () {
+        final result = SalesDedupHelper.groupApiLinesIntoBills([
+          {
+            'sale_id': 'INV-1',
+            'product_name': 'Rice',
+            'quantity': 1,
+            'price': 50,
+            'total': 50,
+          },
+          {
+            'sale_id': 'INV-2',
+            'product_name': 'Rice',
+            'quantity': 1,
+            'price': 50,
+            'total': 50,
+          },
+        ]);
 
-      expect(result.length, 2);
-      expect(result.map((e) => e['sale_id']).toSet(),
-          containsAll(<String>{'INV-1', 'INV-2'}));
-    });
+        expect(result.length, 2);
+        expect(
+          result.map((e) => e['sale_id']).toSet(),
+          containsAll(<String>{'INV-1', 'INV-2'}),
+        );
+      },
+    );
   });
 }

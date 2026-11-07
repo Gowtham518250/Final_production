@@ -50,7 +50,8 @@ class PaymentConfirmationDialog extends StatefulWidget {
   }
 
   @override
-  State<PaymentConfirmationDialog> createState() => _PaymentConfirmationDialogState();
+  State<PaymentConfirmationDialog> createState() =>
+      _PaymentConfirmationDialogState();
 }
 
 class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
@@ -105,10 +106,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                       ),
                       LiveTranslatedText(
                         widget.confidence.reason,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -128,15 +126,25 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               ),
               child: Column(
                 children: [
-                  _detailRow('Amount', '₹${widget.payment.amount}', bold: true, large: true),
+                  _detailRow(
+                    'Amount',
+                    '₹${widget.payment.amount}',
+                    bold: true,
+                    large: true,
+                  ),
                   const SizedBox(height: 12),
                   _detailRow('Name', widget.payment.name ?? 'N/A'),
                   if (widget.payment.phone != null)
                     _detailRow('Phone', widget.payment.phone!),
                   _detailRow('Source', widget.payment.source),
                   _detailRow('Time', _formatTime(widget.payment.createdAt)),
-                  if (widget.payment.reference != null && widget.payment.reference!.isNotEmpty)
-                    _detailRow('Reference', widget.payment.reference!, fontSize: 11),
+                  if (widget.payment.reference != null &&
+                      widget.payment.reference!.isNotEmpty)
+                    _detailRow(
+                      'Reference',
+                      widget.payment.reference!,
+                      fontSize: 11,
+                    ),
                 ],
               ),
             ),
@@ -149,7 +157,10 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                 children: [
                   LiveTranslatedText(
                     'Confidence Score: ${widget.confidence.score.toStringAsFixed(0)}%',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const Spacer(),
                   _buildConfidenceBar(),
@@ -157,12 +168,13 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               ),
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ..._buildScoreDetails(),
-                    ],
+                    children: [..._buildScoreDetails()],
                   ),
                 ),
               ],
@@ -184,7 +196,11 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.warning, color: Colors.orange[700], size: 18),
+                        Icon(
+                          Icons.warning,
+                          color: Colors.orange[700],
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: LiveTranslatedText(
@@ -287,9 +303,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
               onPressed: _showDetailedBreakdown,
               icon: const Icon(Icons.receipt_long, size: 16),
               label: const LiveTranslatedText('View Audit Details'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.blue[600],
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.blue[600]),
             ),
           ],
         ),
@@ -336,10 +350,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
       children: [
         LiveTranslatedText(
           label,
-          style: TextStyle(
-            fontSize: fontSize,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: fontSize, color: Colors.grey[600]),
         ),
         LiveTranslatedText(
           value,
@@ -357,7 +368,9 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
     return (widget.confidence.details.entries).map((entry) {
       final value = entry.value.toString();
       final isPositive = value.contains('+');
-      final color = isPositive ? Colors.green : (value.contains('-') ? Colors.red : Colors.grey);
+      final color = isPositive
+          ? Colors.green
+          : (value.contains('-') ? Colors.red : Colors.grey);
 
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -409,9 +422,7 @@ class _PaymentConfirmationDialogState extends State<PaymentConfirmationDialog> {
   }
 
   Future<void> _handleConfirm() async {
-    if (!TransactionService.isEligibleForMerchantConfirmation(
-      widget.payment,
-    )) {
+    if (!TransactionService.isEligibleForMerchantConfirmation(widget.payment)) {
       return;
     }
     setState(() => _isProcessing = true);

@@ -11,10 +11,7 @@ import '../theme/spacing_utils.dart';
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback? onOnboardingComplete;
 
-  const OnboardingScreen({
-    super.key,
-    this.onOnboardingComplete,
-  });
+  const OnboardingScreen({super.key, this.onOnboardingComplete});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -31,31 +28,36 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final List<OnboardingSlide> _slides = [
     OnboardingSlide(
       title: 'Welcome to RETAIL MIND',
-      description: 'Your complete point of sale solution with inventory management, billing, and analytics.',
+      description:
+          'Your complete point of sale solution with inventory management, billing, and analytics.',
       icon: Icons.store_rounded,
       color: const Color(0xFF6366F1),
     ),
     OnboardingSlide(
       title: 'Quick Sales',
-      description: 'Create sales in seconds with voice billing, product search, and instant inventory updates.',
+      description:
+          'Create sales in seconds with voice billing, product search, and instant inventory updates.',
       icon: Icons.speed_rounded,
       color: const Color(0xFF10B981),
     ),
     OnboardingSlide(
       title: 'Smart Inventory',
-      description: 'Track stock in real-time, get low stock alerts, and manage your product catalog effortlessly.',
+      description:
+          'Track stock in real-time, get low stock alerts, and manage your product catalog effortlessly.',
       icon: Icons.inventory_2_rounded,
       color: const Color(0xFFF59E0B),
     ),
     OnboardingSlide(
       title: 'Analytics Dashboard',
-      description: 'Monitor your sales, revenue, and business growth with comprehensive analytics and reports.',
+      description:
+          'Monitor your sales, revenue, and business growth with comprehensive analytics and reports.',
       icon: Icons.analytics_rounded,
       color: const Color(0xFF3B82F6),
     ),
     OnboardingSlide(
       title: 'Let\'s Get Started!',
-      description: 'You\'re all set to transform your retail experience. Tap below to begin.',
+      description:
+          'You\'re all set to transform your retail experience. Tap below to begin.',
       icon: Icons.rocket_launch_rounded,
       color: const Color(0xFF8B5CF6),
     ),
@@ -87,9 +89,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_completed', true);
-    
+
     HapticFeedback.mediumImpact();
-    
+
     if (widget.onOnboardingComplete != null) {
       widget.onOnboardingComplete!();
     } else {
@@ -136,7 +138,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 },
               ),
             ),
-            
+
             // Page indicators
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
@@ -158,10 +160,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 }),
               ),
             ),
-            
+
             // Navigation buttons
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.xxxl,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -217,14 +224,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       color: slide.color.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      slide.icon,
-                      size: 100,
-                      color: slide.color,
-                    ),
+                    child: Icon(slide.icon, size: 100, color: slide.color),
                   ),
                   const SizedBox(height: AppSpacing.xxxl),
-                  
+
                   // Title
                   LiveTranslatedText(
                     slide.title,
@@ -236,10 +239,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  
+
                   // Description
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                    ),
                     child: LiveTranslatedText(
                       slide.description,
                       textAlign: TextAlign.center,
@@ -318,13 +323,13 @@ class FeatureHighlight extends StatelessWidget {
           children: [
             Icon(Icons.lightbulb, color: const Color(0xFFF59E0B)),
             const SizedBox(width: AppSpacing.sm),
-            LiveTranslatedText(title, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            LiveTranslatedText(
+              title,
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
           ],
         ),
-        content: LiveTranslatedText(
-          description,
-          style: GoogleFonts.poppins(),
-        ),
+        content: LiveTranslatedText(description, style: GoogleFonts.poppins()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -342,18 +347,14 @@ class QuickTip extends StatefulWidget {
   final IconData? icon;
   final VoidCallback? onDismiss;
 
-  const QuickTip({
-    super.key,
-    required this.tip,
-    this.icon,
-    this.onDismiss,
-  });
+  const QuickTip({super.key, required this.tip, this.icon, this.onDismiss});
 
   @override
   State<QuickTip> createState() => _QuickTipState();
 }
 
-class _QuickTipState extends State<QuickTip> with SingleTickerProviderStateMixin {
+class _QuickTipState extends State<QuickTip>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _slideAnimation;
   late Animation<double> _fadeAnimation;
@@ -365,12 +366,14 @@ class _QuickTipState extends State<QuickTip> with SingleTickerProviderStateMixin
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-    _slideAnimation = Tween<double>(begin: -1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
+    _slideAnimation = Tween<double>(
+      begin: -1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
     _controller.forward();
   }
 

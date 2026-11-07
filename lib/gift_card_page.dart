@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -14,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_localizations.dart';
+import 'scoped_shared_preferences.dart';
 import 'visual_widgets.dart'; // AppBackground, GlassContainer, AppColors
 import 'shop_profile_persistence_service.dart';
 import 'low_memory_performance.dart';
@@ -86,6 +88,34 @@ class GiftCardPage extends StatefulWidget {
     Key? key,
   }) : super(key: key);
 
+  @visibleForTesting
+  static Future<Uint8List?> loadPersistedLogo({
+    String? profileLogoBase64,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final candidates = [
+      await ScopedSharedPreferences.getString('logo_base64'),
+      profileLogoBase64,
+      prefs.getString('logo_base64'),
+      prefs.getString('shop_logo'),
+    ];
+
+    for (final candidate in candidates) {
+      final encoded = candidate?.trim() ?? '';
+      if (encoded.isEmpty) continue;
+      final comma = encoded.indexOf(',');
+      final payload = encoded.startsWith('data:') && comma >= 0
+          ? encoded.substring(comma + 1)
+          : encoded;
+      try {
+        return base64Decode(payload);
+      } on FormatException catch (error) {
+        debugPrint('Gift card logo data is invalid: $error');
+      }
+    }
+    return null;
+  }
+
   @override
   State<GiftCardPage> createState() => _GiftCardPageState();
 }
@@ -122,7 +152,11 @@ class _GiftCardPageState extends State<GiftCardPage>
     GiftCardTheme(
       name: 'Midnight Indigo',
       mindsetName: 'The Professional',
-      gradient: [const Color(0xFF1E1B4B), const Color(0xFF312E81), const Color(0xFF4338CA)],
+      gradient: [
+        const Color(0xFF1E1B4B),
+        const Color(0xFF312E81),
+        const Color(0xFF4338CA),
+      ],
       border: const Color(0xFF818CF8),
       text: Colors.white,
       subtext: Colors.white70,
@@ -132,7 +166,11 @@ class _GiftCardPageState extends State<GiftCardPage>
     GiftCardTheme(
       name: 'Electric Neon',
       mindsetName: 'The Future-Bound',
-      gradient: [const Color(0xFF000000), const Color(0xFF1A0033), const Color(0xFF4F46E5)],
+      gradient: [
+        const Color(0xFF000000),
+        const Color(0xFF1A0033),
+        const Color(0xFF4F46E5),
+      ],
       border: const Color(0xFF00F2FF),
       text: Colors.white,
       subtext: const Color(0xFFE0E0E0),
@@ -143,7 +181,11 @@ class _GiftCardPageState extends State<GiftCardPage>
     GiftCardTheme(
       name: 'Ocean Deep',
       mindsetName: 'The Sophisticated',
-      gradient: [const Color(0xFF0C4A6E), const Color(0xFF0369A1), const Color(0xFF0284C7)],
+      gradient: [
+        const Color(0xFF0C4A6E),
+        const Color(0xFF0369A1),
+        const Color(0xFF0284C7),
+      ],
       border: const Color(0xFF38BDF8),
       text: Colors.white,
       subtext: const Color(0xFFBAE6FD),
@@ -153,7 +195,11 @@ class _GiftCardPageState extends State<GiftCardPage>
     GiftCardTheme(
       name: 'Soft Petal',
       mindsetName: 'The Elegant',
-      gradient: [const Color(0xFFFDF2F8), const Color(0xFFFCE7F3), const Color(0xFFFBCFE8)],
+      gradient: [
+        const Color(0xFFFDF2F8),
+        const Color(0xFFFCE7F3),
+        const Color(0xFFFBCFE8),
+      ],
       border: const Color(0xFFEC4899),
       text: const Color(0xFF831843),
       subtext: const Color(0xFF9D174D),
@@ -163,7 +209,11 @@ class _GiftCardPageState extends State<GiftCardPage>
     GiftCardTheme(
       name: 'Zen Moss',
       mindsetName: 'The Minimalist',
-      gradient: [const Color(0xFFF0FDF4), const Color(0xFFDCFCE7), const Color(0xFFBBF7D0)],
+      gradient: [
+        const Color(0xFFF0FDF4),
+        const Color(0xFFDCFCE7),
+        const Color(0xFFBBF7D0),
+      ],
       border: const Color(0xFF166534),
       text: const Color(0xFF064E3B),
       subtext: const Color(0xFF065F46),
@@ -173,7 +223,11 @@ class _GiftCardPageState extends State<GiftCardPage>
     GiftCardTheme(
       name: 'Cosmic Purple',
       mindsetName: 'The Visionary',
-      gradient: [const Color(0xFF5B21B6), const Color(0xFF7C3AED), const Color(0xFFA855F7)],
+      gradient: [
+        const Color(0xFF5B21B6),
+        const Color(0xFF7C3AED),
+        const Color(0xFFA855F7),
+      ],
       border: const Color(0xFFD8B4FE),
       text: Colors.white,
       subtext: const Color(0xFFE9D5FF),
@@ -181,7 +235,7 @@ class _GiftCardPageState extends State<GiftCardPage>
       layout: CardLayout.creative,
     ),
   ];
-  
+
   // Global key to capture card as image
   final GlobalKey _cardKey = GlobalKey();
 
@@ -226,8 +280,6 @@ class _GiftCardPageState extends State<GiftCardPage>
 
     _hydratePersistedProfile();
 
-
-
     // â”€â”€ Flip â”€â”€
     _flipController = AnimationController(
       vsync: this,
@@ -247,13 +299,13 @@ class _GiftCardPageState extends State<GiftCardPage>
       parent: _entranceController,
       curve: Curves.easeOut,
     );
-    _entranceSlide = Tween<Offset>(
-      begin: const Offset(0, .08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _entranceController,
-      curve: Curves.easeOutCubic,
-    ));
+    _entranceSlide =
+        Tween<Offset>(begin: const Offset(0, .08), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _entranceController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
     _entranceController.forward();
 
     // â”€â”€ Shimmer â”€â”€
@@ -287,8 +339,12 @@ class _GiftCardPageState extends State<GiftCardPage>
       final shopData = shopDataRaw is Map
           ? Map<String, dynamic>.from(shopDataRaw)
           : <String, dynamic>{};
+      final persistedLogo = await GiftCardPage.loadPersistedLogo(
+        profileLogoBase64: shopData['logo_base64']?.toString(),
+      );
 
-      final categoryRaw = shopData['shop_categories'] ?? prefs.getString('shop_categories');
+      final categoryRaw =
+          shopData['shop_categories'] ?? prefs.getString('shop_categories');
       String? categories;
       if (categoryRaw is List) {
         categories = categoryRaw.map((e) => e.toString()).join(', ');
@@ -298,38 +354,48 @@ class _GiftCardPageState extends State<GiftCardPage>
 
       if (!mounted) return;
       setState(() {
-        _userNameValue = prefs.getString('user_name') ??
+        _userNameValue =
+            prefs.getString('user_name') ??
             prefs.getString('username') ??
             _userNameValue;
-        _shopNameValue = shopData['shop_name']?.toString() ??
+        _shopNameValue =
+            shopData['shop_name']?.toString() ??
             prefs.getString('shop_name') ??
             _shopNameValue;
-        _locationValue = shopData['location']?.toString() ??
+        _locationValue =
+            shopData['location']?.toString() ??
             shopData['address']?.toString() ??
             prefs.getString('location') ??
             _locationValue;
-        _shopTypeValue = shopData['shop_type']?.toString() ??
+        _shopTypeValue =
+            shopData['shop_type']?.toString() ??
             prefs.getString('shop_type') ??
             _shopTypeValue;
-        _contactPersonValue = shopData['contact_person_name']?.toString() ??
+        _contactPersonValue =
+            shopData['contact_person_name']?.toString() ??
             prefs.getString('contact_person') ??
             _contactPersonValue;
-        _phoneValue = shopData['phone']?.toString() ??
+        _phoneValue =
+            shopData['phone']?.toString() ??
             prefs.getString('shop_phone') ??
             _phoneValue;
-        _emailValue = shopData['email']?.toString() ??
+        _emailValue =
+            shopData['email']?.toString() ??
             prefs.getString('shop_email') ??
             prefs.getString('email') ??
             _emailValue;
-        _gstNumberValue = shopData['gst_number']?.toString() ??
+        _gstNumberValue =
+            shopData['gst_number']?.toString() ??
             prefs.getString('gst_number') ??
             prefs.getString('shop_gst') ??
             _gstNumberValue;
         _categoriesValue = categories ?? _categoriesValue;
-        _websiteValue = shopData['website']?.toString() ??
+        _websiteValue =
+            shopData['website']?.toString() ??
             prefs.getString('website') ??
             _websiteValue;
-        _taglineValue = shopData['shop_tagline']?.toString() ??
+        _taglineValue =
+            shopData['shop_tagline']?.toString() ??
             prefs.getString('shop_tagline') ??
             prefs.getString('tagline') ??
             _taglineValue;
@@ -340,12 +406,7 @@ class _GiftCardPageState extends State<GiftCardPage>
         _phoneController.text = _phoneValue ?? '';
         _taglineController.text = _taglineValue ?? '';
 
-        final logoBase64 = prefs.getString('logo_base64');
-        if (logoBase64 != null && logoBase64.isNotEmpty) {
-          try {
-            _logoBytesValue = base64Decode(logoBase64);
-          } catch (_) {}
-        }
+        _logoBytesValue = persistedLogo ?? _logoBytesValue;
       });
     } catch (e) {
       debugPrint('GiftCard profile hydration failed: $e');
@@ -379,15 +440,22 @@ class _GiftCardPageState extends State<GiftCardPage>
       ..writeln('Shop: $shop')
       ..writeln('Owner: $name')
       ..writeln('Location: $loc');
-    if (_shopTypeValue?.isNotEmpty == true) buf.writeln('Shop Type: ${_shopTypeValue}');
-    if (_contactPersonValue?.isNotEmpty == true) buf.writeln('Contact Person: ${_contactPersonValue}');
+    if (_shopTypeValue?.isNotEmpty == true)
+      buf.writeln('Shop Type: ${_shopTypeValue}');
+    if (_contactPersonValue?.isNotEmpty == true)
+      buf.writeln('Contact Person: ${_contactPersonValue}');
     if (phone?.isNotEmpty == true) buf.writeln('Phone: $phone');
     if (_emailValue?.isNotEmpty == true) buf.writeln('Email: ${_emailValue}');
-    if (_gstNumberValue?.isNotEmpty == true) buf.writeln('GST Number: ${_gstNumberValue}');
-    if (_categoriesValue?.isNotEmpty == true) buf.writeln('Categories: ${_categoriesValue}');
-    if (_openingHourValue?.isNotEmpty == true) buf.writeln('Opens: ${_openingHourValue}');
-    if (_closingHourValue?.isNotEmpty == true) buf.writeln('Closes: ${_closingHourValue}');
-    if (_websiteValue?.isNotEmpty == true) buf.writeln('Website: ${_websiteValue}');
+    if (_gstNumberValue?.isNotEmpty == true)
+      buf.writeln('GST Number: ${_gstNumberValue}');
+    if (_categoriesValue?.isNotEmpty == true)
+      buf.writeln('Categories: ${_categoriesValue}');
+    if (_openingHourValue?.isNotEmpty == true)
+      buf.writeln('Opens: ${_openingHourValue}');
+    if (_closingHourValue?.isNotEmpty == true)
+      buf.writeln('Closes: ${_closingHourValue}');
+    if (_websiteValue?.isNotEmpty == true)
+      buf.writeln('Website: ${_websiteValue}');
     if (tagline?.isNotEmpty == true) buf.writeln('"$tagline"');
     return buf.toString();
   }
@@ -397,32 +465,36 @@ class _GiftCardPageState extends State<GiftCardPage>
     try {
       // Wait a moment to ensure the widget is rendered
       await Future.delayed(const Duration(milliseconds: 100));
-      
+
       // First, make sure we're showing the front side
       if (_showBack) {
         _toggleCard();
-        await Future.delayed(const Duration(milliseconds: 900)); // Wait for flip animation
+        await Future.delayed(
+          const Duration(milliseconds: 900),
+        ); // Wait for flip animation
       }
 
       // Capture the card as an image
       if (_cardKey.currentContext == null) {
         throw Exception('Card context not available');
       }
-      
+
       final RenderRepaintBoundary? boundary =
           _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary?;
-      
+
       if (boundary == null) {
         throw Exception('Cannot render card');
       }
 
       final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      
+      final ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+
       if (byteData == null) {
         throw Exception('Cannot convert image to bytes');
       }
-      
+
       final bytes = byteData.buffer.asUint8List();
 
       // Create a temporary file for the image
@@ -436,7 +508,8 @@ class _GiftCardPageState extends State<GiftCardPage>
       // Share both the image and text details
       final subject = 'Check out ${_shopNameValue}';
       final text = _buildFullDetails();
-      await Share.shareXFiles([XFile(imageFile.path)],
+      await Share.shareXFiles(
+        [XFile(imageFile.path)],
         subject: subject,
         text: text,
       );
@@ -456,10 +529,7 @@ class _GiftCardPageState extends State<GiftCardPage>
           ),
         );
       }
-      Share.share(
-        _buildFullDetails(),
-        subject: 'Check out ${_shopNameValue}',
-      );
+      Share.share(_buildFullDetails(), subject: 'Check out ${_shopNameValue}');
     }
   }
 
@@ -477,7 +547,9 @@ class _GiftCardPageState extends State<GiftCardPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0F), // Slightly lighter more visible dark
+      backgroundColor: const Color(
+        0xFF0A0A0F,
+      ), // Slightly lighter more visible dark
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(),
       body: Stack(
@@ -490,57 +562,78 @@ class _GiftCardPageState extends State<GiftCardPage>
           SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 30),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 30,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildBrandHeader(),
+                    const SizedBox(height: 20),
+                    _buildFlipCard(),
+                    const SizedBox(height: 16),
+                    _buildThemeSelector(),
+                    const SizedBox(height: 28),
+                    _buildHintPill(),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildBrandHeader(),
-                        const SizedBox(height: 20),
-                        _buildFlipCard(),
-                        const SizedBox(height: 16),
-                        _buildThemeSelector(),
-                        const SizedBox(height: 28),
-                        _buildHintPill(),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _shareCard,
-                              icon: const Icon(Icons.share_outlined),
-                              label: LiveTranslatedText(AppLocalizations.of(context).shareCard),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF06B6D4),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              ),
+                        ElevatedButton.icon(
+                          onPressed: _shareCard,
+                          icon: const Icon(Icons.share_outlined),
+                          label: LiveTranslatedText(
+                            AppLocalizations.of(context).shareCard,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF06B6D4),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            const SizedBox(width: 12),
-                            OutlinedButton.icon(
-                              onPressed: _toggleCard,
-                              icon: const Icon(Icons.flip_outlined),
-                              label: LiveTranslatedText(_showBack ? AppLocalizations.of(context).viewFront : AppLocalizations.of(context).viewBack),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
                             ),
-                          ],
+                          ),
                         ),
-                        const SizedBox(height: 20),
-                        _buildDashboardButton(),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: _toggleCard,
+                          icon: const Icon(Icons.flip_outlined),
+                          label: LiveTranslatedText(
+                            _showBack
+                                ? AppLocalizations.of(context).viewFront
+                                : AppLocalizations.of(context).viewBack,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                    _buildDashboardButton(),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      }
+        ],
+      ),
+    );
+  }
 
   AppBar _buildAppBar() {
     return AppBar(
@@ -582,7 +675,6 @@ class _GiftCardPageState extends State<GiftCardPage>
               _locationValue = _locationController.text;
               _phoneValue = _phoneController.text;
               _taglineValue = _taglineController.text;
-
             }
             setState(() => _isEditing = !_isEditing);
           },
@@ -622,9 +714,15 @@ class _GiftCardPageState extends State<GiftCardPage>
               errorBuilder: (context, error, stackTrace) => Container(
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  ),
                 ),
-                child: const Icon(Icons.shopping_bag_outlined, color: Colors.white, size: 30),
+                child: const Icon(
+                  Icons.shopping_bag_outlined,
+                  color: Colors.white,
+                  size: 30,
+                ),
               ),
             ),
           ),
@@ -646,9 +744,7 @@ class _GiftCardPageState extends State<GiftCardPage>
           ),
         ),
         const SizedBox(height: 4),
-        LiveTranslatedText(
-          AppLocalizations.of(context).tagline,
-        ),
+        LiveTranslatedText(AppLocalizations.of(context).tagline),
       ],
     );
   }
@@ -665,13 +761,13 @@ class _GiftCardPageState extends State<GiftCardPage>
           builder: (context, _) {
             final angle = _flipAnim.value * math.pi;
             final isFront = angle < math.pi / 2;
-            
+
             return Transform(
               transform: Matrix4.identity()
                 ..setEntry(3, 2, 0.0012)
                 ..rotateY(angle),
               alignment: Alignment.center,
-              child: isFront 
+              child: isFront
                   ? _buildFront(width)
                   : Transform(
                       transform: Matrix4.identity()..rotateY(math.pi),
@@ -685,10 +781,7 @@ class _GiftCardPageState extends State<GiftCardPage>
     );
 
     if (widget.reversed) {
-      card = Transform.rotate(
-        angle: math.pi,
-        child: card,
-      );
+      card = Transform.rotate(angle: math.pi, child: card);
     }
 
     return card;
@@ -696,7 +789,7 @@ class _GiftCardPageState extends State<GiftCardPage>
 
   Widget _buildFront(double width) {
     final theme = _themes[_selectedThemeIndex];
-    
+
     // Switch between different mindsets/layouts
     switch (theme.layout) {
       case CardLayout.creative:
@@ -737,7 +830,9 @@ class _GiftCardPageState extends State<GiftCardPage>
           Positioned.fill(
             child: Opacity(
               opacity: 0.12,
-              child: CustomPaint(painter: _GiftCardPatternPainter(_selectedThemeIndex)),
+              child: CustomPaint(
+                painter: _GiftCardPatternPainter(_selectedThemeIndex),
+              ),
             ),
           ),
           Padding(
@@ -746,10 +841,7 @@ class _GiftCardPageState extends State<GiftCardPage>
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildAvatar(theme),
-                    _buildCompactQr(),
-                  ],
+                  children: [_buildAvatar(theme), _buildCompactQr()],
                 ),
                 const SizedBox(height: 30),
                 if (_isEditing)
@@ -757,16 +849,31 @@ class _GiftCardPageState extends State<GiftCardPage>
                 else
                   LiveTranslatedText(
                     _userNameController.text.toUpperCase(),
-                    style: GoogleFonts.poppins(fontSize: 12, letterSpacing: 3, color: theme.text.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      letterSpacing: 3,
+                      color: theme.text.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 const SizedBox(height: 8),
                 if (_isEditing)
-                  _buildEditField(_shopNameController, 'Shop Name', theme, isLarge: true)
+                  _buildEditField(
+                    _shopNameController,
+                    'Shop Name',
+                    theme,
+                    isLarge: true,
+                  )
                 else
                   LiveTranslatedText(
                     _shopNameController.text,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.playfairDisplay(fontSize: 32, fontWeight: FontWeight.w900, color: theme.text, height: 1.1),
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: theme.text,
+                      height: 1.1,
+                    ),
                   ),
                 const SizedBox(height: 40),
                 _buildDetailSection(l, theme),
@@ -809,11 +916,7 @@ class _GiftCardPageState extends State<GiftCardPage>
               ),
             ),
           ),
-          Positioned(
-            top: 24,
-            right: 24,
-            child: _buildCompactQr(size: 70),
-          ),
+          Positioned(top: 24, right: 24, child: _buildCompactQr(size: 70)),
           Padding(
             padding: const EdgeInsets.all(28),
             child: Column(
@@ -822,20 +925,32 @@ class _GiftCardPageState extends State<GiftCardPage>
                 Center(child: _buildAvatar(theme, size: 110)),
                 const SizedBox(height: 35),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.accent.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: LiveTranslatedText(
                     _userNameController.text,
-                    style: GoogleFonts.spaceMono(color: theme.text, fontWeight: FontWeight.bold, fontSize: 13),
+                    style: GoogleFonts.spaceMono(
+                      color: theme.text,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 LiveTranslatedText(
                   _shopNameController.text,
-                  style: GoogleFonts.archivoBlack(fontSize: 38, color: theme.text, height: 1, letterSpacing: -1.5),
+                  style: GoogleFonts.archivoBlack(
+                    fontSize: 38,
+                    color: theme.text,
+                    height: 1,
+                    letterSpacing: -1.5,
+                  ),
                 ),
                 const Spacer(),
                 Row(
@@ -845,14 +960,22 @@ class _GiftCardPageState extends State<GiftCardPage>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _SimpleDetail(icon: Icons.phone_rounded, value: _phoneController.text, theme: theme),
+                          _SimpleDetail(
+                            icon: Icons.phone_rounded,
+                            value: _phoneController.text,
+                            theme: theme,
+                          ),
                           const SizedBox(height: 10),
-                          _SimpleDetail(icon: Icons.location_on_rounded, value: _locationController.text, theme: theme),
+                          _SimpleDetail(
+                            icon: Icons.location_on_rounded,
+                            value: _locationController.text,
+                            theme: theme,
+                          ),
                         ],
                       ),
                     ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -882,39 +1005,82 @@ class _GiftCardPageState extends State<GiftCardPage>
         child: Column(
           children: [
             const SizedBox(height: 40),
-            LiveTranslatedText('E S T . 2 0 2 6', style: GoogleFonts.montserrat(fontSize: 10, letterSpacing: 4, color: theme.subtext)),
+            LiveTranslatedText(
+              'E S T . 2 0 2 6',
+              style: GoogleFonts.montserrat(
+                fontSize: 10,
+                letterSpacing: 4,
+                color: theme.subtext,
+              ),
+            ),
             const SizedBox(height: 25),
             _buildAvatar(theme, size: 120),
             const SizedBox(height: 30),
             LiveTranslatedText(
               _shopNameController.text,
               textAlign: TextAlign.center,
-              style: GoogleFonts.cormorantGaramond(fontSize: 42, fontWeight: FontWeight.w300, color: theme.text, fontStyle: FontStyle.italic),
+              style: GoogleFonts.cormorantGaramond(
+                fontSize: 42,
+                fontWeight: FontWeight.w300,
+                color: theme.text,
+                fontStyle: FontStyle.italic,
+              ),
             ),
             const SizedBox(height: 10),
-            Container(width: 50, height: 1, color: theme.border.withValues(alpha: 0.3)),
+            Container(
+              width: 50,
+              height: 1,
+              color: theme.border.withValues(alpha: 0.3),
+            ),
             const SizedBox(height: 10),
-            LiveTranslatedText(_userNameController.text, style: GoogleFonts.montserrat(fontSize: 14, letterSpacing: 2, color: theme.subtext)),
+            LiveTranslatedText(
+              _userNameController.text,
+              style: GoogleFonts.montserrat(
+                fontSize: 14,
+                letterSpacing: 2,
+                color: theme.subtext,
+              ),
+            ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                   Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.phone_outlined, size: 14, color: theme.accent),
                       const SizedBox(width: 8),
-                      LiveTranslatedText(_phoneController.text, style: GoogleFonts.poppins(color: theme.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                      LiveTranslatedText(
+                        _phoneController.text,
+                        style: GoogleFonts.poppins(
+                          color: theme.text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
-                   ),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.location_on_outlined, size: 14, color: theme.accent),
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 14,
+                        color: theme.accent,
+                      ),
                       const SizedBox(width: 8),
-                      Expanded(child: LiveTranslatedText(_locationController.text, style: GoogleFonts.poppins(color: theme.subtext, fontSize: 11), textAlign: TextAlign.center)),
+                      Expanded(
+                        child: LiveTranslatedText(
+                          _locationController.text,
+                          style: GoogleFonts.poppins(
+                            color: theme.subtext,
+                            fontSize: 11,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -938,35 +1104,61 @@ class _GiftCardPageState extends State<GiftCardPage>
           end: Alignment.bottomRight,
           colors: theme.gradient,
         ),
-        border: Border.all(color: theme.border.withValues(alpha: 0.4), width: 1.5),
+        border: Border.all(
+          color: theme.border.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
       ),
       child: Stack(
         children: [
           // Gold corner patterns
-          Positioned(top: -20, left: -20, child: Icon(Icons.auto_awesome, color: theme.accent.withValues(alpha: 0.1), size: 100)),
+          Positioned(
+            top: -20,
+            left: -20,
+            child: Icon(
+              Icons.auto_awesome,
+              color: theme.accent.withValues(alpha: 0.1),
+              size: 100,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
             child: Column(
               children: [
-                Align(alignment: Alignment.topRight, child: _buildCompactQr(size: 60)),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: _buildCompactQr(size: 60),
+                ),
                 const SizedBox(height: 20),
                 _buildAvatar(theme, size: 100),
                 const SizedBox(height: 40),
                 LiveTranslatedText(
                   _shopNameController.text.toUpperCase(),
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.playfairDisplay(fontSize: 34, fontWeight: FontWeight.w900, color: theme.text, letterSpacing: 2),
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                    color: theme.text,
+                    letterSpacing: 2,
+                  ),
                 ),
                 const SizedBox(height: 15),
                 LiveTranslatedText(
-                   _userNameController.text,
-                   style: GoogleFonts.poppins(fontSize: 14, color: theme.accent, letterSpacing: 3, fontWeight: FontWeight.w500),
+                  _userNameController.text,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: theme.accent,
+                    letterSpacing: 3,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    border: Border.all(color: theme.border.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: theme.border.withValues(alpha: 0.2),
+                    ),
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: Column(
@@ -974,16 +1166,26 @@ class _GiftCardPageState extends State<GiftCardPage>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.phone_outlined, color: theme.accent, size: 16),
+                          Icon(
+                            Icons.phone_outlined,
+                            color: theme.accent,
+                            size: 16,
+                          ),
                           const SizedBox(width: 10),
-                          LiveTranslatedText(_phoneController.text, style: TextStyle(color: theme.text)),
+                          LiveTranslatedText(
+                            _phoneController.text,
+                            style: TextStyle(color: theme.text),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       LiveTranslatedText(
                         _locationController.text,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: theme.text.withValues(alpha: 0.7), fontSize: 12),
+                        style: TextStyle(
+                          color: theme.text.withValues(alpha: 0.7),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -1023,14 +1225,35 @@ class _GiftCardPageState extends State<GiftCardPage>
               children: [
                 LiveTranslatedText(
                   _shopNameController.text.toUpperCase(),
-                  style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: theme.text, letterSpacing: 1.2),
+                  style: GoogleFonts.inter(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: theme.text,
+                    letterSpacing: 1.2,
+                  ),
                 ),
                 const SizedBox(height: 4),
-                LiveTranslatedText(_userNameController.text, style: GoogleFonts.inter(color: theme.subtext, fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.5)),
+                LiveTranslatedText(
+                  _userNameController.text,
+                  style: GoogleFonts.inter(
+                    color: theme.subtext,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(height: 40),
-                _MinimalRow(icon: Icons.call_outlined, value: _phoneController.text, theme: theme),
+                _MinimalRow(
+                  icon: Icons.call_outlined,
+                  value: _phoneController.text,
+                  theme: theme,
+                ),
                 const SizedBox(height: 12),
-                _MinimalRow(icon: Icons.map_outlined, value: _locationController.text, theme: theme),
+                _MinimalRow(
+                  icon: Icons.map_outlined,
+                  value: _locationController.text,
+                  theme: theme,
+                ),
                 const SizedBox(height: 50),
                 Center(child: _buildCompactQr(size: 100)),
               ],
@@ -1047,9 +1270,16 @@ class _GiftCardPageState extends State<GiftCardPage>
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: theme.text.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(
+          color: theme.text.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 15, offset: const Offset(0, 5))
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
         ],
       ),
       child: ClipOval(
@@ -1073,11 +1303,16 @@ class _GiftCardPageState extends State<GiftCardPage>
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 4))
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: QrImageView(
-        data: 'Shop: ${_shopNameValue}\nContact: ${_phoneValue}\nOwner: ${_userNameValue}',
+        data:
+            'Shop: ${_shopNameValue}\nContact: ${_phoneValue}\nOwner: ${_userNameValue}',
         version: QrVersions.auto,
         size: size,
         gapless: false,
@@ -1098,27 +1333,51 @@ class _GiftCardPageState extends State<GiftCardPage>
           if (_isEditing)
             _buildEditField(_locationController, l.location, theme)
           else
-            _DetailRow(icon: Icons.location_on_rounded, label: l.location, value: _locationController.text, theme: theme),
+            _DetailRow(
+              icon: Icons.location_on_rounded,
+              label: l.location,
+              value: _locationController.text,
+              theme: theme,
+            ),
           const SizedBox(height: 16),
           if (_isEditing)
             _buildEditField(_phoneController, l.phone, theme)
           else
-            _DetailRow(icon: Icons.phone_rounded, label: l.phone, value: _phoneController.text, theme: theme),
+            _DetailRow(
+              icon: Icons.phone_rounded,
+              label: l.phone,
+              value: _phoneController.text,
+              theme: theme,
+            ),
           if (_emailValue?.isNotEmpty == true) ...[
             const SizedBox(height: 16),
-            _DetailRow(icon: Icons.email_rounded, label: l.email, value: _emailValue!, theme: theme),
+            _DetailRow(
+              icon: Icons.email_rounded,
+              label: l.email,
+              value: _emailValue!,
+              theme: theme,
+            ),
           ],
           if (_gstNumberValue?.isNotEmpty == true) ...[
             const SizedBox(height: 16),
-            _DetailRow(icon: Icons.receipt_long_rounded, label: 'GSTIN', value: _gstNumberValue!, theme: theme),
+            _DetailRow(
+              icon: Icons.receipt_long_rounded,
+              label: 'GSTIN',
+              value: _gstNumberValue!,
+              theme: theme,
+            ),
           ],
-          if (_shopTypeValue?.isNotEmpty == true || _categoriesValue?.isNotEmpty == true) ...[
+          if (_shopTypeValue?.isNotEmpty == true ||
+              _categoriesValue?.isNotEmpty == true) ...[
             const SizedBox(height: 16),
             _DetailRow(
-              icon: Icons.storefront_rounded, 
-              label: 'Identity', 
-              value: [_shopTypeValue ?? '', _categoriesValue ?? ''].where((s) => s.isNotEmpty).join(' • '), 
-              theme: theme
+              icon: Icons.storefront_rounded,
+              label: 'Identity',
+              value: [
+                _shopTypeValue ?? '',
+                _categoriesValue ?? '',
+              ].where((s) => s.isNotEmpty).join(' • '),
+              theme: theme,
             ),
           ],
         ],
@@ -1136,32 +1395,55 @@ class _GiftCardPageState extends State<GiftCardPage>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.access_time_filled_rounded, size: 14, color: Colors.white70),
+          const Icon(
+            Icons.access_time_filled_rounded,
+            size: 14,
+            color: Colors.white70,
+          ),
           const SizedBox(width: 8),
           LiveTranslatedText(
             '${_openingHourValue} – ${_closingHourValue}',
-            style: GoogleFonts.poppins(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEditField(TextEditingController controller, String label, GiftCardTheme theme, {bool isLarge = false}) {
+  Widget _buildEditField(
+    TextEditingController controller,
+    String label,
+    GiftCardTheme theme, {
+    bool isLarge = false,
+  }) {
     return TextField(
       controller: controller,
       textAlign: TextAlign.center,
-      style: isLarge 
-        ? GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.bold, color: theme.text)
-        : GoogleFonts.poppins(fontSize: 13, color: theme.text),
+      style: isLarge
+          ? GoogleFonts.playfairDisplay(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: theme.text,
+            )
+          : GoogleFonts.poppins(fontSize: 13, color: theme.text),
       decoration: InputDecoration(
         hintText: label,
         hintStyle: TextStyle(color: theme.text.withValues(alpha: 0.3)),
         contentPadding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
         isDense: true,
-        border: UnderlineInputBorder(borderSide: BorderSide(color: theme.text.withValues(alpha: 0.3))),
-        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.text.withValues(alpha: 0.2))),
-        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.accent, width: 2)),
+        border: UnderlineInputBorder(
+          borderSide: BorderSide(color: theme.text.withValues(alpha: 0.3)),
+        ),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: theme.text.withValues(alpha: 0.2)),
+        ),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: theme.accent, width: 2),
+        ),
       ),
     );
   }
@@ -1173,8 +1455,7 @@ class _GiftCardPageState extends State<GiftCardPage>
         final t = _shimmerController.value;
         return Positioned.fill(
           child: ClipRRect(
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(28)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             child: Transform.translate(
               offset: Offset((t * 2 - 0.5) * width, 0),
               child: Container(
@@ -1202,9 +1483,7 @@ class _GiftCardPageState extends State<GiftCardPage>
 
   Widget _buildLargePhotoColumn() {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1E293B)),
       child: _logoBytesValue != null
           ? LowMemoryPerformance.memoryImage(
               _logoBytesValue!,
@@ -1239,11 +1518,8 @@ class _GiftCardPageState extends State<GiftCardPage>
             width: 100,
             height: 100,
             fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-              Icons.store_rounded,
-              size: 60,
-              color: Colors.white,
-            ),
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.store_rounded, size: 60, color: Colors.white),
           ),
         ),
       ),
@@ -1295,7 +1571,8 @@ class _GiftCardPageState extends State<GiftCardPage>
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Spread details vertically
+          mainAxisAlignment:
+              MainAxisAlignment.spaceEvenly, // Spread details vertically
           children: [
             // Shop name area
             Column(
@@ -1314,7 +1591,10 @@ class _GiftCardPageState extends State<GiftCardPage>
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF10B981).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -1331,7 +1611,7 @@ class _GiftCardPageState extends State<GiftCardPage>
                 ),
               ], // Close children of Column at 915
             ), // Close Column at 915
-            _buildDetailsListView(), 
+            _buildDetailsListView(),
           ],
         ),
       ),
@@ -1404,12 +1684,14 @@ class _GiftCardPageState extends State<GiftCardPage>
               value: _categoriesValue!,
             ),
           ],
-          if (_openingHourValue?.isNotEmpty == true || _closingHourValue?.isNotEmpty == true) ...[
+          if (_openingHourValue?.isNotEmpty == true ||
+              _closingHourValue?.isNotEmpty == true) ...[
             const SizedBox(height: 12),
             _DetailRow(
               icon: Icons.schedule_rounded,
               label: 'Working Hours',
-              value: '${_openingHourValue ?? "N/A"} - ${_closingHourValue ?? "N/A"}',
+              value:
+                  '${_openingHourValue ?? "N/A"} - ${_closingHourValue ?? "N/A"}',
             ),
           ],
           if (_websiteValue?.isNotEmpty == true) ...[
@@ -1425,7 +1707,11 @@ class _GiftCardPageState extends State<GiftCardPage>
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.format_quote_rounded, size: 14, color: const Color(0xFF6366F1).withValues(alpha: 0.5)),
+                Icon(
+                  Icons.format_quote_rounded,
+                  size: 14,
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.5),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: LiveTranslatedText(
@@ -1518,7 +1804,8 @@ class _GiftCardPageState extends State<GiftCardPage>
       'Owner: ${_userNameValue}',
       'Location: ${_locationValue}',
       if (_shopTypeValue?.isNotEmpty == true) 'Type: ${_shopTypeValue}',
-      if (_contactPersonValue?.isNotEmpty == true) 'Contact: ${_contactPersonValue}',
+      if (_contactPersonValue?.isNotEmpty == true)
+        'Contact: ${_contactPersonValue}',
       if (_phoneValue?.isNotEmpty == true) 'Phone: ${_phoneValue}',
       if (_emailValue?.isNotEmpty == true) 'Email: ${_emailValue}',
       if (_gstNumberValue?.isNotEmpty == true) 'GST: ${_gstNumberValue}',
@@ -1555,16 +1842,13 @@ class _GiftCardPageState extends State<GiftCardPage>
                           _logoBytesValue!,
                           logicalSize: 50,
                           devicePixelRatio:
-                              MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
+                              MediaQuery.maybeOf(context)?.devicePixelRatio ??
+                              2,
                           fit: BoxFit.cover,
                         ),
                       )
                     : const Center(
-                        child: Icon(
-                          Icons.store,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                        child: Icon(Icons.store, color: Colors.white, size: 24),
                       ),
               ),
               const SizedBox(width: 12),
@@ -1616,11 +1900,19 @@ class _GiftCardPageState extends State<GiftCardPage>
           _buildPreviewInfo(Icons.location_on_rounded, _locationValue, 9),
           if (_shopTypeValue?.isNotEmpty == true) ...[
             const SizedBox(height: 6),
-            _buildPreviewInfo(Icons.store_mall_directory_rounded, _shopTypeValue!, 9),
+            _buildPreviewInfo(
+              Icons.store_mall_directory_rounded,
+              _shopTypeValue!,
+              9,
+            ),
           ],
           if (_contactPersonValue?.isNotEmpty == true) ...[
             const SizedBox(height: 6),
-            _buildPreviewInfo(Icons.contact_mail_rounded, _contactPersonValue!, 9),
+            _buildPreviewInfo(
+              Icons.contact_mail_rounded,
+              _contactPersonValue!,
+              9,
+            ),
           ],
           if (_phoneValue?.isNotEmpty == true) ...[
             const SizedBox(height: 6),
@@ -1636,7 +1928,11 @@ class _GiftCardPageState extends State<GiftCardPage>
           ],
           if (_openingHourValue?.isNotEmpty == true) ...[
             const SizedBox(height: 6),
-            _buildPreviewInfo(Icons.schedule_rounded, 'Opens: ${_openingHourValue}', 9),
+            _buildPreviewInfo(
+              Icons.schedule_rounded,
+              'Opens: ${_openingHourValue}',
+              9,
+            ),
           ],
           if (_websiteValue?.isNotEmpty == true) ...[
             const SizedBox(height: 6),
@@ -1677,7 +1973,9 @@ class _GiftCardPageState extends State<GiftCardPage>
       borderRadius: BorderRadius.circular(999),
       blurSigma: 18,
       child: LiveTranslatedText(
-        _showBack ? AppLocalizations.of(context).tapToSeeFront : AppLocalizations.of(context).tapToFlip,
+        _showBack
+            ? AppLocalizations.of(context).tapToSeeFront
+            : AppLocalizations.of(context).tapToFlip,
         style: GoogleFonts.poppins(
           color: Colors.white70,
           fontSize: 12.5,
@@ -1717,8 +2015,7 @@ class _GiftCardPageState extends State<GiftCardPage>
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(999),
             ),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 30, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 13),
           ),
         ),
       ],
@@ -1778,14 +2075,27 @@ class _GiftCardPageState extends State<GiftCardPage>
                 ),
                 borderRadius: BorderRadius.circular(isSelected ? 14 : 10),
                 border: Border.all(
-                  color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
+                  color: isSelected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.2),
                   width: isSelected ? 2.5 : 1,
                 ),
                 boxShadow: isSelected
-                    ? [BoxShadow(color: theme.gradient[0].withValues(alpha: 0.5), blurRadius: 10)]
+                    ? [
+                        BoxShadow(
+                          color: theme.gradient[0].withValues(alpha: 0.5),
+                          blurRadius: 10,
+                        ),
+                      ]
                     : [],
               ),
-              child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 20) : null,
+              child: isSelected
+                  ? const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    )
+                  : null,
             ),
             const SizedBox(height: 6),
             LiveTranslatedText(
@@ -1807,14 +2117,21 @@ class _SimpleDetail extends StatelessWidget {
   final IconData icon;
   final String value;
   final GiftCardTheme theme;
-  const _SimpleDetail({required this.icon, required this.value, required this.theme});
+  const _SimpleDetail({
+    required this.icon,
+    required this.value,
+    required this.theme,
+  });
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Icon(icon, size: 14, color: theme.text.withValues(alpha: 0.6)),
         const SizedBox(width: 8),
-        LiveTranslatedText(value, style: GoogleFonts.poppins(color: theme.text, fontSize: 13)),
+        LiveTranslatedText(
+          value,
+          style: GoogleFonts.poppins(color: theme.text, fontSize: 13),
+        ),
       ],
     );
   }
@@ -1824,19 +2141,27 @@ class _MinimalRow extends StatelessWidget {
   final IconData icon;
   final String value;
   final GiftCardTheme theme;
-  const _MinimalRow({required this.icon, required this.value, required this.theme});
+  const _MinimalRow({
+    required this.icon,
+    required this.value,
+    required this.theme,
+  });
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Icon(icon, size: 18, color: theme.accent),
         const SizedBox(width: 12),
-        Expanded(child: LiveTranslatedText(value, style: GoogleFonts.inter(color: theme.subtext, fontSize: 14))),
+        Expanded(
+          child: LiveTranslatedText(
+            value,
+            style: GoogleFonts.inter(color: theme.subtext, fontSize: 14),
+          ),
+        ),
       ],
     );
   }
 }
-
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Private sub-widgets
@@ -1857,16 +2182,18 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = theme ?? GiftCardTheme(
-      name: 'Default',
-      mindsetName: 'The Professional',
-      gradient: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
-      border: const Color(0xFF818CF8),
-      text: Colors.white,
-      subtext: Colors.white70,
-      accent: const Color(0xFF10B981),
-      layout: CardLayout.professional,
-    );
+    final t =
+        theme ??
+        GiftCardTheme(
+          name: 'Default',
+          mindsetName: 'The Professional',
+          gradient: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+          border: const Color(0xFF818CF8),
+          text: Colors.white,
+          subtext: Colors.white70,
+          accent: const Color(0xFF10B981),
+          layout: CardLayout.professional,
+        );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1876,9 +2203,7 @@ class _DetailRow extends StatelessWidget {
           decoration: BoxDecoration(
             color: t.text.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: t.text.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: t.text.withValues(alpha: 0.3)),
           ),
           child: Icon(icon, size: 14, color: t.text.withValues(alpha: 0.8)),
         ),
@@ -1985,7 +2310,10 @@ class _TaglineStrip extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.white.withValues(alpha: 0.12), Colors.transparent],
+                  colors: [
+                    Colors.white.withValues(alpha: 0.12),
+                    Colors.transparent,
+                  ],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
@@ -2092,7 +2420,11 @@ class _IconBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         ),
-        child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.85)),
+        child: Icon(
+          icon,
+          size: 18,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
       ),
     );
   }
@@ -2118,19 +2450,24 @@ class _AmbientOrbsState extends State<_AmbientOrbs>
   @override
   void initState() {
     super.initState();
-    _controllers = List.generate(3, (i) => AnimationController(
-      vsync: this,
-      duration: Duration(seconds: 9 + i * 2),
-    )..repeat(reverse: true));
+    _controllers = List.generate(
+      3,
+      (i) => AnimationController(
+        vsync: this,
+        duration: Duration(seconds: 9 + i * 2),
+      )..repeat(reverse: true),
+    );
 
     _offsets = _controllers
-        .map((c) => Tween<Offset>(
-              begin: Offset.zero,
-              end: Offset(
-                30 + math.Random().nextDouble() * 20,
-                20 + math.Random().nextDouble() * 15,
-              ),
-            ).animate(CurvedAnimation(parent: c, curve: Curves.easeInOut)))
+        .map(
+          (c) => Tween<Offset>(
+            begin: Offset.zero,
+            end: Offset(
+              30 + math.Random().nextDouble() * 20,
+              20 + math.Random().nextDouble() * 15,
+            ),
+          ).animate(CurvedAnimation(parent: c, curve: Curves.easeInOut)),
+        )
         .toList();
   }
 
@@ -2145,7 +2482,7 @@ class _AmbientOrbsState extends State<_AmbientOrbs>
     final size = MediaQuery.of(context).size;
     final w = size.width > 0 ? size.width : 400.0;
     final h = size.height > 0 ? size.height : 800.0;
-    
+
     final positions = [
       Offset(-80, -80),
       Offset(w - 200, h - 200),
@@ -2156,12 +2493,14 @@ class _AmbientOrbsState extends State<_AmbientOrbs>
       children: List.generate(3, (i) {
         final colors = [
           widget.theme.gradient[0],
-          widget.theme.gradient.length > 1 ? widget.theme.gradient[1] : widget.theme.gradient[0],
+          widget.theme.gradient.length > 1
+              ? widget.theme.gradient[1]
+              : widget.theme.gradient[0],
           widget.theme.accent,
         ];
         final sizes = [320.0, 280.0, 200.0];
         final opacities = [0.15, 0.12, 0.10];
-        
+
         return AnimatedBuilder(
           animation: _offsets[i],
           builder: (_, __) => Positioned(
@@ -2222,11 +2561,8 @@ class _ParticleLayerState extends State<_ParticleLayer>
       final size = MediaQuery.of(context).size;
       final w = size.width > 0 ? size.width : 400.0;
       final h = size.height > 0 ? size.height : 800.0;
-      
-      _particles = List.generate(
-        40,
-        (_) => _Particle.random(Size(w, h), _rng),
-      );
+
+      _particles = List.generate(40, (_) => _Particle.random(Size(w, h), _rng));
       _initialized = true;
       _controller.repeat();
     });
@@ -2240,15 +2576,13 @@ class _ParticleLayerState extends State<_ParticleLayer>
 
   @override
   Widget build(BuildContext context) {
-    if (!_initialized || !_controller.isAnimating) return const SizedBox.shrink();
+    if (!_initialized || !_controller.isAnimating)
+      return const SizedBox.shrink();
     final size = MediaQuery.of(context).size;
     final w = size.width > 0 ? size.width : 400.0;
     final h = size.height > 0 ? size.height : 800.0;
-    
-    return CustomPaint(
-      size: Size(w, h),
-      painter: _ParticlePainter(_particles),
-    );
+
+    return CustomPaint(size: Size(w, h), painter: _ParticlePainter(_particles));
   }
 }
 
@@ -2273,14 +2607,14 @@ class _Particle {
   ];
 
   factory _Particle.random(Size size, math.Random rng) => _Particle(
-        x: rng.nextDouble() * size.width,
-        y: rng.nextDouble() * size.height,
-        vx: (rng.nextDouble() - .5) * .4,
-        vy: (rng.nextDouble() - .5) * .4,
-        radius: rng.nextDouble() * 1.6 + .4,
-        opacity: rng.nextDouble() * .45 + .1,
-        color: _colors[rng.nextInt(_colors.length)],
-      );
+    x: rng.nextDouble() * size.width,
+    y: rng.nextDouble() * size.height,
+    vx: (rng.nextDouble() - .5) * .4,
+    vy: (rng.nextDouble() - .5) * .4,
+    radius: rng.nextDouble() * 1.6 + .4,
+    opacity: rng.nextDouble() * .45 + .1,
+    color: _colors[rng.nextInt(_colors.length)],
+  );
 
   void update(Size size) {
     x += vx;
@@ -2312,11 +2646,9 @@ class _ParticlePainter extends CustomPainter {
 
       for (int j = i + 1; j < particles.length; j++) {
         final b = particles[j];
-        final d = math.sqrt(
-            math.pow(a.x - b.x, 2) + math.pow(a.y - b.y, 2));
+        final d = math.sqrt(math.pow(a.x - b.x, 2) + math.pow(a.y - b.y, 2));
         if (d < 110) {
-          linePaint.color =
-              Colors.white.withValues(alpha: .08 * (1 - d / 110));
+          linePaint.color = Colors.white.withValues(alpha: .08 * (1 - d / 110));
           canvas.drawLine(Offset(a.x, a.y), Offset(b.x, b.y), linePaint);
         }
       }
@@ -2378,7 +2710,11 @@ class _GiftCardPatternPainter extends CustomPainter {
 
   void _drawLines(Canvas canvas, Size size, Paint paint) {
     for (double x = -size.height; x < size.width + size.height; x += 22) {
-      canvas.drawLine(Offset(x, 0), Offset(x + size.height, size.height), paint);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + size.height, size.height),
+        paint,
+      );
     }
   }
 
@@ -2466,8 +2802,16 @@ class _GiftCardPatternPainter extends CustomPainter {
 
   void _drawCrossHatch(Canvas canvas, Size size, Paint paint) {
     for (double x = -size.height; x < size.width; x += 25) {
-      canvas.drawLine(Offset(x, 0), Offset(x + size.height, size.height), paint);
-      canvas.drawLine(Offset(x + size.height, 0), Offset(x, size.height), paint);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + size.height, size.height),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(x + size.height, 0),
+        Offset(x, size.height),
+        paint,
+      );
     }
   }
 
@@ -2479,7 +2823,7 @@ class _GiftCardPatternPainter extends CustomPainter {
           Path()
             ..moveTo(x, y)
             ..lineTo(x + s, y)
-            ..lineTo(x + s/2, y + s)
+            ..lineTo(x + s / 2, y + s)
             ..close(),
           paint,
         );
@@ -2488,7 +2832,7 @@ class _GiftCardPatternPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GiftCardPatternPainter oldDelegate) => 
+  bool shouldRepaint(covariant _GiftCardPatternPainter oldDelegate) =>
       oldDelegate.themeIndex != themeIndex;
 }
 

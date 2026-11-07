@@ -207,7 +207,8 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                 .toList()
           : <Map<String, dynamic>>[];
       final serverTotal = decoded is Map
-          ? (int.tryParse(decoded['total']?.toString() ?? '') ?? allOrders.length)
+          ? (int.tryParse(decoded['total']?.toString() ?? '') ??
+                allOrders.length)
           : allOrders.length;
 
       final pending = <Map<String, dynamic>>[];
@@ -1221,24 +1222,43 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
 
   Widget _buildOrdersHero() {
     final all = _allLoadedOrders();
-    final count = _searchController.text.trim().isNotEmpty ? _searchTotal : all.length;
+    final count = _searchController.text.trim().isNotEmpty
+        ? _searchTotal
+        : all.length;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE4E7EC))),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE4E7EC)),
+      ),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const LiveTranslatedText('Orders overview', style: TextStyle(color: Color(0xFF1D2939), fontSize: 17, fontWeight: FontWeight.w700)),
+                const LiveTranslatedText(
+                  'Orders overview',
+                  style: TextStyle(
+                    color: Color(0xFF1D2939),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 LiveTranslatedText(
-                  _searchController.text.trim().isEmpty ? 'Review incoming orders and manage fulfilment.' : 'Matching orders across your order history.',
+                  _searchController.text.trim().isEmpty
+                      ? 'Review incoming orders and manage fulfilment.'
+                      : 'Matching orders across your order history.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF667085), fontSize: 12, height: 1.35),
+                  style: const TextStyle(
+                    color: Color(0xFF667085),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
                 ),
               ],
             ),
@@ -1247,13 +1267,30 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
           Container(
             constraints: const BoxConstraints(minWidth: 68),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(color: const Color(0xFFF2F4F7), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF2F4F7),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(count.toString(), style: const TextStyle(color: Color(0xFF1D2939), fontSize: 20, fontWeight: FontWeight.w700)),
+                Text(
+                  count.toString(),
+                  style: const TextStyle(
+                    color: Color(0xFF1D2939),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 1),
-                const LiveTranslatedText('Orders', style: TextStyle(color: Color(0xFF667085), fontSize: 10, fontWeight: FontWeight.w500)),
+                const LiveTranslatedText(
+                  'Orders',
+                  style: TextStyle(
+                    color: Color(0xFF667085),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1261,6 +1298,7 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
       ),
     );
   }
+
   Widget _buildOrderSearch() {
     final query = _searchController.text.trim();
     String helperText;
@@ -1878,11 +1916,12 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                     : '';
                 final paymentColor = paymentStatus == 'PAID'
                     ? const Color(0xFF16836B)
-                    : paymentStatus == 'REFUND_REQUIRED' || paymentStatus == 'REVIEW_REQUIRED'
-                        ? const Color(0xFFB42318)
-                        : paymentStatus == 'PENDING' || paymentStatus == 'UNPAID'
-                            ? const Color(0xFFB54708)
-                            : const Color(0xFF475467);
+                    : paymentStatus == 'REFUND_REQUIRED' ||
+                          paymentStatus == 'REVIEW_REQUIRED'
+                    ? const Color(0xFFB42318)
+                    : paymentStatus == 'PENDING' || paymentStatus == 'UNPAID'
+                    ? const Color(0xFFB54708)
+                    : const Color(0xFF475467);
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -1903,7 +1942,11 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                                 'Order #$orderId',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Color(0xFF3156A6), fontWeight: FontWeight.w700, fontSize: 15),
+                                style: const TextStyle(
+                                  color: Color(0xFF3156A6),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1921,7 +1964,11 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                           'Customer: ${order['customer_name'] ?? 'Guest'}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFF1D2939), fontSize: 15, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            color: Color(0xFF1D2939),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         if ((order['customer_phone'] ?? '')
                             .toString()
@@ -1932,7 +1979,10 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                               order['customer_phone'].toString(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
+                              style: const TextStyle(
+                                color: Color(0xFF667085),
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         if ((order['delivery_address'] ?? '')
@@ -1944,7 +1994,10 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                               'Deliver to: ${order['delivery_address']}',
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
+                              style: const TextStyle(
+                                color: Color(0xFF667085),
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         const SizedBox(height: 10),
@@ -1974,13 +2027,20 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                                     '${qty}x ${item['product_name'] ?? 'Item'}',
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Color(0xFF344054), fontSize: 12),
+                                    style: const TextStyle(
+                                      color: Color(0xFF344054),
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 LiveTranslatedText(
                                   'Rs ${lineTotal.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Color(0xFF344054), fontSize: 12, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                    color: Color(0xFF344054),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
@@ -1992,7 +2052,10 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                             const Expanded(
                               child: LiveTranslatedText(
                                 'Total Value',
-                                style: TextStyle(color: Color(0xFF667085), fontSize: 13),
+                                style: TextStyle(
+                                  color: Color(0xFF667085),
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -2002,7 +2065,11 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                                 textAlign: TextAlign.end,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Color(0xFF16836B), fontSize: 17, fontWeight: FontWeight.w700),
+                                style: const TextStyle(
+                                  color: Color(0xFF16836B),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],
@@ -2010,18 +2077,28 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                         if (paymentLabel.isNotEmpty)
                           Container(
                             margin: const EdgeInsets.only(top: 10),
-                            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 9,
+                            ),
                             decoration: BoxDecoration(
                               color: paymentColor.withValues(alpha: 0.07),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: paymentColor.withValues(alpha: 0.18)),
+                              border: Border.all(
+                                color: paymentColor.withValues(alpha: 0.18),
+                              ),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  paymentStatus == 'PAID' ? Icons.verified_outlined :
-                                  paymentStatus == 'REFUND_REQUIRED' || paymentStatus == 'REVIEW_REQUIRED' ? Icons.warning_amber_rounded : Icons.payments_outlined,
-                                  color: paymentColor, size: 17,
+                                  paymentStatus == 'PAID'
+                                      ? Icons.verified_outlined
+                                      : paymentStatus == 'REFUND_REQUIRED' ||
+                                            paymentStatus == 'REVIEW_REQUIRED'
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.payments_outlined,
+                                  color: paymentColor,
+                                  size: 17,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -2029,7 +2106,11 @@ class _OnlineOrdersTabState extends State<OnlineOrdersTab>
                                     paymentLabel,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: paymentColor, fontSize: 11, fontWeight: FontWeight.w700),
+                                    style: TextStyle(
+                                      color: paymentColor,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ],

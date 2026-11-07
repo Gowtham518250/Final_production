@@ -11,9 +11,7 @@ void main() {
       '06_release_gate_checklist_test.dart',
     ];
 
-    const manualFiles = [
-      '07_manual_device_release_suite_test.dart',
-    ];
+    const manualFiles = ['07_manual_device_release_suite_test.dart'];
 
     test('automated deployment suite is comprehensive', () {
       expect(automatedFiles.length, 6);

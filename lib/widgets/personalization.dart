@@ -13,7 +13,8 @@ class PersonalizationDashboard extends StatefulWidget {
   const PersonalizationDashboard({super.key});
 
   @override
-  State<PersonalizationDashboard> createState() => _PersonalizationDashboardState();
+  State<PersonalizationDashboard> createState() =>
+      _PersonalizationDashboardState();
 }
 
 class _PersonalizationDashboardState extends State<PersonalizationDashboard> {
@@ -72,7 +73,7 @@ class _PersonalizationDashboardState extends State<PersonalizationDashboard> {
     final prefs = await SharedPreferences.getInstance();
     final widgetOrder = prefs.getStringList('widget_order');
     final pinnedWidgets = prefs.getStringList('pinned_widgets');
-    
+
     if (widgetOrder != null) {
       setState(() {
         _widgets.sort((a, b) {
@@ -82,7 +83,7 @@ class _PersonalizationDashboardState extends State<PersonalizationDashboard> {
         });
       });
     }
-    
+
     if (pinnedWidgets != null) {
       setState(() {
         for (final widget in _widgets) {
@@ -95,8 +96,11 @@ class _PersonalizationDashboardState extends State<PersonalizationDashboard> {
   Future<void> _saveWidgetPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final widgetOrder = _widgets.map((w) => w.id).toList();
-    final pinnedWidgets = _widgets.where((w) => w.isPinned).map((w) => w.id).toList();
-    
+    final pinnedWidgets = _widgets
+        .where((w) => w.isPinned)
+        .map((w) => w.id)
+        .toList();
+
     await prefs.setStringList('widget_order', widgetOrder);
     await prefs.setStringList('pinned_widgets', pinnedWidgets);
   }
@@ -153,9 +157,7 @@ class _PersonalizationDashboardState extends State<PersonalizationDashboard> {
       body: ReorderableListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         onReorder: _reorderWidgets,
-        children: [
-          ..._widgets.map((widget) => _buildWidgetCard(widget)),
-        ],
+        children: [..._widgets.map((widget) => _buildWidgetCard(widget))],
       ),
     );
   }
@@ -196,7 +198,9 @@ class _PersonalizationDashboardState extends State<PersonalizationDashboard> {
               onPressed: () => _togglePin(widget),
               icon: Icon(
                 widget.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
-                color: widget.isPinned ? const Color(0xFF6366F1) : const Color(0xFF64748B),
+                color: widget.isPinned
+                    ? const Color(0xFF6366F1)
+                    : const Color(0xFF64748B),
               ),
               tooltip: widget.isPinned ? 'Unpin' : 'Pin',
             ),
@@ -410,7 +414,8 @@ class CustomizableQuickActions extends StatefulWidget {
   });
 
   @override
-  State<CustomizableQuickActions> createState() => _CustomizableQuickActionsState();
+  State<CustomizableQuickActions> createState() =>
+      _CustomizableQuickActionsState();
 }
 
 class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
@@ -427,7 +432,7 @@ class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
   Future<void> _loadQuickActionPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final actionOrder = prefs.getStringList('quick_action_order');
-    
+
     if (actionOrder != null) {
       setState(() {
         _actions.sort((a, b) {
@@ -522,7 +527,7 @@ class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          
+
           if (_isEditMode)
             ReorderableListView(
               shrinkWrap: true,
@@ -536,9 +541,7 @@ class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
-              children: [
-                ..._actions.map((action) => _buildActionChip(action)),
-              ],
+              children: [..._actions.map((action) => _buildActionChip(action))],
             ),
         ],
       ),
@@ -559,9 +562,7 @@ class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
         decoration: BoxDecoration(
           color: action.color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: action.color.withValues(alpha: 0.3),
-          ),
+          border: Border.all(color: action.color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -592,9 +593,7 @@ class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-        ),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         children: [
@@ -608,7 +607,11 @@ class _CustomizableQuickActionsState extends State<CustomizableQuickActions> {
           ),
           IconButton(
             onPressed: () => _removeAction(action),
-            icon: const Icon(Icons.remove_circle_outline, size: 16, color: Color(0xFFEF4444)),
+            icon: const Icon(
+              Icons.remove_circle_outline,
+              size: 16,
+              color: Color(0xFFEF4444),
+            ),
           ),
           const Icon(Icons.drag_handle, size: 16, color: Color(0xFF94A3B8)),
         ],

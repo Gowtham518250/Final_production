@@ -6,8 +6,10 @@ import 'models.dart';
 /// Backend remains authoritative when reachable; local storage is the
 /// offline fallback and survives page recreation/app restarts.
 class WorkerLocalStorage {
-  static String getWorkerPreferenceKey(int shopkeeperId) => 'workers_$shopkeeperId';
-  static String getLegacyWorkerKey(int shopkeeperId) => 'workers_json_$shopkeeperId';
+  static String getWorkerPreferenceKey(int shopkeeperId) =>
+      'workers_$shopkeeperId';
+  static String getLegacyWorkerKey(int shopkeeperId) =>
+      'workers_json_$shopkeeperId';
 
   static Future<List<Worker>> fetchWorkers(int shopkeeperId) async {
     if (shopkeeperId <= 0) return [];
@@ -30,7 +32,10 @@ class WorkerLocalStorage {
     }
   }
 
-  static Future<void> saveWorkers(int shopkeeperId, List<Worker> workers) async {
+  static Future<void> saveWorkers(
+    int shopkeeperId,
+    List<Worker> workers,
+  ) async {
     if (shopkeeperId <= 0) return;
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(workers.map((w) => w.toJson()).toList());
@@ -39,7 +44,10 @@ class WorkerLocalStorage {
     await prefs.setString('workers_json', encoded);
   }
 
-  static Future<void> saveWorkersJson(int shopkeeperId, List<dynamic> workers) async {
+  static Future<void> saveWorkersJson(
+    int shopkeeperId,
+    List<dynamic> workers,
+  ) async {
     final models = workers
         .whereType<Map>()
         .map((w) => Worker.fromJson(Map<String, dynamic>.from(w)))
@@ -50,7 +58,9 @@ class WorkerLocalStorage {
   static Future<Worker?> getWorkerByName(int shopkeeperId, String name) async {
     final workers = await fetchWorkers(shopkeeperId);
     try {
-      return workers.firstWhere((w) => w.name.toLowerCase() == name.toLowerCase());
+      return workers.firstWhere(
+        (w) => w.name.toLowerCase() == name.toLowerCase(),
+      );
     } catch (_) {
       return null;
     }

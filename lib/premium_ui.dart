@@ -22,7 +22,8 @@ class BouncingWidget extends StatefulWidget {
   State<BouncingWidget> createState() => _BouncingWidgetState();
 }
 
-class _BouncingWidgetState extends State<BouncingWidget> with SingleTickerProviderStateMixin {
+class _BouncingWidgetState extends State<BouncingWidget>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
 
@@ -30,9 +31,10 @@ class _BouncingWidgetState extends State<BouncingWidget> with SingleTickerProvid
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    _scaleAnimation = Tween<double>(begin: 1.0, end: widget.scaleFactor).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: widget.scaleFactor,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -183,10 +185,7 @@ class PremiumGlassDialog extends StatelessWidget {
               const SizedBox(height: 24),
               content,
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: actions,
-              ),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
             ],
           ),
         ),

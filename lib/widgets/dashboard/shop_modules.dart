@@ -46,7 +46,12 @@ class NavyShopModulesSection extends StatelessWidget {
     );
   }
 
-  Widget _navyModuleTile(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _navyModuleTile(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -61,7 +66,7 @@ class NavyShopModulesSection extends StatelessWidget {
               color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2),
-            )
+            ),
           ],
         ),
         child: Column(
@@ -105,7 +110,11 @@ class NavyShopModulesSection extends StatelessWidget {
         // — Operations subsection —
         Row(
           children: [
-            const Icon(Icons.layers_rounded, color: Color(0xFF1B3A6B), size: 14),
+            const Icon(
+              Icons.layers_rounded,
+              color: Color(0xFF1B3A6B),
+              size: 14,
+            ),
             const SizedBox(width: 6),
             LiveTranslatedText(
               'Operations',
@@ -123,15 +132,40 @@ class NavyShopModulesSection extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           child: Row(
             children: [
-              _navyModuleTile('Purchase\nOrders', Icons.local_shipping_rounded, const Color(0xFF1B3A6B), onPurchaseOrdersTap),
+              _navyModuleTile(
+                'Purchase\nOrders',
+                Icons.local_shipping_rounded,
+                const Color(0xFF1B3A6B),
+                onPurchaseOrdersTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('Online\nStore', Icons.storefront_rounded, const Color(0xFF2563EB), onOnlineStoreTap),
+              _navyModuleTile(
+                'Online\nStore',
+                Icons.storefront_rounded,
+                const Color(0xFF2563EB),
+                onOnlineStoreTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('Workers', Icons.groups_rounded, const Color(0xFF7C3AED), onWorkersTap),
+              _navyModuleTile(
+                'Workers',
+                Icons.groups_rounded,
+                const Color(0xFF7C3AED),
+                onWorkersTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('Daily\nReport', Icons.share_rounded, const Color(0xFF10B981), onDailyReportTap),
+              _navyModuleTile(
+                'Daily\nReport',
+                Icons.share_rounded,
+                const Color(0xFF10B981),
+                onDailyReportTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('Inventory', Icons.inventory_2_rounded, const Color(0xFF0EA5E9), onInventoryTap),
+              _navyModuleTile(
+                'Inventory',
+                Icons.inventory_2_rounded,
+                const Color(0xFF0EA5E9),
+                onInventoryTap,
+              ),
             ],
           ),
         ),
@@ -141,7 +175,11 @@ class NavyShopModulesSection extends StatelessWidget {
         // — Money & Closing subsection —
         Row(
           children: [
-            const Icon(Icons.payments_rounded, color: Color(0xFF1B3A6B), size: 14),
+            const Icon(
+              Icons.payments_rounded,
+              color: Color(0xFF1B3A6B),
+              size: 14,
+            ),
             const SizedBox(width: 6),
             LiveTranslatedText(
               'Money & Closing',
@@ -159,15 +197,40 @@ class NavyShopModulesSection extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           child: Row(
             children: [
-              _navyModuleTile('Khata /\nLedger', Icons.people_alt_rounded, const Color(0xFFF59E0B), onKhataTap),
+              _navyModuleTile(
+                'Khata /\nLedger',
+                Icons.people_alt_rounded,
+                const Color(0xFFF59E0B),
+                onKhataTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('Expense\nTracker', Icons.money_off_rounded, const Color(0xFFEF4444), onExpenseTrackerTap),
+              _navyModuleTile(
+                'Expense\nTracker',
+                Icons.money_off_rounded,
+                const Color(0xFFEF4444),
+                onExpenseTrackerTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('Day\nClosing', Icons.lock_clock_rounded, const Color(0xFF0D9488), onDayClosingTap),
+              _navyModuleTile(
+                'Day\nClosing',
+                Icons.lock_clock_rounded,
+                const Color(0xFF0D9488),
+                onDayClosingTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('All\nTransactions', Icons.receipt_long_rounded, const Color(0xFF475569), onAllTransactionsTap),
+              _navyModuleTile(
+                'All\nTransactions',
+                Icons.receipt_long_rounded,
+                const Color(0xFF475569),
+                onAllTransactionsTap,
+              ),
               const SizedBox(width: 10),
-              _navyModuleTile('GST\nFiling', Icons.article_rounded, const Color(0xFF1D4ED8), onGstFilingTap),
+              _navyModuleTile(
+                'GST\nFiling',
+                Icons.article_rounded,
+                const Color(0xFF1D4ED8),
+                onGstFilingTap,
+              ),
             ],
           ),
         ),

@@ -51,6 +51,7 @@ void main() {
 
       expect(engine.totalSales, 30);
       expect(engine.totalTransactions, 2);
+      expect(engine.lifetimeSalesCache, hasLength(engine.totalTransactions));
     });
 
     test('cancelled and returned orders are excluded from sales analytics', () {
@@ -131,6 +132,7 @@ void main() {
 
       expect(engine.totalSales, 80);
       expect(engine.totalTransactions, 2);
+      expect(engine.lifetimeSalesCache, hasLength(engine.totalTransactions));
       expect(engine.todayRevenue, 80);
       expect(engine.todayTransactionsCount, 2);
       expect(
@@ -143,61 +145,68 @@ void main() {
       );
     });
 
-    test('flat cloud rows for one invoice retain every product in analytics', () {
-      final engine = AnalyticsEngine();
-      final now = DateTime.now();
-      final businessDate =
-          '${now.year.toString().padLeft(4, '0')}-'
-          '${now.month.toString().padLeft(2, '0')}-'
-          '${now.day.toString().padLeft(2, '0')}';
-      final timestamp = now.toUtc().toIso8601String();
+    test(
+      'flat cloud rows for one invoice retain every product in analytics',
+      () {
+        final engine = AnalyticsEngine();
+        final now = DateTime.now();
+        final businessDate =
+            '${now.year.toString().padLeft(4, '0')}-'
+            '${now.month.toString().padLeft(2, '0')}-'
+            '${now.day.toString().padLeft(2, '0')}';
+        final timestamp = now.toUtc().toIso8601String();
 
-      engine.recalculateAnalytics([
-        {
-          'id': '77_0',
-          'sale_id': 'BILL-FLAT-77',
-          'invoice_id': 77,
-          'invoice_number': 'BILL-FLAT-77',
-          'business_date': businessDate,
-          'created_at': timestamp,
-          'updated_at': timestamp,
-          'product_name': 'Chicken',
-          'price': 800,
-          'quantity': 1,
-          'total': 800,
-          'total_amount': 1800,
-          'paid_amount': 1800,
-        },
-        {
-          'id': '77_1',
-          'sale_id': 'BILL-FLAT-77',
-          'invoice_id': 77,
-          'invoice_number': 'BILL-FLAT-77',
-          'business_date': businessDate,
-          'created_at': timestamp,
-          'updated_at': timestamp,
-          'product_name': 'Mutton',
-          'price': 1000,
-          'quantity': 1,
-          'total': 1000,
-          'total_amount': 1800,
-          'paid_amount': 1800,
-        },
-      ], 0);
+        engine.recalculateAnalytics([
+          {
+            'id': '77_0',
+            'sale_id': 'BILL-FLAT-77',
+            'invoice_id': 77,
+            'invoice_number': 'BILL-FLAT-77',
+            'business_date': businessDate,
+            'created_at': timestamp,
+            'updated_at': timestamp,
+            'product_name': 'Chicken',
+            'price': 800,
+            'quantity': 1,
+            'total': 800,
+            'total_amount': 1800,
+            'paid_amount': 1800,
+          },
+          {
+            'id': '77_1',
+            'sale_id': 'BILL-FLAT-77',
+            'invoice_id': 77,
+            'invoice_number': 'BILL-FLAT-77',
+            'business_date': businessDate,
+            'created_at': timestamp,
+            'updated_at': timestamp,
+            'product_name': 'Mutton',
+            'price': 1000,
+            'quantity': 1,
+            'total': 1000,
+            'total_amount': 1800,
+            'paid_amount': 1800,
+          },
+        ], 0);
 
-      expect(engine.totalTransactions, 1);
-      expect(engine.sales, hasLength(1));
-      final lines = engine.sales.single['items'] as List;
-      expect(lines, hasLength(2));
-      expect(
-        lines.map((line) => (line as Map)['product_name']).toSet(),
-        {'Chicken', 'Mutton'},
-      );
-      expect(
-        engine.productAnalyticsCache.values.map((row) => row['total']).toSet(),
-        {800.0, 1000.0},
-      );
-    });
+        expect(engine.totalTransactions, 1);
+        expect(engine.lifetimeRevenue, 1800);
+        expect(engine.lifetimeTransactions, 1);
+        expect(engine.sales, hasLength(1));
+        final lines = engine.sales.single['items'] as List;
+        expect(lines, hasLength(2));
+        expect(lines.map((line) => (line as Map)['product_name']).toSet(), {
+          'Chicken',
+          'Mutton',
+        });
+        expect(
+          engine.productAnalyticsCache.values
+              .map((row) => row['total'])
+              .toSet(),
+          {800.0, 1000.0},
+        );
+      },
+    );
 
     test('four line items remain attached to one sale', () {
       final engine = AnalyticsEngine();
@@ -273,6 +282,23 @@ void main() {
       expect(engine.getEventDate({}), DateTime(1970));
     });
 
+    test(
+      'lifetime sales cache excludes rows without a valid business date',
+      () {
+        final engine = AnalyticsEngine();
+        final today = DateTime.now().toIso8601String();
+
+        engine.recalculateAnalytics([
+          {'sale_id': 'VALID-DATE', 'business_date': today, 'total_amount': 40},
+          {'sale_id': 'MISSING-DATE', 'total_amount': 900},
+        ], 0);
+
+        expect(engine.totalTransactions, 1);
+        expect(engine.lifetimeSalesCache, hasLength(engine.totalTransactions));
+        expect(engine.totalSales, 40);
+      },
+    );
+
     test('headline dashboard metrics use one consistent selected-period set', () {
       final engine = AnalyticsEngine();
       final now = DateTime.now();
@@ -288,11 +314,37 @@ void main() {
       }
 
       final rows = [
-        {'sale_id': 'TODAY', 'business_date': businessDate(today), 'total_amount': 100.0},
-        {'sale_id': 'WEEK', 'business_date': businessDate(today.subtract(const Duration(days: 3))), 'total_amount': 50.0},
-        {'sale_id': 'MONTH', 'business_date': businessDate(today.subtract(const Duration(days: 10))), 'total_amount': 25.0},
-        {'sale_id': 'YEAR', 'business_date': businessDate(DateTime(now.year, 1, 1)), 'total_amount': 60.0},
-        {'sale_id': 'OLDER', 'business_date': businessDate(DateTime(now.year - 1, now.month, now.day)), 'total_amount': 200.0},
+        {
+          'sale_id': 'TODAY',
+          'business_date': businessDate(today),
+          'total_amount': 100.0,
+        },
+        {
+          'sale_id': 'WEEK',
+          'business_date': businessDate(
+            today.subtract(const Duration(days: 3)),
+          ),
+          'total_amount': 50.0,
+        },
+        {
+          'sale_id': 'MONTH',
+          'business_date': businessDate(
+            today.subtract(const Duration(days: 10)),
+          ),
+          'total_amount': 25.0,
+        },
+        {
+          'sale_id': 'YEAR',
+          'business_date': businessDate(DateTime(now.year, 1, 1)),
+          'total_amount': 60.0,
+        },
+        {
+          'sale_id': 'OLDER',
+          'business_date': businessDate(
+            DateTime(now.year - 1, now.month, now.day),
+          ),
+          'total_amount': 200.0,
+        },
       ];
 
       void expectPeriod(int filter, double revenue, int transactions) {
@@ -313,6 +365,7 @@ void main() {
       // Lifetime totals remain separate from the selected-period headline KPIs.
       expect(engine.totalSales, 435.0);
       expect(engine.totalTransactions, 5);
+      expect(engine.lifetimeSalesCache, hasLength(engine.totalTransactions));
     });
   });
 }

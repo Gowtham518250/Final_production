@@ -27,7 +27,7 @@ class EmptyStateWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -48,7 +48,7 @@ class EmptyStateWidget extends StatelessWidget {
                 child: Icon(icon, size: 50, color: iconColor),
               ),
             const SizedBox(height: 24),
-            
+
             // Title
             LiveTranslatedText(
               title,
@@ -60,7 +60,7 @@ class EmptyStateWidget extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            
+
             // Subtitle
             LiveTranslatedText(
               subtitle,
@@ -70,7 +70,7 @@ class EmptyStateWidget extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            
+
             // Action button
             if (onAction != null) ...[
               const SizedBox(height: 24),
@@ -100,10 +100,7 @@ class _AnimatedFloatingIcon extends StatefulWidget {
   final IconData icon;
   final Color color;
 
-  const _AnimatedFloatingIcon({
-    required this.icon,
-    required this.color,
-  });
+  const _AnimatedFloatingIcon({required this.icon, required this.color});
 
   @override
   State<_AnimatedFloatingIcon> createState() => _AnimatedFloatingIconState();
@@ -124,13 +121,15 @@ class _AnimatedFloatingIconState extends State<_AnimatedFloatingIcon>
       vsync: this,
     )..repeat(reverse: true);
 
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    _rotateAnimation = Tween<double>(begin: -0.05, end: 0.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _rotateAnimation = Tween<double>(
+      begin: -0.05,
+      end: 0.05,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _bounceAnimation = Tween<Offset>(
       begin: const Offset(0, 0),
@@ -184,11 +183,8 @@ class SkeletonLoader extends StatefulWidget {
   final int itemCount;
   final double height;
 
-  const SkeletonLoader({
-    Key? key,
-    this.itemCount = 5,
-    this.height = 60,
-  }) : super(key: key);
+  const SkeletonLoader({Key? key, this.itemCount = 5, this.height = 60})
+    : super(key: key);
 
   @override
   State<SkeletonLoader> createState() => _SkeletonLoaderState();
@@ -231,10 +227,7 @@ class _SkeletonItem extends StatelessWidget {
   final AnimationController controller;
   final double height;
 
-  const _SkeletonItem({
-    required this.controller,
-    required this.height,
-  });
+  const _SkeletonItem({required this.controller, required this.height});
 
   @override
   Widget build(BuildContext context) {
@@ -248,11 +241,7 @@ class _SkeletonItem extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [
-                Colors.grey[300]!,
-                Colors.grey[100]!,
-                Colors.grey[300]!,
-              ],
+              colors: [Colors.grey[300]!, Colors.grey[100]!, Colors.grey[300]!],
               stops: [
                 (controller.value - 0.3).clamp(0.0, 1.0),
                 controller.value.clamp(0.0, 1.0),
@@ -282,16 +271,12 @@ class NoDataWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.inbox_rounded,
-            size: 80,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.inbox_rounded, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 16),
           LiveTranslatedText(
             message,

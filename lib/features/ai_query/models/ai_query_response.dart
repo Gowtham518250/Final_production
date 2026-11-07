@@ -50,7 +50,10 @@ class AIQueryResponse {
   }
 
   /// Factory constructor to parse backend JSON safely with defensive fallbacks.
-  factory AIQueryResponse.fromJson(Map<String, dynamic> json, {String? originalQuery}) {
+  factory AIQueryResponse.fromJson(
+    Map<String, dynamic> json, {
+    String? originalQuery,
+  }) {
     try {
       // 1. Query Engine Version
       final queryEngineVersion = json['query_engine_version']?.toString();
@@ -79,8 +82,10 @@ class AIQueryResponse {
 
       // Preserve the raw model response for diagnostics/compatibility, but it is
       // not the primary display or TTS text when it contains SQL.
-      String? generatedModelResponse = json['generated_model_response']?.toString();
-      if (generatedModelResponse == null || generatedModelResponse.trim().isEmpty) {
+      String? generatedModelResponse = json['generated_model_response']
+          ?.toString();
+      if (generatedModelResponse == null ||
+          generatedModelResponse.trim().isEmpty) {
         generatedModelResponse = answerText;
       }
 
@@ -108,8 +113,13 @@ class AIQueryResponse {
           : null;
 
       // If generatedModelResponse is still empty but results exist, synthesize a gentle fallback message
-      if ((generatedModelResponse == null || generatedModelResponse.trim().isEmpty) && resultsList.isNotEmpty) {
-        generatedModelResponse = _synthesizeAnswerFromResults(resultsList, query);
+      if ((generatedModelResponse == null ||
+              generatedModelResponse.trim().isEmpty) &&
+          resultsList.isNotEmpty) {
+        generatedModelResponse = _synthesizeAnswerFromResults(
+          resultsList,
+          query,
+        );
       }
 
       return AIQueryResponse(
@@ -139,13 +149,19 @@ class AIQueryResponse {
   /// Detects SQL/schema text that must never be shown or spoken as the answer.
   static bool _looksLikeTechnicalText(String value) {
     final text = value.trim();
-    return RegExp(r'^(?:TABLE\s*:|SQL\s*:|SELECT\b|WITH\b)', caseSensitive: false).hasMatch(text) ||
+    return RegExp(
+          r'^(?:TABLE\s*:|SQL\s*:|SELECT\b|WITH\b)',
+          caseSensitive: false,
+        ).hasMatch(text) ||
         (RegExp(r'\bSQL\s*:', caseSensitive: false).hasMatch(text) &&
-         RegExp(r'\bSELECT\b', caseSensitive: false).hasMatch(text));
+            RegExp(r'\bSELECT\b', caseSensitive: false).hasMatch(text));
   }
 
   /// Synthesizes a clean fallback summary if the backend only returned raw data rows
-  static String _synthesizeAnswerFromResults(List<dynamic> results, String? query) {
+  static String _synthesizeAnswerFromResults(
+    List<dynamic> results,
+    String? query,
+  ) {
     if (results.isEmpty) return 'No records found matching your request.';
     if (results.length == 1 && results.first is Map) {
       final map = results.first as Map;
@@ -159,7 +175,8 @@ class AIQueryResponse {
   }
 
   /// Returns the effective SQL string if available
-  String? get effectiveSql => (sql != null && sql!.trim().isNotEmpty) ? sql : generatedSql;
+  String? get effectiveSql =>
+      (sql != null && sql!.trim().isNotEmpty) ? sql : generatedSql;
 
   /// Returns whether any SQL was returned
   bool get hasSql => effectiveSql != null && effectiveSql!.trim().isNotEmpty;
@@ -217,7 +234,6 @@ class AIQueryResponse {
   }
 }
 
-
 class AIQueryHistoryItem {
   final int id;
   final String question;
@@ -239,7 +255,8 @@ class AIQueryHistoryItem {
       question: json['question']?.toString() ?? '',
       answer: json['answer']?.toString() ?? '',
       resultCount: int.tryParse(json['result_count']?.toString() ?? '') ?? 0,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal() ??
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal() ??
           DateTime.now(),
     );
   }

@@ -30,10 +30,14 @@ class PrinterService {
       throw StateError('Bluetooth is unavailable or disabled.');
     }
     final devices = await bluetooth.getBondedDevices();
-    return devices.map((device) => BluetoothPrinter(
-      deviceName: device.name,
-      address: device.address,
-    )).toList();
+    return devices
+        .map(
+          (device) => BluetoothPrinter(
+            deviceName: device.name,
+            address: device.address,
+          ),
+        )
+        .toList();
   }
 
   static bool get isConnected => _isConnected;
@@ -62,7 +66,10 @@ class PrinterService {
         throw StateError('Selected printer has no Bluetooth address.');
       }
       await requestBluetoothPermissions();
-      final bluetoothDevice = BluetoothDevice(device.deviceName, device.address);
+      final bluetoothDevice = BluetoothDevice(
+        device.deviceName,
+        device.address,
+      );
       await bluetooth.connect(bluetoothDevice);
       final connected = await bluetooth.isConnected;
       if (connected != true) {
@@ -89,9 +96,12 @@ class PrinterService {
       final prefs = await SharedPreferences.getInstance();
       final savedAddress = prefs.getString('last_printer_address');
       final savedName = prefs.getString('last_printer_name');
-      
+
       if (savedAddress != null && savedAddress.isNotEmpty) {
-        final device = BluetoothPrinter(deviceName: savedName, address: savedAddress);
+        final device = BluetoothPrinter(
+          deviceName: savedName,
+          address: savedAddress,
+        );
         await connect(device);
       }
     } catch (e) {
@@ -121,13 +131,17 @@ class PrinterService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('🔵 Bluetooth printer not found — tap to reconnect.'),
+            content: const Text(
+              '🔵 Bluetooth printer not found — tap to reconnect.',
+            ),
             action: SnackBarAction(
               label: 'Reconnect',
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const PrinterSettingsPage()),
+                  MaterialPageRoute(
+                    builder: (context) => const PrinterSettingsPage(),
+                  ),
                 );
               },
             ),
@@ -172,7 +186,11 @@ class PrinterService {
       bluetooth.printNewLine();
       bluetooth.printCustom("Bill No: $invoiceId", 1, 0);
       bluetooth.printNewLine();
-      bluetooth.printCustom("Date: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}", 1, 0);
+      bluetooth.printCustom(
+        "Date: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}",
+        1,
+        0,
+      );
       bluetooth.printNewLine();
       bluetooth.printCustom("Customer: $customerName", 1, 0);
       bluetooth.printNewLine();
@@ -188,36 +206,56 @@ class PrinterService {
       double specialDiscount = 0.0;
       final Map<double, double> gstByRate = <double, double>{};
       for (var item in items) {
-        final name = (item['product_name'] ?? item['item'] ?? item['itemName'] ?? 'Item').toString();
+        final name =
+            (item['product_name'] ?? item['item'] ?? item['itemName'] ?? 'Item')
+                .toString();
         final qty = item['qty'] ?? item['quantity'] ?? '1';
-        final price = double.tryParse(item['price']?.toString() ?? item['unit_price']?.toString() ?? '0') ?? 0.0;
+        final price =
+            double.tryParse(
+              item['price']?.toString() ??
+                  item['unit_price']?.toString() ??
+                  '0',
+            ) ??
+            0.0;
         final itemQty = qty is num
             ? qty.toDouble()
             : double.tryParse(qty.toString()) ?? 1.0;
         final itemDiscount =
             double.tryParse(item['discount_amount']?.toString() ?? '0') ?? 0.0;
-        final itemGstRaw = item['gstPercent'] ?? item['gst_percent'] ?? item['gst'];
+        final itemGstRaw =
+            item['gstPercent'] ?? item['gst_percent'] ?? item['gst'];
         final parsedItemGst = itemGstRaw is num
             ? itemGstRaw.toDouble()
             : double.tryParse(itemGstRaw?.toString() ?? '');
         // A zero global rate explicitly disables GST for this bill; otherwise
         // use each row's tax slab when present.
-        final itemGstRate = gstPercent <= 0 ? 0.0 : (parsedItemGst ?? gstPercent);
+        final itemGstRate = gstPercent <= 0
+            ? 0.0
+            : (parsedItemGst ?? gstPercent);
 
         subTotal += price * itemQty;
         specialDiscount += itemDiscount;
         if (itemGstRate > 0) {
           gstByRate[itemGstRate] =
-              (gstByRate[itemGstRate] ?? 0.0) + price * itemQty * itemGstRate / 100;
+              (gstByRate[itemGstRate] ?? 0.0) +
+              price * itemQty * itemGstRate / 100;
         }
 
         // Handle long names
         if (name.length > 20) {
           bluetooth.printCustom(name.substring(0, 20), 1, 0);
           bluetooth.printNewLine();
-          bluetooth.printLeftRight("", qty.toString() + " x " + price.toStringAsFixed(2), 1);
+          bluetooth.printLeftRight(
+            "",
+            qty.toString() + " x " + price.toStringAsFixed(2),
+            1,
+          );
         } else {
-          bluetooth.printLeftRight(name, qty.toString() + " x " + price.toStringAsFixed(2), 1);
+          bluetooth.printLeftRight(
+            name,
+            qty.toString() + " x " + price.toStringAsFixed(2),
+            1,
+          );
         }
         bluetooth.printNewLine();
       }
@@ -261,7 +299,11 @@ class PrinterService {
       final safeTotal = totalAmount.isFinite && totalAmount >= 0
           ? totalAmount
           : calculatedTotal;
-      bluetooth.printLeftRight("TOTAL", "Rs " + safeTotal.toStringAsFixed(2), 3);
+      bluetooth.printLeftRight(
+        "TOTAL",
+        "Rs " + safeTotal.toStringAsFixed(2),
+        3,
+      );
       bluetooth.printNewLine();
       bluetooth.printCustom("-" * 32, 1, 1);
       bluetooth.printNewLine();
@@ -318,13 +360,17 @@ class PrinterService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('🔵 Bluetooth printer not found — tap to reconnect.'),
+            content: const Text(
+              '🔵 Bluetooth printer not found — tap to reconnect.',
+            ),
             action: SnackBarAction(
               label: 'Reconnect',
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const PrinterSettingsPage()),
+                  MaterialPageRoute(
+                    builder: (context) => const PrinterSettingsPage(),
+                  ),
                 );
               },
             ),
@@ -349,17 +395,17 @@ class PrinterService {
       bluetooth.printNewLine();
       bluetooth.printNewLine();
       bluetooth.printNewLine();
-      
+
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Test print sent')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Test print sent')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Test print failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Test print failed: $e')));
       }
     }
   }
@@ -370,11 +416,7 @@ class BluetoothPrinter {
   final String? address;
   final bool isBle;
 
-  BluetoothPrinter({
-    this.deviceName,
-    this.address,
-    this.isBle = false,
-  });
+  BluetoothPrinter({this.deviceName, this.address, this.isBle = false});
 
   static Future<bool> printBillWithRecovery({
     required BuildContext context,
@@ -402,25 +444,35 @@ class BluetoothPrinter {
       } catch (e) {
         retryCount++;
         if (!context.mounted) break;
-        
+
         // Show Recovery UI using Dialog
         final retry = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: Row(
               children: [
                 const Icon(Icons.print_disabled, color: Colors.red),
                 const SizedBox(width: 8),
-                const Text('Printer Error', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Printer Error',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
-            content: const Text('The printer disconnected or is out of paper. The invoice is securely saved. Do you want to retry printing?'),
+            content: const Text(
+              'The printer disconnected or is out of paper. The invoice is securely saved. Do you want to retry printing?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('CONTINUE WITHOUT PRINTING', style: TextStyle(color: Colors.grey)),
+                child: const Text(
+                  'CONTINUE WITHOUT PRINTING',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
@@ -430,16 +482,16 @@ class BluetoothPrinter {
             ],
           ),
         );
-        
+
         if (retry != true) {
           break; // User chose to continue without printing
         }
-        
+
         // Try to auto-connect before next retry
         await PrinterService.autoConnect();
       }
     }
-    
+
     return printSuccess;
   }
 }

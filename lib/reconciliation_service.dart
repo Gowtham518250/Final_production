@@ -21,9 +21,10 @@ class ReconciliationService {
 
       for (int i = 0; i < sales.length; i++) {
         final sale = sales[i];
-        final id = (sale['sale_id'] ?? sale['invoice_number'] ?? sale['id'] ?? '')
-            .toString()
-            .trim();
+        final id =
+            (sale['sale_id'] ?? sale['invoice_number'] ?? sale['id'] ?? '')
+                .toString()
+                .trim();
 
         if (id.isEmpty) {
           missingIds.add(i);
@@ -38,10 +39,7 @@ class ReconciliationService {
         final expectedPending = status != 'synced';
         final pendingFlag = sale['pending_sync'];
         if (pendingFlag is bool && pendingFlag != expectedPending) {
-          sales[i] = {
-            ...sale,
-            'pending_sync': expectedPending,
-          };
+          sales[i] = {...sale, 'pending_sync': expectedPending};
           repairedPendingFlags++;
         }
       }

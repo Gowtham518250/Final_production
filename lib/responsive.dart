@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 /// Responsive design helper class for adaptive UI scaling
 class Responsive {
@@ -85,11 +85,11 @@ class Responsive {
 extension ResponsiveExtension on BuildContext {
   double get screenWidth => MediaQuery.of(this).size.width;
   double get screenHeight => MediaQuery.of(this).size.height;
-  
+
   bool get isMobile => Responsive.isMobile(this);
   bool get isTablet => Responsive.isTablet(this);
   bool get isDesktop => Responsive.isDesktop(this);
-  
+
   double h(double percentage) => Responsive.getHeight(percentage);
   double w(double percentage) => Responsive.getWidth(percentage);
   double fontSize(double size) => Responsive.getFontSize(size);

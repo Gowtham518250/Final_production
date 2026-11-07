@@ -20,17 +20,15 @@ class InvoiceState {
     this.paidDate,
   });
 
-  InvoiceState copyWith({
-    String? paymentStatus,
-    DateTime? paidDate,
-  }) => InvoiceState(
-    number: number,
-    customer: customer,
-    totalAmount: totalAmount,
-    paymentStatus: paymentStatus ?? this.paymentStatus,
-    createdDate: createdDate,
-    paidDate: paidDate ?? this.paidDate,
-  );
+  InvoiceState copyWith({String? paymentStatus, DateTime? paidDate}) =>
+      InvoiceState(
+        number: number,
+        customer: customer,
+        totalAmount: totalAmount,
+        paymentStatus: paymentStatus ?? this.paymentStatus,
+        createdDate: createdDate,
+        paidDate: paidDate ?? this.paidDate,
+      );
 }
 
 /// Manages invoice state — prevents deletion, tracks updates
@@ -38,7 +36,7 @@ class InvoiceStateNotifier extends ChangeNotifier {
   final Map<String, InvoiceState> _invoices = {};
 
   List<InvoiceState> get invoices => _invoices.values.toList();
-  
+
   InvoiceState? getInvoice(String number) => _invoices[number];
 
   /// Add new invoice
@@ -56,10 +54,12 @@ class InvoiceStateNotifier extends ChangeNotifier {
         customer: inv['customer'] ?? 'Guest',
         totalAmount: (inv['totalAmount'] as num?)?.toDouble() ?? 0.0,
         paymentStatus: inv['paymentStatus'] ?? 'UNPAID',
-        createdDate: inv['createdDate'] is DateTime 
-            ? inv['createdDate'] as DateTime 
+        createdDate: inv['createdDate'] is DateTime
+            ? inv['createdDate'] as DateTime
             : DateTime.now(),
-        paidDate: inv['paidDate'] is DateTime ? inv['paidDate'] as DateTime : null,
+        paidDate: inv['paidDate'] is DateTime
+            ? inv['paidDate'] as DateTime
+            : null,
       );
       _invoices[invoice.number] = invoice;
     }
@@ -67,7 +67,11 @@ class InvoiceStateNotifier extends ChangeNotifier {
   }
 
   /// Update invoice status (NEVER delete)
-  void updateInvoiceStatus(String invoiceNumber, String newStatus, [DateTime? paidDate]) {
+  void updateInvoiceStatus(
+    String invoiceNumber,
+    String newStatus, [
+    DateTime? paidDate,
+  ]) {
     final invoice = _invoices[invoiceNumber];
     if (invoice == null) return;
     _invoices[invoiceNumber] = invoice.copyWith(
@@ -85,8 +89,10 @@ class InvoiceStateNotifier extends ChangeNotifier {
       .where((i) => i.paymentStatus == 'PAID')
       .fold(0.0, (sum, i) => sum + i.totalAmount);
 
-  int get unpaidCount => _invoices.values.where((i) => i.paymentStatus == 'UNPAID').length;
-  int get paidCount => _invoices.values.where((i) => i.paymentStatus == 'PAID').length;
+  int get unpaidCount =>
+      _invoices.values.where((i) => i.paymentStatus == 'UNPAID').length;
+  int get paidCount =>
+      _invoices.values.where((i) => i.paymentStatus == 'PAID').length;
   int get totalCount => _invoices.length;
 
   void clear() {

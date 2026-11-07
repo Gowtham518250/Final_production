@@ -25,9 +25,8 @@ void main() {
     final spoken = <String>[];
     void Function()? pending;
     final box = SoundboxAnnouncementCoordinator<String>(
-      speak: (event, _) => spoken.add(
-        '${event.id}:${event.normalizedReferenceId ?? 'none'}',
-      ),
+      speak: (event, _) =>
+          spoken.add('${event.id}:${event.normalizedReferenceId ?? 'none'}'),
       holdWindow: () => const Duration(milliseconds: 1500),
       schedule: (duration, callback) {
         pending = callback;
@@ -96,23 +95,26 @@ void main() {
     expect(spoken, ['n1', 'n2']);
   });
 
-  test('UTR on the first alert speaks immediately like a confirmed sound box', () {
-    final spoken = <String>[];
-    final box = SoundboxAnnouncementCoordinator<String>(
-      speak: (event, _) => spoken.add(event.id),
-      holdWindow: () => const Duration(milliseconds: 1500),
-      schedule: (duration, callback) {
-        return () {};
-      },
-    );
+  test(
+    'UTR on the first alert speaks immediately like a confirmed sound box',
+    () {
+      final spoken = <String>[];
+      final box = SoundboxAnnouncementCoordinator<String>(
+        speak: (event, _) => spoken.add(event.id),
+        holdWindow: () => const Duration(milliseconds: 1500),
+        schedule: (duration, callback) {
+          return () {};
+        },
+      );
 
-    expect(
-      box.notePrimary(
-        _credit(id: 'n1', source: 'notification', reference: '412345678901'),
-        'ui',
-      ),
-      isFalse,
-    );
-    expect(spoken, isEmpty);
-  });
+      expect(
+        box.notePrimary(
+          _credit(id: 'n1', source: 'notification', reference: '412345678901'),
+          'ui',
+        ),
+        isFalse,
+      );
+      expect(spoken, isEmpty);
+    },
+  );
 }

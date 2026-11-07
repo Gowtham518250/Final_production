@@ -65,10 +65,7 @@ class _WorkerAttendanceDetailPageState
 
   Future<void> _saveLocalAttendance(List<dynamic> records) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _attendanceCacheKey(_workerId),
-      jsonEncode(records),
-    );
+    await prefs.setString(_attendanceCacheKey(_workerId), jsonEncode(records));
   }
 
   Future<void> _load() async {
@@ -96,8 +93,8 @@ class _WorkerAttendanceDetailPageState
           final records = data is Map && data['records'] is List
               ? List<dynamic>.from(data['records'] as List)
               : data is List
-                  ? List<dynamic>.from(data)
-                  : <dynamic>[];
+              ? List<dynamic>.from(data)
+              : <dynamic>[];
 
           await _saveLocalAttendance(records);
 
@@ -129,17 +126,24 @@ class _WorkerAttendanceDetailPageState
   Map<String, dynamic>? _recordFor(DateTime day) {
     final target = DateFormat('yyyy-MM-dd').format(day);
     for (final r in _records) {
-      final recDate = (r['attendance_date'] ?? '').toString().split('T').first.trim();
+      final recDate = (r['attendance_date'] ?? '')
+          .toString()
+          .split('T')
+          .first
+          .trim();
       if (recDate == target) return Map<String, dynamic>.from(r as Map);
     }
     return null;
   }
 
   List<Map<String, dynamic>> _recordsInMonth(DateTime month) {
-    return _records.where((r) {
-      final d = DateTime.tryParse((r['attendance_date'] ?? '').toString());
-      return d != null && d.year == month.year && d.month == month.month;
-    }).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    return _records
+        .where((r) {
+          final d = DateTime.tryParse((r['attendance_date'] ?? '').toString());
+          return d != null && d.year == month.year && d.month == month.month;
+        })
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
   }
 
   double _hoursOf(Map<String, dynamic> r) {
@@ -196,16 +200,26 @@ class _WorkerAttendanceDetailPageState
   bool _isLate(Map<String, dynamic> r) {
     final local = _parseServerTime(r['check_in_time']);
     if (local == null) return false;
-    final threshold = DateTime(local.year, local.month, local.day,
-        _shiftStart.hour, _shiftStart.minute + _graceMinutes);
+    final threshold = DateTime(
+      local.year,
+      local.month,
+      local.day,
+      _shiftStart.hour,
+      _shiftStart.minute + _graceMinutes,
+    );
     return local.isAfter(threshold);
   }
 
   bool _isEarly(Map<String, dynamic> r) {
     final local = _parseServerTime(r['check_out_time']);
     if (local == null) return false;
-    final threshold = DateTime(local.year, local.month, local.day,
-        _shiftEnd.hour, _shiftEnd.minute - _graceMinutes);
+    final threshold = DateTime(
+      local.year,
+      local.month,
+      local.day,
+      _shiftEnd.hour,
+      _shiftEnd.minute - _graceMinutes,
+    );
     return local.isBefore(threshold);
   }
 
@@ -233,7 +247,9 @@ class _WorkerAttendanceDetailPageState
   }
 
   double _monthlyHours(DateTime month) {
-    return _recordsInMonth(month).fold<double>(0, (sum, r) => sum + _hoursOf(r));
+    return _recordsInMonth(
+      month,
+    ).fold<double>(0, (sum, r) => sum + _hoursOf(r));
   }
 
   // ---- Performance insights --------------------------------------------
@@ -244,7 +260,9 @@ class _WorkerAttendanceDetailPageState
   /// Null when there's no check-in data yet for the month, so the UI can
   /// show "—" instead of a misleading 100%.
   double? _punctualityScore(DateTime month) {
-    final recs = _recordsInMonth(month).where((r) => r['check_in_time'] != null).toList();
+    final recs = _recordsInMonth(
+      month,
+    ).where((r) => r['check_in_time'] != null).toList();
     if (recs.isEmpty) return null;
     final onTime = recs.where((r) => !_isLate(r)).length;
     return (onTime / recs.length) * 100;
@@ -253,16 +271,21 @@ class _WorkerAttendanceDetailPageState
   /// Distinct calendar dates (across all history) marked PRESENT or
   /// HALF_DAY, sorted oldest to newest.
   List<DateTime> _presentDatesSorted() {
-    final dates = _records
-        .where((r) {
-          final st = (r['status'] ?? '').toString().trim().toUpperCase();
-          return st == 'PRESENT' || st == 'HALF_DAY';
-        })
-        .map((r) => DateTime.tryParse((r['attendance_date'] ?? '').toString().split('T').first))
-        .whereType<DateTime>()
-        .toSet()
-        .toList()
-      ..sort();
+    final dates =
+        _records
+            .where((r) {
+              final st = (r['status'] ?? '').toString().trim().toUpperCase();
+              return st == 'PRESENT' || st == 'HALF_DAY';
+            })
+            .map(
+              (r) => DateTime.tryParse(
+                (r['attendance_date'] ?? '').toString().split('T').first,
+              ),
+            )
+            .whereType<DateTime>()
+            .toSet()
+            .toList()
+          ..sort();
     return dates;
   }
 
@@ -287,7 +310,9 @@ class _WorkerAttendanceDetailPageState
 
   /// Longest run of consecutive present days within the given month.
   int _bestStreakInMonth(DateTime month) {
-    final dates = _presentDatesSorted().where((d) => d.year == month.year && d.month == month.month).toList();
+    final dates = _presentDatesSorted()
+        .where((d) => d.year == month.year && d.month == month.month)
+        .toList();
     if (dates.isEmpty) return 0;
     int best = 1, cur = 1;
     for (var i = 1; i < dates.length; i++) {
@@ -306,8 +331,11 @@ class _WorkerAttendanceDetailPageState
   /// implying a 0% attendance drop that never really happened.
   ({double pctDelta, double hrsDelta, bool hasPrevData}) _monthOverMonth() {
     final hasPrev = _recordsInMonth(_prevMonth).isNotEmpty;
-    final pctDelta = _attendancePercent(_month) - (hasPrev ? _attendancePercent(_prevMonth) : 0);
-    final hrsDelta = _monthlyHours(_month) - (hasPrev ? _monthlyHours(_prevMonth) : 0);
+    final pctDelta =
+        _attendancePercent(_month) -
+        (hasPrev ? _attendancePercent(_prevMonth) : 0);
+    final hrsDelta =
+        _monthlyHours(_month) - (hasPrev ? _monthlyHours(_prevMonth) : 0);
     return (pctDelta: pctDelta, hrsDelta: hrsDelta, hasPrevData: hasPrev);
   }
 
@@ -317,7 +345,9 @@ class _WorkerAttendanceDetailPageState
   double _paidThisMonth() {
     final now = DateTime.now();
     return _payments
-        .where((p) => p.date.year == _month.year && p.date.month == _month.month)
+        .where(
+          (p) => p.date.year == _month.year && p.date.month == _month.month,
+        )
         .fold<double>(0, (sum, p) => sum + p.amount);
   }
 
@@ -335,7 +365,10 @@ class _WorkerAttendanceDetailPageState
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: LiveTranslatedText(w.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        title: LiveTranslatedText(
+          w.name,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
         backgroundColor: _primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -350,45 +383,95 @@ class _WorkerAttendanceDetailPageState
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  _monthSwitcher(),
-                  const SizedBox(height: 16),
-                  Row(children: [
-                    Expanded(child: _statTile('Attendance', '${pct.toStringAsFixed(0)}%', _present)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _statTile('Hours', monthHours.toStringAsFixed(1), _primary)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _statTile('Payroll', '₹${payroll.toStringAsFixed(0)}', _half)),
-                  ]),
-                  const SizedBox(height: 16),
-                  _insightsCard(),
-                  const SizedBox(height: 24),
-                  LiveTranslatedText('Calendar', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  _calendar(),
-                  const SizedBox(height: 12),
-                  _legend(),
-                  const SizedBox(height: 24),
-                  LiveTranslatedText('Daily Hours Trend', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  _trendChart(),
-                  const SizedBox(height: 24),
-                  LiveTranslatedText('Late / Early Check-ins', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  _lateEarlyList(),
-                  const SizedBox(height: 24),
-                  LiveTranslatedText('Payroll Summary', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  _payrollCard(monthHours, payroll, paid, balance),
-                  const SizedBox(height: 80),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _monthSwitcher(),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _statTile(
+                            'Attendance',
+                            '${pct.toStringAsFixed(0)}%',
+                            _present,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _statTile(
+                            'Hours',
+                            monthHours.toStringAsFixed(1),
+                            _primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _statTile(
+                            'Payroll',
+                            '₹${payroll.toStringAsFixed(0)}',
+                            _half,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _insightsCard(),
+                    const SizedBox(height: 24),
+                    LiveTranslatedText(
+                      'Calendar',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _calendar(),
+                    const SizedBox(height: 12),
+                    _legend(),
+                    const SizedBox(height: 24),
+                    LiveTranslatedText(
+                      'Daily Hours Trend',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _trendChart(),
+                    const SizedBox(height: 24),
+                    LiveTranslatedText(
+                      'Late / Early Check-ins',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _lateEarlyList(),
+                    const SizedBox(height: 24),
+                    LiveTranslatedText(
+                      'Payroll Summary',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _payrollCard(monthHours, payroll, paid, balance),
+                    const SizedBox(height: 80),
+                  ],
+                ),
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _shopkeeperId == null ? null : _showAddPaymentDialog,
         backgroundColor: _primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const LiveTranslatedText('Log Payment', style: TextStyle(color: Colors.white)),
+        label: const LiveTranslatedText(
+          'Log Payment',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
@@ -399,20 +482,34 @@ class _WorkerAttendanceDetailPageState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6),
+        ],
       ),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left),
-          onPressed: () => setState(() => _month = DateTime(_month.year, _month.month - 1)),
-        ),
-        LiveTranslatedText(DateFormat('MMMM yyyy').format(_month),
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
-        IconButton(
-          icon: const Icon(Icons.chevron_right),
-          onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1)),
-        ),
-      ]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: () => setState(
+              () => _month = DateTime(_month.year, _month.month - 1),
+            ),
+          ),
+          LiveTranslatedText(
+            DateFormat('MMMM yyyy').format(_month),
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: () => setState(
+              () => _month = DateTime(_month.year, _month.month + 1),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -422,13 +519,30 @@ class _WorkerAttendanceDetailPageState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6),
+        ],
       ),
-      child: Column(children: [
-        LiveTranslatedText(value, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-        const SizedBox(height: 4),
-        LiveTranslatedText(label, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600)),
-      ]),
+      child: Column(
+        children: [
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -450,49 +564,107 @@ class _WorkerAttendanceDetailPageState
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.indigo.withValues(alpha: 0.25), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.indigo.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText('PERFORMANCE INSIGHTS', style: GoogleFonts.poppins(
-              fontSize: 10, letterSpacing: 1, fontWeight: FontWeight.w700, color: Colors.white60)),
+          LiveTranslatedText(
+            'PERFORMANCE INSIGHTS',
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              letterSpacing: 1,
+              fontWeight: FontWeight.w700,
+              color: Colors.white60,
+            ),
+          ),
           const SizedBox(height: 14),
-          Row(children: [
-            Expanded(child: _insightBlock(
-                punctuality == null ? '—' : '${punctuality.toStringAsFixed(0)}%',
-                'Punctuality', Icons.punch_clock_rounded)),
-            Container(width: 1, height: 40, color: Colors.white24),
-            Expanded(child: _insightBlock('$currentStreak', 'Day Streak', Icons.local_fire_department_rounded)),
-            Container(width: 1, height: 40, color: Colors.white24),
-            Expanded(child: _insightBlock('$bestStreak', 'Best Streak', Icons.emoji_events_rounded)),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: _insightBlock(
+                  punctuality == null
+                      ? '—'
+                      : '${punctuality.toStringAsFixed(0)}%',
+                  'Punctuality',
+                  Icons.punch_clock_rounded,
+                ),
+              ),
+              Container(width: 1, height: 40, color: Colors.white24),
+              Expanded(
+                child: _insightBlock(
+                  '$currentStreak',
+                  'Day Streak',
+                  Icons.local_fire_department_rounded,
+                ),
+              ),
+              Container(width: 1, height: 40, color: Colors.white24),
+              Expanded(
+                child: _insightBlock(
+                  '$bestStreak',
+                  'Best Streak',
+                  Icons.emoji_events_rounded,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: mom.hasPrevData
-                ? Row(children: [
-                    Icon(mom.pctDelta >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                        color: Colors.white, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: LiveTranslatedText(
-                        'vs last month: ${mom.pctDelta >= 0 ? '+' : ''}${mom.pctDelta.toStringAsFixed(0)}% attendance'
-                        ' • ${mom.hrsDelta >= 0 ? '+' : ''}${mom.hrsDelta.toStringAsFixed(1)} hrs',
-                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                ? Row(
+                    children: [
+                      Icon(
+                        mom.pctDelta >= 0
+                            ? Icons.trending_up_rounded
+                            : Icons.trending_down_rounded,
+                        color: Colors.white,
+                        size: 18,
                       ),
-                    ),
-                  ])
-                : Row(children: [
-                    const Icon(Icons.info_outline_rounded, color: Colors.white70, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: LiveTranslatedText('No data for ${DateFormat('MMMM').format(_prevMonth)} to compare against yet',
-                          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
-                    ),
-                  ]),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: LiveTranslatedText(
+                          'vs last month: ${mom.pctDelta >= 0 ? '+' : ''}${mom.pctDelta.toStringAsFixed(0)}% attendance'
+                          ' • ${mom.hrsDelta >= 0 ? '+' : ''}${mom.hrsDelta.toStringAsFixed(1)} hrs',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: LiveTranslatedText(
+                          'No data for ${DateFormat('MMMM').format(_prevMonth)} to compare against yet',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -505,8 +677,18 @@ class _WorkerAttendanceDetailPageState
       children: [
         Icon(icon, color: Colors.white70, size: 18),
         const SizedBox(height: 6),
-        LiveTranslatedText(value, style: GoogleFonts.poppins(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
-        LiveTranslatedText(label, style: GoogleFonts.poppins(color: Colors.white60, fontSize: 10)),
+        LiveTranslatedText(
+          value,
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        LiveTranslatedText(
+          label,
+          style: GoogleFonts.poppins(color: Colors.white60, fontSize: 10),
+        ),
       ],
     );
   }
@@ -542,15 +724,27 @@ class _WorkerAttendanceDetailPageState
         color = _absent.withValues(alpha: 0.15);
         textColor = _absent;
       }
-      cells.add(GestureDetector(
-        onTap: rec == null ? null : () => _showDayDetail(day, rec),
-        child: Container(
-          margin: const EdgeInsets.all(3),
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
-          alignment: Alignment.center,
-          child: LiveTranslatedText('$d', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: textColor)),
+      cells.add(
+        GestureDetector(
+          onTap: rec == null ? null : () => _showDayDetail(day, rec),
+          child: Container(
+            margin: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: LiveTranslatedText(
+              '$d',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ),
         ),
-      ));
+      );
     }
 
     return Container(
@@ -558,63 +752,101 @@ class _WorkerAttendanceDetailPageState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
-      child: Column(children: [
-        Row(
-          children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-              .map((d) => Expanded(
-                  child: Center(
-                      child: LiveTranslatedText(d,
-                          style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600)))))
-              .toList(),
-        ),
-        const SizedBox(height: 4),
-        GridView.count(
-          crossAxisCount: 7,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1,
-          children: cells,
-        ),
-      ]),
+      child: Column(
+        children: [
+          Row(
+            children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                .map(
+                  (d) => Expanded(
+                    child: Center(
+                      child: LiveTranslatedText(
+                        d,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 4),
+          GridView.count(
+            crossAxisCount: 7,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1,
+            children: cells,
+          ),
+        ],
+      ),
     );
   }
 
   Widget _legend() {
-    Widget dot(Color c, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600)),
-        ]);
-    return Wrap(spacing: 16, runSpacing: 8, children: [
-      dot(_present, 'Present'),
-      dot(_half, 'Half day'),
-      dot(_absent, 'Absent / no record'),
-    ]);
+    Widget dot(Color c, String label) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        LiveTranslatedText(
+          label,
+          style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      children: [
+        dot(_present, 'Present'),
+        dot(_half, 'Half day'),
+        dot(_absent, 'Absent / no record'),
+      ],
+    );
   }
 
   Widget _trendChart() {
     final recs = _recordsInMonth(_month)
-      ..sort((a, b) => (a['attendance_date'] ?? '').toString().compareTo((b['attendance_date'] ?? '').toString()));
+      ..sort(
+        (a, b) => (a['attendance_date'] ?? '').toString().compareTo(
+          (b['attendance_date'] ?? '').toString(),
+        ),
+      );
     if (recs.isEmpty) {
       return _emptyCard('No records yet this month');
     }
-    final maxHours = recs.map(_hoursOf).fold<double>(1, (m, v) => v > m ? v : m);
+    final maxHours = recs
+        .map(_hoursOf)
+        .fold<double>(1, (m, v) => v > m ? v : m);
     return Container(
       height: 130,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: recs.map((r) {
           final hours = _hoursOf(r);
           final h = maxHours == 0 ? 4.0 : (hours / maxHours) * 90;
-          final day = DateTime.tryParse((r['attendance_date'] ?? '').toString());
+          final day = DateTime.tryParse(
+            (r['attendance_date'] ?? '').toString(),
+          );
           final late = _isLate(r);
           return Expanded(
             child: Padding(
@@ -622,7 +854,13 @@ class _WorkerAttendanceDetailPageState
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  LiveTranslatedText(hours.toStringAsFixed(1), style: GoogleFonts.poppins(fontSize: 8, color: Colors.grey.shade500)),
+                  LiveTranslatedText(
+                    hours.toStringAsFixed(1),
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Container(
                     height: h.clamp(4, 90),
@@ -632,7 +870,13 @@ class _WorkerAttendanceDetailPageState
                     ),
                   ),
                   const SizedBox(height: 4),
-                  LiveTranslatedText(day != null ? '${day.day}' : '', style: GoogleFonts.poppins(fontSize: 8, color: Colors.grey.shade400)),
+                  LiveTranslatedText(
+                    day != null ? '${day.day}' : '',
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -643,8 +887,13 @@ class _WorkerAttendanceDetailPageState
   }
 
   Widget _lateEarlyList() {
-    final recs = _recordsInMonth(_month).where((r) => _isLate(r) || _isEarly(r)).toList()
-      ..sort((a, b) => (b['attendance_date'] ?? '').toString().compareTo((a['attendance_date'] ?? '').toString()));
+    final recs =
+        _recordsInMonth(_month).where((r) => _isLate(r) || _isEarly(r)).toList()
+          ..sort(
+            (a, b) => (b['attendance_date'] ?? '').toString().compareTo(
+              (a['attendance_date'] ?? '').toString(),
+            ),
+          );
     if (recs.isEmpty) {
       return _emptyCard('No late arrivals or early departures this month 🎉');
     }
@@ -658,53 +907,94 @@ class _WorkerAttendanceDetailPageState
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)],
-          ),
-          child: Row(children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade600, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: LiveTranslatedText(
-                '${r['attendance_date']}: ${[
-                  if (late) 'Late check-in',
-                  if (early) 'Early check-out',
-                ].join(' • ')}',
-                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
               ),
-            ),
-          ]),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orange.shade600,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: LiveTranslatedText(
+                  '${r['attendance_date']}: ${[if (late) 'Late check-in', if (early) 'Early check-out'].join(' • ')}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       }).toList(),
     );
   }
 
-  Widget _payrollCard(double hours, double payroll, double paid, double balance) {
+  Widget _payrollCard(
+    double hours,
+    double payroll,
+    double paid,
+    double balance,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _payrollRow('Hours worked', '${hours.toStringAsFixed(1)} hrs'),
-        _payrollRow('Rate', '₹${_hourlyRate.toStringAsFixed(2)}/hr'),
-        const Divider(color: Colors.white24, height: 20),
-        _payrollRow('Earned this month', '₹${payroll.toStringAsFixed(2)}', bold: true),
-        _payrollRow('Already paid', '₹${paid.toStringAsFixed(2)}'),
-        const Divider(color: Colors.white24, height: 20),
-        _payrollRow(balance >= 0 ? 'Balance due' : 'Overpaid', '₹${balance.abs().toStringAsFixed(2)}', bold: true),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _payrollRow('Hours worked', '${hours.toStringAsFixed(1)} hrs'),
+          _payrollRow('Rate', '₹${_hourlyRate.toStringAsFixed(2)}/hr'),
+          const Divider(color: Colors.white24, height: 20),
+          _payrollRow(
+            'Earned this month',
+            '₹${payroll.toStringAsFixed(2)}',
+            bold: true,
+          ),
+          _payrollRow('Already paid', '₹${paid.toStringAsFixed(2)}'),
+          const Divider(color: Colors.white24, height: 20),
+          _payrollRow(
+            balance >= 0 ? 'Balance due' : 'Overpaid',
+            '₹${balance.abs().toStringAsFixed(2)}',
+            bold: true,
+          ),
+        ],
+      ),
     );
   }
 
   Widget _payrollRow(String label, String value, {bool bold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        LiveTranslatedText(label, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
-        LiveTranslatedText(value, style: GoogleFonts.poppins(
-            color: Colors.white, fontSize: bold ? 16 : 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-      ]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13),
+          ),
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: bold ? 16 : 13,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -715,9 +1005,15 @@ class _WorkerAttendanceDetailPageState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
-      child: LiveTranslatedText(text, textAlign: TextAlign.center, style: GoogleFonts.poppins(color: Colors.grey.shade500, fontSize: 12)),
+      child: LiveTranslatedText(
+        text,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(color: Colors.grey.shade500, fontSize: 12),
+      ),
     );
   }
 
@@ -725,16 +1021,32 @@ class _WorkerAttendanceDetailPageState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: LiveTranslatedText(DateFormat('dd MMM yyyy').format(day), style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          LiveTranslatedText('Status: ${rec['status'] ?? 'N/A'}'),
-          if (rec['check_in_time'] != null)
-            LiveTranslatedText('Check-in: ${_fmtTime(rec['check_in_time'])}${_isLate(rec) ? ' (Late)' : ''}'),
-          if (rec['check_out_time'] != null)
-            LiveTranslatedText('Check-out: ${_fmtTime(rec['check_out_time'])}${_isEarly(rec) ? ' (Early)' : ''}'),
-          LiveTranslatedText('Hours: ${_hoursOf(rec).toStringAsFixed(2)}'),
-        ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const LiveTranslatedText('Close'))],
+        title: LiveTranslatedText(
+          DateFormat('dd MMM yyyy').format(day),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LiveTranslatedText('Status: ${rec['status'] ?? 'N/A'}'),
+            if (rec['check_in_time'] != null)
+              LiveTranslatedText(
+                'Check-in: ${_fmtTime(rec['check_in_time'])}${_isLate(rec) ? ' (Late)' : ''}',
+              ),
+            if (rec['check_out_time'] != null)
+              LiveTranslatedText(
+                'Check-out: ${_fmtTime(rec['check_out_time'])}${_isEarly(rec) ? ' (Early)' : ''}',
+              ),
+            LiveTranslatedText('Hours: ${_hoursOf(rec).toStringAsFixed(2)}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const LiveTranslatedText('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -751,57 +1063,84 @@ class _WorkerAttendanceDetailPageState
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (context, setModalState) {
-        return AlertDialog(
-          title: LiveTranslatedText('Log Payment for ${widget.worker.name}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(label: LiveTranslatedText('Amount (₹)'), prefixIcon: Icon(Icons.currency_rupee)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            title: LiveTranslatedText(
+              'Log Payment for ${widget.worker.name}',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: type,
-              items: ['Salary', 'Advance', 'Bonus', 'Other']
-                  .map((t) => DropdownMenuItem(value: t, child: LiveTranslatedText(t)))
-                  .toList(),
-              onChanged: (v) => setModalState(() => type = v ?? 'Salary'),
-              decoration: const InputDecoration(label: LiveTranslatedText('Type')),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteCtrl,
-              decoration: const InputDecoration(label: LiveTranslatedText('Note (optional)'), prefixIcon: Icon(Icons.note_alt_outlined)),
-            ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const LiveTranslatedText('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final amt = double.tryParse(amountCtrl.text.trim());
-                if (amt == null || amt <= 0 || _shopkeeperId == null) return;
-                final workerId = int.tryParse(widget.worker.id) ?? 0;
-                await PaymentHistoryStorage.addPayment(
-                  _shopkeeperId!,
-                  WorkerPayment(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
-                    workerId: workerId,
-                    amount: amt,
-                    note: noteCtrl.text.trim(),
-                    type: type,
-                    date: DateTime.now(),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    label: LiveTranslatedText('Amount (₹)'),
+                    prefixIcon: Icon(Icons.currency_rupee),
                   ),
-                );
-                if (context.mounted) Navigator.pop(ctx);
-                await _load();
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: _primary, foregroundColor: Colors.white),
-              child: const LiveTranslatedText('Save'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: type,
+                  items: ['Salary', 'Advance', 'Bonus', 'Other']
+                      .map(
+                        (t) => DropdownMenuItem(
+                          value: t,
+                          child: LiveTranslatedText(t),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setModalState(() => type = v ?? 'Salary'),
+                  decoration: const InputDecoration(
+                    label: LiveTranslatedText('Type'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: const InputDecoration(
+                    label: LiveTranslatedText('Note (optional)'),
+                    prefixIcon: Icon(Icons.note_alt_outlined),
+                  ),
+                ),
+              ],
             ),
-          ],
-        );
-      }),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const LiveTranslatedText('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final amt = double.tryParse(amountCtrl.text.trim());
+                  if (amt == null || amt <= 0 || _shopkeeperId == null) return;
+                  final workerId = int.tryParse(widget.worker.id) ?? 0;
+                  await PaymentHistoryStorage.addPayment(
+                    _shopkeeperId!,
+                    WorkerPayment(
+                      id: DateTime.now().microsecondsSinceEpoch.toString(),
+                      workerId: workerId,
+                      amount: amt,
+                      note: noteCtrl.text.trim(),
+                      type: type,
+                      date: DateTime.now(),
+                    ),
+                  );
+                  if (context.mounted) Navigator.pop(ctx);
+                  await _load();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                ),
+                child: const LiveTranslatedText('Save'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

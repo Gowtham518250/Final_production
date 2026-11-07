@@ -21,6 +21,40 @@ void main() {
       expect(metrics['available'], isTrue);
     });
 
+    test(
+      'prefers the all-status owner-order total over accepted aggregate',
+      () {
+        final metrics = OnlineOrderService.normalizeOwnerOrderAnalytics({
+          'totalCount': 18,
+          'acceptedCount': 18,
+          'pending': 3,
+        }, canonicalTotalCount: 42);
+
+        expect(metrics!['totalCount'], 42);
+        expect(metrics['pending'], 3);
+      },
+    );
+
+    test('reads total from owner orders list, not the current page length', () {
+      expect(
+        OnlineOrderService.normalizeOwnerOrdersTotal({
+          'orders': List.filled(1, <String, dynamic>{}),
+          'total': '42',
+        }),
+        42,
+      );
+      expect(
+        OnlineOrderService.normalizeOwnerOrdersTotal({
+          'orders': List.filled(1, <String, dynamic>{}),
+        }),
+        isNull,
+      );
+      expect(
+        OnlineOrderService.normalizeOwnerOrdersTotal({'total': -1}),
+        isNull,
+      );
+    });
+
     test('accepts numeric string count but rejects an invalid total', () {
       expect(
         OnlineOrderService.normalizeOwnerOrderAnalytics({
@@ -37,9 +71,7 @@ void main() {
         isNull,
       );
       expect(
-        OnlineOrderService.normalizeOwnerOrderAnalytics({
-          'totalCount': -1,
-        }),
+        OnlineOrderService.normalizeOwnerOrderAnalytics({'totalCount': -1}),
         isNull,
       );
     });

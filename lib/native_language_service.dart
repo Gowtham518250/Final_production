@@ -43,12 +43,17 @@ class NativeLanguageService {
   /// Initialize the ML Kit Model
   static Future<void> initialize() async {
     try {
-      _isModelDownloaded = await _modelManager.isModelDownloaded(TranslateLanguage.hindi.bcpCode);
+      _isModelDownloaded = await _modelManager.isModelDownloaded(
+        TranslateLanguage.hindi.bcpCode,
+      );
       if (!_isModelDownloaded) {
-        if (kDebugMode) debugPrint('Downloading Hindi Translation Model (~30MB)...');
-        _isModelDownloaded = await _modelManager.downloadModel(TranslateLanguage.hindi.bcpCode);
+        if (kDebugMode)
+          debugPrint('Downloading Hindi Translation Model (~30MB)...');
+        _isModelDownloaded = await _modelManager.downloadModel(
+          TranslateLanguage.hindi.bcpCode,
+        );
       }
-      
+
       if (_isModelDownloaded) {
         _hindiTranslator = OnDeviceTranslator(
           sourceLanguage: TranslateLanguage.hindi,

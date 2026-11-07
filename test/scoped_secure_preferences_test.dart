@@ -104,30 +104,36 @@ void main() {
     },
   );
 
-  test('owner session stays valid after a leftover SharedPreferences token is present', () async {
-    await SecureTokenStorage.saveUserId(41);
-    await SecureTokenStorage.saveRole(SessionRole.owner);
-    await SecureTokenStorage.saveToken('owner-secure-token');
-    await SharedPreferences.getInstance().then(
-      (prefs) => prefs.setString('auth_token', 'stale-prefs-token'),
-    );
+  test(
+    'owner session stays valid after a leftover SharedPreferences token is present',
+    () async {
+      await SecureTokenStorage.saveUserId(41);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
+      await SecureTokenStorage.saveToken('owner-secure-token');
+      await SharedPreferences.getInstance().then(
+        (prefs) => prefs.setString('auth_token', 'stale-prefs-token'),
+      );
 
-    expect(await SecureTokenStorage.isSessionValid(), isTrue);
-    expect(await SecureTokenStorage.getToken(), 'owner-secure-token');
-  });
+      expect(await SecureTokenStorage.isSessionValid(), isTrue);
+      expect(await SecureTokenStorage.getToken(), 'owner-secure-token');
+    },
+  );
 
-  test('customer and owner credentials remain role-isolated for matching IDs', () async {
-    await SecureTokenStorage.saveUserId(41);
-    await SecureTokenStorage.saveRole(SessionRole.owner);
-    await SecureTokenStorage.saveToken('owner-token-41');
+  test(
+    'customer and owner credentials remain role-isolated for matching IDs',
+    () async {
+      await SecureTokenStorage.saveUserId(41);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
+      await SecureTokenStorage.saveToken('owner-token-41');
 
-    await SecureTokenStorage.saveRole(SessionRole.customer);
-    await SecureTokenStorage.saveCustomerToken('customer-token-41');
-    expect(await SecureTokenStorage.getToken(), 'customer-token-41');
+      await SecureTokenStorage.saveRole(SessionRole.customer);
+      await SecureTokenStorage.saveCustomerToken('customer-token-41');
+      expect(await SecureTokenStorage.getToken(), 'customer-token-41');
 
-    await SecureTokenStorage.saveRole(SessionRole.owner);
-    expect(await SecureTokenStorage.getToken(), 'owner-token-41');
-  });
+      await SecureTokenStorage.saveRole(SessionRole.owner);
+      expect(await SecureTokenStorage.getToken(), 'owner-token-41');
+    },
+  );
 
   test('tampered token payload is rejected and removed', () async {
     await SecureTokenStorage.saveUserId(41);
@@ -144,21 +150,24 @@ void main() {
     expect(_secureValues.containsKey(slot), isFalse);
   });
 
-  test('copying an encrypted token into another user slot fails authentication', () async {
-    await SecureTokenStorage.saveUserId(41);
-    await SecureTokenStorage.saveRole(SessionRole.owner);
-    await SecureTokenStorage.saveToken('owner-token-41');
-    _secureValues['auth_token_enc_72'] = _secureValues['auth_token_enc_41']!;
+  test(
+    'copying an encrypted token into another user slot fails authentication',
+    () async {
+      await SecureTokenStorage.saveUserId(41);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
+      await SecureTokenStorage.saveToken('owner-token-41');
+      _secureValues['auth_token_enc_72'] = _secureValues['auth_token_enc_41']!;
 
-    await SecureTokenStorage.saveUserId(72);
-    await expectLater(
-      SecureTokenStorage.getToken(),
-      throwsA(isA<SecureStorageException>()),
-    );
-    expect(_secureValues.containsKey('auth_token_enc_72'), isFalse);
-    await SecureTokenStorage.saveUserId(41);
-    expect(await SecureTokenStorage.getToken(), 'owner-token-41');
-  });
+      await SecureTokenStorage.saveUserId(72);
+      await expectLater(
+        SecureTokenStorage.getToken(),
+        throwsA(isA<SecureStorageException>()),
+      );
+      expect(_secureValues.containsKey('auth_token_enc_72'), isFalse);
+      await SecureTokenStorage.saveUserId(41);
+      expect(await SecureTokenStorage.getToken(), 'owner-token-41');
+    },
+  );
 
   test('key rotation keeps every users scoped token readable', () async {
     await SecureTokenStorage.saveUserId(41);

@@ -9,10 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 class DashboardAiQueryCard extends StatelessWidget {
   final VoidCallback onTap;
 
-  const DashboardAiQueryCard({
-    super.key,
-    required this.onTap,
-  });
+  const DashboardAiQueryCard({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -83,10 +80,14 @@ class DashboardAiQueryCard extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.20),
+                            color: const Color(
+                              0xFF6366F1,
+                            ).withValues(alpha: 0.20),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
-                              color: const Color(0xFF818CF8).withValues(alpha: 0.26),
+                              color: const Color(
+                                0xFF818CF8,
+                              ).withValues(alpha: 0.26),
                             ),
                           ),
                           child: LiveTranslatedText(

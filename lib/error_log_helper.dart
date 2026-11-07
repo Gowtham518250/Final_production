@@ -63,7 +63,11 @@ class ErrorLogHelper {
   }
 
   /// Set user context for better error attribution
-  static Future<void> setUserContext(int userId, String email, String shopName) async {
+  static Future<void> setUserContext(
+    int userId,
+    String email,
+    String shopName,
+  ) async {
     try {
       await _crashlytics.setUserIdentifier(userId.toString());
       await _crashlytics.setCustomKey('email', email);

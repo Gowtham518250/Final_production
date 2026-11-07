@@ -68,9 +68,9 @@ class Expense {
     ),
     amount: double.tryParse(map['amount']?.toString() ?? '0') ?? 0,
     description: map['description']?.toString() ?? '',
-    date: map['date'] != null 
-      ? DateTime.parse(map['date'].toString())
-      : DateTime.now(),
+    date: map['date'] != null
+        ? DateTime.parse(map['date'].toString())
+        : DateTime.now(),
     reference: map['reference']?.toString(),
     receipt: map['receipt']?.toString(),
   );
@@ -344,8 +344,8 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
           final rawItems = decoded is List
               ? decoded
               : decoded is Map
-                  ? (decoded['expenses'] ?? decoded['results'])
-                  : null;
+              ? (decoded['expenses'] ?? decoded['results'])
+              : null;
           if (rawItems is! List) {
             throw const FormatException(
               'Expense response did not contain an expense list.',
@@ -580,8 +580,8 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
         filtered = filtered
             .where(
               (e) =>
-            e.date.year == now.year &&
-            e.date.month == now.month &&
+                  e.date.year == now.year &&
+                  e.date.month == now.month &&
                   e.date.day == now.day,
             )
             .toList();
@@ -682,7 +682,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   ),
                 // Summary Card
                 _buildSummaryCard(filteredExpenses),
-                
+
                 // Filter Tabs
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -720,7 +720,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     final pending = _getTotalExpenses(
       filtered.where((expense) => expense.isPending).toList(),
     );
-    
+
     // Calculate by category
     final byCategory = <ExpenseCategory, double>{};
     for (var category in ExpenseCategory.values) {
@@ -851,7 +851,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
 
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _filterBy == value;
-    
+
     return FilterChip(
       label: LiveTranslatedText(label, style: GoogleFonts.poppins()),
       selected: isSelected,
@@ -918,27 +918,27 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
         final expense = row.expense;
         if (expense == null) {
           return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  LiveTranslatedText(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                LiveTranslatedText(
                   row.dateLabel,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade700,
-                    ),
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
                   ),
-                  LiveTranslatedText(
+                ),
+                LiveTranslatedText(
                   '₹${row.dayTotal.toStringAsFixed(0)}',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF6366F1),
-                    ),
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF6366F1),
                   ),
-                ],
-              ),
-        );
+                ),
+              ],
+            ),
+          );
         }
         return _buildExpenseCard(expense);
       },
@@ -1012,7 +1012,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                             ? Colors.deepOrange.shade700
                             : Colors.green.shade700,
                       ),
-                  ),
+                    ),
                 ],
               ),
             ),
@@ -1088,8 +1088,8 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   items: ExpenseCategory.values
                       .map(
                         (e) => DropdownMenuItem(
-                            value: e,
-                            child: LiveTranslatedText(e.name),
+                          value: e,
+                          child: LiveTranslatedText(e.name),
                         ),
                       )
                       .toList(),
@@ -1180,8 +1180,8 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                               decoded is Map && decoded['expense'] is Map
                               ? Map<String, dynamic>.from(decoded['expense'])
                               : decoded is Map
-                                  ? Map<String, dynamic>.from(decoded)
-                                  : <String, dynamic>{};
+                              ? Map<String, dynamic>.from(decoded)
+                              : <String, dynamic>{};
                           final value =
                               payload['id'] ??
                               payload['expense_id'] ??

@@ -7,41 +7,40 @@ class ManualPaymentFallbackWidget extends StatefulWidget {
   final double saleAmount;
   final Function(ManualPaymentEntry) onPaymentRecorded;
   final Function()? onCancel;
-  
+
   const ManualPaymentFallbackWidget({
     required this.saleAmount,
     required this.onPaymentRecorded,
     this.onCancel,
     Key? key,
   }) : super(key: key);
-  
+
   @override
-  State<ManualPaymentFallbackWidget> createState() => 
+  State<ManualPaymentFallbackWidget> createState() =>
       _ManualPaymentFallbackWidgetState();
 }
 
-class _ManualPaymentFallbackWidgetState 
+class _ManualPaymentFallbackWidgetState
     extends State<ManualPaymentFallbackWidget> {
-  
   final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _refCtrl = TextEditingController();
   String _selectedMethod = 'CASH';
   String? _selectedBank;
   bool _isProcessing = false;
-  
+
   @override
   void initState() {
     super.initState();
     _amountCtrl.text = widget.saleAmount.toString();
   }
-  
+
   @override
   void dispose() {
     _amountCtrl.dispose();
     _refCtrl.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -96,7 +95,7 @@ class _ManualPaymentFallbackWidgetState
                 ],
               ),
               const SizedBox(height: 20),
-              
+
               // Amount
               TextField(
                 controller: _amountCtrl,
@@ -112,7 +111,7 @@ class _ManualPaymentFallbackWidgetState
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               // Payment Method
               DropdownButtonFormField<String>(
                 value: _selectedMethod,
@@ -124,22 +123,40 @@ class _ManualPaymentFallbackWidgetState
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'CASH', child: LiveTranslatedText('💵 Cash')),
-                  DropdownMenuItem(value: 'UPI', child: LiveTranslatedText('📱 UPI')),
-                  DropdownMenuItem(value: 'CARD', child: LiveTranslatedText('💳 Card')),
-                  DropdownMenuItem(value: 'BANK', child: LiveTranslatedText('🏦 Bank Transfer')),
-                  DropdownMenuItem(value: 'CHEQUE', child: LiveTranslatedText('📄 Cheque')),
-                ]
-                    .map((item) => DropdownMenuItem(
-                      value: item.value,
-                      child: item.child,
-                    ))
-                    .toList(),
+                items:
+                    const [
+                          DropdownMenuItem(
+                            value: 'CASH',
+                            child: LiveTranslatedText('💵 Cash'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'UPI',
+                            child: LiveTranslatedText('📱 UPI'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'CARD',
+                            child: LiveTranslatedText('💳 Card'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'BANK',
+                            child: LiveTranslatedText('🏦 Bank Transfer'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'CHEQUE',
+                            child: LiveTranslatedText('📄 Cheque'),
+                          ),
+                        ]
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item.value,
+                            child: item.child,
+                          ),
+                        )
+                        .toList(),
                 onChanged: (value) => setState(() => _selectedMethod = value!),
               ),
               const SizedBox(height: 16),
-              
+
               // Bank selection for non-cash payments
               if (_selectedMethod != 'CASH') ...[
                 DropdownButtonFormField<String>(
@@ -152,26 +169,29 @@ class _ManualPaymentFallbackWidgetState
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  items: [
-                    'HDFC Bank',
-                    'SBI Bank',
-                    'ICICI Bank',
-                    'Axis Bank',
-                    'Google Pay',
-                    'PhonePe',
-                    'Paytm',
-                    'Other',
-                  ]
-                      .map((bank) => DropdownMenuItem(
-                        value: bank,
-                        child: LiveTranslatedText(bank),
-                      ))
-                      .toList(),
+                  items:
+                      [
+                            'HDFC Bank',
+                            'SBI Bank',
+                            'ICICI Bank',
+                            'Axis Bank',
+                            'Google Pay',
+                            'PhonePe',
+                            'Paytm',
+                            'Other',
+                          ]
+                          .map(
+                            (bank) => DropdownMenuItem(
+                              value: bank,
+                              child: LiveTranslatedText(bank),
+                            ),
+                          )
+                          .toList(),
                   onChanged: (value) => setState(() => _selectedBank = value),
                 ),
                 const SizedBox(height: 16),
               ],
-              
+
               // Reference ID
               TextField(
                 controller: _refCtrl,
@@ -190,7 +210,7 @@ class _ManualPaymentFallbackWidgetState
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               // Info box
               Container(
                 padding: const EdgeInsets.all(12),
@@ -206,23 +226,22 @@ class _ManualPaymentFallbackWidgetState
                     Expanded(
                       child: LiveTranslatedText(
                         'This payment will be recorded immediately. You can verify it in the transaction history.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.blue[700]),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               // Buttons
               Row(
                 children: [
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _isProcessing ? null : () => Navigator.pop(context),
+                      onPressed: _isProcessing
+                          ? null
+                          : () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.grey[300],
                         foregroundColor: Colors.grey[800],
@@ -239,10 +258,10 @@ class _ManualPaymentFallbackWidgetState
                       ),
                       child: _isProcessing
                           ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const LiveTranslatedText('✓ Record Payment'),
                     ),
                   ),
@@ -254,49 +273,51 @@ class _ManualPaymentFallbackWidgetState
       ),
     );
   }
-  
+
   Future<void> _recordPayment() async {
     try {
       setState(() => _isProcessing = true);
-      
+
       final amount = double.tryParse(_amountCtrl.text) ?? widget.saleAmount;
-      
+
       // Validate amount
       if (amount <= 0) {
         _showError('Amount must be greater than 0');
         return;
       }
-      
+
       if (amount > widget.saleAmount * 2) {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const LiveTranslatedText('⚠️ Amount Mismatch'),
-            content: LiveTranslatedText(
-              'Received amount (₹$amount) is more than 2x the sale amount (₹${widget.saleAmount}).\n\nContinue?'
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const LiveTranslatedText('Cancel'),
+        final confirm =
+            await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const LiveTranslatedText('⚠️ Amount Mismatch'),
+                content: LiveTranslatedText(
+                  'Received amount (₹$amount) is more than 2x the sale amount (₹${widget.saleAmount}).\n\nContinue?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const LiveTranslatedText('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const LiveTranslatedText('Continue'),
+                  ),
+                ],
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const LiveTranslatedText('Continue'),
-              ),
-            ],
-          ),
-        ) ?? false;
-        
+            ) ??
+            false;
+
         if (!confirm) return;
       }
-      
+
       // Validate reference for non-cash
       if (_selectedMethod != 'CASH' && _refCtrl.text.isEmpty) {
         _showError('Reference ID required for $_selectedMethod payments');
         return;
       }
-      
+
       final entry = ManualPaymentEntry(
         amount: amount,
         method: _selectedMethod,
@@ -305,9 +326,9 @@ class _ManualPaymentFallbackWidgetState
         timestamp: DateTime.now(),
         isManualEntry: true,
       );
-      
+
       widget.onPaymentRecorded(entry);
-      
+
       if (mounted) {
         Navigator.pop(context);
         _showSuccess('Payment recorded successfully! ✅');
@@ -318,7 +339,7 @@ class _ManualPaymentFallbackWidgetState
       if (mounted) setState(() => _isProcessing = false);
     }
   }
-  
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -328,7 +349,7 @@ class _ManualPaymentFallbackWidgetState
       ),
     );
   }
-  
+
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -343,12 +364,12 @@ class _ManualPaymentFallbackWidgetState
 /// Data model for manually entered payment
 class ManualPaymentEntry {
   final double amount;
-  final String method;      // CASH, UPI, CARD, BANK, CHEQUE
-  final String? bank;       // Optional bank/app name
+  final String method; // CASH, UPI, CARD, BANK, CHEQUE
+  final String? bank; // Optional bank/app name
   final String? referenceId; // Optional: UTR, Ref No., etc.
   final DateTime timestamp;
   final bool isManualEntry;
-  
+
   ManualPaymentEntry({
     required this.amount,
     required this.method,
@@ -357,7 +378,7 @@ class ManualPaymentEntry {
     required this.timestamp,
     this.isManualEntry = true,
   });
-  
+
   Map<String, dynamic> toJson() => {
     'amount': amount,
     'method': method,

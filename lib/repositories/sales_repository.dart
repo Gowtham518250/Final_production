@@ -5,10 +5,13 @@ import '../api_client.dart';
 /// Repository Pattern: Abstracts external data source interactions
 class SalesRepository {
   /// Fetches sales data from the remote backend
-  static Future<List<Map<String, dynamic>>> fetchRemoteSales({required String token}) async {
-    final response = await ApiClient.getJson('/auth/sales', headers: {
-      'Authorization': 'Bearer $token',
-    });
+  static Future<List<Map<String, dynamic>>> fetchRemoteSales({
+    required String token,
+  }) async {
+    final response = await ApiClient.getJson(
+      '/auth/sales',
+      headers: {'Authorization': 'Bearer $token'},
+    );
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -26,9 +29,11 @@ class SalesRepository {
     required Map<String, String> saleData,
     required String token,
   }) async {
-    final response = await ApiClient.postForm('/auth/sales', saleData, headers: {
-      'Authorization': 'Bearer $token',
-    }).timeout(const Duration(seconds: 15));
+    final response = await ApiClient.postForm(
+      '/auth/sales',
+      saleData,
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 15));
 
     return response.statusCode == 200 || response.statusCode == 201;
   }

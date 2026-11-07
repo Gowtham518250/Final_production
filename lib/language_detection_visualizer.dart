@@ -26,29 +26,29 @@ import 'voice_nlp_engine.dart';
 // ─── Script detection ─────────────────────────────────────────────────────────
 
 enum DetectedScript {
-  latin,       // English (Roman)
-  devanagari,  // Hindi, Marathi
+  latin, // English (Roman)
+  devanagari, // Hindi, Marathi
   tamil,
   telugu,
   kannada,
   malayalam,
   bengali,
   gujarati,
-  gurmukhi,    // Punjabi
-  mixed,       // Hinglish / code-switching
+  gurmukhi, // Punjabi
+  mixed, // Hinglish / code-switching
   unknown,
 }
 
 class ScriptDetector {
   static const Map<DetectedScript, _ScriptRange> _ranges = {
     DetectedScript.devanagari: _ScriptRange(0x0900, 0x097F),
-    DetectedScript.tamil:      _ScriptRange(0x0B80, 0x0BFF),
-    DetectedScript.telugu:     _ScriptRange(0x0C00, 0x0C7F),
-    DetectedScript.kannada:    _ScriptRange(0x0C80, 0x0CFF),
-    DetectedScript.malayalam:  _ScriptRange(0x0D00, 0x0D7F),
-    DetectedScript.bengali:    _ScriptRange(0x0980, 0x09FF),
-    DetectedScript.gujarati:   _ScriptRange(0x0A80, 0x0AFF),
-    DetectedScript.gurmukhi:   _ScriptRange(0x0A00, 0x0A7F),
+    DetectedScript.tamil: _ScriptRange(0x0B80, 0x0BFF),
+    DetectedScript.telugu: _ScriptRange(0x0C00, 0x0C7F),
+    DetectedScript.kannada: _ScriptRange(0x0C80, 0x0CFF),
+    DetectedScript.malayalam: _ScriptRange(0x0D00, 0x0D7F),
+    DetectedScript.bengali: _ScriptRange(0x0980, 0x09FF),
+    DetectedScript.gujarati: _ScriptRange(0x0A80, 0x0AFF),
+    DetectedScript.gurmukhi: _ScriptRange(0x0A00, 0x0A7F),
   };
 
   static DetectedScript detect(String text) {
@@ -85,23 +85,21 @@ class ScriptDetector {
     if (nativeTotal == 0) return DetectedScript.latin;
 
     // Return dominant native script
-    return counts.entries
-        .reduce((a, b) => a.value >= b.value ? a : b)
-        .key;
+    return counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
   }
 
   static String scriptToLocale(DetectedScript s) => const {
-    DetectedScript.latin:      'en-IN',
+    DetectedScript.latin: 'en-IN',
     DetectedScript.devanagari: 'hi-IN',
-    DetectedScript.tamil:      'ta-IN',
-    DetectedScript.telugu:     'te-IN',
-    DetectedScript.kannada:    'kn-IN',
-    DetectedScript.malayalam:  'ml-IN',
-    DetectedScript.bengali:    'bn-IN',
-    DetectedScript.gujarati:   'gu-IN',
-    DetectedScript.gurmukhi:   'pa-IN',
-    DetectedScript.mixed:      'hi-IN',
-    DetectedScript.unknown:    'en-IN',
+    DetectedScript.tamil: 'ta-IN',
+    DetectedScript.telugu: 'te-IN',
+    DetectedScript.kannada: 'kn-IN',
+    DetectedScript.malayalam: 'ml-IN',
+    DetectedScript.bengali: 'bn-IN',
+    DetectedScript.gujarati: 'gu-IN',
+    DetectedScript.gurmukhi: 'pa-IN',
+    DetectedScript.mixed: 'hi-IN',
+    DetectedScript.unknown: 'en-IN',
   }[s]!;
 }
 
@@ -113,10 +111,10 @@ class _ScriptRange {
 // ─── Detected word model ──────────────────────────────────────────────────────
 
 class DetectedWord {
-  final String native;      // word as STT returned it
-  final String? canonical;  // English canonical name if resolved
-  final double confidence;  // 0.0 – 1.0
-  final String role;        // 'product' | 'quantity' | 'unit' | 'price' | 'other'
+  final String native; // word as STT returned it
+  final String? canonical; // English canonical name if resolved
+  final double confidence; // 0.0 – 1.0
+  final String role; // 'product' | 'quantity' | 'unit' | 'price' | 'other'
 
   const DetectedWord({
     required this.native,
@@ -126,9 +124,9 @@ class DetectedWord {
   });
 
   Color get color {
-    if (confidence >= 0.80) return const Color(0xFF00C853);   // green
-    if (confidence >= 0.60) return const Color(0xFFFFAB00);   // amber
-    return const Color(0xFFFF3D71);                            // red
+    if (confidence >= 0.80) return const Color(0xFF00C853); // green
+    if (confidence >= 0.60) return const Color(0xFFFFAB00); // amber
+    return const Color(0xFFFF3D71); // red
   }
 }
 
@@ -138,7 +136,7 @@ class DetectedWord {
 /// Feed it the live transcript + parsed items; it self-updates.
 class LanguageDetectionVisualizer extends StatefulWidget {
   final String transcript;
-  final String selectedLocale;   // BCP-47, e.g. "hi-IN"
+  final String selectedLocale; // BCP-47, e.g. "hi-IN"
   final List<Map<String, dynamic>> parsedItems; // from NLP parser
   final bool isListening;
 
@@ -156,12 +154,13 @@ class LanguageDetectionVisualizer extends StatefulWidget {
 }
 
 class _LanguageDetectionVisualizerState
-    extends State<LanguageDetectionVisualizer> with TickerProviderStateMixin {
+    extends State<LanguageDetectionVisualizer>
+    with TickerProviderStateMixin {
   late AnimationController _fadeCtrl;
   late AnimationController _slideCtrl;
   late AnimationController _listenCtrl;
-  late Animation<double>   _fadeAnim;
-  late Animation<Offset>   _slideAnim;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
 
   DetectedScript _lastScript = DetectedScript.unknown;
   List<DetectedWord> _words = [];
@@ -169,26 +168,37 @@ class _LanguageDetectionVisualizerState
   // Language display info
   static const _langInfo = <String, _LangDisplay>{
     'en-IN': _LangDisplay('English', '🇮🇳', Color(0xFF1565C0)),
-    'hi-IN': _LangDisplay('हिंदी', '🕉️',  Color(0xFFFF6F00)),
-    'ta-IN': _LangDisplay('தமிழ்', '🌺',  Color(0xFF6A1B9A)),
-    'te-IN': _LangDisplay('తెలుగు','🌸',  Color(0xFF00695C)),
-    'kn-IN': _LangDisplay('ಕನ್ನಡ', '🌻',  Color(0xFFE65100)),
-    'ml-IN': _LangDisplay('മലയാളം','🌴',  Color(0xFF1B5E20)),
-    'mr-IN': _LangDisplay('मराठी', '🏔️',  Color(0xFF880E4F)),
-    'bn-IN': _LangDisplay('বাংলা', '🎋',  Color(0xFF01579B)),
-    'gu-IN': _LangDisplay('ગુજરાતી','🦚', Color(0xFF4E342E)),
-    'pa-IN': _LangDisplay('ਪੰਜਾਬੀ','🌾',  Color(0xFF558B2F)),
+    'hi-IN': _LangDisplay('हिंदी', '🕉️', Color(0xFFFF6F00)),
+    'ta-IN': _LangDisplay('தமிழ்', '🌺', Color(0xFF6A1B9A)),
+    'te-IN': _LangDisplay('తెలుగు', '🌸', Color(0xFF00695C)),
+    'kn-IN': _LangDisplay('ಕನ್ನಡ', '🌻', Color(0xFFE65100)),
+    'ml-IN': _LangDisplay('മലയാളം', '🌴', Color(0xFF1B5E20)),
+    'mr-IN': _LangDisplay('मराठी', '🏔️', Color(0xFF880E4F)),
+    'bn-IN': _LangDisplay('বাংলা', '🎋', Color(0xFF01579B)),
+    'gu-IN': _LangDisplay('ગુજરાતી', '🦚', Color(0xFF4E342E)),
+    'pa-IN': _LangDisplay('ਪੰਜਾਬੀ', '🌾', Color(0xFF558B2F)),
   };
 
   @override
   void initState() {
     super.initState();
-    _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-    _slideCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
-    _listenCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(begin: const Offset(0, -0.3), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _slideCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _listenCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, -0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
     _lastScript = ScriptDetector.detect(widget.transcript);
     _words = _buildDetectedWords(widget.transcript, widget.parsedItems);
     _fadeCtrl.forward();
@@ -202,14 +212,16 @@ class _LanguageDetectionVisualizerState
     final parsedNamesChanged =
         old.parsedItems.length != widget.parsedItems.length ||
         List.generate(old.parsedItems.length, (index) {
-          final oldName = (old.parsedItems[index]['product_name'] ??
-                  old.parsedItems[index]['name'] ??
-                  '')
-              .toString();
-          final newName = (widget.parsedItems[index]['product_name'] ??
-                  widget.parsedItems[index]['name'] ??
-                  '')
-              .toString();
+          final oldName =
+              (old.parsedItems[index]['product_name'] ??
+                      old.parsedItems[index]['name'] ??
+                      '')
+                  .toString();
+          final newName =
+              (widget.parsedItems[index]['product_name'] ??
+                      widget.parsedItems[index]['name'] ??
+                      '')
+                  .toString();
           return oldName != newName;
         }).contains(true);
     if (old.transcript != widget.transcript ||
@@ -235,7 +247,6 @@ class _LanguageDetectionVisualizerState
     super.dispose();
   }
 
-
   void _analyzeTranscript() {
     final script = ScriptDetector.detect(widget.transcript);
     if (script != _lastScript) {
@@ -249,12 +260,18 @@ class _LanguageDetectionVisualizerState
   }
 
   List<DetectedWord> _buildDetectedWords(
-      String transcript, List<Map<String, dynamic>> items) {
+    String transcript,
+    List<Map<String, dynamic>> items,
+  ) {
     if (transcript.trim().isEmpty) return [];
 
     final words = transcript.trim().split(RegExp(r'\s+'));
-    final itemNames = items.map((e) =>
-        (e['product_name'] ?? e['name'] ?? '').toString().toLowerCase()).toList();
+    final itemNames = items
+        .map(
+          (e) =>
+              (e['product_name'] ?? e['name'] ?? '').toString().toLowerCase(),
+        )
+        .toList();
 
     return words.map((w) {
       final lower = w.toLowerCase();
@@ -284,7 +301,8 @@ class _LanguageDetectionVisualizerState
       if (role == 'product') {
         for (final item in items) {
           final name = (item['product_name'] ?? item['name'] ?? '').toString();
-          if (name.toLowerCase().contains(lower) || lower.contains(name.toLowerCase())) {
+          if (name.toLowerCase().contains(lower) ||
+              lower.contains(name.toLowerCase())) {
             canonical = name;
             break;
           }
@@ -313,8 +331,16 @@ class _LanguageDetectionVisualizerState
   }.contains(w);
 
   bool _isPrice(String w) => const {
-    'rs', 'rupees', 'rupee', 'रुपये', 'रुपए', 'रூபாய்',
-    'రూపాయలు', 'ರೂಪಾಯಿ', 'rupaya', '₹',
+    'rs',
+    'rupees',
+    'rupee',
+    'रुपये',
+    'रुपए',
+    'रூபாய்',
+    'రూపాయలు',
+    'ರೂಪಾಯಿ',
+    'rupaya',
+    '₹',
   }.contains(w);
 
   @override
@@ -324,13 +350,15 @@ class _LanguageDetectionVisualizerState
     }
 
     final detectedLocale = ScriptDetector.scriptToLocale(
-        ScriptDetector.detect(widget.transcript));
-    final displayLocale  = widget.selectedLocale;
+      ScriptDetector.detect(widget.transcript),
+    );
+    final displayLocale = widget.selectedLocale;
     final langInfo = _langInfo[displayLocale] ?? _langInfo['en-IN']!;
     final autoInfo = _langInfo[detectedLocale];
-    final isMismatch = detectedLocale != displayLocale &&
-                       widget.transcript.isNotEmpty &&
-                       detectedLocale != 'en-IN';
+    final isMismatch =
+        detectedLocale != displayLocale &&
+        widget.transcript.isNotEmpty &&
+        detectedLocale != 'en-IN';
 
     return FadeTransition(
       opacity: _fadeAnim,
@@ -358,8 +386,11 @@ class _LanguageDetectionVisualizerState
                 ),
                 if (isMismatch && autoInfo != null) ...[
                   const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_ios,
-                      size: 10, color: Color(0xFF546E7A)),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 10,
+                    color: Color(0xFF546E7A),
+                  ),
                   const SizedBox(width: 8),
                   SlideTransition(
                     position: _slideAnim,
@@ -372,8 +403,7 @@ class _LanguageDetectionVisualizerState
                 ],
                 const Spacer(),
                 // Live listening indicator
-                if (widget.isListening)
-                  _LiveDot(),
+                if (widget.isListening) _LiveDot(),
               ],
             ),
 
@@ -381,22 +411,30 @@ class _LanguageDetectionVisualizerState
             if (isMismatch) ...[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFAB00).withOpacity(0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded,
-                        color: Color(0xFFFFAB00), size: 14),
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Color(0xFFFFAB00),
+                      size: 14,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Speech detected in ${autoInfo?.name ?? detectedLocale} — '
                         'switching to that language may improve accuracy',
                         style: GoogleFonts.poppins(
-                            fontSize: 10, color: const Color(0xFFFFAB00)),
+                          fontSize: 10,
+                          color: const Color(0xFFFFAB00),
+                        ),
                       ),
                     ),
                   ],
@@ -414,13 +452,17 @@ class _LanguageDetectionVisualizerState
             // ── Row 2: Word-by-word confidence display ───────────────────────
             if (_words.isNotEmpty) ...[
               Text(
-                VoiceBillingLocalization.label('RECOGNIZED WORDS', displayLocale),
+                VoiceBillingLocalization.label(
+                  'RECOGNIZED WORDS',
+                  displayLocale,
+                ),
                 style: GoogleFonts.rajdhani(
                   color: const Color(0xFF42A5F5),
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.5,
-                )),
+                ),
+              ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 6,
@@ -447,16 +489,19 @@ class _LanguageDetectionVisualizerState
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.5,
-                )),
-              const SizedBox(height: 8),
-              ...widget.parsedItems.asMap().entries.map((entry) => _AnimatedDetectChip(
-                delay: Duration(milliseconds: 90 * entry.key),
-                child: _buildProductRow(
-                  entry.value,
-                  displayLocale,
-                  langInfo.color,
                 ),
-              )),
+              ),
+              const SizedBox(height: 8),
+              ...widget.parsedItems.asMap().entries.map(
+                (entry) => _AnimatedDetectChip(
+                  delay: Duration(milliseconds: 90 * entry.key),
+                  child: _buildProductRow(
+                    entry.value,
+                    displayLocale,
+                    langInfo.color,
+                  ),
+                ),
+              ),
             ],
           ],
         ),
@@ -464,7 +509,11 @@ class _LanguageDetectionVisualizerState
     );
   }
 
-  Widget _buildLangBadge(_LangDisplay info, String label, {bool pulse = false}) {
+  Widget _buildLangBadge(
+    _LangDisplay info,
+    String label, {
+    bool pulse = false,
+  }) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -485,19 +534,23 @@ class _LanguageDetectionVisualizerState
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label,
+              Text(
+                label,
                 style: GoogleFonts.rajdhani(
                   fontSize: 9,
                   color: info.color.withOpacity(0.7),
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,
-                )),
-              Text(info.name,
+                ),
+              ),
+              Text(
+                info.name,
                 style: GoogleFonts.notoSans(
                   fontSize: 12,
                   color: info.color,
                   fontWeight: FontWeight.w700,
-                )),
+                ),
+              ),
             ],
           ),
         ],
@@ -525,19 +578,23 @@ class _LanguageDetectionVisualizerState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(shown,
+            Text(
+              shown,
               style: GoogleFonts.notoSans(
                 fontSize: 13,
                 color: word.color,
                 fontWeight: isProduct ? FontWeight.w700 : FontWeight.w400,
-              )),
+              ),
+            ),
             if (isProduct && shown != word.native)
-              Text(word.native,
+              Text(
+                word.native,
                 style: GoogleFonts.rajdhani(
                   fontSize: 9,
                   color: word.color.withOpacity(0.7),
                   letterSpacing: 0.3,
-                )),
+                ),
+              ),
           ],
         ),
       ),
@@ -566,12 +623,15 @@ class _LanguageDetectionVisualizerState
   }
 
   Widget _buildProductRow(
-      Map<String, dynamic> item, String locale, Color accentColor) {
-    final name  = (item['product_name'] ?? item['name'] ?? '').toString();
+    Map<String, dynamic> item,
+    String locale,
+    Color accentColor,
+  ) {
+    final name = (item['product_name'] ?? item['name'] ?? '').toString();
     final price = item['price'] ?? item['unit_price'] ?? 0;
-    final qty   = item['quantity'] ?? item['qty'] ?? 1;
-    final unit  = _displayUnit(item, locale);
-    final conf  = (item['confidence'] as num?)?.toDouble() ?? 0.7;
+    final qty = item['quantity'] ?? item['qty'] ?? 1;
+    final unit = _displayUnit(item, locale);
+    final conf = (item['confidence'] as num?)?.toDouble() ?? 0.7;
     final nativeName = VoiceBillingDisplay.productName(name, locale);
 
     return Padding(
@@ -579,14 +639,15 @@ class _LanguageDetectionVisualizerState
       child: Row(
         children: [
           Container(
-            width: 8, height: 8,
+            width: 8,
+            height: 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: conf >= 0.8
                   ? const Color(0xFF00C853)
                   : conf >= 0.6
-                      ? const Color(0xFFFFAB00)
-                      : const Color(0xFFFF3D71),
+                  ? const Color(0xFFFFAB00)
+                  : const Color(0xFFFF3D71),
             ),
           ),
           const SizedBox(width: 10),
@@ -594,32 +655,42 @@ class _LanguageDetectionVisualizerState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(nativeName ?? name,
+                Text(
+                  nativeName ?? name,
                   style: GoogleFonts.notoSans(
                     fontSize: 15,
                     color: accentColor,
                     fontWeight: FontWeight.w700,
-                  )),
+                  ),
+                ),
                 if (nativeName != null && nativeName != name)
-                  Text(name,
+                  Text(
+                    name,
                     style: GoogleFonts.rajdhani(
                       fontSize: 11,
                       color: const Color(0xFF546E7A),
                       fontWeight: FontWeight.w600,
-                    )),
+                    ),
+                  ),
               ],
             ),
           ),
-          Text('$qty $unit',
+          Text(
+            '$qty $unit',
             style: GoogleFonts.rajdhani(
-              fontSize: 12, color: const Color(0xFF7986CB))),
+              fontSize: 12,
+              color: const Color(0xFF7986CB),
+            ),
+          ),
           const SizedBox(width: 8),
-          Text('₹${price.toString()}',
+          Text(
+            '₹${price.toString()}',
             style: GoogleFonts.rajdhani(
               fontSize: 14,
               color: Colors.white,
               fontWeight: FontWeight.w700,
-            )),
+            ),
+          ),
         ],
       ),
     );
@@ -650,15 +721,18 @@ class _LiveDot extends StatefulWidget {
   State<_LiveDot> createState() => _LiveDotState();
 }
 
-class _LiveDotState extends State<_LiveDot> with SingleTickerProviderStateMixin {
+class _LiveDotState extends State<_LiveDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _anim;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
-      ..repeat(reverse: true);
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
     _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
   }
 
@@ -675,20 +749,23 @@ class _LiveDotState extends State<_LiveDot> with SingleTickerProviderStateMixin 
       child: Row(
         children: [
           Container(
-            width: 7, height: 7,
+            width: 7,
+            height: 7,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: Color(0xFFFF3D71),
             ),
           ),
           const SizedBox(width: 4),
-          Text('LIVE',
+          Text(
+            'LIVE',
             style: GoogleFonts.rajdhani(
               fontSize: 10,
               color: const Color(0xFFFF3D71),
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
-            )),
+            ),
+          ),
         ],
       ),
     );
@@ -704,10 +781,7 @@ class _LangDisplay {
 }
 
 class _AnimatedDetectChip extends StatelessWidget {
-  const _AnimatedDetectChip({
-    required this.delay,
-    required this.child,
-  });
+  const _AnimatedDetectChip({required this.delay, required this.child});
 
   final Duration delay;
   final Widget child;

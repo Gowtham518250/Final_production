@@ -45,11 +45,12 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
     var usingLocalCache = false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _shopName = (prefs.getString('shop_name') ??
-              prefs.getString('shopName') ??
-              prefs.getString('business_name') ??
-              'My Shop')
-          .trim();
+      _shopName =
+          (prefs.getString('shop_name') ??
+                  prefs.getString('shopName') ??
+                  prefs.getString('business_name') ??
+                  'My Shop')
+              .trim();
       if (_shopName.isEmpty) _shopName = 'My Shop';
 
       final response = await ApiClient.getJson(
@@ -70,10 +71,12 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
         // when the backend read fails.
         final offlineProducts = local.values
             .whereType<Map>()
-            .map((item) => <String, dynamic>{
-                  ...Map<String, dynamic>.from(item),
-                  'is_offline': true,
-                })
+            .map(
+              (item) => <String, dynamic>{
+                ...Map<String, dynamic>.from(item),
+                'is_offline': true,
+              },
+            )
             .toList();
         inventory = InventoryStockHelper.mergeApiWithLocalCache(
           InventoryStockHelper.normalizeProducts(cachedBackend),
@@ -81,10 +84,12 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
         );
         usingLocalCache = inventory.isNotEmpty;
         if (!usingLocalCache) {
-          _error = 'Could not load inventory. Check the connection and try again.';
+          _error =
+              'Could not load inventory. Check the connection and try again.';
         }
       } catch (_) {
-        _error = 'Could not load inventory. Check the connection and try again.';
+        _error =
+            'Could not load inventory. Check the connection and try again.';
       }
     }
 
@@ -111,7 +116,8 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
 
   String _qty(Object? value) {
     if (value is! num) return value?.toString() ?? '0';
-    if (value.toDouble() == value.toInt().toDouble()) return value.toInt().toString();
+    if (value.toDouble() == value.toInt().toDouble())
+      return value.toInt().toString();
     return value.toStringAsFixed(1);
   }
 
@@ -123,14 +129,13 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
       suggestedQty: quantity,
       shopName: _shopName,
     );
-    final phone = (alert['supplier_whatsapp'] ?? '')
-        .toString()
-        .replaceAll(RegExp(r'\D'), '');
-    final uri = Uri.https(
-      'wa.me',
-      phone.isEmpty ? '/' : '/$phone',
-      {'text': message},
+    final phone = (alert['supplier_whatsapp'] ?? '').toString().replaceAll(
+      RegExp(r'\D'),
+      '',
     );
+    final uri = Uri.https('wa.me', phone.isEmpty ? '/' : '/$phone', {
+      'text': message,
+    });
 
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -198,7 +203,10 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                             SizedBox(width: 8),
                             LiveTranslatedText(
                               'Demand-based stockout forecast',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ],
                         ),
@@ -206,7 +214,10 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                         LiveTranslatedText(
                           'Uses seven days of sales saved on this owner device. '
                           'Suggestions are advisory only; review quantities before ordering.',
-                          style: TextStyle(color: Color(0xFF667085), height: 1.45),
+                          style: TextStyle(
+                            color: Color(0xFF667085),
+                            height: 1.45,
+                          ),
                         ),
                       ],
                     ),
@@ -220,7 +231,10 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    LiveTranslatedText(_error!, style: const TextStyle(color: Colors.red)),
+                    LiveTranslatedText(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
@@ -241,18 +255,28 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                       ),
                       child: const Column(
                         children: [
-                          Icon(Icons.inventory_2_outlined, size: 36, color: Color(0xFF667085)),
+                          Icon(
+                            Icons.inventory_2_outlined,
+                            size: 36,
+                            color: Color(0xFF667085),
+                          ),
                           SizedBox(height: 10),
                           LiveTranslatedText(
                             'No stockout forecasts yet',
-                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
                           ),
                           SizedBox(height: 6),
                           LiveTranslatedText(
                             'Forecasts appear after this device has recorded sales for a product. '
                             'Products without sales history are not given an invented estimate.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Color(0xFF667085), height: 1.45),
+                            style: TextStyle(
+                              color: Color(0xFF667085),
+                              height: 1.45,
+                            ),
                           ),
                         ],
                       ),
@@ -260,7 +284,10 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                   else ...[
                     LiveTranslatedText(
                       '${_alerts.length} product(s) may run out in 5 days or less',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     ..._alerts.map((alert) {
@@ -268,7 +295,8 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                           (alert['days_until_stockout'] as num?)?.toInt() ?? 0;
                       final isUrgent = stockoutDays <= 2;
                       final suggestedQty =
-                          (alert['suggested_reorder_qty'] as num?)?.toInt() ?? 0;
+                          (alert['suggested_reorder_qty'] as num?)?.toInt() ??
+                          0;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(16),
@@ -289,7 +317,8 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                               children: [
                                 Expanded(
                                   child: LiveTranslatedText(
-                                    alert['product_name']?.toString() ?? 'Product',
+                                    alert['product_name']?.toString() ??
+                                        'Product',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
@@ -297,7 +326,10 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isUrgent
                                         ? const Color(0xFFFEE2E2)
@@ -305,7 +337,9 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: LiveTranslatedText(
-                                    stockoutDays == 0 ? 'Out of stock' : '$stockoutDays days left',
+                                    stockoutDays == 0
+                                        ? 'Out of stock'
+                                        : '$stockoutDays days left',
                                     style: TextStyle(
                                       color: isUrgent
                                           ? const Color(0xFF991B1B)
@@ -322,18 +356,31 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
                               spacing: 18,
                               runSpacing: 10,
                               children: [
-                                _metric('Current stock', _qty(alert['current_stock'])),
-                                _metric('Avg. sales/day', _qty(alert['daily_velocity'])),
-                                _metric('Suggested qty', suggestedQty.toString()),
+                                _metric(
+                                  'Current stock',
+                                  _qty(alert['current_stock']),
+                                ),
+                                _metric(
+                                  'Avg. sales/day',
+                                  _qty(alert['daily_velocity']),
+                                ),
+                                _metric(
+                                  'Suggested qty',
+                                  suggestedQty.toString(),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 14),
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
-                                onPressed: suggestedQty <= 0 ? null : () => _openWhatsApp(alert),
+                                onPressed: suggestedQty <= 0
+                                    ? null
+                                    : () => _openWhatsApp(alert),
                                 icon: const Icon(Icons.chat_rounded),
-                                label: const LiveTranslatedText('Prepare supplier message'),
+                                label: const LiveTranslatedText(
+                                  'Prepare supplier message',
+                                ),
                               ),
                             ),
                           ],
@@ -351,9 +398,15 @@ class _SmartReorderPageState extends State<SmartReorderPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText(label, style: const TextStyle(color: Color(0xFF667085), fontSize: 12)),
+        LiveTranslatedText(
+          label,
+          style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
+        ),
         const SizedBox(height: 3),
-        LiveTranslatedText(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        LiveTranslatedText(
+          value,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
       ],
     );
   }

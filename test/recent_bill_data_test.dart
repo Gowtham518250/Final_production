@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
+import 'package:retail_mind/export_service.dart';
 import 'package:retail_mind/widgets/dashboard/recent_bill_details_dialog.dart';
 import 'package:retail_mind/widgets/dashboard/recent_bill_data.dart';
 
@@ -173,5 +175,62 @@ void main() {
       expect(find.text('Grand total'), findsOneWidget);
       expect(find.text('₹145.00'), findsNWidgets(3));
     });
+
+    testWidgets(
+      'bill details use event time instead of date-only business date',
+      (tester) async {
+        const eventTimestamp = '2026-11-07T04:42:35Z';
+        final bill = RecentBillData(
+          invoiceNumber: 'B-121',
+          customerName: 'Cash Customer',
+          totalAmount: 100,
+          items: const [],
+          data: const {
+            'business_date': '2026-11-07',
+            'created_at': eventTimestamp,
+          },
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(home: RecentBillDetailsDialog(bill: bill)),
+        );
+
+        final expectedTime = DateFormat(
+          'dd MMM yyyy, hh:mm a',
+        ).format(DateTime.parse(eventTimestamp).toLocal());
+        expect(find.text(expectedTime), findsOneWidget);
+        expect(find.text('07 Nov 2026, 12:00 AM'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'bill details use the same event-time precedence and timezone as the list',
+      (tester) async {
+        final bill = RecentBillData(
+          invoiceNumber: 'B-129',
+          customerName: 'Guest Customer',
+          totalAmount: 9,
+          items: const [],
+          data: const {
+            'business_date': '2026-11-07',
+            'sale_timestamp': '2026-11-07T15:38:00',
+            'event_timestamp': '2026-11-07T09:08:53',
+            'created_at': '2026-11-07T09:08:53',
+          },
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(home: RecentBillDetailsDialog(bill: bill)),
+        );
+
+        final listEventTime = ExportService.resolveSalesEventTime(bill.data);
+        expect(listEventTime, isNotNull);
+        final expected = DateFormat(
+          'dd MMM yyyy, hh:mm a',
+        ).format(listEventTime!);
+        expect(find.text(expected), findsOneWidget);
+        expect(find.text('07 Nov 2026, 03:38 PM'), findsNothing);
+      },
+    );
   });
 }

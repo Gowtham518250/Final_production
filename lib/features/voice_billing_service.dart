@@ -40,14 +40,19 @@ class VoiceBillingService {
   /// PHASE 4 FIX: Enhanced NLP parser for natural product-price input
   /// Supports: "Chicken Biryani 200" → {name: "Chicken Biryani", price: 200, qty: 1}
   /// Also supports: "2 water 50", "masala dosa 150 x3", etc.
-  Map<String, dynamic> parseSpokenText(String text, {String language = 'hi-IN'}) {
+  Map<String, dynamic> parseSpokenText(
+    String text, {
+    String language = 'hi-IN',
+  }) {
     if (text.isEmpty) return {'items': [], 'error': 'Empty input'};
-    
+
     // Get vocabulary based on language
-    final vocab.LanguageVocabulary languageVocab = _getLanguageVocabulary(language);
+    final vocab.LanguageVocabulary languageVocab = _getLanguageVocabulary(
+      language,
+    );
     final numberWords = languageVocab.numberWords;
     final priceWords = languageVocab.priceWords;
-    
+
     final Map<String, dynamic> result = {
       'items': <Map<String, dynamic>>[],
       'success': false,
@@ -55,17 +60,32 @@ class VoiceBillingService {
     };
 
     String normalized = text.toLowerCase().trim();
-    
+
     // Remove noise words
     final noiseWords = [
-      'please add', 'add', 'item', 'product', 'ok', 'alright', 'stop', 
-      'the', 'a', 'and', 'next', 'one more', 'one', 'uhm', 'uh', 'ah', 'like',
+      'please add',
+      'add',
+      'item',
+      'product',
+      'ok',
+      'alright',
+      'stop',
+      'the',
+      'a',
+      'and',
+      'next',
+      'one more',
+      'one',
+      'uhm',
+      'uh',
+      'ah',
+      'like',
     ];
-    
+
     for (final noise in noiseWords) {
       normalized = normalized.replaceAll(noise, '');
     }
-    
+
     normalized = normalized.replaceAll(RegExp(r'\s+'), ' ').trim();
 
     if (kDebugMode) debugPrint('📝 Normalized: $normalized');
@@ -73,17 +93,17 @@ class VoiceBillingService {
     // ── PATTERN 1: "Chicken Biryani 200" (product name + price) ──
     // Try to match: <words> <number>
     final parts = normalized.split(RegExp(r'\s+'));
-    
+
     // Find number at the end
     int? priceValue;
     int priceIndex = -1;
     int qtyValue = 1;
     int qtyIndex = -1;
-    
+
     // Scan from right to left for price and quantity
     for (int i = parts.length - 1; i >= 0; i--) {
       final part = parts[i];
-      
+
       // Check for direct number
       if (int.tryParse(part) != null) {
         if (priceValue == null) {
@@ -95,7 +115,7 @@ class VoiceBillingService {
           break;
         }
       }
-      
+
       // Check for word number (e.g., "fifty", "fifty rupees")
       final num? wordNum = numberWords[part];
       if (wordNum != null) {
@@ -108,21 +128,21 @@ class VoiceBillingService {
           break;
         }
       }
-      
+
       // Check for price keywords
       if (priceWords.contains(part) && priceIndex >= 0) {
         // Move price index to just before price word
         break;
       }
     }
-    
+
     if (priceValue != null && priceValue > 0 && priceIndex >= 0) {
       // Product name is everything before the price
       final productNameParts = parts.sublist(0, priceIndex);
-      
+
       if (productNameParts.isNotEmpty) {
         final productName = productNameParts.join(' ').trim();
-        
+
         if (productName.isNotEmpty && productName.length > 2) {
           result['items'].add({
             'product_name': productName,
@@ -132,7 +152,9 @@ class VoiceBillingService {
           });
           result['success'] = true;
           if (kDebugMode) {
-            debugPrint('✅ Pattern 1 matched: "$productName" x$qtyValue @ ₹$priceValue');
+            debugPrint(
+              '✅ Pattern 1 matched: "$productName" x$qtyValue @ ₹$priceValue',
+            );
           }
           return result;
         }
@@ -141,10 +163,12 @@ class VoiceBillingService {
 
     // ── PATTERN 2: "2 water 50" (qty + product + price) ──
     if (parts.length >= 3) {
-      final firstNum = int.tryParse(parts[0]) ?? (numberWords[parts[0]]?.toInt());
-      final lastNum = int.tryParse(parts[parts.length - 1]) ?? 
-                      (numberWords[parts[parts.length - 1]]?.toInt());
-      
+      final firstNum =
+          int.tryParse(parts[0]) ?? (numberWords[parts[0]]?.toInt());
+      final lastNum =
+          int.tryParse(parts[parts.length - 1]) ??
+          (numberWords[parts[parts.length - 1]]?.toInt());
+
       if (firstNum != null && firstNum > 0 && lastNum != null && lastNum > 0) {
         final productParts = parts.sublist(1, parts.length - 1);
         if (productParts.isNotEmpty) {
@@ -158,7 +182,9 @@ class VoiceBillingService {
             });
             result['success'] = true;
             if (kDebugMode) {
-              debugPrint('✅ Pattern 2 matched: $firstNum x "$productName" @ ₹$lastNum');
+              debugPrint(
+                '✅ Pattern 2 matched: $firstNum x "$productName" @ ₹$lastNum',
+              );
             }
             return result;
           }
@@ -174,7 +200,7 @@ class VoiceBillingService {
         if (itemParts.length >= 2) {
           int? itemPrice;
           int itemQty = 1;
-          
+
           for (int i = itemParts.length - 1; i >= 0; i--) {
             final part = itemParts[i];
             if (int.tryParse(part) != null && itemPrice == null) {
@@ -182,11 +208,11 @@ class VoiceBillingService {
               break;
             }
           }
-          
+
           if (itemPrice != null && itemPrice > 0) {
             final productNameParts = itemParts.sublist(0, itemParts.length - 1);
             final productName = productNameParts.join(' ').trim();
-            
+
             if (productName.isNotEmpty && productName.length > 2) {
               result['items'].add({
                 'product_name': productName,
@@ -198,7 +224,7 @@ class VoiceBillingService {
           }
         }
       }
-      
+
       if (result['items'].isNotEmpty) {
         result['success'] = true;
         if (kDebugMode) {
@@ -209,13 +235,26 @@ class VoiceBillingService {
     }
 
     // Fallback: naive parser for simple cases
-    String lowercased = text.toLowerCase()
-      .replaceAll('one', '1').replaceAll('a ', '1 ').replaceAll('an ', '1 ')
-      .replaceAll('two', '2').replaceAll('three', '3').replaceAll('four', '4')
-      .replaceAll('five', '5').replaceAll('six', '6').replaceAll('seven', '7')
-      .replaceAll('eight', '8').replaceAll('nine', '9').replaceAll('ten', '10');
+    String lowercased = text
+        .toLowerCase()
+        .replaceAll('one', '1')
+        .replaceAll('a ', '1 ')
+        .replaceAll('an ', '1 ')
+        .replaceAll('two', '2')
+        .replaceAll('three', '3')
+        .replaceAll('four', '4')
+        .replaceAll('five', '5')
+        .replaceAll('six', '6')
+        .replaceAll('seven', '7')
+        .replaceAll('eight', '8')
+        .replaceAll('nine', '9')
+        .replaceAll('ten', '10');
 
-    lowercased = lowercased.replaceAll('add', '').replaceAll('and', '').replaceAll('please', '').trim();
+    lowercased = lowercased
+        .replaceAll('add', '')
+        .replaceAll('and', '')
+        .replaceAll('please', '')
+        .trim();
 
     final simpleParts = lowercased.split(RegExp(r'\s+'));
     int currentQty = 1;
@@ -239,9 +278,12 @@ class VoiceBillingService {
 
     result['success'] = result['items'].isNotEmpty;
     if (result['success']) {
-      if (kDebugMode) debugPrint('✅ Fallback parser matched: ${result['items'].length} items');
+      if (kDebugMode)
+        debugPrint(
+          '✅ Fallback parser matched: ${result['items'].length} items',
+        );
     }
-    
+
     return result;
   }
 
@@ -279,4 +321,3 @@ class VoiceBillingService {
     return _getLanguageVocab(language);
   }
 }
-

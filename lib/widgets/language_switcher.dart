@@ -128,10 +128,7 @@ class _LanguageSwitcherState extends State<LanguageSwitcher> {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFFE2E8F0),
-            width: 1,
-          ),
+          border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -151,11 +148,7 @@ class _LanguageSwitcherState extends State<LanguageSwitcher> {
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),
-              const Icon(
-                Icons.expand_more,
-                size: 16,
-                color: Color(0xFF64748B),
-              ),
+              const Icon(Icons.expand_more, size: 16, color: Color(0xFF64748B)),
             ],
           ],
         ),
@@ -293,7 +286,8 @@ class LanguageTransitionOverlay extends StatefulWidget {
   });
 
   @override
-  State<LanguageTransitionOverlay> createState() => _LanguageTransitionOverlayState();
+  State<LanguageTransitionOverlay> createState() =>
+      _LanguageTransitionOverlayState();
 }
 
 class _LanguageTransitionOverlayState extends State<LanguageTransitionOverlay>
@@ -308,9 +302,10 @@ class _LanguageTransitionOverlayState extends State<LanguageTransitionOverlay>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override

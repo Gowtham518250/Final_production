@@ -17,25 +17,27 @@ void main() {
       }
     });
 
-    test('sale and invoice IDs are not used as product names by placeholder detector', () {
-      final engine = AnalyticsEngine();
+    test(
+      'sale and invoice IDs are not used as product names by placeholder detector',
+      () {
+        final engine = AnalyticsEngine();
 
-      expect(AnalyticsEngine.isPlaceholderProductName('sale-17'), isTrue);
-      expect(AnalyticsEngine.isPlaceholderProductName('sale_17'), isTrue);
-      expect(AnalyticsEngine.isPlaceholderProductName('invoice_17'), isTrue);
-      expect(AnalyticsEngine.isPlaceholderProductName('transaction_17'), isTrue);
-    });
+        expect(AnalyticsEngine.isPlaceholderProductName('sale-17'), isTrue);
+        expect(AnalyticsEngine.isPlaceholderProductName('sale_17'), isTrue);
+        expect(AnalyticsEngine.isPlaceholderProductName('invoice_17'), isTrue);
+        expect(
+          AnalyticsEngine.isPlaceholderProductName('transaction_17'),
+          isTrue,
+        );
+      },
+    );
 
     test('identical content fingerprints are deterministic', () {
       final sale = {
         'business_date': '2026-08-13',
         'total': 50,
         'items': [
-          {
-            'product_name': 'Rice',
-            'qty': 1,
-            'price': 50,
-          }
+          {'product_name': 'Rice', 'qty': 1, 'price': 50},
         ],
       };
 

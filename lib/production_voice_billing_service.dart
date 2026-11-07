@@ -1,8 +1,8 @@
-
 import 'dart:math' as math;
 
 import 'product_catalog_service.dart';
 import 'roman_indian_voice_normalizer.dart';
+import 'voice_billing_price_policy.dart';
 import 'voice_nlp_engine.dart';
 import 'voice_billing_safety_policy.dart';
 
@@ -34,24 +34,24 @@ class VoiceBillingLine {
   });
 
   Map<String, dynamic> toMap() => {
-        'name': name,
-        'product_name': name,
-        'qty': quantity,
-        'quantity': quantity,
-        'unit': unit,
-        'price': price,
-        'total': quantity * price,
-        'confidence': confidence,
-        'catalog_matched': catalogMatched,
-        'stock_tracked': catalogMatched,
-        'is_custom_item': !catalogMatched,
-        'price_source': priceSource,
-        'price_missing': price <= 0,
-        if (barcode != null && barcode!.isNotEmpty) 'barcode': barcode,
-        if (gst != null) 'gst': gst,
-        if (priceWarning != null && priceWarning!.isNotEmpty)
-          'price_warning': priceWarning,
-      };
+    'name': name,
+    'product_name': name,
+    'qty': quantity,
+    'quantity': quantity,
+    'unit': unit,
+    'price': price,
+    'total': quantity * price,
+    'confidence': confidence,
+    'catalog_matched': catalogMatched,
+    'stock_tracked': catalogMatched,
+    'is_custom_item': !catalogMatched,
+    'price_source': priceSource,
+    'price_missing': price <= 0,
+    if (barcode != null && barcode!.isNotEmpty) 'barcode': barcode,
+    if (gst != null) 'gst': gst,
+    if (priceWarning != null && priceWarning!.isNotEmpty)
+      'price_warning': priceWarning,
+  };
 }
 
 class VoiceBillingParseResult {
@@ -99,7 +99,7 @@ class ProductionVoiceBillingService {
         languageCode: localeCode,
         lines: const [],
         warnings: const [
-          'No speech was captured. Try speaking the product and quantity again.'
+          'No speech was captured. Try speaking the product and quantity again.',
         ],
       );
     }
@@ -134,12 +134,13 @@ class ProductionVoiceBillingService {
             ],
           );
         }
-        final canonical = (catalogProduct['name'] ??
-                catalogProduct['product_name'] ??
-                catalogProduct['canonical_name'] ??
-                '')
-            .toString()
-            .trim();
+        final canonical =
+            (catalogProduct['name'] ??
+                    catalogProduct['product_name'] ??
+                    catalogProduct['canonical_name'] ??
+                    '')
+                .toString()
+                .trim();
         if (canonical.isEmpty) {
           return VoiceBillingParseResult(
             normalizedTranscript: normalized,
@@ -167,7 +168,7 @@ class ProductionVoiceBillingService {
         languageCode: localeCode,
         lines: const [],
         warnings: const [
-          'I could not confidently identify a bill item. Try: "2 kg rice 50" or "sugar 60".'
+          'I could not confidently identify a bill item. Try: "2 kg rice 50" or "sugar 60".',
         ],
       );
     }
@@ -182,17 +183,15 @@ class ProductionVoiceBillingService {
       // The shop's current inventory is authoritative. Never allow
       // a persistent learned/global alias (for example "enna" -> Oil) to
       // override a product that exists in this shop's catalog.
-      final shopProduct = _findShopProduct(
-        knownProducts,
-        item.name,
-      );
+      final shopProduct = _findShopProduct(knownProducts, item.name);
 
       // Only this shop's actual inventory is allowed to assign stock identity
       // or a saved catalog price. Learned/global aliases are hints, not proof
       // that the merchant has registered the product. Unknown items remain
       // custom bill lines even if another shop or training catalog knows them.
       final product = shopProduct;
-      final canonicalName = shopProduct?['name']?.toString() ??
+      final canonicalName =
+          shopProduct?['name']?.toString() ??
           shopProduct?['product_name']?.toString() ??
           item.name.trim();
 
@@ -202,14 +201,15 @@ class ProductionVoiceBillingService {
         product?['sale_price'],
       ]);
 
-      final spokenPrice = item.priceWasSpoken && item.price > 0 ? item.price : null;
+      final spokenPrice = item.priceWasSpoken && item.price > 0
+          ? item.price
+          : null;
       final finalPrice = spokenPrice ?? catalogPrice ?? 0.0;
 
       final unit = _cleanUnit(
         item.unit,
-        fallback: product?['unit']?.toString() ??
-            product?['uom']?.toString() ??
-            '',
+        fallback:
+            product?['unit']?.toString() ?? product?['uom']?.toString() ?? '',
       );
 
       final warning = _priceWarning(
@@ -233,9 +233,10 @@ class ProductionVoiceBillingService {
           priceSource: spokenPrice != null
               ? 'spoken'
               : catalogPrice != null && catalogPrice > 0
-                  ? 'catalog'
-                  : 'missing',
-          barcode: product?['barcode']?.toString() ??
+              ? 'catalog'
+              : 'missing',
+          barcode:
+              product?['barcode']?.toString() ??
               product?['sku']?.toString() ??
               product?['product_code']?.toString(),
           gst: _firstPositiveDouble([
@@ -262,12 +263,10 @@ class ProductionVoiceBillingService {
     );
   }
 
-  static bool _startsWithSpokenScaleAmount(String transcript) =>
-      RegExp(
-        r'^\s*(?:[0-9]+(?:\.[0-9]+)?|one|two|three|four|five|six|seven|eight|nine|ten|rendu|moodu|mudu|nalugu|naalugu|aidu|ayidu|aaru|iravai|muppai|nalabhai|yabhai|yaabhai|एक|दो|तीन|चार|पांच|पाँच|ఒకటి|రెండు|మూడు|నాలుగు)\s+(?:hundred|hundreds|sau|vanda|vandu|vandalu|vandala|vandlu|vandulu|vandallu|వంద|వందలు|వందల|thousand|thousands|hazar|hazaar|vela|velu|velalu|వేలు|వేల)(?=[\s,;.!?]|$)',
-        caseSensitive: false,
-
-      ).hasMatch(transcript.trim());
+  static bool _startsWithSpokenScaleAmount(String transcript) => RegExp(
+    r'^\s*(?:[0-9]+(?:\.[0-9]+)?|one|two|three|four|five|six|seven|eight|nine|ten|rendu|moodu|mudu|nalugu|naalugu|aidu|ayidu|aaru|iravai|muppai|nalabhai|yabhai|yaabhai|एक|दो|तीन|चार|पांच|पाँच|ఒకటి|రెండు|మూడు|నాలుగు)\s+(?:hundred|hundreds|sau|vanda|vandu|vandalu|vandala|vandlu|vandulu|vandallu|వంద|వందలు|వందల|thousand|thousands|hazar|hazaar|vela|velu|velalu|వేలు|వేల)(?=[\s,;.!?]|$)',
+    caseSensitive: false,
+  ).hasMatch(transcript.trim());
   static Map<String, dynamic>? _findShopProduct(
     List<Map<String, dynamic>> products,
     String spokenName,
@@ -285,10 +284,9 @@ class ProductionVoiceBillingService {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
-    Set<String> tokens(String value) => normalize(value)
-        .split(RegExp(r'\s+'))
-        .where((token) => token.length >= 3)
-        .toSet();
+    Set<String> tokens(String value) => normalize(
+      value,
+    ).split(RegExp(r'\s+')).where((token) => token.length >= 3).toSet();
 
     // A narrow catalog-aware correction for a known Whisper/Android STT
     // confusion: "bubt" can be emitted for the shop product "Boost". Expand
@@ -301,8 +299,7 @@ class ProductionVoiceBillingService {
     Set<String> catalogTokens(String value) {
       final result = tokens(value);
       for (final entry in spokenCatalogAliases.entries) {
-        if (result.contains(entry.key) ||
-            result.any(entry.value.contains)) {
+        if (result.contains(entry.key) || result.any(entry.value.contains)) {
           result
             ..add(entry.key)
             ..addAll(entry.value);
@@ -346,7 +343,6 @@ class ProductionVoiceBillingService {
       if (boostMatches != 1) return null;
     }
 
-
     final scored = <MapEntry<Map<String, dynamic>, double>>[];
 
     for (final product in products) {
@@ -365,10 +361,8 @@ class ProductionVoiceBillingService {
         final overlap = queryTokens.intersection(productTokens);
         if (overlap.isEmpty) continue;
 
-        final tokenScore =
-            overlap.length / queryTokens.length;
-        final coverage =
-            overlap.length / productTokens.length;
+        final tokenScore = overlap.length / queryTokens.length;
+        final coverage = overlap.length / productTokens.length;
         final score = (tokenScore * 0.65) + (coverage * 0.35);
         if (score > best) best = score;
       }
@@ -391,7 +385,6 @@ class ProductionVoiceBillingService {
 
     return null;
   }
-
 
   static Map<String, dynamic>? _findKnownProduct(
     List<Map<String, dynamic>> products,
@@ -424,8 +417,8 @@ class ProductionVoiceBillingService {
       double bestScore = 0;
 
       for (final product in products) {
-        final name =
-            (product['name'] ?? product['product_name'] ?? '').toString();
+        final name = (product['name'] ?? product['product_name'] ?? '')
+            .toString();
         final productTokens = _tokens(name);
         if (productTokens.isEmpty) continue;
 
@@ -457,7 +450,6 @@ class ProductionVoiceBillingService {
       .where((value) => value.length >= 2)
       .toSet();
 
-
   static double? _firstPositiveDouble(Iterable<dynamic> values) {
     for (final value in values) {
       final parsed = value is num
@@ -486,6 +478,8 @@ class ProductionVoiceBillingService {
     required double? spokenPrice,
     required double? catalogPrice,
   }) {
+    // FIX: Only warn when spoken price was NOT explicitly provided (AI-guessed price)
+    // If the user spoke the price, trust it even if it differs from catalog.
     if (spokenPrice == null || catalogPrice == null || catalogPrice <= 0) {
       return null;
     }
@@ -493,6 +487,7 @@ class ProductionVoiceBillingService {
     final delta = (spokenPrice - catalogPrice).abs();
     final ratio = delta / catalogPrice;
 
+    // Warning threshold: 50% difference AND at least ₹10 deviation
     if (ratio >= 0.50 && delta >= 10) {
       return 'Spoken price ₹' +
           spokenPrice.toStringAsFixed(0) +
@@ -506,9 +501,7 @@ class ProductionVoiceBillingService {
     return null;
   }
 
-  static List<VoiceBillingLine> _mergeDuplicates(
-    List<VoiceBillingLine> lines,
-  ) {
+  static List<VoiceBillingLine> _mergeDuplicates(List<VoiceBillingLine> lines) {
     final merged = <VoiceBillingLine>[];
 
     for (final line in lines) {
@@ -537,8 +530,9 @@ class ProductionVoiceBillingService {
 
       final previous = merged[idx];
       final preferredPrice = line.price > 0 ? line.price : previous.price;
-      final preferredSource =
-          line.price > 0 ? line.priceSource : previous.priceSource;
+      final preferredSource = line.price > 0
+          ? line.priceSource
+          : previous.priceSource;
 
       merged[idx] = VoiceBillingLine(
         name: previous.name,

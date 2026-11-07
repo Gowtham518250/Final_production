@@ -13,43 +13,40 @@ class DailySummaryWidget {
   static Future<void> updateWidget() async {
     try {
       final sales = await LocalStorageService.loadSales();
-      
+
       double totalSales = 0;
       double upiSales = 0;
       int transactionCount = 0;
-      
+
       final today = DateTime.now();
-      
+
       for (var sale in sales) {
-        final saleDate = sale is Map ? 
-          DateTime.tryParse(sale['sale_date']?.toString() ?? '') :
-          null;
-        
-        if (saleDate != null && 
+        final saleDate = sale is Map
+            ? DateTime.tryParse(sale['sale_date']?.toString() ?? '')
+            : null;
+
+        if (saleDate != null &&
             saleDate.year == today.year &&
             saleDate.month == today.month &&
             saleDate.day == today.day) {
           totalSales += double.tryParse(sale['total']?.toString() ?? '0') ?? 0;
-          
+
           if (sale['payment_method'] == 'UPI') {
             upiSales += double.tryParse(sale['total']?.toString() ?? '0') ?? 0;
           }
           transactionCount++;
         }
       }
-      
+
       // Store data for widget
-      await HomeWidget.saveWidgetData(
-        storageKey,
-        {
-          'totalSales': totalSales.toStringAsFixed(0),
-          'transactionCount': transactionCount.toString(),
-          'upiSales': upiSales.toStringAsFixed(0),
-          'cashSales': (totalSales - upiSales).toStringAsFixed(0),
-          'timestamp': DateTime.now().toIso8601String(),
-        },
-      );
-      
+      await HomeWidget.saveWidgetData(storageKey, {
+        'totalSales': totalSales.toStringAsFixed(0),
+        'transactionCount': transactionCount.toString(),
+        'upiSales': upiSales.toStringAsFixed(0),
+        'cashSales': (totalSales - upiSales).toStringAsFixed(0),
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
       // Update the widget
       await HomeWidget.updateWidget(
         name: 'DailySummaryWidget',
@@ -81,30 +78,50 @@ class WidgetVoiceSummary {
     required VoiceLanguage language,
   }) async {
     String message = '';
-    
+
     switch (language) {
       case VoiceLanguage.hindi:
-        message = _buildHindiMessage(totalSales, transactionCount, creditPending);
+        message = _buildHindiMessage(
+          totalSales,
+          transactionCount,
+          creditPending,
+        );
         await _tts.setLanguage('hi-IN');
         break;
       case VoiceLanguage.tamil:
-        message = _buildTamilMessage(totalSales, transactionCount, creditPending);
+        message = _buildTamilMessage(
+          totalSales,
+          transactionCount,
+          creditPending,
+        );
         await _tts.setLanguage('ta-IN');
         break;
       case VoiceLanguage.telugu:
-        message = _buildTeluguMessage(totalSales, transactionCount, creditPending);
+        message = _buildTeluguMessage(
+          totalSales,
+          transactionCount,
+          creditPending,
+        );
         await _tts.setLanguage('te-IN');
         break;
       case VoiceLanguage.kannada:
-        message = _buildKannadaMessage(totalSales, transactionCount, creditPending);
+        message = _buildKannadaMessage(
+          totalSales,
+          transactionCount,
+          creditPending,
+        );
         await _tts.setLanguage('kn-IN');
         break;
       case VoiceLanguage.english:
       default:
-        message = _buildEnglishMessage(totalSales, transactionCount, creditPending);
+        message = _buildEnglishMessage(
+          totalSales,
+          transactionCount,
+          creditPending,
+        );
         await _tts.setLanguage('en-IN');
     }
-    
+
     await _tts.speak(message);
   }
 
@@ -169,20 +186,22 @@ class _HomeScreenWidgetPageState extends State<HomeScreenWidgetPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final totalSales = double.tryParse(_widgetData?['totalSales'] ?? '0') ?? 0;
-    final transactionCount = int.tryParse(_widgetData?['transactionCount'] ?? '0') ?? 0;
+    final transactionCount =
+        int.tryParse(_widgetData?['transactionCount'] ?? '0') ?? 0;
     final upiSales = double.tryParse(_widgetData?['upiSales'] ?? '0') ?? 0;
     final cashSales = double.tryParse(_widgetData?['cashSales'] ?? '0') ?? 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: LiveTranslatedText('Widget Preview', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Widget Preview',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
       ),
@@ -248,13 +267,28 @@ class _HomeScreenWidgetPageState extends State<HomeScreenWidgetPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LiveTranslatedText('Today\'s Breakdown', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  LiveTranslatedText(
+                    'Today\'s Breakdown',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 12),
-                  _buildStatRow('UPI Sales', '₹${upiSales.toStringAsFixed(0)}', Colors.blue),
+                  _buildStatRow(
+                    'UPI Sales',
+                    '₹${upiSales.toStringAsFixed(0)}',
+                    Colors.blue,
+                  ),
                   const SizedBox(height: 8),
-                  _buildStatRow('Cash Sales', '₹${cashSales.toStringAsFixed(0)}', Colors.green),
+                  _buildStatRow(
+                    'Cash Sales',
+                    '₹${cashSales.toStringAsFixed(0)}',
+                    Colors.green,
+                  ),
                   const SizedBox(height: 8),
-                  _buildStatRow('Transactions', '$transactionCount', Colors.purple),
+                  _buildStatRow(
+                    'Transactions',
+                    '$transactionCount',
+                    Colors.purple,
+                  ),
                 ],
               ),
             ),
@@ -268,16 +302,23 @@ class _HomeScreenWidgetPageState extends State<HomeScreenWidgetPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        LiveTranslatedText(label, style: GoogleFonts.poppins(color: Colors.grey.shade600)),
-        LiveTranslatedText(value, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: color)),
+        LiveTranslatedText(
+          label,
+          style: GoogleFonts.poppins(color: Colors.grey.shade600),
+        ),
+        LiveTranslatedText(
+          value,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: color),
+        ),
       ],
     );
   }
 
   Future<void> _speakSummary() async {
     final totalSales = double.tryParse(_widgetData?['totalSales'] ?? '0') ?? 0;
-    final transactionCount = int.tryParse(_widgetData?['transactionCount'] ?? '0') ?? 0;
-    
+    final transactionCount =
+        int.tryParse(_widgetData?['transactionCount'] ?? '0') ?? 0;
+
     await WidgetVoiceSummary.speakDailySummary(
       totalSales: totalSales,
       transactionCount: transactionCount,

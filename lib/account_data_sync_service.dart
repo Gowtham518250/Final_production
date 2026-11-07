@@ -9,10 +9,14 @@ class AccountDataSyncService {
   static Future<List<Map<String, dynamic>>> fetchAccountInvoices() async {
     try {
       if (kDebugMode) debugPrint('📥 Fetching invoices from backend...');
-      final response = await ApiClient.getJson('${ApiClient.invoicesPrefix}/user');
+      final response = await ApiClient.getJson(
+        '${ApiClient.invoicesPrefix}/user',
+      );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final invoices = List<Map<String, dynamic>>.from(data['invoices'] ?? []);
+        final invoices = List<Map<String, dynamic>>.from(
+          data['invoices'] ?? [],
+        );
         if (kDebugMode) debugPrint('✅ Fetched ${invoices.length} invoices');
         await _cacheInvoices(invoices);
         return invoices;
@@ -20,7 +24,8 @@ class AccountDataSyncService {
         if (kDebugMode) debugPrint('⚠️ Unauthorized - need to login');
         return [];
       } else {
-        if (kDebugMode) debugPrint('❌ Failed to fetch invoices: ${response.statusCode}');
+        if (kDebugMode)
+          debugPrint('❌ Failed to fetch invoices: ${response.statusCode}');
         return [];
       }
     } catch (e) {
@@ -44,7 +49,8 @@ class AccountDataSyncService {
         if (kDebugMode) debugPrint('⚠️ Unauthorized - need to login');
         return [];
       } else {
-        if (kDebugMode) debugPrint('❌ Failed to fetch workers: ${response.statusCode}');
+        if (kDebugMode)
+          debugPrint('❌ Failed to fetch workers: ${response.statusCode}');
         return [];
       }
     } catch (e) {
@@ -57,7 +63,7 @@ class AccountDataSyncService {
   static Future<bool> saveInvoiceToBackend(Map<String, dynamic> invoice) async {
     try {
       debugPrint('📤 Saving invoice to backend...');
-      
+
       final response = await ApiClient.postJson(
         '${ApiClient.invoicesPrefix}/create',
         invoice,
@@ -80,11 +86,8 @@ class AccountDataSyncService {
   static Future<bool> saveWorkerToBackend(Map<String, dynamic> worker) async {
     try {
       debugPrint('📤 Saving worker to backend...');
-      
-      final response = await ApiClient.postJson(
-        '/api/workers/create',
-        worker,
-      );
+
+      final response = await ApiClient.postJson('/api/workers/create', worker);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         debugPrint('✅ Worker saved to backend');
@@ -106,7 +109,7 @@ class AccountDataSyncService {
   ) async {
     try {
       debugPrint('📤 Updating invoice in backend...');
-      
+
       final response = await ApiClient.putJson(
         '${ApiClient.invoicesPrefix}/$invoiceId',
         updatedData,
@@ -132,7 +135,7 @@ class AccountDataSyncService {
   ) async {
     try {
       debugPrint('📤 Updating worker in backend...');
-      
+
       final response = await ApiClient.putJson(
         '/api/workers/$workerId',
         updatedData,
@@ -155,7 +158,7 @@ class AccountDataSyncService {
   static Future<bool> deleteInvoiceFromBackend(String invoiceId) async {
     try {
       debugPrint('📤 Deleting invoice from backend...');
-      
+
       final response = await ApiClient.deleteJson(
         '${ApiClient.invoicesPrefix}/$invoiceId',
       );
@@ -177,10 +180,8 @@ class AccountDataSyncService {
   static Future<bool> deleteWorkerFromBackend(String workerId) async {
     try {
       debugPrint('📤 Deleting worker from backend...');
-      
-      final response = await ApiClient.deleteJson(
-        '/api/workers/$workerId',
-      );
+
+      final response = await ApiClient.deleteJson('/api/workers/$workerId');
 
       if (response.statusCode == 200 || response.statusCode == 204) {
         debugPrint('✅ Worker deleted from backend');
@@ -199,12 +200,12 @@ class AccountDataSyncService {
   static Future<Map<String, dynamic>> syncAllAccountDataOnLogin() async {
     try {
       debugPrint('🔄 Syncing all account data...');
-      
+
       final invoices = await fetchAccountInvoices();
       final workers = await fetchAccountWorkers();
-      
+
       debugPrint('✅ Account data sync complete');
-      
+
       return {
         'invoices': invoices,
         'workers': workers,
@@ -225,12 +226,18 @@ class AccountDataSyncService {
     return id.toString();
   }
 
-  static Future<String> get _invoicesCacheKey async => 'invoices_cache_${await _getUserId()}';
-  static Future<String> get _workersCacheKey async => 'workers_cache_${await _getUserId()}';
-  static Future<String> get _invoicesSyncKey async => 'invoices_last_sync_${await _getUserId()}';
-  static Future<String> get _workersSyncKey async => 'workers_last_sync_${await _getUserId()}';
+  static Future<String> get _invoicesCacheKey async =>
+      'invoices_cache_${await _getUserId()}';
+  static Future<String> get _workersCacheKey async =>
+      'workers_cache_${await _getUserId()}';
+  static Future<String> get _invoicesSyncKey async =>
+      'invoices_last_sync_${await _getUserId()}';
+  static Future<String> get _workersSyncKey async =>
+      'workers_last_sync_${await _getUserId()}';
 
-  static Future<void> _cacheInvoices(List<Map<String, dynamic>> invoices) async {
+  static Future<void> _cacheInvoices(
+    List<Map<String, dynamic>> invoices,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = await _invoicesCacheKey;

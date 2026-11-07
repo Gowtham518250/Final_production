@@ -4,63 +4,59 @@ class GSTCompliance {
   // GST Rate mapping by HSN code (reference: GST Rates Chart 2024)
   static const Map<String, double> _hsnGstRates = {
     // 0% GST (Essential items)
-    '0401': 0.0,   // Milk
-    '0402': 0.0,   // Dairy products
-    '1001': 0.0,   // Cereals (wheat, rice, etc)
-    '1100': 0.0,   // Malt, flour
-    
+    '0401': 0.0, // Milk
+    '0402': 0.0, // Dairy products
+    '1001': 0.0, // Cereals (wheat, rice, etc)
+    '1100': 0.0, // Malt, flour
     // 5% GST (Essential items, textiles, food, services)
-    '0901': 5.0,   // Coffee (5%)
-    '0902': 5.0,   // Tea (5%)
-    '0907': 5.0,   // Spices (5%) 
-    '1905': 5.0,   // Food (bread, biscuits) - 5%
-    '2106': 5.0,   // Food (snacks, beverages) - 5%
-    '4820': 5.0,   // Stationery (notebooks) - 5%
-    '4901': 5.0,   // Books - 5%
-    '5205': 5.0,   // Textiles (fabric) - 5%
-    '5208': 5.0,   // Textiles (cotton) - 5%
-    '6109': 5.0,   // Clothing - 5%
-    '6203': 5.0,   // Trousers - 5%
-    '6204': 5.0,   // Dress - 5%
-    '6401': 5.0,   // Footwear - 5%
-    '6402': 5.0,   // Sandals - 5%
-    '9609': 5.0,   // Pens - 5%
-    
+    '0901': 5.0, // Coffee (5%)
+    '0902': 5.0, // Tea (5%)
+    '0907': 5.0, // Spices (5%)
+    '1905': 5.0, // Food (bread, biscuits) - 5%
+    '2106': 5.0, // Food (snacks, beverages) - 5%
+    '4820': 5.0, // Stationery (notebooks) - 5%
+    '4901': 5.0, // Books - 5%
+    '5205': 5.0, // Textiles (fabric) - 5%
+    '5208': 5.0, // Textiles (cotton) - 5%
+    '6109': 5.0, // Clothing - 5%
+    '6203': 5.0, // Trousers - 5%
+    '6204': 5.0, // Dress - 5%
+    '6401': 5.0, // Footwear - 5%
+    '6402': 5.0, // Sandals - 5%
+    '9609': 5.0, // Pens - 5%
     // 12% GST (Intermediate items, some electronics, cosmetics)
-    '3304': 12.0,  // Cosmetics (skincare) - 12%
-    '3305': 12.0,  // Beauty products - 12%
-    '3306': 12.0,  // Oral products - 12%
-    '3307': 12.0,  // Personal care - 12%
-    '3401': 12.0,  // Soap - 12%
-    '3926': 12.0,  // Plastic items - 12%
-    '4202': 12.0,  // Bags - 12%
-    '7323': 12.0,  // Kitchen utensils - 12%
-    '8504': 12.0,  // Chargers/adapters - 12%
-    '8517': 12.0,  // Mobile accessories - 12%
-    '8518': 12.0,  // Headphones/speakers - 12%
-    '8544': 12.0,  // Cables - 12%
-    '9102': 12.0,  // Watches - 12%
-    '9406': 12.0,  // Furniture/home decor - 12%
-    
+    '3304': 12.0, // Cosmetics (skincare) - 12%
+    '3305': 12.0, // Beauty products - 12%
+    '3306': 12.0, // Oral products - 12%
+    '3307': 12.0, // Personal care - 12%
+    '3401': 12.0, // Soap - 12%
+    '3926': 12.0, // Plastic items - 12%
+    '4202': 12.0, // Bags - 12%
+    '7323': 12.0, // Kitchen utensils - 12%
+    '8504': 12.0, // Chargers/adapters - 12%
+    '8517': 12.0, // Mobile accessories - 12%
+    '8518': 12.0, // Headphones/speakers - 12%
+    '8544': 12.0, // Cables - 12%
+    '9102': 12.0, // Watches - 12%
+    '9406': 12.0, // Furniture/home decor - 12%
     // 18% GST (Most electronics, premium items, services)
-    '8471': 18.0,  // Computers/phones/laptops - 18%
-    '8528': 18.0,  // Display screens - 18%
-    '9503': 18.0,  // Toys - 18%
-    '9504': 18.0,  // Games - 18%
-    '9506': 18.0,  // Sports equipment - 18%
-    '9512': 18.0,  // Services (repair, maintenance) - 18%
-    '9983': 18.0,  // Services - 18%
-    '7113': 18.0,  // Jewelry - 18%
-    
+    '8471': 18.0, // Computers/phones/laptops - 18%
+    '8528': 18.0, // Display screens - 18%
+    '9503': 18.0, // Toys - 18%
+    '9504': 18.0, // Games - 18%
+    '9506': 18.0, // Sports equipment - 18%
+    '9512': 18.0, // Services (repair, maintenance) - 18%
+    '9983': 18.0, // Services - 18%
+    '7113': 18.0, // Jewelry - 18%
     // 28% GST (Luxury items - rarely applicable in retail)
     // None typically in retail POS
   };
 
   static const Map<String, double> _gstRates = {
-    'essentials': 5.0,    // Food, medicines
-    'textiles': 5.0,      // Clothes, fabrics
-    'electronics': 12.0,  // Phones, accessories (most common)
-    'premium': 18.0,      // Luxury, services
+    'essentials': 5.0, // Food, medicines
+    'textiles': 5.0, // Clothes, fabrics
+    'electronics': 12.0, // Phones, accessories (most common)
+    'premium': 18.0, // Luxury, services
     'super_luxury': 28.0, // High-end luxury
   };
 
@@ -70,18 +66,21 @@ class GSTCompliance {
     if (hsnCode != null && _hsnGstRates.containsKey(hsnCode)) {
       return _hsnGstRates[hsnCode] ?? 18.0;
     }
-    
+
     // Priority 2: Try to match as HSN code
     if (_hsnGstRates.containsKey(categoryOrHsn)) {
       return _hsnGstRates[categoryOrHsn] ?? 18.0;
     }
-    
+
     // Priority 3: Fall back to category based rates
     return _gstRates[categoryOrHsn.toLowerCase()] ?? 18.0;
   }
 
   /// Calculate price with GST
-  static Map<String, double> calculateWithGST(double basePrice, String category) {
+  static Map<String, double> calculateWithGST(
+    double basePrice,
+    String category,
+  ) {
     final gstRate = getGSTRate(category);
     final gstAmount = (basePrice * gstRate) / 100;
     final finalPrice = basePrice + gstAmount;
@@ -97,7 +96,9 @@ class GSTCompliance {
   /// Format GST Invoice (GSTIN format validation)
   static bool isValidGSTIN(String gstin) {
     // GSTIN format: 2 digit state + 10 digit PAN + 1 digit entity + 1 digit check
-    final pattern = RegExp(r'^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$');
+    final pattern = RegExp(
+      r'^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$',
+    );
     return pattern.hasMatch(gstin);
   }
 
@@ -148,7 +149,9 @@ class GSTCompliance {
   static bool isIntraState(String sellerGSTIN, String buyerGSTIN) {
     final sellerState = getStateCodeFromGSTIN(sellerGSTIN);
     final buyerState = getStateCodeFromGSTIN(buyerGSTIN);
-    return sellerState == buyerState && sellerState.isNotEmpty && buyerState.isNotEmpty;
+    return sellerState == buyerState &&
+        sellerState.isNotEmpty &&
+        buyerState.isNotEmpty;
   }
 
   /// Split GST into CGST/SGST (intra-state) or IGST (inter-state)
@@ -192,7 +195,7 @@ class GSTCompliance {
     required DateTime invoiceDate,
   }) {
     final gstData = calculateWithGST(amount, category);
-    
+
     return {
       'invoice_number': invoiceNumber,
       'invoice_date': DateFormat('yyyy-MM-dd').format(invoiceDate),
@@ -209,7 +212,9 @@ class GSTCompliance {
   }
 
   /// Validate invoice compliance
-  static Map<String, dynamic> validateInvoiceCompliance(Map<String, dynamic> invoice) {
+  static Map<String, dynamic> validateInvoiceCompliance(
+    Map<String, dynamic> invoice,
+  ) {
     final issues = <String>[];
 
     // Check GSTIN format
@@ -276,7 +281,7 @@ class GSTCompliance {
       'spices': '0907',
       'condiments': '2103',
       'food': '1905',
-      
+
       // FMCG & Personal Care (3304-3305, 3306-3307)
       'cosmetics': '3304',
       'skincare': '3304',
@@ -288,7 +293,7 @@ class GSTCompliance {
       'shampoo': '3305',
       'deodorant': '3307',
       'personal_care': '3305',
-      
+
       // Textiles & Clothing (5205-5208, 6109, 6203-6204)
       'textiles': '5205',
       'fabric': '5205',
@@ -303,14 +308,14 @@ class GSTCompliance {
       'socks': '6115',
       't_shirt': '6105',
       'jeans': '6203',
-      
+
       // Footwear (6401-6404)
       'footwear': '6401',
       'shoes': '6401',
       'sandals': '6402',
       'boots': '6401',
       'slippers': '6402',
-      
+
       // Stationery & Paper (4820, 4911-4912)
       'stationery': '4820',
       'notebooks': '4820',
@@ -319,7 +324,7 @@ class GSTCompliance {
       'books': '4901',
       'printed_matter': '4911',
       'envelopes': '4819',
-      
+
       // Electronics & Mobile Accessories (8471-8480, 8517)
       'electronics': '8471',
       'mobile_accessories': '8517',
@@ -333,7 +338,7 @@ class GSTCompliance {
       'tablet': '8471',
       'screen': '8528',
       'adapter': '8504',
-      
+
       // General Retail & Plastic Items (3926, 4911, 3920)
       'general_retail': '3926',
       'plastic_items': '3926',
@@ -342,7 +347,7 @@ class GSTCompliance {
       'storage': '3926',
       'household': '7323',
       'kitchenware': '7323',
-      
+
       // Home & Kitchen (7323, 9406, 7326)
       'kitchen': '7323',
       'utensils': '7323',
@@ -351,43 +356,45 @@ class GSTCompliance {
       'home_decor': '9406',
       'bedding': '9404',
       'curtains': '6303',
-      
+
       // Tools & Hardware (8203, 8205, 8208)
       'tools': '8203',
       'hardware': '8205',
       'nails': '7308',
       'bolts': '7308',
       'screws': '7318',
-      
+
       // Sports & Fitness (9506)
       'sports': '9506',
       'fitness': '9506',
       'equipment': '9506',
       'gym': '9506',
-      
+
       // Toys & Games (9503-9505)
       'toys': '9503',
       'games': '9504',
       'hobby': '9505',
-      
+
       // Services (9983, 9986, 9989)
       'services': '9983',
       'repair': '9512',
       'maintenance': '9512',
-      
+
       // Premium/Jewelry (7113-7117)
       'jewelry': '7113',
       'watches': '9102',
       'accessories': '9406',
-      
+
       // Default fallback (for unclassified items - will fail GST audit!)
       'other': '9999',
     };
-    
+
     final code = hsnMap[productCategory.toLowerCase()] ?? hsnMap['other'];
     if (code == '9999') {
       // Log warning for unclassified items
-      print('⚠️ WARNING: Using HSN code 9999 for category "$productCategory" - GST filing will be rejected. Add proper HSN code.');
+      print(
+        '⚠️ WARNING: Using HSN code 9999 for category "$productCategory" - GST filing will be rejected. Add proper HSN code.',
+      );
     }
     return code ?? '9999';
   }
@@ -406,7 +413,8 @@ class GSTCompliance {
 
     return {
       'seller_gstin': sellerGSTIN,
-      'seller_state': _stateCodeMap[getStateCodeFromGSTIN(sellerGSTIN)] ?? 'Unknown',
+      'seller_state':
+          _stateCodeMap[getStateCodeFromGSTIN(sellerGSTIN)] ?? 'Unknown',
       'period': period,
       'filing_date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
       'summary': {
@@ -418,7 +426,8 @@ class GSTCompliance {
         'total_b2b_igst': b2bSummary['total_igst'],
         'total_b2c_value': b2cSummary['total_value'],
         'total_b2c_gst': b2cSummary['total_gst'],
-        'grand_total_value': b2bSummary['total_value'] + b2cSummary['total_value'],
+        'grand_total_value':
+            b2bSummary['total_value'] + b2cSummary['total_value'],
         'grand_total_gst': b2bSummary['total_gst'] + b2cSummary['total_gst'],
         'grand_total_cgst': b2bSummary['total_cgst'],
         'grand_total_sgst': b2bSummary['total_sgst'],
@@ -428,13 +437,18 @@ class GSTCompliance {
       'b2c': b2cSummary['summary'],
       'hsn_summary': hsnSummary,
       'status': 'READY_FOR_FILING',
-      'compliance_validation': 'All invoices are GST compliant (CGST/SGST/IGST split)',
-      'filing_notes': 'CGST/SGST split applied for intra-state sales, IGST for inter-state sales',
+      'compliance_validation':
+          'All invoices are GST compliant (CGST/SGST/IGST split)',
+      'filing_notes':
+          'CGST/SGST split applied for intra-state sales, IGST for inter-state sales',
     };
   }
 
   /// Get B2B (business-to-business) invoices with GSTIN
-  static Map<String, dynamic> _getB2BSummary(List<Map<String, dynamic>> invoices, {String? sellerGSTIN}) {
+  static Map<String, dynamic> _getB2BSummary(
+    List<Map<String, dynamic>> invoices, {
+    String? sellerGSTIN,
+  }) {
     double totalValue = 0;
     double totalGST = 0;
     double totalCGST = 0;
@@ -444,21 +458,22 @@ class GSTCompliance {
 
     for (var inv in invoices) {
       final buyerGSTIN = inv['buyer_gstin']?.toString() ?? '';
-      
+
       // B2B = buyer has GSTIN
       if (buyerGSTIN.isNotEmpty && isValidGSTIN(buyerGSTIN)) {
         final baseAmount = (inv['base_amount'] as num?)?.toDouble() ?? 0;
         final gstAmount = (inv['gst_amount'] as num?)?.toDouble() ?? 0;
         final gstRate = (inv['gst_rate'] as num?)?.toDouble() ?? 18.0;
-        
+
         // Determine if intra-state or inter-state
-        final intraState = sellerGSTIN != null && isIntraState(sellerGSTIN, buyerGSTIN);
+        final intraState =
+            sellerGSTIN != null && isIntraState(sellerGSTIN, buyerGSTIN);
         final gstSplit = splitGST(
           gstAmount: gstAmount,
           gstRate: gstRate,
           isIntraState: intraState,
         );
-        
+
         totalValue += baseAmount;
         totalGST += gstAmount;
         totalCGST += gstSplit['cgst_amount'] ?? 0;
@@ -496,19 +511,21 @@ class GSTCompliance {
   }
 
   /// Get B2C (business-to-consumer) invoices without GSTIN
-  static Map<String, dynamic> _getB2CSummary(List<Map<String, dynamic>> invoices) {
+  static Map<String, dynamic> _getB2CSummary(
+    List<Map<String, dynamic>> invoices,
+  ) {
     double totalValue = 0;
     double totalGST = 0;
     int count = 0;
 
     for (var inv in invoices) {
       final buyerGSTIN = inv['buyer_gstin']?.toString() ?? '';
-      
+
       // B2C = buyer has no GSTIN or invalid GSTIN
       if (buyerGSTIN.isEmpty || !isValidGSTIN(buyerGSTIN)) {
         final baseAmount = (inv['base_amount'] as num?)?.toDouble() ?? 0;
         final gstAmount = (inv['gst_amount'] as num?)?.toDouble() ?? 0;
-        
+
         totalValue += baseAmount;
         totalGST += gstAmount;
         count++;
@@ -528,12 +545,14 @@ class GSTCompliance {
   }
 
   /// Get HSN summary (product-wise breakdown)
-  static Map<String, dynamic> _getHSNSummary(List<Map<String, dynamic>> invoices) {
+  static Map<String, dynamic> _getHSNSummary(
+    List<Map<String, dynamic>> invoices,
+  ) {
     final hsnMap = <String, Map<String, dynamic>>{};
 
     for (var inv in invoices) {
       final items = inv['items'] as List? ?? [];
-      
+
       for (var item in items) {
         final productName = item['product_name']?.toString() ?? 'Unknown';
         final category = item['category']?.toString() ?? 'premium';
@@ -554,9 +573,12 @@ class GSTCompliance {
           };
         }
 
-        hsnMap[hsn]!['total_quantity'] = (hsnMap[hsn]!['total_quantity'] as double) + qty;
-        hsnMap[hsn]!['total_value'] = (hsnMap[hsn]!['total_value'] as double) + baseAmount;
-        hsnMap[hsn]!['gst_amount'] = (hsnMap[hsn]!['gst_amount'] as double) + gstAmount;
+        hsnMap[hsn]!['total_quantity'] =
+            (hsnMap[hsn]!['total_quantity'] as double) + qty;
+        hsnMap[hsn]!['total_value'] =
+            (hsnMap[hsn]!['total_value'] as double) + baseAmount;
+        hsnMap[hsn]!['gst_amount'] =
+            (hsnMap[hsn]!['gst_amount'] as double) + gstAmount;
       }
     }
 
@@ -578,7 +600,9 @@ class GSTCompliance {
 
     return {
       'month': month,
-      'generated_date': DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+      'generated_date': DateFormat(
+        'yyyy-MM-dd HH:mm:ss',
+      ).format(DateTime.now()),
       'total_invoices': invoices.length,
       'breakdown': {
         'b2b': {
@@ -595,7 +619,9 @@ class GSTCompliance {
       'totals': {
         'gross_amount': b2b['total_value'] + b2c['total_value'],
         'total_gst': b2b['total_gst'] + b2c['total_gst'],
-        'net_amount': (b2b['total_value'] + b2c['total_value']) - (b2b['total_gst'] + b2c['total_gst']),
+        'net_amount':
+            (b2b['total_value'] + b2c['total_value']) -
+            (b2b['total_gst'] + b2c['total_gst']),
       },
       'hsn_breakdown': (hsn['summary'] as List).take(10).toList(), // Top 10
       'ca_saving': '₹500/month (DIY GSTR-1 filing)',
@@ -620,7 +646,7 @@ class GSTCompliance {
       period: period,
       invoices: invoices,
     );
-    
+
     // Format as JSON
     return '''
 {

@@ -114,7 +114,8 @@ class _SpokenLanguageTypewriterState extends State<SpokenLanguageTypewriter>
 
   @override
   Widget build(BuildContext context) {
-    final style = widget.style ??
+    final style =
+        widget.style ??
         const TextStyle(
           color: Color(0xFF94A3B8),
           fontSize: 13,

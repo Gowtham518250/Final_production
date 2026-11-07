@@ -268,7 +268,10 @@ bool paymentFitsOpenBalance(Map<String, dynamic> row, double amount) {
     (total - paid).clamp(0.0, double.infinity).toDouble(),
   );
   final amountPaise = rupeesToPaise(amount);
-  return total > 0 && duePaise > 0 && amountPaise > 0 && amountPaise <= duePaise;
+  return total > 0 &&
+      duePaise > 0 &&
+      amountPaise > 0 &&
+      amountPaise <= duePaise;
 }
 
 String? canonicalInvoiceNumber(Map<String, dynamic> row) {
@@ -317,7 +320,9 @@ AutoSettleTarget? selectUnambiguousAutoSettleTarget({
   if (invoice != null && !paymentFitsOpenBalance(invoice, amount)) return null;
 
   final saleNumber = sale == null ? null : canonicalInvoiceNumber(sale);
-  final invoiceNumber = invoice == null ? null : canonicalInvoiceNumber(invoice);
+  final invoiceNumber = invoice == null
+      ? null
+      : canonicalInvoiceNumber(invoice);
   if (sale != null && (saleNumber == null || saleNumber.isEmpty)) return null;
   if (invoice != null && (invoiceNumber == null || invoiceNumber.isEmpty)) {
     return null;

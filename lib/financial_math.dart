@@ -1,27 +1,26 @@
 import 'dart:math';
 
 /// 🔒 SECURITY & PRECISION FIX: Financial math utility to prevent floating-point errors
-/// 
+///
 /// ALL GST, discount, and invoice calculations MUST use these functions.
 /// NEVER use direct arithmetic (e.g., price * 1.18) as it causes precision loss.
-/// 
+///
 /// Example - WRONG:
 ///   final gst = 999.99 * 0.18;  // = 179.9982 instead of 180
-/// 
+///
 /// Example - CORRECT:
 ///   final gst = CurrencyManager.calculateGstAmount(999.99, 18);  // = 180.00
 class CurrencyManager {
-  
   /// Secure addition (prevents floating-point drift)
   static double add(double a, double b) {
     return ((a * 100).round() + (b * 100).round()) / 100;
   }
-  
+
   /// Secure subtraction (prevents floating-point drift)
   static double subtract(double a, double b) {
     return ((a * 100).round() - (b * 100).round()) / 100;
   }
-  
+
   /// Secure multiplication (e.g., price * qty)
   /// Always use for price calculations
   static double multiply(double price, double qty) {
@@ -31,10 +30,10 @@ class CurrencyManager {
     // 349.96499999... instead of 349.97.
     return (((price * 100).round() * qty) / 100 * 100).round() / 100;
   }
-  
+
   /// Calculate GST amount safely (uses integer math on paise)
   /// Works in 100ths of rupee to avoid floating-point errors
-  /// 
+  ///
   /// Example:
   /// ```dart
   /// final gst = CurrencyManager.calculateGstAmount(999.99, 18);  // 180.00
@@ -48,7 +47,10 @@ class CurrencyManager {
 
   /// Calculate base price from GST-inclusive price
   /// Example: If total is 1180 with 18% GST, base = 1000
-  static double calculateBasePriceFromTotal(double totalPrice, double gstPercent) {
+  static double calculateBasePriceFromTotal(
+    double totalPrice,
+    double gstPercent,
+  ) {
     final rate = (100 + gstPercent) / 100;
     return (totalPrice * 100 / (rate * 100)).round() / 100;
   }

@@ -3,15 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+
 /// Offline Status Indicator
 /// Shows the current network connection status
 class OfflineStatusIndicator extends StatefulWidget {
   final Widget child;
 
-  const OfflineStatusIndicator({
-    super.key,
-    required this.child,
-  });
+  const OfflineStatusIndicator({super.key, required this.child});
 
   @override
   State<OfflineStatusIndicator> createState() => _OfflineStatusIndicatorState();
@@ -26,7 +24,9 @@ class _OfflineStatusIndicatorState extends State<OfflineStatusIndicator> {
   void initState() {
     super.initState();
     _checkConnectivity();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_updateConnectivity);
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      _updateConnectivity,
+    );
   }
 
   @override
@@ -82,10 +82,7 @@ class _OfflineBanner extends StatelessWidget {
   final VoidCallback onDismiss;
   final VoidCallback onRetry;
 
-  const _OfflineBanner({
-    required this.onDismiss,
-    required this.onRetry,
-  });
+  const _OfflineBanner({required this.onDismiss, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -105,11 +102,7 @@ class _OfflineBanner extends StatelessWidget {
         bottom: false,
         child: Row(
           children: [
-            const Icon(
-              Icons.wifi_off_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
+            const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: LiveTranslatedText(
@@ -153,10 +146,7 @@ class _OfflineBanner extends StatelessWidget {
 class OfflineBadge extends StatelessWidget {
   final bool isOnline;
 
-  const OfflineBadge({
-    super.key,
-    required this.isOnline,
-  });
+  const OfflineBadge({super.key, required this.isOnline});
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +177,9 @@ class OfflineBadge extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: isOnline ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+              color: isOnline
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFFEF4444),
             ),
           ),
         ],
@@ -200,10 +192,7 @@ class OfflineBadge extends StatelessWidget {
 class ConnectivityStatus extends StatefulWidget {
   final Widget Function(bool isOnline) builder;
 
-  const ConnectivityStatus({
-    super.key,
-    required this.builder,
-  });
+  const ConnectivityStatus({super.key, required this.builder});
 
   @override
   State<ConnectivityStatus> createState() => _ConnectivityStatusState();
@@ -217,7 +206,9 @@ class _ConnectivityStatusState extends State<ConnectivityStatus> {
   void initState() {
     super.initState();
     _checkConnectivity();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_updateConnectivity);
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      _updateConnectivity,
+    );
   }
 
   @override

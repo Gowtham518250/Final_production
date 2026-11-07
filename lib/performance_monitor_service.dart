@@ -64,8 +64,8 @@ class PerformanceMonitorService {
       }
     }
     if (_recentFrameTimes.isEmpty) return;
-    _lastFrameTimeMs = _recentFrameTimes.reduce((a, b) => a + b) /
-        _recentFrameTimes.length;
+    _lastFrameTimeMs =
+        _recentFrameTimes.reduce((a, b) => a + b) / _recentFrameTimes.length;
   }
 
   Future<void> _collectMetrics() async {
@@ -94,7 +94,8 @@ class PerformanceMonitorService {
   /// This is application memory, not total system memory pressure.
   Future<double?> _getMemoryUsage() async {
     try {
-      final totalRamGb = DeviceCapabilityService.instance.capabilities?.totalRAM;
+      final totalRamGb =
+          DeviceCapabilityService.instance.capabilities?.totalRAM;
       if (totalRamGb == null || !totalRamGb.isFinite || totalRamGb <= 0) {
         return null;
       }
@@ -167,8 +168,7 @@ class PerformanceMonitorService {
     var weightedScore = 0.0;
     var availableWeight = 0.0;
     if (avgMemory != null) {
-      weightedScore +=
-          (1.0 - avgMemory.clamp(0.0, 1.0).toDouble()) * 40.0;
+      weightedScore += (1.0 - avgMemory.clamp(0.0, 1.0).toDouble()) * 40.0;
       availableWeight += 40.0;
     }
     if (avgCpu != null) {
@@ -186,13 +186,17 @@ class PerformanceMonitorService {
 
     final recommendations = <String>[];
     if (avgMemory != null && avgMemory > _highMemoryUsageThreshold) {
-      recommendations.add('Reduce app memory use and review image/model caches');
+      recommendations.add(
+        'Reduce app memory use and review image/model caches',
+      );
     }
     if (avgCpu != null && avgCpu > 0.7) {
       recommendations.add('Profile CPU-heavy work on the affected screen');
     }
     if (avgFrame != null && avgFrame > _slowFrameTimeThreshold) {
-      recommendations.add('Profile expensive widget builds and frame rendering');
+      recommendations.add(
+        'Profile expensive widget builds and frame rendering',
+      );
     }
 
     return PerformanceSummary(
@@ -270,13 +274,13 @@ class PerformanceMetric {
   });
 
   Map<String, dynamic> toJson() => {
-        'timestamp': timestamp.toIso8601String(),
-        'memory_usage': memoryUsage,
-        'cpu_usage': cpuUsage,
-        'frame_time': frameTime,
-        'battery_level': batteryLevel,
-        'thermal_state': thermalState?.toString(),
-      };
+    'timestamp': timestamp.toIso8601String(),
+    'memory_usage': memoryUsage,
+    'cpu_usage': cpuUsage,
+    'frame_time': frameTime,
+    'battery_level': batteryLevel,
+    'thermal_state': thermalState?.toString(),
+  };
 }
 
 enum ThermalState { normal, warm, hot }

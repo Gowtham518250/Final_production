@@ -1,4 +1,5 @@
 import '../live_translated_text.dart';
+
 /// 🥧 RevenuePieChart
 /// Products sold by PRICE — shows revenue split across top products
 /// Beautiful donut chart with side legend + mini progress bars
@@ -8,7 +9,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../analytics_engine.dart';
 import 'product_price_analytics.dart';
-
 
 class RevenuePieChart extends StatefulWidget {
   final AnalyticsEngine engine;
@@ -50,22 +50,29 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
   }
 
   Widget _empty() => Container(
-        height: 200,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey[200]!),
+    height: 200,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: Colors.grey[50],
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.grey[200]!),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.pie_chart_outline_rounded,
+          size: 48,
+          color: Colors.grey[400],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.pie_chart_outline_rounded, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            LiveTranslatedText('No product revenue data', style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 13)),
-          ],
+        const SizedBox(height: 12),
+        LiveTranslatedText(
+          'No product revenue data',
+          style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 13),
         ),
-      );
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -80,8 +87,7 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
       (sum, row) => sum + row.revenue,
     );
     const maxVisibleNamedSlices = 5;
-    final visibleNamedCount =
-        products.length > 6 ? maxVisibleNamedSlices : 6;
+    final visibleNamedCount = products.length > 6 ? maxVisibleNamedSlices : 6;
     final top = products
         .take(visibleNamedCount)
         .map((row) => MapEntry(row.label, row.revenue))
@@ -132,7 +138,11 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.pie_chart_rounded, color: Colors.white, size: 18),
+                        child: const Icon(
+                          Icons.pie_chart_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Column(
@@ -148,13 +158,19 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                           ),
                           LiveTranslatedText(
                             'Top product and selling-price groups',
-                            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[500]),
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                            ),
                           ),
                         ],
                       ),
                       const Spacer(),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF3F4F6),
                           borderRadius: BorderRadius.circular(20),
@@ -192,10 +208,13 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                   pieTouchData: PieTouchData(
                                     touchCallback: (event, resp) {
                                       setState(() {
-                                        _touchedIndex = (event.isInterestedForInteractions &&
+                                        _touchedIndex =
+                                            (event.isInterestedForInteractions &&
                                                 resp != null &&
                                                 resp.touchedSection != null)
-                                            ? resp.touchedSection!.touchedSectionIndex
+                                            ? resp
+                                                  .touchedSection!
+                                                  .touchedSectionIndex
                                             : -1;
                                       });
                                     },
@@ -204,13 +223,17 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                     final i = entry.key;
                                     final p = entry.value;
                                     final val = p.value;
-                                    final perc = grandTotal > 0 ? val / grandTotal * 100 : 0.0;
+                                    final perc = grandTotal > 0
+                                        ? val / grandTotal * 100
+                                        : 0.0;
                                     final color = _color(i);
                                     final isTouched = i == _touchedIndex;
                                     return PieChartSectionData(
                                       color: color,
                                       value: val,
-                                      title: perc >= 12 ? '${perc.toStringAsFixed(0)}%' : '',
+                                      title: perc >= 12
+                                          ? '${perc.toStringAsFixed(0)}%'
+                                          : '',
                                       radius: isTouched ? 58.0 : 50.0,
                                       titleStyle: GoogleFonts.poppins(
                                         fontSize: 11,
@@ -220,7 +243,9 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                     );
                                   }).toList(),
                                 ),
-                                swapAnimationDuration: const Duration(milliseconds: 500),
+                                swapAnimationDuration: const Duration(
+                                  milliseconds: 500,
+                                ),
                                 swapAnimationCurve: Curves.easeOutCubic,
                               ),
                               // Centre label
@@ -237,7 +262,10 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                   ),
                                   LiveTranslatedText(
                                     'Total',
-                                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[500]),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      color: Colors.grey[500],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -255,7 +283,9 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                 final i = entry.key;
                                 final p = entry.value;
                                 final val = p.value;
-                                final perc = grandTotal > 0 ? val / grandTotal * 100 : 0.0;
+                                final perc = grandTotal > 0
+                                    ? val / grandTotal * 100
+                                    : 0.0;
                                 final color = _color(i);
                                 final name = p.key;
                                 return Padding(
@@ -265,12 +295,16 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                       Container(
                                         width: 10,
                                         height: 10,
-                                        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle,
+                                        ),
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             LiveTranslatedText(
                                               name,
@@ -283,7 +317,9 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
                                               children: [
                                                 LiveTranslatedText(
                                                   '₹${_compact(val)}',
@@ -304,11 +340,19 @@ class _RevenuePieChartState extends State<RevenuePieChart> {
                                             ),
                                             const SizedBox(height: 3),
                                             ClipRRect(
-                                              borderRadius: BorderRadius.circular(4),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
                                               child: LinearProgressIndicator(
-                                                value: (val / grandTotal).clamp(0.0, 1.0),
-                                                backgroundColor: color.withValues(alpha: 0.12),
-                                                valueColor: AlwaysStoppedAnimation<Color>(color),
+                                                value: (val / grandTotal).clamp(
+                                                  0.0,
+                                                  1.0,
+                                                ),
+                                                backgroundColor: color
+                                                    .withValues(alpha: 0.12),
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(color),
                                                 minHeight: 4,
                                               ),
                                             ),

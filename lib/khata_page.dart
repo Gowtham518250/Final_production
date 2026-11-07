@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -21,6 +22,7 @@ import 'invoice_dedup_helper.dart';
 import 'invoice_analytics_snapshot.dart';
 import 'invoice_payment_status.dart';
 import 'sales_restore_service.dart';
+import 'transaction_reconciliation_helper.dart';
 
 class KhataPage extends StatefulWidget {
   final String? focusPhone;
@@ -556,6 +558,7 @@ class _KhataPageState extends State<KhataPage>
         ) ??
         0.0;
     DateTime dateOf(Map<String, dynamic> inv) =>
+        _invoiceEventTime(inv) ??
         DateTime.tryParse(inv['business_date']?.toString() ?? '') ??
         DateTime(1970);
 
@@ -1634,7 +1637,7 @@ class _KhataPageState extends State<KhataPage>
           ),
           tabs: const [
             Tab(child: LiveTranslatedText('Pending Udhar')),
-            Tab(child: LiveTranslatedText('Invoice Analytics')),
+            Tab(child: LiveTranslatedText('Khata Analytics')),
           ],
         ),
       ),
@@ -2505,7 +2508,7 @@ class _KhataPageState extends State<KhataPage>
               border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
             ),
             child: const Icon(
-              Icons.receipt_long_rounded,
+              Icons.menu_book_rounded,
               color: Colors.white,
               size: 27,
             ),
@@ -2516,7 +2519,7 @@ class _KhataPageState extends State<KhataPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 LiveTranslatedText(
-                  'Invoice intelligence',
+                  'Khata ledger',
                   style: GoogleFonts.inter(
                     color: Colors.white,
                     fontSize: 17,
@@ -2579,10 +2582,10 @@ class _KhataPageState extends State<KhataPage>
           runSpacing: 10,
           children: [
             _buildSummaryCard(
-              'Total invoices',
+              'Khata bills',
               '${_allInvoices.length}',
               _primary,
-              Icons.receipt_long_rounded,
+              Icons.menu_book_rounded,
               cardWidth,
             ),
             _buildSummaryCard(
@@ -2864,6 +2867,29 @@ class _KhataPageState extends State<KhataPage>
     );
   }
 
+  DateTime? _invoiceEventTime(Map<String, dynamic> invoice) {
+    for (final key in const [
+      'paid_at',
+      'payment_date',
+      'sale_timestamp',
+      'invoice_timestamp',
+      'created_at',
+      'createdAt',
+      'timestamp',
+      'event_timestamp',
+      'business_date',
+      'sale_date',
+      'invoice_date',
+      'date',
+    ]) {
+      final raw = invoice[key]?.toString().trim() ?? '';
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw)) continue;
+      final parsed = TransactionReconciliationHelper.parseEventTime(raw);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
   Widget _buildInvoiceTile(Map<String, dynamic> inv) {
     final total =
         (inv['total_amount'] as num?)?.toDouble() ??
@@ -2881,7 +2907,10 @@ class _KhataPageState extends State<KhataPage>
     final customerName = inv['customer_name']?.toString() ?? 'Guest Customer';
     final invoiceNumber =
         inv['invoice_number']?.toString() ?? inv['sale_id']?.toString() ?? '—';
-    final dateStr = inv['business_date']?.toString() ?? '';
+    final eventTime = _invoiceEventTime(inv);
+    final dateStr = eventTime == null
+        ? (inv['business_date']?.toString() ?? '').split('T').first
+        : DateFormat('dd/MM/yyyy hh:mm a').format(eventTime);
 
     Color statusColor;
     switch (status) {
@@ -2933,7 +2962,7 @@ class _KhataPageState extends State<KhataPage>
                   ),
                   const SizedBox(height: 2),
                   LiveTranslatedText(
-                    dateStr.split('T').first,
+                    dateStr,
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: const Color(0xFF94A3B8),
@@ -3006,7 +3035,10 @@ class _KhataPageState extends State<KhataPage>
     final customerAddress = inv['customer_address']?.toString() ?? '';
     final invoiceNumber =
         inv['invoice_number']?.toString() ?? inv['sale_id']?.toString() ?? '—';
-    final dateStr = inv['business_date']?.toString() ?? '';
+    final eventTime = _invoiceEventTime(inv);
+    final dateStr = eventTime == null
+        ? (inv['business_date']?.toString() ?? '').split('T').first
+        : DateFormat('dd MMM yyyy, hh:mm a').format(eventTime);
     final lineItems = List<Map<String, dynamic>>.from(
       inv['line_items'] ?? inv['items'] ?? [],
     );
@@ -3057,7 +3089,7 @@ class _KhataPageState extends State<KhataPage>
                             ),
                           ),
                           LiveTranslatedText(
-                            dateStr.split('T').first,
+                            dateStr,
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               color: const Color(0xFF64748B),

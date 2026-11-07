@@ -50,7 +50,11 @@ class WelcomeCard extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.waving_hand_rounded, color: Colors.white, size: 22),
+                  child: const Icon(
+                    Icons.waving_hand_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -66,7 +70,9 @@ class WelcomeCard extends StatelessWidget {
                         ),
                       ),
                       LiveTranslatedText(
-                        localizations.translate('Welcome! Start with these 3 quick actions:'),
+                        localizations.translate(
+                          'Welcome! Start with these 3 quick actions:',
+                        ),
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           color: Colors.white.withValues(alpha: 0.8),
@@ -83,7 +89,11 @@ class WelcomeCard extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                 ),
               ],

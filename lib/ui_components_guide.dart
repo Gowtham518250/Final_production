@@ -1,5 +1,5 @@
 /// UI Component Library Documentation
-/// 
+///
 /// This file documents all the new beautiful UI components created for Retail Mind.
 /// Each component can be imported and used in your Flutter app.
 ///
@@ -8,7 +8,7 @@
 ///
 /// 1. ONBOARDING & SPLASH SCREENS
 /// ================================================================
-/// 
+///
 /// OnboardingPage - Beautiful multi-step onboarding with animations
 /// Usage:
 ///   Navigator.push(context, MaterialPageRoute(

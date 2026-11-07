@@ -137,7 +137,9 @@ class _QueryInputCardState extends State<QueryInputCard> {
                     height: 1.4,
                   ),
                   decoration: InputDecoration(
-                    hint: LiveTranslatedText('Ask about sales, revenue, customers, stock...'),
+                    hint: LiveTranslatedText(
+                      'Ask about sales, revenue, customers, stock...',
+                    ),
                     hintStyle: GoogleFonts.inter(
                       fontSize: 14,
                       color: AppColors.textTertiary,
@@ -159,7 +161,10 @@ class _QueryInputCardState extends State<QueryInputCard> {
                   tooltip: 'Clear text',
                   splashRadius: 18,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                 ),
               ],
             ],
@@ -186,7 +191,10 @@ class _QueryInputCardState extends State<QueryInputCard> {
                   disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
                   elevation: canSubmit ? 4 : 0,
                   shadowColor: brandPrimary.withValues(alpha: 0.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 10,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -197,7 +205,9 @@ class _QueryInputCardState extends State<QueryInputCard> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Row(

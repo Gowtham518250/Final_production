@@ -9,9 +9,9 @@ import 'local_storage_service.dart';
 /// Day Closing Extension - WhatsApp owner report functionality
 class DayClosingExtended {
   static const String _tag = '📋 DAY_CLOSING_EXT';
-  
+
   final LocalStorageService _storage = LocalStorageService();
-  
+
   /// Show manual cash input and WhatsApp option
   static Future<void> showCashInputDialog(
     BuildContext context, {
@@ -21,7 +21,7 @@ class DayClosingExtended {
     required VoiceLanguage language,
   }) async {
     final TextEditingController cashCtrl = TextEditingController();
-    
+
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -34,7 +34,10 @@ class DayClosingExtended {
             children: [
               LiveTranslatedText(
                 'Recorded Cash: ₹${recordedCash.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -42,7 +45,9 @@ class DayClosingExtended {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'Actual Cash (₹)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   filled: true,
                   fillColor: Colors.grey[50],
                 ),
@@ -64,9 +69,9 @@ class DayClosingExtended {
                 );
                 return;
               }
-              
+
               Navigator.pop(ctx);
-              
+
               await showWhatsAppConfirmation(
                 context: context,
                 recordedCash: recordedCash,
@@ -82,7 +87,7 @@ class DayClosingExtended {
       ),
     );
   }
-  
+
   /// Show WhatsApp preview and send button
   static Future<void> showWhatsAppConfirmation({
     required BuildContext context,
@@ -98,9 +103,9 @@ class DayClosingExtended {
       actualCash: actualCash,
       language: language,
     );
-    
+
     final discrepancy = recordedCash - actualCash;
-    
+
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -127,9 +132,9 @@ class DayClosingExtended {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Discrepancy warning
               if (discrepancy.abs() > 10)
                 Container(
@@ -152,7 +157,7 @@ class DayClosingExtended {
                     ],
                   ),
                 ),
-              
+
               const SizedBox(height: 12),
               LiveTranslatedText(
                 'Owner: $ownerPhone',
@@ -173,15 +178,13 @@ class DayClosingExtended {
             },
             icon: const Icon(Icons.send),
             label: const LiveTranslatedText('Send to Owner'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
           ),
         ],
       ),
     );
   }
-  
+
   /// Send message via WhatsApp
   static Future<void> _sendViaWhatsApp(String message, String phone) async {
     try {
@@ -190,11 +193,11 @@ class DayClosingExtended {
       if (!formattedPhone.startsWith('91')) {
         formattedPhone = '91$formattedPhone';
       }
-      
+
       final whatsappUrl = Uri.parse(
         'https://wa.me/$formattedPhone/?text=${Uri.encodeComponent(message)}',
       );
-      
+
       if (await canLaunchUrl(whatsappUrl)) {
         await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
       } else {
@@ -214,7 +217,7 @@ class DayClosingWithWhatsAppWidget extends StatefulWidget {
   final String ownerPhone;
   final VoiceLanguage language;
   final Function() onClosingComplete;
-  
+
   const DayClosingWithWhatsAppWidget({
     required this.recordedCash,
     required this.upiSales,
@@ -224,7 +227,7 @@ class DayClosingWithWhatsAppWidget extends StatefulWidget {
     required this.onClosingComplete,
     Key? key,
   }) : super(key: key);
-  
+
   @override
   State<DayClosingWithWhatsAppWidget> createState() =>
       _DayClosingWithWhatsAppWidgetState();
@@ -232,9 +235,8 @@ class DayClosingWithWhatsAppWidget extends StatefulWidget {
 
 class _DayClosingWithWhatsAppWidgetState
     extends State<DayClosingWithWhatsAppWidget> {
-  
   bool _isConfirmingClose = false;
-  
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -254,33 +256,36 @@ class _DayClosingWithWhatsAppWidgetState
             child: Column(
               children: [
                 _buildSummarRow('UPI Sales', widget.upiSales),
-                _buildSummarRow('Cash Sales', widget.totalSales - widget.upiSales),
+                _buildSummarRow(
+                  'Cash Sales',
+                  widget.totalSales - widget.upiSales,
+                ),
                 Divider(color: Colors.grey[400]),
                 _buildSummarRow('Total', widget.totalSales, isBold: true),
               ],
             ),
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Confirm Day Close Button
           ElevatedButton.icon(
             onPressed: _isConfirmingClose
                 ? null
                 : () async {
-              setState(() => _isConfirmingClose = true);
-              
-              await DayClosingExtended.showCashInputDialog(
-                context,
-                recordedCash: widget.recordedCash,
-                upiSales: widget.upiSales,
-                ownerPhone: widget.ownerPhone,
-                language: widget.language,
-              );
-              
-              setState(() => _isConfirmingClose = false);
-              widget.onClosingComplete();
-            },
+                    setState(() => _isConfirmingClose = true);
+
+                    await DayClosingExtended.showCashInputDialog(
+                      context,
+                      recordedCash: widget.recordedCash,
+                      upiSales: widget.upiSales,
+                      ownerPhone: widget.ownerPhone,
+                      language: widget.language,
+                    );
+
+                    setState(() => _isConfirmingClose = false);
+                    widget.onClosingComplete();
+                  },
             icon: const Icon(Icons.check_circle),
             label: const LiveTranslatedText('Confirm Day Close & Send Report'),
             style: ElevatedButton.styleFrom(
@@ -292,7 +297,7 @@ class _DayClosingWithWhatsAppWidgetState
       ),
     );
   }
-  
+
   Widget _buildSummarRow(String label, double amount, {bool isBold = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),

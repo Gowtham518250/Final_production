@@ -1,3 +1,5 @@
+import '../../export_service.dart';
+
 class RecentBillData {
   const RecentBillData({
     required this.invoiceNumber,
@@ -120,23 +122,7 @@ class RecentBillData {
   }
 
   static DateTime? _sortDate(RecentBillData bill) {
-    for (final key in const [
-      'sale_timestamp',
-      'invoice_timestamp',
-      'created_at',
-      'createdAt',
-      'timestamp',
-      'event_timestamp',
-      'business_date',
-      'sale_date',
-      'invoice_date',
-      'date',
-    ]) {
-      final value = bill.data[key]?.toString().trim() ?? '';
-      final parsed = DateTime.tryParse(value);
-      if (parsed != null) return parsed.toLocal();
-    }
-    return null;
+    return ExportService.resolveSalesDate(bill.data);
   }
 
   static List<Map<String, dynamic>> _readItems(

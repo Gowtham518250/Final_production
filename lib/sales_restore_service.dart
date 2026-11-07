@@ -9,19 +9,19 @@ import 'online_order_service.dart';
 import 'cache_consistency_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 
+///
 /// SALES RESTORE SERVICE - Complete Sales Recovery After App Reinstall
 /// =================================================================
-/// 
+///
 /// Restores:
 /// - invoices
 /// - invoice items
 /// - stock impact
 /// - customer history
 /// - payment status
-/// 
+///
 /// Called after app reinstall to recover all data from backend.
-/// 
+///
 class SalesRestoreService {
   // A complete cloud snapshot is restored once per signed-in owner. A local
   // cache can contain only recent records, so "non-empty" is not proof that
@@ -118,7 +118,6 @@ class SalesRestoreService {
     }
   }
 
-  
   /// Restore all sales from backend after app reinstall
   static Future<Map<String, dynamic>> restoreAllSales({
     String? startDate,
@@ -126,28 +125,29 @@ class SalesRestoreService {
     bool includeStockImpact = true,
   }) async {
     try {
-      if (kDebugMode) debugPrint('🔄 Starting sales restoration from backend...');
-      
+      if (kDebugMode)
+        debugPrint('🔄 Starting sales restoration from backend...');
+
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) {
         return {
           'success': false,
           'error': 'NOT_AUTHENTICATED',
-          'message': 'Authentication required'
+          'message': 'Authentication required',
         };
       }
-      
+
       final requestBody = <String, dynamic>{};
       if (startDate != null) requestBody['start_date'] = startDate;
       if (endDate != null) requestBody['end_date'] = endDate;
       requestBody['include_stock_impact'] = includeStockImpact;
-      
+
       final response = await ApiClient.postJson(
         '/api/sales-restore/restore-all',
         requestBody,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 30));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final rawInvoices = data['invoices'];
@@ -162,28 +162,32 @@ class SalesRestoreService {
           cancelledOrders,
         );
         final invoices = OnlineOrderService.excludeCancelledOrderInvoices(
-          rawInvoices
-              .whereType<Map>()
-              .map((invoice) => Map<String, dynamic>.from(invoice)),
+          rawInvoices.whereType<Map>().map(
+            (invoice) => Map<String, dynamic>.from(invoice),
+          ),
           cancelledOrders,
         );
-        
+
         // Save restored sales to local storage
         await _saveRestoredSales(invoices);
-        
+
         // Refresh inventory from backend to ensure consistency
         if (includeStockImpact) {
           await InventorySyncService.refreshAllInventory();
         }
-        
+
         if (kDebugMode) {
           debugPrint('✅ Sales restoration complete');
           debugPrint('   Invoices restored: ${invoices.length}');
-          debugPrint('   Line items restored: ${data['total_line_items_restored']}');
+          debugPrint(
+            '   Line items restored: ${data['total_line_items_restored']}',
+          );
           debugPrint('   Customers restored: ${data['customers_restored']}');
-          debugPrint('   Stock impact applied: ${data['stock_impact_applied']}');
+          debugPrint(
+            '   Stock impact applied: ${data['stock_impact_applied']}',
+          );
         }
-        
+
         return {
           'success': true,
           'total_invoices_restored': invoices.length,
@@ -211,7 +215,7 @@ class SalesRestoreService {
       };
     }
   }
-  
+
   /// Get summary of available sales data for restoration
   static Future<Map<String, dynamic>> getRestoreSummary() async {
     try {
@@ -219,12 +223,12 @@ class SalesRestoreService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.getJson(
         '/api/sales-restore/restore-summary',
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -243,35 +247,39 @@ class SalesRestoreService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Restore customers from backend
   static Future<Map<String, dynamic>> restoreCustomers() async {
     try {
       if (kDebugMode) debugPrint('🔄 Restoring customers from backend...');
-      
+
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.postJson(
         '/api/sales-restore/restore-customers',
         {},
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         // Save restored customers to local storage
         await _saveRestoredCustomers(data['customers']);
-        try { await InventorySyncService.refreshAllInventory(); } catch (_) {}
-        
+        try {
+          await InventorySyncService.refreshAllInventory();
+        } catch (_) {}
+
         if (kDebugMode) {
           debugPrint('✅ Customer restoration complete');
-          debugPrint('   Customers restored: ${data['total_customers_restored']}');
+          debugPrint(
+            '   Customers restored: ${data['total_customers_restored']}',
+          );
         }
-        
+
         return {
           'success': true,
           'total_customers_restored': data['total_customers_restored'],
@@ -286,7 +294,7 @@ class SalesRestoreService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Complete restoration after app reinstall
   /// This is the main entry point called on login after reinstall
   static Future<Map<String, dynamic>> completeRestoration() async {
@@ -302,7 +310,10 @@ class SalesRestoreService {
       // subsequent logins are skipped — which is the desired behaviour).
       final alreadyDone = await wasRestorationCompleted();
       if (alreadyDone) {
-        if (kDebugMode) debugPrint('✅ Restoration already complete — skipping to prevent duplicates');
+        if (kDebugMode)
+          debugPrint(
+            '✅ Restoration already complete — skipping to prevent duplicates',
+          );
         return {
           'success': true,
           'message': 'Restoration already completed on this device',
@@ -320,50 +331,61 @@ class SalesRestoreService {
           'steps_completed': [],
         };
       }
-      
+
       final stepsCompleted = <String>[];
-      
+
       // Step 2: Restore sales
       final salesResult = await restoreAllSales(includeStockImpact: true);
       if (salesResult['success']) {
-        stepsCompleted.add('Sales restored: ${salesResult['total_invoices_restored']} invoices');
+        stepsCompleted.add(
+          'Sales restored: ${salesResult['total_invoices_restored']} invoices',
+        );
       } else {
         stepsCompleted.add('Sales restoration failed: ${salesResult['error']}');
       }
-      
+
       // Step 3: Restore customers
       final customersResult = await restoreCustomers();
       if (customersResult['success']) {
-        stepsCompleted.add('Customers restored: ${customersResult['total_customers_restored']} customers');
+        stepsCompleted.add(
+          'Customers restored: ${customersResult['total_customers_restored']} customers',
+        );
       } else {
-        stepsCompleted.add('Customer restoration failed: ${customersResult['error']}');
+        stepsCompleted.add(
+          'Customer restoration failed: ${customersResult['error']}',
+        );
       }
-      
+
       // Step 4: Reconcile inventory
       final reconcileResult = await InventorySyncService.reconcileInventory();
       if (reconcileResult['success']) {
-        stepsCompleted.add('Inventory reconciled: ${reconcileResult['discrepancies_found']} discrepancies found');
+        stepsCompleted.add(
+          'Inventory reconciled: ${reconcileResult['discrepancies_found']} discrepancies found',
+        );
       } else {
-        stepsCompleted.add('Inventory reconciliation failed: ${reconcileResult['error']}');
+        stepsCompleted.add(
+          'Inventory reconciliation failed: ${reconcileResult['error']}',
+        );
       }
-      
+
       // Step 5: Update last sync timestamp
       await InventorySyncService.updateLastSyncTimestamp();
 
-      final restorationSucceeded = salesResult['success'] == true &&
+      final restorationSucceeded =
+          salesResult['success'] == true &&
           customersResult['success'] == true &&
           reconcileResult['success'] == true;
       if (restorationSucceeded) {
         await markRestorationComplete();
       }
-      
+
       if (kDebugMode) {
         debugPrint('✅ Complete restoration finished');
         for (var step in stepsCompleted) {
           debugPrint('   - $step');
         }
       }
-      
+
       return {
         'success': restorationSucceeded,
         'steps_completed': stepsCompleted,
@@ -379,49 +401,52 @@ class SalesRestoreService {
       };
     }
   }
-  
+
   /// Save restored sales to local storage
   static Future<void> _saveRestoredSales(List<dynamic> invoices) async {
     try {
       // 🔧 FIX: Load existing local sales and invoices first to merge instead of overwrite
       final List<dynamic> existingSales = await LocalStorageService.loadSales();
-      final List<dynamic> existingLocalInvoices = await LocalStorageService.loadLocalInvoices();
-      
+      final List<dynamic> existingLocalInvoices =
+          await LocalStorageService.loadLocalInvoices();
+
       final Map<String, dynamic> existingInvoiceMap = {};
-      
+
       for (var inv in existingLocalInvoices) {
         final invId = (inv['invoice_number']).toString();
         existingInvoiceMap[invId] = inv;
       }
-      
+
       final List<Map<String, dynamic>> salesHistory = [];
       final List<Map<String, dynamic>> localInvoicesList = [];
       final Set<String> processedSaleIds = {};
       final Set<String> processedInvoiceIds = {};
-      
+
       // First pass: add all existing local sales and invoices
       for (var s in existingSales) {
         final saleId = (s['sale_id'] ?? s['invoice_number']).toString();
         salesHistory.add(Map<String, dynamic>.from(s));
         processedSaleIds.add(saleId);
       }
-      
+
       for (var inv in existingLocalInvoices) {
         final invId = (inv['invoice_number']).toString();
         localInvoicesList.add(Map<String, dynamic>.from(inv));
         processedInvoiceIds.add(invId);
       }
-      
+
       // Second pass: merge backend sales and invoices
       for (var invoice in invoices) {
         final saleId = invoice['invoice_number'].toString();
-        
+
         // Convert backend invoice to local invoice format
-        final productName = invoice['notes'] ?? 
-            (invoice['line_items']?.isNotEmpty == true 
-                ? (invoice['line_items'][0]['product_name'] ?? invoice['line_items'][0]['description']) 
+        final productName =
+            invoice['notes'] ??
+            (invoice['line_items']?.isNotEmpty == true
+                ? (invoice['line_items'][0]['product_name'] ??
+                      invoice['line_items'][0]['description'])
                 : 'Custom Invoice');
-        
+
         final backendInvoiceRecord = {
           'invoice_number': invoice['invoice_number'],
           'id': invoice['id'],
@@ -443,61 +468,88 @@ class SalesRestoreService {
           // Business date and technical timestamps are separate concepts.
           // Missing business dates remain missing so analytics can surface the
           // record as unreconciled instead of moving it into today's sales.
-          'business_date': invoice['sale_date'] ?? invoice['invoice_date'] ?? invoice['date'],
+          'business_date':
+              invoice['sale_date'] ??
+              invoice['invoice_date'] ??
+              invoice['date'],
           'created_at': invoice['created_at'],
           'updated_at': invoice['updated_at'],
         };
-        
+
         // Add to local invoices list if not already present
         if (!existingInvoiceMap.containsKey(saleId)) {
           localInvoicesList.add(backendInvoiceRecord);
-          if (kDebugMode) debugPrint('➕ Added new backend invoice $saleId to local invoices');
+          if (kDebugMode)
+            debugPrint('➕ Added new backend invoice $saleId to local invoices');
         } else {
           // Update existing invoice if backend is newer
           final existingInv = existingInvoiceMap[saleId];
-          final existingUpdatedAt = existingInv['updated_at'] ?? existingInv['created_at'];
-          final backendUpdatedAt = invoice['updated_at'] ?? invoice['created_at'];
+          final existingUpdatedAt =
+              existingInv['updated_at'] ?? existingInv['created_at'];
+          final backendUpdatedAt =
+              invoice['updated_at'] ?? invoice['created_at'];
 
-          DateTime existingDate = existingUpdatedAt != null 
-              ? DateTime.tryParse(existingUpdatedAt.toString()) ?? DateTime(1970) 
+          DateTime existingDate = existingUpdatedAt != null
+              ? DateTime.tryParse(existingUpdatedAt.toString()) ??
+                    DateTime(1970)
               : DateTime(1970);
-          DateTime backendDate = backendUpdatedAt != null 
-              ? DateTime.tryParse(backendUpdatedAt.toString()) ?? DateTime(1970) 
+          DateTime backendDate = backendUpdatedAt != null
+              ? DateTime.tryParse(backendUpdatedAt.toString()) ?? DateTime(1970)
               : DateTime(1970);
 
           if (backendDate.isAfter(existingDate)) {
-            final index = localInvoicesList.indexWhere((i) => i['invoice_number'].toString() == saleId);
+            final index = localInvoicesList.indexWhere(
+              (i) => i['invoice_number'].toString() == saleId,
+            );
             if (index != -1) {
               localInvoicesList[index] = backendInvoiceRecord;
-              if (kDebugMode) debugPrint('🔄 Updated local invoice $saleId with newer backend data');
+              if (kDebugMode)
+                debugPrint(
+                  '🔄 Updated local invoice $saleId with newer backend data',
+                );
             }
           }
         }
-        
+
         // 🔧 FIX: Validate product_name in line items for sales
         final List<dynamic> validLineItems = [];
         for (var item in invoice['line_items'] ?? []) {
-          final itemProductName = (item['product_name'] ?? item['description'] ?? '').toString().trim();
-          if (itemProductName.isEmpty || itemProductName.toLowerCase() == 'unknown' || itemProductName.toLowerCase() == 'unknown item') {
-            if (kDebugMode) debugPrint('⚠️ Skipping line item with invalid product_name: $itemProductName');
+          final itemProductName =
+              (item['product_name'] ?? item['description'] ?? '')
+                  .toString()
+                  .trim();
+          if (itemProductName.isEmpty ||
+              itemProductName.toLowerCase() == 'unknown' ||
+              itemProductName.toLowerCase() == 'unknown item') {
+            if (kDebugMode)
+              debugPrint(
+                '⚠️ Skipping line item with invalid product_name: $itemProductName',
+              );
             continue;
           }
           validLineItems.add(item);
         }
-        
+
         if (validLineItems.isNotEmpty) {
           final normalizedLineItems = validLineItems.map((item) {
-            final desc = (item['product_name'] ?? item['name'] ?? item['product'] ?? item['description'] ?? '').toString().trim();
+            final desc =
+                (item['product_name'] ??
+                        item['name'] ??
+                        item['product'] ??
+                        item['description'] ??
+                        '')
+                    .toString()
+                    .trim();
             final safeDesc = desc.isEmpty ? 'Custom Product' : desc;
             final qty = item['quantity'] is num
-              ? item['quantity'] as num
-              : num.tryParse(item['quantity']?.toString() ?? '') ?? 1;
+                ? item['quantity'] as num
+                : num.tryParse(item['quantity']?.toString() ?? '') ?? 1;
             final price = item['unit_price'] is num
-              ? item['unit_price'] as num
-              : num.tryParse(item['unit_price']?.toString() ?? '') ?? 0.0;
+                ? item['unit_price'] as num
+                : num.tryParse(item['unit_price']?.toString() ?? '') ?? 0.0;
             final total = item['line_total'] is num
-              ? item['line_total'] as num
-              : qty * price;
+                ? item['line_total'] as num
+                : qty * price;
             return {
               'product_name': safeDesc,
               'product': safeDesc,
@@ -518,7 +570,10 @@ class SalesRestoreService {
             'offline_id': invoice['offline_id'] ?? invoice['invoice_number'],
             'invoice_id': invoice['id'],
             // Keep the invoice business date distinct from insert/update time.
-            'business_date': invoice['sale_date'] ?? invoice['invoice_date'] ?? invoice['date'],
+            'business_date':
+                invoice['sale_date'] ??
+                invoice['invoice_date'] ??
+                invoice['date'],
             'created_at': invoice['created_at'],
             'updated_at': invoice['updated_at'],
             'user_id': null,
@@ -546,16 +601,15 @@ class SalesRestoreService {
             'source': invoice['source'],
             'restored': true,
           };
-          
+
           // Match by any stable transaction identity, not just the display ID.
           // Local sales use SALE_<timestamp>; backend invoices use BILL-xxxx.
           // A shared invoice_number/offline_id means these are the same sale.
           final existingSaleIndex = salesHistory.indexWhere((raw) {
             if (raw is! Map) return false;
-            return SalesDedupHelper.isDuplicateBill(
-              backendSaleRecord,
-              [Map<String, dynamic>.from(raw)],
-            );
+            return SalesDedupHelper.isDuplicateBill(backendSaleRecord, [
+              Map<String, dynamic>.from(raw),
+            ]);
           });
 
           if (existingSaleIndex >= 0) {
@@ -567,16 +621,20 @@ class SalesRestoreService {
             final backendUpdatedAt = backendSaleRecord['updated_at'];
 
             final existingDate = existingUpdatedAt != null
-                ? DateTime.tryParse(existingUpdatedAt.toString()) ?? DateTime(1970)
+                ? DateTime.tryParse(existingUpdatedAt.toString()) ??
+                      DateTime(1970)
                 : DateTime(1970);
             final backendDate = backendUpdatedAt != null
-                ? DateTime.tryParse(backendUpdatedAt.toString()) ?? DateTime(1970)
+                ? DateTime.tryParse(backendUpdatedAt.toString()) ??
+                      DateTime(1970)
                 : DateTime(1970);
 
             if (backendDate.isAfter(existingDate)) {
               if (existingSale['sync_status'] == 'pending') {
                 if (kDebugMode) {
-                  debugPrint('⏭️ Keeping local pending sale $saleId (has pending sync)');
+                  debugPrint(
+                    '⏭️ Keeping local pending sale $saleId (has pending sync)',
+                  );
                 }
               } else {
                 final merged = <String, dynamic>{
@@ -595,9 +653,11 @@ class SalesRestoreService {
                     backendSaleRecord['invoice_number'] ??
                     existingSale['invoice_number'] ??
                     saleId;
-                merged['invoice_id'] = backendSaleRecord['invoice_id'] ??
+                merged['invoice_id'] =
+                    backendSaleRecord['invoice_id'] ??
                     existingSale['invoice_id'];
-                merged['backend_id'] = backendSaleRecord['backend_id'] ??
+                merged['backend_id'] =
+                    backendSaleRecord['backend_id'] ??
                     existingSale['backend_id'];
                 salesHistory[existingSaleIndex] = {
                   ...merged,
@@ -605,7 +665,9 @@ class SalesRestoreService {
                   'sync_attempts': existingSale['sync_attempts'] ?? 0,
                 };
                 if (kDebugMode) {
-                  debugPrint('🔄 Reconciled cloud invoice $saleId with existing local sale');
+                  debugPrint(
+                    '🔄 Reconciled cloud invoice $saleId with existing local sale',
+                  );
                 }
               }
             } else if (kDebugMode) {
@@ -618,26 +680,30 @@ class SalesRestoreService {
           }
         }
       }
-      
+
       await LocalStorageService.saveSales(salesHistory);
       await LocalStorageService.saveLocalInvoices(localInvoicesList);
-      
-      if (kDebugMode) debugPrint('💾 Saved ${salesHistory.length} sales and ${localInvoicesList.length} invoices (merged restored with local)');
+
+      if (kDebugMode)
+        debugPrint(
+          '💾 Saved ${salesHistory.length} sales and ${localInvoicesList.length} invoices (merged restored with local)',
+        );
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Failed to save restored sales/invoices: $e');
+      if (kDebugMode)
+        debugPrint('⚠️ Failed to save restored sales/invoices: $e');
       // A restore is not complete until both the sales mirror and invoice
       // ledger have been persisted. Propagate this so the per-user completion
       // marker is not written for a partial restore.
       rethrow;
     }
   }
-  
+
   /// Save restored customers to local storage
   static Future<void> _saveRestoredCustomers(List<dynamic> customers) async {
     try {
       // Convert to customer format expected by local storage
       final List<Map<String, dynamic>> customerData = [];
-      
+
       for (var customer in customers) {
         customerData.add({
           'id': customer['id'],
@@ -655,33 +721,39 @@ class SalesRestoreService {
           'restored': true,
         });
       }
-      
+
       final existingCustomers = await LocalStorageService.loadLocalCustomers();
       final mergedCustomers = <String, Map<String, dynamic>>{};
       for (final existing in existingCustomers) {
         if (existing is Map) {
           final key = (existing['id'] ?? existing['phone'] ?? '').toString();
-          if (key.isNotEmpty) mergedCustomers[key] = Map<String, dynamic>.from(existing);
+          if (key.isNotEmpty)
+            mergedCustomers[key] = Map<String, dynamic>.from(existing);
         }
       }
       for (final customer in customerData) {
         final key = (customer['id'] ?? customer['phone'] ?? '').toString();
         if (key.isNotEmpty) mergedCustomers[key] = customer;
       }
-      await LocalStorageService.saveLocalCustomers(mergedCustomers.values.toList());
-      
-      if (kDebugMode) debugPrint('💾 Saved ${customerData.length} restored customers to local storage');
+      await LocalStorageService.saveLocalCustomers(
+        mergedCustomers.values.toList(),
+      );
+
+      if (kDebugMode)
+        debugPrint(
+          '💾 Saved ${customerData.length} restored customers to local storage',
+        );
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to save restored customers: $e');
     }
   }
-  
+
   /// Check if restoration is needed (first login after reinstall)
   static Future<bool> isRestorationNeeded() async {
     try {
       // Check if local sales exist
       final localSales = await LocalStorageService.loadSales();
-      
+
       // ✅ FIX: Only check sales - inventory is refreshed separately
       // This ensures sales are restored even if inventory was already synced
       return localSales.isEmpty;
@@ -690,18 +762,21 @@ class SalesRestoreService {
       return false;
     }
   }
-  
+
   /// Mark restoration as complete
   static Future<void> markRestorationComplete() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('restoration_complete', true);
-      await prefs.setString('restoration_date', DateTime.now().toIso8601String());
+      await prefs.setString(
+        'restoration_date',
+        DateTime.now().toIso8601String(),
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to mark restoration complete: $e');
     }
   }
-  
+
   /// Check if restoration was already completed
   static Future<bool> wasRestorationCompleted() async {
     try {

@@ -29,7 +29,8 @@ class AdvancedSalesDashboard extends StatefulWidget {
   State<AdvancedSalesDashboard> createState() => _AdvancedSalesDashboardState();
 }
 
-class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with SingleTickerProviderStateMixin {
+class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
+    with SingleTickerProviderStateMixin {
   final List<CartItem> _cart = [];
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -41,15 +42,27 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     // Add some dummy items for demonstration
     _cart.addAll([
-      CartItem(id: '1', name: 'Premium Arabica Coffee', quantity: 2, price: 450, unit: 'kg'),
-      CartItem(id: '2', name: 'Organic Almonds', quantity: 0.5, price: 800, unit: 'kg'),
+      CartItem(
+        id: '1',
+        name: 'Premium Arabica Coffee',
+        quantity: 2,
+        price: 450,
+        unit: 'kg',
+      ),
+      CartItem(
+        id: '2',
+        name: 'Organic Almonds',
+        quantity: 0.5,
+        price: 800,
+        unit: 'kg',
+      ),
     ]);
   }
 
@@ -63,12 +76,15 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
 
   void _addNewItem() {
     setState(() {
-      _cart.insert(0, CartItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: 'New Item',
-        quantity: 1,
-        price: 0,
-      ));
+      _cart.insert(
+        0,
+        CartItem(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: 'New Item',
+          quantity: 1,
+          price: 0,
+        ),
+      );
     });
     HapticFeedback.lightImpact();
   }
@@ -100,7 +116,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onPressed: () {},
-          )
+          ),
         ],
       ),
       body: Stack(
@@ -150,7 +166,11 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.white.withOpacity(0.2)),
+                              Icon(
+                                Icons.shopping_cart_outlined,
+                                size: 80,
+                                color: Colors.white.withOpacity(0.2),
+                              ),
                               const SizedBox(height: 16),
                               LiveTranslatedText(
                                 'Cart is empty',
@@ -163,7 +183,10 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           itemCount: _cart.length,
                           itemBuilder: (context, index) {
                             return _buildGlassCartItem(index);
@@ -199,7 +222,11 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                     elevation: 8,
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: LiveTranslatedText('Voice Engine coming soon!')),
+                        const SnackBar(
+                          content: LiveTranslatedText(
+                            'Voice Engine coming soon!',
+                          ),
+                        ),
                       );
                     },
                     child: const Icon(Icons.mic, size: 32, color: Colors.white),
@@ -207,7 +234,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                 ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -252,10 +279,13 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                       color: Colors.blueAccent.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.inventory_2_outlined, color: Colors.blueAccent),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      color: Colors.blueAccent,
+                    ),
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // Details
                   Expanded(
                     child: Column(
@@ -280,11 +310,11 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                               ),
                             ),
                           ],
-                        )
+                        ),
                       ],
                     ),
                   ),
-                  
+
                   // Quantity Controls & Total
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -323,9 +353,9 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                             HapticFeedback.selectionClick();
                           }),
                         ],
-                      )
+                      ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
@@ -357,9 +387,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
           topLeft: Radius.circular(32),
           topRight: Radius.circular(32),
         ),
-        border: Border(
-          top: BorderSide(color: Colors.white.withOpacity(0.1)),
-        ),
+        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
       ),
       child: ClipRRect(
         borderRadius: const BorderRadius.only(
@@ -420,7 +448,10 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                       child: Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [Colors.blueAccent.shade400, Colors.purpleAccent.shade400],
+                            colors: [
+                              Colors.blueAccent.shade400,
+                              Colors.purpleAccent.shade400,
+                            ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -430,7 +461,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                               color: Colors.purpleAccent.withOpacity(0.4),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
-                            )
+                            ),
                           ],
                         ),
                         child: ElevatedButton(
@@ -455,7 +486,10 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard> with Si
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                              const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                              ),
                             ],
                           ),
                         ),

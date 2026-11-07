@@ -11,9 +11,10 @@ class GiftCardsPage extends StatefulWidget {
   State<GiftCardsPage> createState() => _GiftCardsPageState();
 }
 
-class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProviderStateMixin {
+class _GiftCardsPageState extends State<GiftCardsPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
+
   // Issue tab
   final _issueNameC = TextEditingController();
   final _issuePhoneC = TextEditingController();
@@ -63,15 +64,36 @@ class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProvider
       if (res.statusCode == 200 || res.statusCode == 201) {
         final code = jsonDecode(res.body)['gift_card_code'] ?? 'UNKNOWN';
         if (mounted) {
-          showDialog(context: context, builder: (_) => AlertDialog(
-            backgroundColor: _card,
-            title: const LiveTranslatedText('Gift Card Issued!', style: TextStyle(color: Colors.white)),
-            content: SelectableText(code, style: GoogleFonts.robotoMono(color: Colors.purpleAccent, fontSize: 24, fontWeight: FontWeight.bold)),
-            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const LiveTranslatedText('Close'))],
-          ));
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: _card,
+              title: const LiveTranslatedText(
+                'Gift Card Issued!',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: SelectableText(
+                code,
+                style: GoogleFonts.robotoMono(
+                  color: Colors.purpleAccent,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const LiveTranslatedText('Close'),
+                ),
+              ],
+            ),
+          );
         }
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText('Failed: ${res.body}')));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: LiveTranslatedText('Failed: ${res.body}')),
+          );
       }
     } finally {
       if (mounted) setState(() => _issuing = false);
@@ -88,15 +110,35 @@ class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProvider
       if (res.statusCode == 200) {
         final bal = jsonDecode(res.body)['remaining_balance'] ?? 0;
         if (mounted) {
-          showDialog(context: context, builder: (_) => AlertDialog(
-            backgroundColor: _card,
-            title: const LiveTranslatedText('Redeemed Successfully', style: TextStyle(color: Colors.white)),
-            content: LiveTranslatedText('Remaining Balance: Rs $bal', style: GoogleFonts.poppins(color: Colors.greenAccent, fontSize: 18)),
-            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const LiveTranslatedText('Close'))],
-          ));
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: _card,
+              title: const LiveTranslatedText(
+                'Redeemed Successfully',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: LiveTranslatedText(
+                'Remaining Balance: Rs $bal',
+                style: GoogleFonts.poppins(
+                  color: Colors.greenAccent,
+                  fontSize: 18,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const LiveTranslatedText('Close'),
+                ),
+              ],
+            ),
+          );
         }
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText('Failed: ${res.body}')));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: LiveTranslatedText('Failed: ${res.body}')),
+          );
       }
     } finally {
       if (mounted) setState(() => _redeeming = false);
@@ -108,7 +150,11 @@ class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProvider
     try {
       final res = await ApiClient.getJson('/gst/export-gstr1');
       if (res.statusCode == 200) {
-        setState(() => _gstData = const JsonEncoder.withIndent('  ').convert(jsonDecode(res.body)));
+        setState(
+          () => _gstData = const JsonEncoder.withIndent(
+            '  ',
+          ).convert(jsonDecode(res.body)),
+        );
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -119,12 +165,18 @@ class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProvider
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
-        controller: c, keyboardType: numeric ? TextInputType.number : TextInputType.text,
+        controller: c,
+        keyboardType: numeric ? TextInputType.number : TextInputType.text,
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
-          hintText: hint, hintStyle: const TextStyle(color: Colors.white38),
-          filled: true, fillColor: Colors.white10,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white38),
+          filled: true,
+          fillColor: Colors.white10,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
     );
@@ -136,55 +188,158 @@ class _GiftCardsPageState extends State<GiftCardsPage> with SingleTickerProvider
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _card,
-        title: LiveTranslatedText('Gift Cards & GST', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Gift Cards & GST',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         bottom: TabBar(
-          controller: _tabController, indicatorColor: Colors.purpleAccent, labelColor: Colors.purpleAccent, unselectedLabelColor: Colors.white54,
-          tabs: const [Tab(text: 'Issue'), Tab(text: 'Redeem'), Tab(text: 'GST')],
+          controller: _tabController,
+          indicatorColor: Colors.purpleAccent,
+          labelColor: Colors.purpleAccent,
+          unselectedLabelColor: Colors.white54,
+          tabs: const [
+            Tab(text: 'Issue'),
+            Tab(text: 'Redeem'),
+            Tab(text: 'GST'),
+          ],
         ),
       ),
-      body: TabBarView(controller: _tabController, children: [
-        // Issue
-        SingleChildScrollView(padding: const EdgeInsets.all(24), child: Column(children: [
-          const Icon(Icons.card_giftcard, size: 64, color: Colors.purpleAccent),
-          const SizedBox(height: 24),
-          _field(_issueNameC, 'Customer Name'), _field(_issuePhoneC, 'Customer Phone'),
-          _field(_issueAmountC, 'Amount (Rs)', numeric: true), _field(_issueValidityC, 'Validity (Days)', numeric: true),
-          SizedBox(width: double.infinity, height: 50, child: ElevatedButton(
-            onPressed: _issuing ? null : _issueCard, style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent),
-            child: _issuing ? const CircularProgressIndicator(color: Colors.white) : const LiveTranslatedText('Issue Gift Card', style: TextStyle(fontWeight: FontWeight.bold)),
-          )),
-        ])),
-        // Redeem
-        SingleChildScrollView(padding: const EdgeInsets.all(24), child: Column(children: [
-          const Icon(Icons.redeem, size: 64, color: Colors.purpleAccent),
-          const SizedBox(height: 24),
-          _field(_redeemCodeC, 'Gift Card Code'), _field(_redeemPhoneC, 'Customer Phone'),
-          SizedBox(width: double.infinity, height: 50, child: ElevatedButton(
-            onPressed: _redeeming ? null : _redeemCard, style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: _redeeming ? const CircularProgressIndicator(color: Colors.white) : const LiveTranslatedText('Redeem Card', style: TextStyle(fontWeight: FontWeight.bold)),
-          )),
-        ])),
-        // GST
-        Padding(padding: const EdgeInsets.all(24), child: Column(children: [
-          SizedBox(width: double.infinity, height: 50, child: ElevatedButton.icon(
-            onPressed: _exporting ? null : _exportGst, style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
-            icon: _exporting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) : const Icon(Icons.download),
-            label: const LiveTranslatedText('Export GSTR-1 Data'),
-          )),
-          const SizedBox(height: 16),
-          if (_gstData.isNotEmpty) ...[
-            Align(alignment: Alignment.centerRight, child: TextButton.icon(
-              onPressed: () { Clipboard.setData(ClipboardData(text: _gstData)); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Copied to clipboard'))); },
-              icon: const Icon(Icons.copy, color: Colors.purpleAccent), label: const LiveTranslatedText('Copy', style: TextStyle(color: Colors.purpleAccent)),
-            )),
-            Expanded(child: Container(
-              width: double.infinity, padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12)),
-              child: SingleChildScrollView(child: LiveTranslatedText(_gstData, style: GoogleFonts.robotoMono(color: Colors.greenAccent, fontSize: 12))),
-            )),
-          ]
-        ])),
-      ]),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // Issue
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.card_giftcard,
+                  size: 64,
+                  color: Colors.purpleAccent,
+                ),
+                const SizedBox(height: 24),
+                _field(_issueNameC, 'Customer Name'),
+                _field(_issuePhoneC, 'Customer Phone'),
+                _field(_issueAmountC, 'Amount (Rs)', numeric: true),
+                _field(_issueValidityC, 'Validity (Days)', numeric: true),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _issuing ? null : _issueCard,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purpleAccent,
+                    ),
+                    child: _issuing
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const LiveTranslatedText(
+                            'Issue Gift Card',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Redeem
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Icon(Icons.redeem, size: 64, color: Colors.purpleAccent),
+                const SizedBox(height: 24),
+                _field(_redeemCodeC, 'Gift Card Code'),
+                _field(_redeemPhoneC, 'Customer Phone'),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _redeeming ? null : _redeemCard,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
+                    child: _redeeming
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const LiveTranslatedText(
+                            'Redeem Card',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // GST
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _exporting ? null : _exportGst,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey,
+                    ),
+                    icon: _exporting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(),
+                          )
+                        : const Icon(Icons.download),
+                    label: const LiveTranslatedText('Export GSTR-1 Data'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_gstData.isNotEmpty) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: _gstData));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: LiveTranslatedText('Copied to clipboard'),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, color: Colors.purpleAccent),
+                      label: const LiveTranslatedText(
+                        'Copy',
+                        style: TextStyle(color: Colors.purpleAccent),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SingleChildScrollView(
+                        child: LiveTranslatedText(
+                          _gstData,
+                          style: GoogleFonts.robotoMono(
+                            color: Colors.greenAccent,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

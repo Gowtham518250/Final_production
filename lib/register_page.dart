@@ -43,7 +43,7 @@ class _RegisterPageState extends State<RegisterPage>
   bool _biometricAvailable = false;
   String errorMessage = '';
   String successMessage = '';
-  
+
   // Retry mechanism for connection issues
   int _retryCount = 0;
   static const int _maxRetries = 3;
@@ -152,28 +152,30 @@ class _RegisterPageState extends State<RegisterPage>
 
   Future<void> _registerUserWithRetry() async {
     _retryCount = 0;
-    
+
     while (_retryCount < _maxRetries) {
       try {
-        if (kDebugMode) debugPrint('📝 Registration attempt ${_retryCount + 1}/$_maxRetries');
-        
+        if (kDebugMode)
+          debugPrint('📝 Registration attempt ${_retryCount + 1}/$_maxRetries');
+
         // ✅ FIXED: Use correct field names (username, and include shop_name)
-        if (kDebugMode) debugPrint('📝 Calling /auth/register with: ${{
-          'username': nameController.text.trim(),
-          'shop_name': shopNameController.text.trim(),
-          'email': emailController.text.trim(),
-          'password': '***'
-        }}');
-        
-        final response = await ApiClient.postJson('/auth/register', {
-          'username': nameController.text.trim(),  // Backend expects 'username'
-          'shop_name': shopNameController.text.trim(),
-          'email': emailController.text.trim(),
-          'password': passwordController.text.trim(),
-        }).timeout(
-          const Duration(seconds: 45),
-          onTimeout: () => throw TimeoutException('Server took too long to respond'),
-        );
+        if (kDebugMode)
+          debugPrint(
+            '📝 Calling /auth/register with: ${{'username': nameController.text.trim(), 'shop_name': shopNameController.text.trim(), 'email': emailController.text.trim(), 'password': '***'}}',
+          );
+
+        final response =
+            await ApiClient.postJson('/auth/register', {
+              'username': nameController.text
+                  .trim(), // Backend expects 'username'
+              'shop_name': shopNameController.text.trim(),
+              'email': emailController.text.trim(),
+              'password': passwordController.text.trim(),
+            }).timeout(
+              const Duration(seconds: 45),
+              onTimeout: () =>
+                  throw TimeoutException('Server took too long to respond'),
+            );
 
         if (!mounted) return;
 
@@ -192,7 +194,7 @@ class _RegisterPageState extends State<RegisterPage>
       } on TimeoutException catch (e) {
         _retryCount++;
         if (kDebugMode) debugPrint('⏱️ Timeout on attempt $_retryCount: $e');
-        
+
         if (_retryCount < _maxRetries) {
           // Wait before retry - exponential backoff
           await Future.delayed(Duration(seconds: 2 * _retryCount));
@@ -202,7 +204,8 @@ class _RegisterPageState extends State<RegisterPage>
           if (mounted) {
             setState(() {
               isLoading = false;
-              errorMessage = '⏱️ Server is responding slowly.\n\n💡 Solutions:\n'
+              errorMessage =
+                  '⏱️ Server is responding slowly.\n\n💡 Solutions:\n'
                   '1️⃣ Check your internet speed\n'
                   '2️⃣ Move closer to WiFi router\n'
                   '3️⃣ Wait a moment and try again';
@@ -213,8 +216,9 @@ class _RegisterPageState extends State<RegisterPage>
         }
       } on SocketException catch (e) {
         _retryCount++;
-        if (kDebugMode) debugPrint('🌐 Network error on attempt $_retryCount: $e');
-        
+        if (kDebugMode)
+          debugPrint('🌐 Network error on attempt $_retryCount: $e');
+
         if (_retryCount < _maxRetries) {
           await Future.delayed(Duration(seconds: 2 * _retryCount));
           continue; // Retry
@@ -222,7 +226,8 @@ class _RegisterPageState extends State<RegisterPage>
           if (mounted) {
             setState(() {
               isLoading = false;
-              errorMessage = '🌐 Network connection lost.\n\n💡 Please check:\n'
+              errorMessage =
+                  '🌐 Network connection lost.\n\n💡 Please check:\n'
                   '• WiFi/mobile data is enabled\n'
                   '• You have an active connection\n'
                   '• Server is reachable';
@@ -235,11 +240,11 @@ class _RegisterPageState extends State<RegisterPage>
         _retryCount++;
         final errorStr = e.toString();
         if (kDebugMode) debugPrint('❌ Error on attempt $_retryCount: $e');
-        
-        if (_retryCount < _maxRetries && 
-            (errorStr.contains('Connection') || 
-             errorStr.contains('refused') || 
-             errorStr.contains('reset'))) {
+
+        if (_retryCount < _maxRetries &&
+            (errorStr.contains('Connection') ||
+                errorStr.contains('refused') ||
+                errorStr.contains('reset'))) {
           await Future.delayed(Duration(seconds: 2 * _retryCount));
           continue; // Retry on connection errors
         } else {
@@ -248,7 +253,8 @@ class _RegisterPageState extends State<RegisterPage>
             setState(() {
               isLoading = false;
               if (errorStr.contains('Connection refused')) {
-                errorMessage = '🔌 Server connection refused.\n\n⚠️ The server might be:\n'
+                errorMessage =
+                    '🔌 Server connection refused.\n\n⚠️ The server might be:\n'
                     '• Down for maintenance\n'
                     '• Not running\n\n💡 Please contact support';
               } else {
@@ -266,48 +272,59 @@ class _RegisterPageState extends State<RegisterPage>
   Future<void> _handleRegistrationSuccess(http.Response response) async {
     try {
       final data = json.decode(response.body);
-      
+
       // ✅ FIXED: Parse 'access_token' from response (not 'token')
       final accessToken = data['access_token'] as String? ?? '';
       final tokenType = data['token_type'] as String? ?? 'bearer';
       final role = data['role'] as String? ?? 'OWNER';
       final userId = data['user_id'] as int? ?? 0;
-      final username = data['username'] as String? ?? nameController.text.trim();
+      final username =
+          data['username'] as String? ?? nameController.text.trim();
 
       if (accessToken.isEmpty) {
         setState(() {
           isLoading = false;
-          errorMessage = 'Registration failed: No access token received from server';
+          errorMessage =
+              'Registration failed: No access token received from server';
         });
         return;
       }
-      
+
       final prefs = await SharedPreferences.getInstance();
       final language = prefs.getString('languageCode');
       final pdsEnabled = prefs.getBool('payment_sound_enabled');
       final pdsSoundLang = prefs.getString('payment_sound_lang');
-      
+
       await prefs.clear();
-      
+
       if (language != null) await prefs.setString('languageCode', language);
-      if (pdsEnabled != null) await prefs.setBool('payment_sound_enabled', pdsEnabled);
-      if (pdsSoundLang != null) await prefs.setString('payment_sound_lang', pdsSoundLang);
-      
-      final extractedUserId = userId > 0 ? userId : (() {
-        try {
-          final parts = accessToken.split('.');
-          if (parts.length != 3) return 0;
-          String normalized = parts[1].replaceAll('-', '+').replaceAll('_', '/');
-          while (normalized.length % 4 != 0) {
-            normalized += '=';
-          }
-          final payload = json.decode(utf8.decode(base64.decode(normalized)));
-          return int.tryParse(payload['sub']?.toString() ?? '') ?? 0;
-        } catch (e) {
-          if (kDebugMode) debugPrint('⚠️ Error extracting user ID from JWT: $e');
-          return 0;
-        }
-      })();
+      if (pdsEnabled != null)
+        await prefs.setBool('payment_sound_enabled', pdsEnabled);
+      if (pdsSoundLang != null)
+        await prefs.setString('payment_sound_lang', pdsSoundLang);
+
+      final extractedUserId = userId > 0
+          ? userId
+          : (() {
+              try {
+                final parts = accessToken.split('.');
+                if (parts.length != 3) return 0;
+                String normalized = parts[1]
+                    .replaceAll('-', '+')
+                    .replaceAll('_', '/');
+                while (normalized.length % 4 != 0) {
+                  normalized += '=';
+                }
+                final payload = json.decode(
+                  utf8.decode(base64.decode(normalized)),
+                );
+                return int.tryParse(payload['sub']?.toString() ?? '') ?? 0;
+              } catch (e) {
+                if (kDebugMode)
+                  debugPrint('⚠️ Error extracting user ID from JWT: $e');
+                return 0;
+              }
+            })();
 
       final deviceId = await SessionManagementService.getDeviceId();
       await SessionManagementService.initializeSession(
@@ -378,10 +395,13 @@ class _RegisterPageState extends State<RegisterPage>
     try {
       final body = response.body;
       final decoded = json.decode(body);
-      final detail = (decoded is Map<String, dynamic>
-              ? (decoded['detail'] ?? decoded['message'] ?? 'Registration failed. Please try again.')
-              : body)
-          .toString();
+      final detail =
+          (decoded is Map<String, dynamic>
+                  ? (decoded['detail'] ??
+                        decoded['message'] ??
+                        'Registration failed. Please try again.')
+                  : body)
+              .toString();
 
       if (mounted) {
         setState(() {
@@ -389,13 +409,19 @@ class _RegisterPageState extends State<RegisterPage>
 
           final lowerDetail = detail.toLowerCase();
           if (lowerDetail.contains('username or email')) {
-            errorMessage = '👤📧 This shop name or email is already taken. Please try another.';
-          } else if (lowerDetail.contains('email already') && !lowerDetail.contains('username')) {
-            errorMessage = '📧 This email is already registered.\n\n💡 Try logging in instead, or use a different email address.';
-          } else if (lowerDetail.contains('username already') || lowerDetail.contains('shop name')) {
-            errorMessage = '👤 This owner/shop name is already taken.\n\n💡 Please choose a different name.';
+            errorMessage =
+                '👤📧 This shop name or email is already taken. Please try another.';
+          } else if (lowerDetail.contains('email already') &&
+              !lowerDetail.contains('username')) {
+            errorMessage =
+                '📧 This email is already registered.\n\n💡 Try logging in instead, or use a different email address.';
+          } else if (lowerDetail.contains('username already') ||
+              lowerDetail.contains('shop name')) {
+            errorMessage =
+                '👤 This owner/shop name is already taken.\n\n💡 Please choose a different name.';
           } else if (lowerDetail.contains('email is required')) {
-            errorMessage = '📧 Email address is required. Please enter your email.';
+            errorMessage =
+                '📧 Email address is required. Please enter your email.';
           } else if (lowerDetail.contains('password')) {
             errorMessage = '🔒 Password issue: $detail';
           } else {
@@ -408,7 +434,8 @@ class _RegisterPageState extends State<RegisterPage>
       if (mounted) {
         setState(() {
           isLoading = false;
-          errorMessage = 'Server error: ${response.statusCode}.\n\n💡 Please try again in a moment.';
+          errorMessage =
+              'Server error: ${response.statusCode}.\n\n💡 Please try again in a moment.';
           successMessage = '';
         });
       }
@@ -423,9 +450,9 @@ class _RegisterPageState extends State<RegisterPage>
       errorMessage = '';
       successMessage = '';
     });
-    
+
     await _checkConnectionAndRegister();
-    
+
     if (mounted) setState(() => isLoading = false);
   }
 
@@ -439,11 +466,7 @@ class _RegisterPageState extends State<RegisterPage>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF020617),
-              Color(0xFF020617),
-              Color(0xFF0B1120),
-            ],
+            colors: [Color(0xFF020617), Color(0xFF020617), Color(0xFF0B1120)],
           ),
         ),
         child: SafeArea(
@@ -505,7 +528,9 @@ class _RegisterPageState extends State<RegisterPage>
                       child: Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF111827).withValues(alpha: 0.96),
+                          color: const Color(
+                            0xFF111827,
+                          ).withValues(alpha: 0.96),
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
                             color: Colors.white.withValues(alpha: 0.08),
@@ -525,10 +550,12 @@ class _RegisterPageState extends State<RegisterPage>
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       LiveTranslatedText(
                                         l.createAccount,
@@ -542,7 +569,9 @@ class _RegisterPageState extends State<RegisterPage>
                                       LiveTranslatedText(
                                         l.joinCommunity,
                                         style: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.65),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.65,
+                                          ),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -551,7 +580,9 @@ class _RegisterPageState extends State<RegisterPage>
                                   // Small accent pill
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 6),
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(999),
                                       gradient: const LinearGradient(
@@ -564,8 +595,11 @@ class _RegisterPageState extends State<RegisterPage>
                                     child: const Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.shield_moon_rounded,
-                                            size: 14, color: Colors.white),
+                                        Icon(
+                                          Icons.shield_moon_rounded,
+                                          size: 14,
+                                          color: Colors.white,
+                                        ),
                                         SizedBox(width: 4),
                                         LiveTranslatedText(
                                           'Secure',
@@ -585,28 +619,38 @@ class _RegisterPageState extends State<RegisterPage>
                                 const SizedBox(height: 14),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 10),
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0x33EF4444),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                        color: const Color(0x55EF4444)),
+                                      color: const Color(0x55EF4444),
+                                    ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.red.withValues(alpha: 0.1),
+                                        color: Colors.red.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         blurRadius: 8,
                                         spreadRadius: 1,
                                       ),
                                     ],
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          const Icon(Icons.error_outline_rounded,
-                                              color: Color(0xFFEF4444), size: 18),
+                                          const Icon(
+                                            Icons.error_outline_rounded,
+                                            color: Color(0xFFEF4444),
+                                            size: 18,
+                                          ),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: LiveTranslatedText(
@@ -631,20 +675,31 @@ class _RegisterPageState extends State<RegisterPage>
                                         SizedBox(
                                           width: double.infinity,
                                           child: ElevatedButton.icon(
-                                            icon: const Icon(Icons.refresh, size: 16),
-                                            label: const LiveTranslatedText('Retry Registration'),
+                                            icon: const Icon(
+                                              Icons.refresh,
+                                              size: 16,
+                                            ),
+                                            label: const LiveTranslatedText(
+                                              'Retry Registration',
+                                            ),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFFEF4444),
-                                              foregroundColor: Colors.white,
-                                              padding: const EdgeInsets.symmetric(
-                                                vertical: 8,
-                                                horizontal: 12,
+                                              backgroundColor: const Color(
+                                                0xFFEF4444,
                                               ),
+                                              foregroundColor: Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 8,
+                                                    horizontal: 12,
+                                                  ),
                                               shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(6),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
                                             ),
-                                            onPressed: isLoading ? null : registerUser,
+                                            onPressed: isLoading
+                                                ? null
+                                                : registerUser,
                                           ),
                                         ),
                                       ],
@@ -657,17 +712,23 @@ class _RegisterPageState extends State<RegisterPage>
                                 const SizedBox(height: 14),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 10),
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0x3310B981),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                        color: const Color(0x5510B981)),
+                                      color: const Color(0x5510B981),
+                                    ),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.check_circle_outline_rounded,
-                                          color: Color(0xFF10B981), size: 18),
+                                      const Icon(
+                                        Icons.check_circle_outline_rounded,
+                                        color: Color(0xFF10B981),
+                                        size: 18,
+                                      ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: LiveTranslatedText(
@@ -691,7 +752,8 @@ class _RegisterPageState extends State<RegisterPage>
                                 labelText: l.fullName,
                                 hintText: 'Enter your full name',
                                 icon: Icons.person_outline_rounded,
-                                validator: (v) => (v == null || v.trim().isEmpty)
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
                                     ? 'Please enter your name'
                                     : null,
                               ),
@@ -703,7 +765,8 @@ class _RegisterPageState extends State<RegisterPage>
                                 labelText: 'Shop Name',
                                 hintText: 'Enter your shop or business name',
                                 icon: Icons.storefront_outlined,
-                                validator: (v) => (v == null || v.trim().isEmpty)
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
                                     ? 'Please enter your shop name'
                                     : null,
                               ),
@@ -716,7 +779,8 @@ class _RegisterPageState extends State<RegisterPage>
                                 hintText: l.enterEmail,
                                 icon: Icons.email_outlined,
                                 keyboardType: TextInputType.emailAddress,
-                                validator: (v) => ProductionSecuritySuite.validateEmail(v),
+                                validator: (v) =>
+                                    ProductionSecuritySuite.validateEmail(v),
                               ),
 
                               const SizedBox(height: 12),
@@ -731,7 +795,8 @@ class _RegisterPageState extends State<RegisterPage>
                                   FilteringTextInputFormatter.digitsOnly,
                                   LengthLimitingTextInputFormatter(10),
                                 ],
-                                validator: (v) => ProductionSecuritySuite.validatePhone(v),
+                                validator: (v) =>
+                                    ProductionSecuritySuite.validatePhone(v),
                               ),
 
                               const SizedBox(height: 12),
@@ -750,8 +815,10 @@ class _RegisterPageState extends State<RegisterPage>
                                     color: Colors.white70,
                                     size: 20,
                                   ),
-                                  onPressed: () => setState(() =>
-                                      isPasswordVisible = !isPasswordVisible),
+                                  onPressed: () => setState(
+                                    () =>
+                                        isPasswordVisible = !isPasswordVisible,
+                                  ),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
@@ -789,14 +856,17 @@ class _RegisterPageState extends State<RegisterPage>
                                     color: Colors.white70,
                                     size: 20,
                                   ),
-                                  onPressed: () => setState(() =>
-                                      isConfirmPasswordVisible = !isConfirmPasswordVisible),
+                                  onPressed: () => setState(
+                                    () => isConfirmPasswordVisible =
+                                        !isConfirmPasswordVisible,
+                                  ),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) {
                                     return 'Please confirm your password';
                                   }
-                                  if (v.trim() != passwordController.text.trim()) {
+                                  if (v.trim() !=
+                                      passwordController.text.trim()) {
                                     return 'Passwords do not match';
                                   }
                                   return null;
@@ -829,7 +899,9 @@ class _RegisterPageState extends State<RegisterPage>
                                         LiveTranslatedText(
                                           'Enable Biometric Login (Optional)',
                                           style: TextStyle(
-                                            color: Colors.white.withValues(alpha: 0.9),
+                                            color: Colors.white.withValues(
+                                              alpha: 0.9,
+                                            ),
                                             fontSize: 14,
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -840,7 +912,9 @@ class _RegisterPageState extends State<RegisterPage>
                                     LiveTranslatedText(
                                       'Register fingerprint or face unlock for faster login. You can enable this later from Shop Profile.',
                                       style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.6),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.6,
+                                        ),
                                         fontSize: 12,
                                       ),
                                     ),
@@ -850,7 +924,10 @@ class _RegisterPageState extends State<RegisterPage>
                                         Checkbox(
                                           value: _enableBiometric,
                                           onChanged: _biometricAvailable
-                                              ? (value) => setState(() => _enableBiometric = value ?? false)
+                                              ? (value) => setState(
+                                                  () => _enableBiometric =
+                                                      value ?? false,
+                                                )
                                               : null,
                                           activeColor: const Color(0xFF10B981),
                                           checkColor: Colors.white,
@@ -861,7 +938,9 @@ class _RegisterPageState extends State<RegisterPage>
                                                 ? 'I want to use fingerprint/face unlock for login'
                                                 : 'Biometric support not available on this device',
                                             style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.8),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.8,
+                                              ),
                                               fontSize: 13,
                                             ),
                                           ),
@@ -880,18 +959,23 @@ class _RegisterPageState extends State<RegisterPage>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   elevation: 6,
-                                  shadowColor: AppColors.primary.withValues(alpha: 0.75),
+                                  shadowColor: AppColors.primary.withValues(
+                                    alpha: 0.75,
+                                  ),
                                 ),
                                 child: SizedBox(
                                   height: 24,
                                   child: isLoading
                                       ? Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
                                             const SizedBox(
                                               width: 18,
@@ -906,7 +990,9 @@ class _RegisterPageState extends State<RegisterPage>
                                               'Creating Account...',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w600,
-                                                color: Colors.white.withValues(alpha: 0.9),
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.9,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -927,13 +1013,18 @@ class _RegisterPageState extends State<RegisterPage>
                               _isGoogleLoading
                                   ? const Center(
                                       child: Padding(
-                                        padding: EdgeInsets.symmetric(vertical: 14),
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
                                         child: SizedBox(
                                           width: 24,
                                           height: 24,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2.5,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Color(0xFF6366F1),
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -941,40 +1032,55 @@ class _RegisterPageState extends State<RegisterPage>
                                   : Container(
                                       decoration: BoxDecoration(
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.2),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.2,
+                                          ),
                                         ),
                                         borderRadius: BorderRadius.circular(12),
                                         gradient: LinearGradient(
                                           colors: [
-                                            Colors.white.withValues(alpha: 0.07),
-                                            Colors.white.withValues(alpha: 0.03),
+                                            Colors.white.withValues(
+                                              alpha: 0.07,
+                                            ),
+                                            Colors.white.withValues(
+                                              alpha: 0.03,
+                                            ),
                                           ],
                                         ),
                                       ),
                                       child: Material(
                                         color: Colors.transparent,
                                         child: InkWell(
-                                          onTap: isLoading ? null : _signInWithGoogle,
-                                          borderRadius: BorderRadius.circular(12),
+                                          onTap: isLoading
+                                              ? null
+                                              : _signInWithGoogle,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           child: Padding(
                                             padding: const EdgeInsets.symmetric(
                                               vertical: 12,
                                               horizontal: 16,
                                             ),
                                             child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
                                               children: [
                                                 // Google "G" logo using coloured squares
                                                 SizedBox(
                                                   width: 20,
                                                   height: 20,
-                                                  child: CustomPaint(painter: _GoogleLogoPainter()),
+                                                  child: CustomPaint(
+                                                    painter:
+                                                        _GoogleLogoPainter(),
+                                                  ),
                                                 ),
                                                 const SizedBox(width: 10),
                                                 LiveTranslatedText(
                                                   'Continue with Google',
                                                   style: TextStyle(
-                                                    color: Colors.white.withValues(alpha: 0.9),
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.9),
                                                     fontWeight: FontWeight.w600,
                                                     fontSize: 14,
                                                   ),
@@ -1077,9 +1183,10 @@ class _RegisterLanguageSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final languageProvider = Provider.of<LanguageProvider>(context);
     final currentCode = languageProvider.locale.languageCode;
-    final current =
-        LanguageProvider.languages.firstWhere((l) => l['code'] == currentCode,
-            orElse: () => LanguageProvider.languages.first);
+    final current = LanguageProvider.languages.firstWhere(
+      (l) => l['code'] == currentCode,
+      orElse: () => LanguageProvider.languages.first,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -1132,8 +1239,11 @@ class _RegisterLanguageSelector extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.arrow_drop_down,
-                  size: 18, color: Colors.white.withValues(alpha: 0.7)),
+              Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
             ],
           ),
         ),
@@ -1151,11 +1261,7 @@ class _GoogleLogoPainter extends CustomPainter {
     final double r = size.width / 2;
 
     // Background circle
-    canvas.drawCircle(
-      Offset(cx, cy),
-      r,
-      Paint()..color = Colors.white,
-    );
+    canvas.drawCircle(Offset(cx, cy), r, Paint()..color = Colors.white);
 
     // Red top-left arc
     _drawArc(canvas, cx, cy, r * 0.72, -30, -120, const Color(0xFFEA4335));
@@ -1167,11 +1273,7 @@ class _GoogleLogoPainter extends CustomPainter {
     _drawArc(canvas, cx, cy, r * 0.72, 180, -90, const Color(0xFF34A853));
 
     // White inner circle
-    canvas.drawCircle(
-      Offset(cx, cy),
-      r * 0.45,
-      Paint()..color = Colors.white,
-    );
+    canvas.drawCircle(Offset(cx, cy), r * 0.45, Paint()..color = Colors.white);
 
     // Blue right bar (horizontal G arm)
     final barPaint = Paint()..color = const Color(0xFF4285F4);
@@ -1181,8 +1283,15 @@ class _GoogleLogoPainter extends CustomPainter {
     );
   }
 
-  void _drawArc(Canvas canvas, double cx, double cy, double r,
-      double startDeg, double sweepDeg, Color color) {
+  void _drawArc(
+    Canvas canvas,
+    double cx,
+    double cy,
+    double r,
+    double startDeg,
+    double sweepDeg,
+    Color color,
+  ) {
     const double deg2rad = 3.14159265358979 / 180;
     canvas.drawArc(
       Rect.fromCircle(center: Offset(cx, cy), radius: r),

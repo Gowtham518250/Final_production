@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// Local map results are not presented as confirmed inventory or shelf prices.
 class ProductDiscoveryCard extends StatelessWidget {
   final Map<String, dynamic> data;
+
   /// When used in Purchase Orders, the cheapest returned listing is labelled as
   /// the best listed price, with pack-size/fees caveats shown by that screen.
   final bool purchaseAssistantMode;
@@ -26,17 +27,23 @@ class ProductDiscoveryCard extends StatelessWidget {
   }
 
   String _price(dynamic value) {
-    final parsed = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
-    return parsed == null ? 'Price unavailable' : '₹' + parsed.toStringAsFixed(2);
+    final parsed = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '');
+    return parsed == null
+        ? 'Price unavailable'
+        : '₹' + parsed.toStringAsFixed(2);
   }
 
   Future<void> _openLink(BuildContext context, String? rawUrl) async {
     final uri = Uri.tryParse((rawUrl ?? '').trim());
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty) {
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('A safe HTTPS link is not available for this result.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'A safe HTTPS link is not available for this result.',
+          ),
+        ),
       );
       return;
     }
@@ -44,13 +51,17 @@ class ProductDiscoveryCard extends StatelessWidget {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open this listing.')),
+          const SnackBar(
+            content: LiveTranslatedText('Could not open this listing.'),
+          ),
         );
       }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open this listing.')),
+          const SnackBar(
+            content: LiveTranslatedText('Could not open this listing.'),
+          ),
         );
       }
     }
@@ -60,7 +71,11 @@ class ProductDiscoveryCard extends StatelessWidget {
     final clean = (phone ?? '').trim();
     if (clean.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('This shop has no public phone number in the listing.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'This shop has no public phone number in the listing.',
+          ),
+        ),
       );
       return;
     }
@@ -69,13 +84,17 @@ class ProductDiscoveryCard extends StatelessWidget {
       final opened = await launchUrl(uri);
       if (!opened && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open the phone app.')),
+          const SnackBar(
+            content: LiveTranslatedText('Could not open the phone app.'),
+          ),
         );
       }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open the phone app.')),
+          const SnackBar(
+            content: LiveTranslatedText('Could not open the phone app.'),
+          ),
         );
       }
     }
@@ -151,12 +170,20 @@ class ProductDiscoveryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.shopping_bag_rounded, color: Color(0xFF4F46E5), size: 22),
+              const Icon(
+                Icons.shopping_bag_rounded,
+                color: Color(0xFF4F46E5),
+                size: 22,
+              ),
               const SizedBox(width: 9),
               Expanded(
                 child: LiveTranslatedText(
                   'Prices for ' + productQuery,
-                  style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF17264A)),
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF17264A),
+                  ),
                 ),
               ),
             ],
@@ -164,7 +191,11 @@ class ProductDiscoveryCard extends StatelessWidget {
           const SizedBox(height: 6),
           LiveTranslatedText(
             'Cheapest internet price is shown first. Check packet size before you compare.',
-            style: GoogleFonts.inter(fontSize: 11.5, height: 1.45, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(
+              fontSize: 11.5,
+              height: 1.45,
+              color: const Color(0xFF64748B),
+            ),
           ),
           const SizedBox(height: 16),
           _sectionHeading(
@@ -174,7 +205,9 @@ class ProductDiscoveryCard extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           if (offers.isEmpty)
-            _emptyMessage('No online prices found. Try a brand name or packet size.')
+            _emptyMessage(
+              'No online prices found. Try a brand name or packet size.',
+            )
           else
             ...offers.take(10).toList().asMap().entries.map((entry) {
               final offer = entry.value;
@@ -188,10 +221,14 @@ class ProductDiscoveryCard extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(11),
                 decoration: BoxDecoration(
-                  color: isCheapest ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                  color: isCheapest
+                      ? const Color(0xFFF0FDF4)
+                      : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(13),
                   border: Border.all(
-                    color: isCheapest ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+                    color: isCheapest
+                        ? const Color(0xFFBBF7D0)
+                        : const Color(0xFFE2E8F0),
                   ),
                 ),
                 child: Row(
@@ -207,7 +244,11 @@ class ProductDiscoveryCard extends StatelessWidget {
                       ),
                       child: LiveTranslatedText(
                         (entry.key + 1).toString(),
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF334155)),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF334155),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -222,24 +263,55 @@ class ProductDiscoveryCard extends StatelessWidget {
                                 purchaseAssistantMode
                                     ? 'Lowest price · check packet'
                                     : 'Lowest price',
-                                style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF047857), letterSpacing: 0.3),
+                                style: GoogleFonts.inter(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF047857),
+                                  letterSpacing: 0.3,
+                                ),
                               ),
                             ),
                           LiveTranslatedText(
                             title,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF1E293B), height: 1.4),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF1E293B),
+                              height: 1.4,
+                            ),
                           ),
                           const SizedBox(height: 3),
-                          LiveTranslatedText(source, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B))),
+                          LiveTranslatedText(
+                            source,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
                           if (rating != null && rating.isNotEmpty)
                             LiveTranslatedText(
-                              'Rating ' + rating + (reviews != null && reviews.isNotEmpty ? ' (' + reviews + ' reviews)' : ''),
-                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B)),
+                              'Rating ' +
+                                  rating +
+                                  (reviews != null && reviews.isNotEmpty
+                                      ? ' (' + reviews + ' reviews)'
+                                      : ''),
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: const Color(0xFF64748B),
+                              ),
                             ),
                           if (delivery.isNotEmpty)
-                            LiveTranslatedText(delivery, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF64748B))),
+                            LiveTranslatedText(
+                              delivery,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -249,11 +321,22 @@ class ProductDiscoveryCard extends StatelessWidget {
                       children: [
                         LiveTranslatedText(
                           _price(offer['price']),
-                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: isCheapest ? const Color(0xFF047857) : const Color(0xFF17264A)),
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: isCheapest
+                                ? const Color(0xFF047857)
+                                : const Color(0xFF17264A),
+                          ),
                         ),
                         TextButton(
-                          onPressed: () => _openLink(context, offer['url']?.toString()),
-                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 5), minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          onPressed: () =>
+                              _openLink(context, offer['url']?.toString()),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            minimumSize: const Size(0, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                           child: const LiveTranslatedText('Open'),
                         ),
                       ],
@@ -275,7 +358,11 @@ class ProductDiscoveryCard extends StatelessWidget {
             locationAvailable
                 ? 'Closest shops first. Call to confirm stock and price.'
                 : 'Turn on location to see shops near you.',
-            style: GoogleFonts.inter(fontSize: 11, height: 1.45, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              height: 1.45,
+              color: const Color(0xFF64748B),
+            ),
           ),
           const SizedBox(height: 9),
           if (shops.isEmpty)
@@ -288,7 +375,9 @@ class ProductDiscoveryCard extends StatelessWidget {
             ...shops.map((shop) {
               final name = shop['name']?.toString() ?? 'Local shop';
               final address = shop['address']?.toString() ?? '';
-              final distance = double.tryParse(shop['distance_km']?.toString() ?? '');
+              final distance = double.tryParse(
+                shop['distance_km']?.toString() ?? '',
+              );
               final rating = shop['rating']?.toString();
               final openState = shop['open_state']?.toString() ?? '';
               final phone = shop['phone']?.toString() ?? '';
@@ -306,37 +395,76 @@ class ProductDiscoveryCard extends StatelessWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.store_rounded, size: 19, color: Color(0xFF4F46E5)),
+                        const Icon(
+                          Icons.store_rounded,
+                          size: 19,
+                          color: Color(0xFF4F46E5),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: LiveTranslatedText(name, style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: const Color(0xFF1E293B))),
+                          child: LiveTranslatedText(
+                            name,
+                            style: GoogleFonts.inter(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF1E293B),
+                            ),
+                          ),
                         ),
                         if (distance != null)
                           LiveTranslatedText(
                             distance.toStringAsFixed(1) + ' km',
-                            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF475569)),
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF475569),
+                            ),
                           ),
                       ],
                     ),
                     if (address.isNotEmpty) ...[
                       const SizedBox(height: 5),
-                      LiveTranslatedText(address, style: GoogleFonts.inter(fontSize: 11, height: 1.4, color: const Color(0xFF475569))),
+                      LiveTranslatedText(
+                        address,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          height: 1.4,
+                          color: const Color(0xFF475569),
+                        ),
+                      ),
                     ],
                     if (rating != null && rating.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: LiveTranslatedText('★ ' + rating + (openState.isNotEmpty ? '  •  ' + openState : ''),
-                          style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
+                        child: LiveTranslatedText(
+                          '★ ' +
+                              rating +
+                              (openState.isNotEmpty ? '  •  ' + openState : ''),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
                       )
                     else if (openState.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
-                        child: LiveTranslatedText(openState, style: GoogleFonts.inter(fontSize: 10.5, color: const Color(0xFF64748B))),
+                        child: LiveTranslatedText(
+                          openState,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
                       ),
                     const SizedBox(height: 8),
                     LiveTranslatedText(
                       'Call to confirm price and stock',
-                      style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF92400E),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Wrap(
@@ -344,17 +472,30 @@ class ProductDiscoveryCard extends StatelessWidget {
                       runSpacing: 4,
                       children: [
                         OutlinedButton.icon(
-                          onPressed: () => _openLink(context, shop['maps_url']?.toString()),
+                          onPressed: () =>
+                              _openLink(context, shop['maps_url']?.toString()),
                           icon: const Icon(Icons.directions_rounded, size: 15),
                           label: const LiveTranslatedText('Directions'),
-                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), visualDensity: VisualDensity.compact),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ),
                         if (phone.isNotEmpty)
                           OutlinedButton.icon(
                             onPressed: () => _callShop(context, phone),
                             icon: const Icon(Icons.call_rounded, size: 15),
                             label: const LiveTranslatedText('Call shop'),
-                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), visualDensity: VisualDensity.compact),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            ),
                           ),
                       ],
                     ),
@@ -374,10 +515,21 @@ class ProductDiscoveryCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.info_outline_rounded, size: 17, color: Color(0xFF92400E)),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 17,
+                    color: Color(0xFF92400E),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: LiveTranslatedText(note, style: GoogleFonts.inter(fontSize: 10.5, height: 1.45, color: const Color(0xFF92400E))),
+                    child: LiveTranslatedText(
+                      note,
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        height: 1.45,
+                        color: const Color(0xFF92400E),
+                      ),
+                    ),
                   ),
                 ],
               ),

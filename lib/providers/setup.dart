@@ -21,7 +21,9 @@ List<ChangeNotifierProvider> createAppProviders() {
   );
   return [
     ChangeNotifierProvider<PaymentStateNotifier>(create: (_) => payment),
-    ChangeNotifierProvider<PaymentDecisionStateNotifier>(create: (_) => paymentDecision),
+    ChangeNotifierProvider<PaymentDecisionStateNotifier>(
+      create: (_) => paymentDecision,
+    ),
     ChangeNotifierProvider<InvoiceStateNotifier>(create: (_) => invoice),
     ChangeNotifierProvider<WorkerStateNotifier>(create: (_) => worker),
   ];

@@ -157,7 +157,7 @@ void main() {
   );
 
   test(
-    'repeated accessibility text is coalesced but another payment remains eligible',
+    'repeated accessibility text without identity remains a possible payment',
     () async {
       final now = DateTime.now();
       final first = _event(
@@ -198,7 +198,7 @@ void main() {
           repeatedScreenEvent,
           now: now.add(const Duration(seconds: 45)),
         ),
-        isTrue,
+        isFalse,
       );
       expect(
         await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
@@ -210,43 +210,98 @@ void main() {
     },
   );
 
-  test('one notification and its SMS echo are announced once without UTR', () async {
-    final time = DateTime(2026, 10, 27, 10, 0);
-    final notification = _event(
-      id: 'notif-1',
-      timestamp: time,
-      source: 'notification',
-      app: PaymentApp.phonePe,
-      rawText: 'Payment received ₹500',
-      payerName: 'Ravi Kumar',
-    );
-    final sms = _event(
-      id: 'sms-1',
-      timestamp: time.add(const Duration(seconds: 24)),
-      source: 'sms',
-      app: PaymentApp.bankSms,
-      rawText: 'Your account has been credited by INR 500',
-      payerName: 'Ravi Kumar',
-    );
+  test(
+    'notification and SMS with the same payer coalesce across isolates',
+    () async {
+      final time = DateTime(2026, 10, 27, 10, 0);
+      final notification = _event(
+        id: 'notif-1',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹500',
+        payerName: 'Ravi Kumar',
+      );
+      final sms = _event(
+        id: 'sms-1',
+        timestamp: time.add(const Duration(seconds: 24)),
+        source: 'sms',
+        app: PaymentApp.bankSms,
+        rawText: 'Your account has been credited by INR 500',
+        payerName: 'Ravi Kumar',
+      );
 
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        notification,
-        now: time,
-      ),
-      isFalse,
-    );
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        sms,
-        now: time.add(const Duration(seconds: 24)),
-      ),
-      isTrue,
-    );
-  });
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          notification,
+          now: time,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          sms,
+          now: time.add(const Duration(seconds: 24)),
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test(
-    'unique Truecaller mirror without payer/account/UTR is coalesced within eight seconds',
+    'ambiguous cross-source matches remain visible as possible repeats',
+    () async {
+      final time = DateTime(2026, 10, 27, 10, 0);
+      final first = _event(
+        id: 'possible-first',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹500 from Ravi',
+        payerName: 'Ravi',
+      );
+      final otherNotification = _event(
+        id: 'possible-other-notification',
+        timestamp: time.add(const Duration(seconds: 5)),
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹500 from Ravi',
+        payerName: 'Ravi',
+      );
+      final sms = _event(
+        id: 'possible-second',
+        timestamp: time.add(const Duration(seconds: 10)),
+        source: 'sms',
+        app: PaymentApp.bankSms,
+        rawText: '₹500 credited from Ravi',
+        payerName: 'Ravi',
+      );
+      var possibleMatchReported = false;
+
+      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+        first,
+        now: time,
+      );
+      final secondNotificationSuppressed =
+          await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+            otherNotification,
+            now: time.add(const Duration(seconds: 5)),
+          );
+      final smsSuppressed =
+          await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+            sms,
+            now: time.add(const Duration(seconds: 10)),
+            onPossibleMatch: () => possibleMatchReported = true,
+          );
+
+      expect(secondNotificationSuppressed, isFalse);
+      expect(smsSuppressed, isFalse);
+      expect(possibleMatchReported, isTrue);
+    },
+  );
+
+  test(
+    'Truecaller mirror without shared identity stays visible within eight seconds',
     () async {
       final time = DateTime(2026, 10, 27, 10, 0);
       final notification = _event(
@@ -256,7 +311,8 @@ void main() {
         app: PaymentApp.phonePe,
         rawText: 'Payment received INR 500',
         amount: 500,
-        sourceEventKey: 'com.phonepe.app|71|${time.millisecondsSinceEpoch}|phonepe',
+        sourceEventKey:
+            'com.phonepe.app|71|${time.millisecondsSinceEpoch}|phonepe',
       );
       final truecallerEcho = _event(
         id: 'truecaller-mirror',
@@ -281,7 +337,7 @@ void main() {
           truecallerEcho,
           now: time.add(const Duration(seconds: 3)),
         ),
-        isTrue,
+        isFalse,
       );
     },
   );
@@ -297,7 +353,8 @@ void main() {
         app: PaymentApp.phonePe,
         rawText: 'Payment received INR 500',
         amount: 500,
-        sourceEventKey: 'com.phonepe.app|73|${time.millisecondsSinceEpoch}|phonepe',
+        sourceEventKey:
+            'com.phonepe.app|73|${time.millisecondsSinceEpoch}|phonepe',
       );
       final laterTruecaller = _event(
         id: 'truecaller-later',
@@ -327,112 +384,138 @@ void main() {
     },
   );
 
-  test('two same-value notifications can pair with two SMS messages one-to-one', () async {
-    final time = DateTime(2026, 10, 27, 10, 0);
-    final firstNotification = _event(
-      id: 'notif-1',
-      timestamp: time,
-      source: 'notification',
-      app: PaymentApp.phonePe,
-      rawText: 'Payment received ₹5 from Ravi',
-      amount: 5,
-      payerName: 'Ravi',
-    );
-    final secondNotification = _event(
-      id: 'notif-2',
-      timestamp: time.add(const Duration(seconds: 4)),
-      source: 'notification',
-      app: PaymentApp.phonePe,
-      rawText: 'Payment received ₹5 from Meena',
-      amount: 5,
-      payerName: 'Meena',
-    );
-    final firstSms = _event(
-      id: 'sms-1',
-      timestamp: time.add(const Duration(seconds: 8)),
-      source: 'sms',
-      app: PaymentApp.bankSms,
-      rawText: 'A/c credited ₹5',
-      amount: 5,
-      payerName: 'Ravi',
-    );
-    final secondSms = _event(
-      id: 'sms-2',
-      timestamp: time.add(const Duration(seconds: 12)),
-      source: 'sms',
-      app: PaymentApp.bankSms,
-      rawText: 'A/c credited ₹5',
-      amount: 5,
-      payerName: 'Meena',
-    );
+  test(
+    'same-value payments keep distinct payers while matching SMS coalesces',
+    () async {
+      final time = DateTime(2026, 10, 27, 10, 0);
+      final firstNotification = _event(
+        id: 'notif-1',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹5 from Ravi',
+        amount: 5,
+        payerName: 'Ravi',
+      );
+      final secondNotification = _event(
+        id: 'notif-2',
+        timestamp: time.add(const Duration(seconds: 4)),
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹5 from Meena',
+        amount: 5,
+        payerName: 'Meena',
+      );
+      final firstSms = _event(
+        id: 'sms-1',
+        timestamp: time.add(const Duration(seconds: 8)),
+        source: 'sms',
+        app: PaymentApp.bankSms,
+        rawText: 'A/c credited ₹5',
+        amount: 5,
+        payerName: 'Ravi',
+      );
+      final secondSms = _event(
+        id: 'sms-2',
+        timestamp: time.add(const Duration(seconds: 12)),
+        source: 'sms',
+        app: PaymentApp.bankSms,
+        rawText: 'A/c credited ₹5',
+        amount: 5,
+        payerName: 'Meena',
+      );
 
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        firstNotification,
-        now: time,
-      ),
-      isFalse,
-    );
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        secondNotification,
-        now: time.add(const Duration(seconds: 4)),
-      ),
-      isFalse,
-    );
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        firstSms,
-        now: time.add(const Duration(seconds: 8)),
-      ),
-      isTrue,
-    );
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        secondSms,
-        now: time.add(const Duration(seconds: 12)),
-      ),
-      isTrue,
-    );
-  });
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          firstNotification,
+          now: time,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          secondNotification,
+          now: time.add(const Duration(seconds: 4)),
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          firstSms,
+          now: time.add(const Duration(seconds: 8)),
+        ),
+        isTrue,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          secondSms,
+          now: time.add(const Duration(seconds: 12)),
+        ),
+        isTrue,
+      );
+    },
+  );
 
-  test('ambiguous same-payer same-amount cross-source event is not suppressed', () async {
-    final now = DateTime.now();
-    final first = _event(
-      id: 'phonepe-1',
-      timestamp: now,
-      source: 'notification',
-      app: PaymentApp.phonePe,
-      rawText: 'Payment received ₹500 from Ravi',
-      payerName: 'Ravi Kumar',
-      accountSuffix: '4222',
-      sourceEventKey: 'com.phonepe.app|11|${now.millisecondsSinceEpoch}|a',
-    );
-    final second = _event(
-      id: 'phonepe-2',
-      timestamp: now.add(const Duration(seconds: 1)),
-      source: 'notification',
-      app: PaymentApp.phonePe,
-      rawText: 'Payment received ₹500 from Ravi',
-      payerName: 'Ravi Kumar',
-      accountSuffix: '4222',
-      sourceEventKey: 'com.phonepe.app|12|${now.millisecondsSinceEpoch + 1000}|b',
-    );
-    final ambiguousEcho = _event(
-      id: 'truecaller-1',
-      timestamp: now.add(const Duration(seconds: 2)),
-      source: 'notification',
-      app: PaymentApp.bankApp,
-      rawText: 'Payment received ₹500 from Ravi',
-      payerName: 'Ravi Kumar',
-      accountSuffix: '4222',
-      sourceEventKey: 'com.truecaller|13|${now.millisecondsSinceEpoch + 2000}|c',
-    );
+  test(
+    'ambiguous same-payer same-amount cross-source event is not suppressed',
+    () async {
+      final now = DateTime.now();
+      final first = _event(
+        id: 'phonepe-1',
+        timestamp: now,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹500 from Ravi',
+        payerName: 'Ravi Kumar',
+        accountSuffix: '4222',
+        sourceEventKey: 'com.phonepe.app|11|${now.millisecondsSinceEpoch}|a',
+      );
+      final second = _event(
+        id: 'phonepe-2',
+        timestamp: now.add(const Duration(seconds: 1)),
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Payment received ₹500 from Ravi',
+        payerName: 'Ravi Kumar',
+        accountSuffix: '4222',
+        sourceEventKey:
+            'com.phonepe.app|12|${now.millisecondsSinceEpoch + 1000}|b',
+      );
+      final ambiguousEcho = _event(
+        id: 'truecaller-1',
+        timestamp: now.add(const Duration(seconds: 2)),
+        source: 'notification',
+        app: PaymentApp.bankApp,
+        rawText: 'Payment received ₹500 from Ravi',
+        payerName: 'Ravi Kumar',
+        accountSuffix: '4222',
+        sourceEventKey:
+            'com.truecaller|13|${now.millisecondsSinceEpoch + 2000}|c',
+      );
 
-    expect(await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(first, now: now), isFalse);
-    expect(await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(second, now: now.add(const Duration(seconds: 1))), isFalse);
-    expect(await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(ambiguousEcho, now: now.add(const Duration(seconds: 2))), isFalse);
-  });
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          first,
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          second,
+          now: now.add(const Duration(seconds: 1)),
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          ambiguousEcho,
+          now: now.add(const Duration(seconds: 2)),
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('different authoritative references are never paired', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
@@ -469,43 +552,46 @@ void main() {
     );
   });
 
-  test('a late SMS UTR enriches the matching unreferenced notification', () async {
-    final time = DateTime(2026, 10, 27, 10, 0);
-    final olderNotification = _event(
-      id: 'notif-no-utr',
-      timestamp: time,
-      source: 'notification',
-      app: PaymentApp.bankApp,
-      rawText: '₹5 credited to account XXXX4222',
-      amount: 5,
-      accountSuffix: '4222',
-    );
-    final referencedSms = _event(
-      id: 'sms-with-utr',
-      timestamp: time.add(const Duration(seconds: 5)),
-      source: 'sms',
-      app: PaymentApp.bankSms,
-      rawText: '₹5 credited to account XXXX4222 UTR 123456789013',
-      amount: 5,
-      referenceId: '123456789013',
-      accountSuffix: '4222',
-    );
+  test(
+    'a late SMS with a one-sided UTR and matching account coalesces',
+    () async {
+      final time = DateTime(2026, 10, 27, 10, 0);
+      final olderNotification = _event(
+        id: 'notif-no-utr',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.bankApp,
+        rawText: '₹5 credited to account XXXX4222',
+        amount: 5,
+        accountSuffix: '4222',
+      );
+      final referencedSms = _event(
+        id: 'sms-with-utr',
+        timestamp: time.add(const Duration(seconds: 5)),
+        source: 'sms',
+        app: PaymentApp.bankSms,
+        rawText: '₹5 credited to account XXXX4222 UTR 123456789013',
+        amount: 5,
+        referenceId: '123456789013',
+        accountSuffix: '4222',
+      );
 
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        olderNotification,
-        now: time,
-      ),
-      isFalse,
-    );
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        referencedSms,
-        now: time.add(const Duration(seconds: 5)),
-      ),
-      isTrue,
-    );
-  });
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          olderNotification,
+          now: time,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          referencedSms,
+          now: time.add(const Duration(seconds: 5)),
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('conflicting known account suffixes are never paired', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
@@ -541,43 +627,45 @@ void main() {
       isFalse,
     );
   });
-  test('same amount and payer with opposite direction is not a cross-source echo', () async {
-    final time = DateTime(2026, 10, 30, 10, 0);
-    final credit = _event(
-      id: 'credit-500',
-      timestamp: time,
-      source: 'notification',
-      app: PaymentApp.phonePe,
-      rawText: 'Ravi sent INR 500 to your account',
-      amount: 500,
-      payerName: 'Ravi Kumar',
-      direction: PaymentTransactionDirection.incomingCredit,
-    );
-    final debit = _event(
-      id: 'debit-500',
-      timestamp: time.add(const Duration(seconds: 4)),
-      source: 'sms',
-      app: PaymentApp.bankSms,
-      rawText: 'INR 500 debited from your account to Ravi Kumar',
-      amount: 500,
-      payerName: 'Ravi Kumar',
-      direction: PaymentTransactionDirection.outgoingDebit,
-    );
+  test(
+    'same amount and payer with opposite direction is not a cross-source echo',
+    () async {
+      final time = DateTime(2026, 10, 30, 10, 0);
+      final credit = _event(
+        id: 'credit-500',
+        timestamp: time,
+        source: 'notification',
+        app: PaymentApp.phonePe,
+        rawText: 'Ravi sent INR 500 to your account',
+        amount: 500,
+        payerName: 'Ravi Kumar',
+        direction: PaymentTransactionDirection.incomingCredit,
+      );
+      final debit = _event(
+        id: 'debit-500',
+        timestamp: time.add(const Duration(seconds: 4)),
+        source: 'sms',
+        app: PaymentApp.bankSms,
+        rawText: 'INR 500 debited from your account to Ravi Kumar',
+        amount: 500,
+        payerName: 'Ravi Kumar',
+        direction: PaymentTransactionDirection.outgoingDebit,
+      );
 
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        credit,
-        now: time,
-      ),
-      isFalse,
-    );
-    expect(
-      await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
-        debit,
-        now: time.add(const Duration(seconds: 4)),
-      ),
-      isFalse,
-    );
-  });
-
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          credit,
+          now: time,
+        ),
+        isFalse,
+      );
+      expect(
+        await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
+          debit,
+          now: time.add(const Duration(seconds: 4)),
+        ),
+        isFalse,
+      );
+    },
+  );
 }

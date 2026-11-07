@@ -35,17 +35,13 @@ void main() {
     });
 
     test('empty input does not crash', () {
-      expect(
-        () => RomanIndianVoiceNormalizer.normalize(''),
-        returnsNormally,
-      );
+      expect(() => RomanIndianVoiceNormalizer.normalize(''), returnsNormally);
     });
 
     test('repeated whitespace does not crash', () {
       expect(
-        () => RomanIndianVoiceNormalizer.normalize(
-          'rendu    kilo    rice    50',
-        ),
+        () =>
+            RomanIndianVoiceNormalizer.normalize('rendu    kilo    rice    50'),
         returnsNormally,
       );
     });

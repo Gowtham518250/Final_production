@@ -57,10 +57,9 @@ void main() {
 
   test('different references and amounts remain distinct', () {
     expect(
-      SalePaymentEchoPolicy.classify(
-        _sms('sms', reference: 'utr2'),
-        [_candidate('notification', reference: 'utr1')],
-      ).verdict,
+      SalePaymentEchoPolicy.classify(_sms('sms', reference: 'utr2'), [
+        _candidate('notification', reference: 'utr1'),
+      ]).verdict,
       SaleEchoVerdict.distinct,
     );
     expect(
@@ -71,22 +70,25 @@ void main() {
     );
   });
 
-  test('uncertain same-amount alert is only droppable when bill is covered', () {
-    expect(
-      SalePaymentEchoPolicy.billAlreadyCovered(
-        remainingDue: 500,
-        pendingAmounts: const [],
-        amount: 500,
-      ),
-      isFalse,
-    );
-    expect(
-      SalePaymentEchoPolicy.billAlreadyCovered(
-        remainingDue: 500,
-        pendingAmounts: const [500],
-        amount: 500,
-      ),
-      isTrue,
-    );
-  });
+  test(
+    'uncertain same-amount alert is only droppable when bill is covered',
+    () {
+      expect(
+        SalePaymentEchoPolicy.billAlreadyCovered(
+          remainingDue: 500,
+          pendingAmounts: const [],
+          amount: 500,
+        ),
+        isFalse,
+      );
+      expect(
+        SalePaymentEchoPolicy.billAlreadyCovered(
+          remainingDue: 500,
+          pendingAmounts: const [500],
+          amount: 500,
+        ),
+        isTrue,
+      );
+    },
+  );
 }

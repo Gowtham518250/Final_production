@@ -26,13 +26,15 @@ class _AILoadingIndicatorState extends State<AILoadingIndicator>
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
-    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0.95,
+      end: 1.05,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    _opacityAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _opacityAnimation = Tween<double>(
+      begin: 0.6,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -80,9 +82,9 @@ class _AILoadingIndicatorState extends State<AILoadingIndicator>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(
-                          alpha: _opacityAnimation.value * 0.4,
-                        ),
+                        color: const Color(
+                          0xFF6366F1,
+                        ).withValues(alpha: _opacityAnimation.value * 0.4),
                         blurRadius: 20,
                         spreadRadius: 2,
                       ),

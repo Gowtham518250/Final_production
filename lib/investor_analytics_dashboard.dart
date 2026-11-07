@@ -16,7 +16,8 @@ class InvestorAnalyticsDashboard extends StatefulWidget {
       _InvestorAnalyticsDashboardState();
 }
 
-class _InvestorAnalyticsDashboardState extends State<InvestorAnalyticsDashboard> {
+class _InvestorAnalyticsDashboardState
+    extends State<InvestorAnalyticsDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -118,7 +119,7 @@ class _InvestorAnalyticsDashboardState extends State<InvestorAnalyticsDashboard>
   }
 
   Widget _buildHeadlineCard(Map<String, dynamic> metrics) {
-    final headline = metrics['headline_metrics'] as Map?? {};
+    final headline = metrics['headline_metrics'] as Map ?? {};
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -182,7 +183,8 @@ class _InvestorAnalyticsDashboardState extends State<InvestorAnalyticsDashboard>
               gridData: FlGridData(show: true),
               titlesData: FlTitlesData(
                 bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(interval: 1, 
+                  sideTitles: SideTitles(
+                    interval: 1,
                     showTitles: true,
                     getTitlesWidget: (value, meta) {
                       const titles = ['Day 1', 'Day 7', 'Day 30', 'Day 60'];
@@ -194,7 +196,8 @@ class _InvestorAnalyticsDashboardState extends State<InvestorAnalyticsDashboard>
                   ),
                 ),
                 leftTitles: AxisTitles(
-                  sideTitles: SideTitles(interval: 1, 
+                  sideTitles: SideTitles(
+                    interval: 1,
                     showTitles: true,
                     getTitlesWidget: (value, meta) {
                       return LiveTranslatedText('${value.toInt()}%');
@@ -251,12 +254,26 @@ class _InvestorAnalyticsDashboardState extends State<InvestorAnalyticsDashboard>
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildLTVBracket('₹0-5k', ltv['bracket_0_5k'] ?? 0, Colors.blue),
-              _buildLTVBracket('₹5-10k', ltv['bracket_5_10k'] ?? 0, Colors.cyan),
-              _buildLTVBracket('₹10-25k', ltv['bracket_10_25k'] ?? 0,
-                  Colors.green),
-              _buildLTVBracket('₹25-50k', ltv['bracket_25_50k'] ?? 0,
-                  Colors.amber),
-              _buildLTVBracket('₹50k+', ltv['bracket_50k_plus'] ?? 0, Colors.red),
+              _buildLTVBracket(
+                '₹5-10k',
+                ltv['bracket_5_10k'] ?? 0,
+                Colors.cyan,
+              ),
+              _buildLTVBracket(
+                '₹10-25k',
+                ltv['bracket_10_25k'] ?? 0,
+                Colors.green,
+              ),
+              _buildLTVBracket(
+                '₹25-50k',
+                ltv['bracket_25_50k'] ?? 0,
+                Colors.amber,
+              ),
+              _buildLTVBracket(
+                '₹50k+',
+                ltv['bracket_50k_plus'] ?? 0,
+                Colors.red,
+              ),
             ],
           ),
         ],

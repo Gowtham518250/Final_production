@@ -7,9 +7,9 @@ import '../payment_event.dart';
 /// Manages payment state with minimal rebuilds
 class PaymentStateNotifier extends ChangeNotifier {
   final List<PaymentEvent> _payments = [];
-  
+
   List<PaymentEvent> get payments => List.unmodifiable(_payments);
-  
+
   double get todayTotal => _payments
       .where((p) => _isToday(p.timestamp) && p.isMerchantConfirmed)
       .fold(0.0, (sum, p) => sum + p.amount);
@@ -67,9 +67,12 @@ class PaymentDecisionStateNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  int get confirmedCount => _decisions.values.where((d) => d == PaymentDecision.confirmed).length;
-  int get likelyCount => _decisions.values.where((d) => d == PaymentDecision.likely).length;
-  int get rejectedCount => _decisions.values.where((d) => d == PaymentDecision.rejected).length;
+  int get confirmedCount =>
+      _decisions.values.where((d) => d == PaymentDecision.confirmed).length;
+  int get likelyCount =>
+      _decisions.values.where((d) => d == PaymentDecision.likely).length;
+  int get rejectedCount =>
+      _decisions.values.where((d) => d == PaymentDecision.rejected).length;
 }
 
 enum PaymentDecision { confirmed, likely, tentative, suspicious, rejected }

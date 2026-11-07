@@ -60,9 +60,10 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    _rotateAnimation = Tween<double>(begin: 0.0, end: 2 * math.pi).animate(
-      CurvedAnimation(parent: _rotateController, curve: Curves.linear),
-    );
+    _rotateAnimation = Tween<double>(
+      begin: 0.0,
+      end: 2 * math.pi,
+    ).animate(CurvedAnimation(parent: _rotateController, curve: Curves.linear));
 
     // Scale animation for tap feedback
     _scaleController = AnimationController(
@@ -200,7 +201,9 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: _getStateColor().withOpacity(0.3 * (1 - value)),
+                            color: _getStateColor().withOpacity(
+                              0.3 * (1 - value),
+                            ),
                             width: 2,
                           ),
                         ),
@@ -244,7 +247,9 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
                             child: Padding(
                               padding: const EdgeInsets.all(4),
                               child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(_getStateColor()),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  _getStateColor(),
+                                ),
                                 strokeWidth: 2,
                               ),
                             ),
@@ -268,11 +273,7 @@ class _VoiceBillingAnimationState extends State<VoiceBillingAnimation>
                           ),
                         ],
                 ),
-                child: Icon(
-                  _getStateIcon(),
-                  color: Colors.white,
-                  size: 40,
-                ),
+                child: Icon(_getStateIcon(), color: Colors.white, size: 40),
               ),
 
               // Status text

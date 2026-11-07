@@ -49,17 +49,46 @@ class _OrderItem {
 class _WhatsAppOrderParser {
   /// All unit aliases → canonical
   static const _unitMap = <String, String>{
-    'kg': 'kg', 'kilo': 'kg', 'kilogram': 'kg', 'kilograms': 'kg',
-    'किलो': 'kg', 'kgs': 'kg', 'கிலோ': 'kg', 'కిలో': 'kg',
-    'g': 'g', 'gm': 'g', 'gram': 'g', 'grams': 'g',
-    'l': 'L', 'ltr': 'L', 'litre': 'L', 'liter': 'L', 'liters': 'L',
-    'ml': 'mL', 'milliliter': 'mL',
-    'pcs': 'pc', 'pc': 'pc', 'piece': 'pc', 'pieces': 'pc', 'nos': 'pc', 'no': 'pc',
-    'pkt': 'pkt', 'pack': 'pkt', 'packet': 'pkt', 'packets': 'pkt',
-    'btl': 'btl', 'bottle': 'btl', 'bottles': 'btl',
-    'box': 'box', 'boxes': 'box',
-    'doz': 'doz', 'dozen': 'doz',
-    'पैकेट': 'pkt', 'पीस': 'pc', 'लीटर': 'L', 'बोतल': 'btl',
+    'kg': 'kg',
+    'kilo': 'kg',
+    'kilogram': 'kg',
+    'kilograms': 'kg',
+    'किलो': 'kg',
+    'kgs': 'kg',
+    'கிலோ': 'kg',
+    'కిలో': 'kg',
+    'g': 'g',
+    'gm': 'g',
+    'gram': 'g',
+    'grams': 'g',
+    'l': 'L',
+    'ltr': 'L',
+    'litre': 'L',
+    'liter': 'L',
+    'liters': 'L',
+    'ml': 'mL',
+    'milliliter': 'mL',
+    'pcs': 'pc',
+    'pc': 'pc',
+    'piece': 'pc',
+    'pieces': 'pc',
+    'nos': 'pc',
+    'no': 'pc',
+    'pkt': 'pkt',
+    'pack': 'pkt',
+    'packet': 'pkt',
+    'packets': 'pkt',
+    'btl': 'btl',
+    'bottle': 'btl',
+    'bottles': 'btl',
+    'box': 'box',
+    'boxes': 'box',
+    'doz': 'doz',
+    'dozen': 'doz',
+    'पैकेट': 'pkt',
+    'पीस': 'pc',
+    'लीटर': 'L',
+    'बोतल': 'btl',
   };
 
   static String _resolveUnit(String? raw) {
@@ -69,9 +98,21 @@ class _WhatsAppOrderParser {
 
   // Hindi / Hinglish number words
   static const _hindiNums = <String, double>{
-    'एक': 1, 'दो': 2, 'तीन': 3, 'चार': 4, 'पाँच': 5, 'पांच': 5,
-    'छह': 6, 'सात': 7, 'आठ': 8, 'नौ': 9, 'दस': 10,
-    'half': 0.5, 'आधा': 0.5, 'डेढ़': 1.5, 'ढाई': 2.5,
+    'एक': 1,
+    'दो': 2,
+    'तीन': 3,
+    'चार': 4,
+    'पाँच': 5,
+    'पांच': 5,
+    'छह': 6,
+    'सात': 7,
+    'आठ': 8,
+    'नौ': 9,
+    'दस': 10,
+    'half': 0.5,
+    'आधा': 0.5,
+    'डेढ़': 1.5,
+    'ढाई': 2.5,
   };
 
   static String _replaceWords(String text) {
@@ -107,7 +148,11 @@ class _WhatsAppOrderParser {
         qty: double.tryParse(mA.group(1) ?? '1') ?? 1,
         unit: isUnit ? _resolveUnit(rawUnit) : 'pc',
         price: double.tryParse(mA.group(4) ?? '0') ?? 0,
-        confidence: _confidence(name, double.tryParse(mA.group(1)!)!, double.tryParse(mA.group(4)!)!),
+        confidence: _confidence(
+          name,
+          double.tryParse(mA.group(1)!)!,
+          double.tryParse(mA.group(4)!)!,
+        ),
       );
     }
 
@@ -123,7 +168,11 @@ class _WhatsAppOrderParser {
         qty: double.tryParse(mB.group(2) ?? '1') ?? 1,
         unit: _resolveUnit(mB.group(3)),
         price: double.tryParse(mB.group(4) ?? '0') ?? 0,
-        confidence: _confidence(mB.group(1)!, double.tryParse(mB.group(2)!)!, double.tryParse(mB.group(4)!)!),
+        confidence: _confidence(
+          mB.group(1)!,
+          double.tryParse(mB.group(2)!)!,
+          double.tryParse(mB.group(4)!)!,
+        ),
       );
     }
 
@@ -139,7 +188,11 @@ class _WhatsAppOrderParser {
         qty: double.tryParse(mC.group(2) ?? '1') ?? 1,
         unit: 'pc',
         price: double.tryParse(mC.group(3) ?? '0') ?? 0,
-        confidence: _confidence(mC.group(1)!, double.tryParse(mC.group(2)!)!, double.tryParse(mC.group(3)!)!),
+        confidence: _confidence(
+          mC.group(1)!,
+          double.tryParse(mC.group(2)!)!,
+          double.tryParse(mC.group(3)!)!,
+        ),
       );
     }
 
@@ -173,10 +226,13 @@ class _WhatsAppOrderParser {
   }
 
   static String _titleCase(String s) {
-    return s.split(RegExp(r'\s+')).map((w) {
-      if (w.isEmpty) return w;
-      return w[0].toUpperCase() + w.substring(1);
-    }).join(' ');
+    return s
+        .split(RegExp(r'\s+'))
+        .map((w) {
+          if (w.isEmpty) return w;
+          return w[0].toUpperCase() + w.substring(1);
+        })
+        .join(' ');
   }
 
   /// Split the full text into lines/segments intelligently
@@ -194,8 +250,10 @@ class _WhatsAppOrderParser {
       return text.split(';').where((l) => l.trim().isNotEmpty).toList();
     }
     // Fallback: split on "and" / "aur"
-    return text.split(RegExp(r'\band\b|aur|और', caseSensitive: false))
-        .where((l) => l.trim().isNotEmpty).toList();
+    return text
+        .split(RegExp(r'\band\b|aur|और', caseSensitive: false))
+        .where((l) => l.trim().isNotEmpty)
+        .toList();
   }
 
   /// Main parse entry
@@ -233,8 +291,10 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
   @override
   void initState() {
     super.initState();
-    _shimmerCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
-      ..repeat();
+    _shimmerCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
   }
 
   @override
@@ -248,17 +308,26 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
   void _parse() {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
-    setState(() { _parsing = true; _items = []; });
+    setState(() {
+      _parsing = true;
+      _items = [];
+    });
 
     Future.delayed(const Duration(milliseconds: 300), () {
       final parsed = _WhatsAppOrderParser.parse(text);
       _editCtrl.clear();
-      if (mounted) setState(() { _items = parsed; _parsing = false; });
+      if (mounted)
+        setState(() {
+          _items = parsed;
+          _parsing = false;
+        });
 
       if (parsed.isEmpty) {
         _snack('Could not parse items. Try a different format.', error: true);
       } else {
-        _snack('✅ ${parsed.length} item${parsed.length > 1 ? 's' : ''} detected');
+        _snack(
+          '✅ ${parsed.length} item${parsed.length > 1 ? 's' : ''} detected',
+        );
       }
     });
   }
@@ -268,14 +337,19 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
     for (int i = 0; i < _items.length; i++) {
       final m = _editCtrl[i];
       if (m != null) {
-        _items[i].name  = m['name']!.text.trim().isEmpty ? _items[i].name : m['name']!.text.trim();
-        _items[i].qty   = double.tryParse(m['qty']!.text) ?? _items[i].qty;
+        _items[i].name = m['name']!.text.trim().isEmpty
+            ? _items[i].name
+            : m['name']!.text.trim();
+        _items[i].qty = double.tryParse(m['qty']!.text) ?? _items[i].qty;
         _items[i].price = double.tryParse(m['price']!.text) ?? _items[i].price;
       }
     }
 
     final selected = _items.where((e) => e.selected).toList();
-    if (selected.isEmpty) { _snack('No items selected', error: true); return; }
+    if (selected.isEmpty) {
+      _snack('No items selected', error: true);
+      return;
+    }
 
     Navigator.pop(context, selected.map((e) => e.toMap()).toList());
   }
@@ -290,13 +364,23 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
 
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: LiveTranslatedText(msg, style: GoogleFonts.rajdhani(fontSize: 14, fontWeight: FontWeight.w600)),
-      backgroundColor: error ? const Color(0xFFBF360C) : const Color(0xFF1B5E20),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(12),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: LiveTranslatedText(
+          msg,
+          style: GoogleFonts.rajdhani(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: error
+            ? const Color(0xFFBF360C)
+            : const Color(0xFF1B5E20),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(12),
+      ),
+    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -324,7 +408,9 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
                     if (_items.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       _buildResultHeader(),
-                      ..._items.asMap().entries.map((e) => _buildItemCard(e.key, e.value)),
+                      ..._items.asMap().entries.map(
+                        (e) => _buildItemCard(e.key, e.value),
+                      ),
                     ],
                     const SizedBox(height: 80),
                   ],
@@ -343,34 +429,58 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
       backgroundColor: const Color(0xFF0D1B2A),
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+        icon: const Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: Colors.white,
+          size: 18,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       title: Row(
         children: [
           Container(
-            width: 32, height: 32,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: const Color(0xFF1B5E20).withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.mail_rounded, color: Color(0xFF4CAF50), size: 18),
+            child: const Icon(
+              Icons.mail_rounded,
+              color: Color(0xFF4CAF50),
+              size: 18,
+            ),
           ),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LiveTranslatedText('WhatsApp Order',
-                style: GoogleFonts.rajdhani(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-              LiveTranslatedText('Paste → Parse → Bill',
-                style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 11)),
+              LiveTranslatedText(
+                'WhatsApp Order',
+                style: GoogleFonts.rajdhani(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              LiveTranslatedText(
+                'Paste → Parse → Bill',
+                style: GoogleFonts.rajdhani(
+                  color: const Color(0xFF546E7A),
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
         ],
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.help_outline_rounded, color: Color(0xFF546E7A), size: 20),
+          icon: const Icon(
+            Icons.help_outline_rounded,
+            color: Color(0xFF546E7A),
+            size: 20,
+          ),
           onPressed: () => setState(() => _showExamples = !_showExamples),
         ),
       ],
@@ -401,44 +511,72 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LiveTranslatedText('SUPPORTED FORMATS',
+            LiveTranslatedText(
+              'SUPPORTED FORMATS',
               style: GoogleFonts.rajdhani(
-                color: const Color(0xFF42A5F5), fontSize: 11,
-                fontWeight: FontWeight.w700, letterSpacing: 1.5,
-              )),
-            const SizedBox(height: 10),
-            ...examples.map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LiveTranslatedText(e.$1,
-                    style: GoogleFonts.rajdhani(color: const Color(0xFF7986CB), fontSize: 11,
-                      fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-                  const SizedBox(height: 3),
-                  GestureDetector(
-                    onTap: () {
-                      _textCtrl.text = e.$2;
-                      setState(() => _showExamples = false);
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0A1628),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF263238), width: 1),
-                      ),
-                      child: LiveTranslatedText(e.$2,
-                        style: GoogleFonts.sourceCodePro(
-                          color: const Color(0xFF80CBC4), fontSize: 12, height: 1.5)),
-                    ),
-                  ),
-                ],
+                color: const Color(0xFF42A5F5),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
               ),
-            )),
-            LiveTranslatedText('Tap any example to load it',
-              style: GoogleFonts.rajdhani(color: const Color(0xFF37474F), fontSize: 11)),
+            ),
+            const SizedBox(height: 10),
+            ...examples.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LiveTranslatedText(
+                      e.$1,
+                      style: GoogleFonts.rajdhani(
+                        color: const Color(0xFF7986CB),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    GestureDetector(
+                      onTap: () {
+                        _textCtrl.text = e.$2;
+                        setState(() => _showExamples = false);
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0A1628),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF263238),
+                            width: 1,
+                          ),
+                        ),
+                        child: LiveTranslatedText(
+                          e.$2,
+                          style: GoogleFonts.sourceCodePro(
+                            color: const Color(0xFF80CBC4),
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            LiveTranslatedText(
+              'Tap any example to load it',
+              style: GoogleFonts.rajdhani(
+                color: const Color(0xFF37474F),
+                fontSize: 11,
+              ),
+            ),
           ],
         ),
       ),
@@ -458,26 +596,51 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
             padding: const EdgeInsets.fromLTRB(14, 10, 8, 0),
             child: Row(
               children: [
-                const Icon(Icons.message_rounded, color: Color(0xFF4CAF50), size: 16),
+                const Icon(
+                  Icons.message_rounded,
+                  color: Color(0xFF4CAF50),
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
-                LiveTranslatedText('Order Text',
-                  style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 12,
-                    fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                LiveTranslatedText(
+                  'Order Text',
+                  style: GoogleFonts.rajdhani(
+                    color: const Color(0xFF546E7A),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: _pasteFromClipboard,
                   icon: const Icon(Icons.content_paste_rounded, size: 14),
-                  label: LiveTranslatedText('Paste',
-                    style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w600)),
+                  label: LiveTranslatedText(
+                    'Paste',
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF42A5F5),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                   ),
                 ),
                 if (_textCtrl.text.isNotEmpty)
                   IconButton(
-                    icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF546E7A)),
-                    onPressed: () => setState(() { _textCtrl.clear(); _items = []; }),
+                    icon: const Icon(
+                      Icons.clear_rounded,
+                      size: 16,
+                      color: Color(0xFF546E7A),
+                    ),
+                    onPressed: () => setState(() {
+                      _textCtrl.clear();
+                      _items = [];
+                    }),
                     padding: const EdgeInsets.all(4),
                     constraints: const BoxConstraints(),
                   ),
@@ -487,11 +650,20 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
           TextField(
             controller: _textCtrl,
             maxLines: 7,
-            style: GoogleFonts.notoSans(color: Colors.white, fontSize: 14, height: 1.6),
+            style: GoogleFonts.notoSans(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.6,
+            ),
             decoration: InputDecoration(
-              hint: LiveTranslatedText('Paste customer\'s WhatsApp order here…\n\nE.g:\n2 kg Atta 60, 1 Oil 150\nSugar 1kg 45'),
+              hint: LiveTranslatedText(
+                'Paste customer\'s WhatsApp order here…\n\nE.g:\n2 kg Atta 60, 1 Oil 150\nSugar 1kg 45',
+              ),
               hintStyle: GoogleFonts.notoSans(
-                color: const Color(0xFF263238), fontSize: 13, height: 1.6),
+                color: const Color(0xFF263238),
+                fontSize: 13,
+                height: 1.6,
+              ),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
             ),
@@ -519,8 +691,14 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
         children: [
           const Icon(Icons.auto_fix_high_rounded, size: 18),
           const SizedBox(width: 8),
-          LiveTranslatedText('Smart Parse',
-            style: GoogleFonts.rajdhani(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+          LiveTranslatedText(
+            'Smart Parse',
+            style: GoogleFonts.rajdhani(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
         ],
       ),
     );
@@ -537,22 +715,36 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
               return ShaderMask(
                 blendMode: BlendMode.srcIn,
                 shaderCallback: (bounds) => LinearGradient(
-                  colors: const [Color(0xFF263238), Color(0xFF42A5F5), Color(0xFF263238)],
+                  colors: const [
+                    Color(0xFF263238),
+                    Color(0xFF42A5F5),
+                    Color(0xFF263238),
+                  ],
                   stops: [
                     (_shimmerCtrl.value - 0.3).clamp(0.0, 1.0),
                     _shimmerCtrl.value.clamp(0.0, 1.0),
                     (_shimmerCtrl.value + 0.3).clamp(0.0, 1.0),
                   ],
                 ).createShader(bounds),
-                child: LiveTranslatedText('Parsing order…',
-                  style: GoogleFonts.rajdhani(fontSize: 16, fontWeight: FontWeight.w600,
-                    color: Colors.white)),
+                child: LiveTranslatedText(
+                  'Parsing order…',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
               );
             },
           ),
           const SizedBox(height: 8),
-          LiveTranslatedText('Detecting items, quantities & prices',
-            style: GoogleFonts.rajdhani(color: const Color(0xFF37474F), fontSize: 12)),
+          LiveTranslatedText(
+            'Detecting items, quantities & prices',
+            style: GoogleFonts.rajdhani(
+              color: const Color(0xFF37474F),
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -564,14 +756,23 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          LiveTranslatedText('PARSED ITEMS',
+          LiveTranslatedText(
+            'PARSED ITEMS',
             style: GoogleFonts.rajdhani(
-              color: const Color(0xFF42A5F5), fontSize: 11,
-              fontWeight: FontWeight.w700, letterSpacing: 1.5,
-            )),
+              color: const Color(0xFF42A5F5),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+            ),
+          ),
           const Spacer(),
-          LiveTranslatedText('$selectedCount / ${_items.length} selected',
-            style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 12)),
+          LiveTranslatedText(
+            '$selectedCount / ${_items.length} selected',
+            style: GoogleFonts.rajdhani(
+              color: const Color(0xFF546E7A),
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => setState(() {
@@ -581,7 +782,10 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
             child: LiveTranslatedText(
               _items.every((e) => e.selected) ? 'Deselect all' : 'Select all',
               style: GoogleFonts.rajdhani(
-                color: const Color(0xFF1976D2), fontSize: 12, fontWeight: FontWeight.w600),
+                color: const Color(0xFF1976D2),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -590,11 +794,14 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
   }
 
   Widget _buildItemCard(int idx, _OrderItem item) {
-    _editCtrl.putIfAbsent(idx, () => {
-      'name':  TextEditingController(text: item.name),
-      'qty':   TextEditingController(text: item.qty.toString()),
-      'price': TextEditingController(text: item.price.toString()),
-    });
+    _editCtrl.putIfAbsent(
+      idx,
+      () => {
+        'name': TextEditingController(text: item.name),
+        'qty': TextEditingController(text: item.qty.toString()),
+        'price': TextEditingController(text: item.price.toString()),
+      },
+    );
 
     final lowConf = item.confidence < 0.6;
     final total = item.qty * item.price;
@@ -604,11 +811,15 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: item.selected ? const Color(0xFF0F1F38) : const Color(0xFF0A1422),
+          color: item.selected
+              ? const Color(0xFF0F1F38)
+              : const Color(0xFF0A1422),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: item.selected
-                ? (lowConf ? const Color(0xFFE65100).withValues(alpha: 0.5) : const Color(0xFF1E3A5F))
+                ? (lowConf
+                      ? const Color(0xFFE65100).withValues(alpha: 0.5)
+                      : const Color(0xFF1E3A5F))
                 : const Color(0xFF0F1F38),
             width: 1,
           ),
@@ -628,9 +839,13 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
                   margin: const EdgeInsets.only(top: 2),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: item.selected ? const Color(0xFF4CAF50) : Colors.transparent,
+                    color: item.selected
+                        ? const Color(0xFF4CAF50)
+                        : Colors.transparent,
                     border: Border.all(
-                      color: item.selected ? const Color(0xFF4CAF50) : const Color(0xFF37474F),
+                      color: item.selected
+                          ? const Color(0xFF4CAF50)
+                          : const Color(0xFF37474F),
                       width: 1.5,
                     ),
                   ),
@@ -651,11 +866,15 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
                           child: TextField(
                             controller: _editCtrl[idx]!['name'],
                             style: GoogleFonts.notoSans(
-                              color: item.selected ? Colors.white : const Color(0xFF37474F),
-                              fontSize: 14, fontWeight: FontWeight.w600,
+                              color: item.selected
+                                  ? Colors.white
+                                  : const Color(0xFF37474F),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
                             decoration: const InputDecoration(
-                              isDense: true, contentPadding: EdgeInsets.zero,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
                               border: InputBorder.none,
                             ),
                           ),
@@ -664,17 +883,29 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
                           Tooltip(
                             message: 'Low confidence — verify this item',
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFBF360C).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFBF360C).withValues(alpha: 0.4)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
                               ),
-                              child: LiveTranslatedText('⚠️ Check',
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFFBF360C,
+                                ).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFFBF360C,
+                                  ).withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: LiveTranslatedText(
+                                '⚠️ Check',
                                 style: GoogleFonts.rajdhani(
-                                  color: const Color(0xFFFF6D00), fontSize: 10,
+                                  color: const Color(0xFFFF6D00),
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                )),
+                                ),
+                              ),
                             ),
                           ),
                       ],
@@ -685,11 +916,22 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
                         _fieldChip('Qty', _editCtrl[idx]!['qty']!),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: LiveTranslatedText(item.unit,
-                            style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 12)),
+                          child: LiveTranslatedText(
+                            item.unit,
+                            style: GoogleFonts.rajdhani(
+                              color: const Color(0xFF546E7A),
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 8),
-                        LiveTranslatedText('₹', style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 13)),
+                        LiveTranslatedText(
+                          '₹',
+                          style: GoogleFonts.rajdhani(
+                            color: const Color(0xFF546E7A),
+                            fontSize: 13,
+                          ),
+                        ),
                         _fieldChip('Price', _editCtrl[idx]!['price']!),
                       ],
                     ),
@@ -700,14 +942,26 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  LiveTranslatedText('₹${total.toStringAsFixed(0)}',
+                  LiveTranslatedText(
+                    '₹${total.toStringAsFixed(0)}',
                     style: GoogleFonts.rajdhani(
-                      color: item.selected ? const Color(0xFF82B1FF) : const Color(0xFF37474F),
-                      fontSize: 16, fontWeight: FontWeight.w700,
-                    )),
+                      color: item.selected
+                          ? const Color(0xFF82B1FF)
+                          : const Color(0xFF37474F),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFF37474F)),
-                    onPressed: () => setState(() { _items.removeAt(idx); _editCtrl.remove(idx); }),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      size: 16,
+                      color: Color(0xFF37474F),
+                    ),
+                    onPressed: () => setState(() {
+                      _items.removeAt(idx);
+                      _editCtrl.remove(idx);
+                    }),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -726,13 +980,20 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
       child: TextField(
         controller: ctrl,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: GoogleFonts.rajdhani(color: const Color(0xFF82B1FF), fontSize: 13, fontWeight: FontWeight.w600),
+        style: GoogleFonts.rajdhani(
+          color: const Color(0xFF82B1FF),
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
         decoration: InputDecoration(
           isDense: true,
           contentPadding: EdgeInsets.zero,
           border: InputBorder.none,
           hintText: hint,
-          hintStyle: GoogleFonts.rajdhani(color: const Color(0xFF263238), fontSize: 12),
+          hintStyle: GoogleFonts.rajdhani(
+            color: const Color(0xFF263238),
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -746,9 +1007,15 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1B2A),
-        border: Border(top: BorderSide(color: const Color(0xFF1E3A5F), width: 1)),
+        border: Border(
+          top: BorderSide(color: const Color(0xFF1E3A5F), width: 1),
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, -4)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
         ],
       ),
       child: Row(
@@ -757,24 +1024,42 @@ class _WhatsAppOrderPageState extends State<WhatsAppOrderPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              LiveTranslatedText('${selected.length} item${selected.length != 1 ? 's' : ''}',
-                style: GoogleFonts.rajdhani(color: const Color(0xFF546E7A), fontSize: 12)),
-              LiveTranslatedText('₹${total.toStringAsFixed(2)}',
+              LiveTranslatedText(
+                '${selected.length} item${selected.length != 1 ? 's' : ''}',
                 style: GoogleFonts.rajdhani(
-                  color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                  color: const Color(0xFF546E7A),
+                  fontSize: 12,
+                ),
+              ),
+              LiveTranslatedText(
+                '₹${total.toStringAsFixed(2)}',
+                style: GoogleFonts.rajdhani(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
           const Spacer(),
           ElevatedButton.icon(
             onPressed: selected.isEmpty ? null : _transfer,
             icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-            label: LiveTranslatedText('Transfer to Bill',
-              style: GoogleFonts.rajdhani(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+            label: LiveTranslatedText(
+              'Transfer to Bill',
+              style: GoogleFonts.rajdhani(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4CAF50),
               disabledBackgroundColor: const Color(0xFF1B2838),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               elevation: 0,
             ),

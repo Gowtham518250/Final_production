@@ -8,18 +8,18 @@ import 'local_storage_service.dart';
 import 'inventory_stock_helper.dart';
 import 'notification_service.dart';
 
-/// 
+///
 /// INVENTORY SYNC SERVICE - SINGLE SOURCE OF TRUTH
 /// ================================================
-/// 
+///
 /// CRITICAL ARCHITECTURAL CHANGE:
 /// - Backend PostgreSQL is NOW the ONLY source of truth for inventory
 /// - Local storage is ONLY a cache - never authoritative
 /// - All stock deductions MUST go through backend
 /// - Frontend fetches updated stock after every operation
-/// 
+///
 /// This fixes the critical bug where stock was lost after app data clear
-/// 
+///
 class InventorySyncService {
   /// Parse a positive stock quantity without truncating fractional retail units.
   /// The backend Numeric column currently supports at most three decimal places.
@@ -84,7 +84,9 @@ class InventorySyncService {
         if (!combined.isFinite ||
             combined <= 0 ||
             (scaled - scaled.roundToDouble()).abs() > 0.000001) {
-          errors.add('Combined quantity for product $productId exceeds supported precision.');
+          errors.add(
+            'Combined quantity for product $productId exceeds supported precision.',
+          );
           continue;
         }
         existing['quantity'] = combined;
@@ -107,7 +109,7 @@ class InventorySyncService {
       'updates': grouped.values.toList(growable: false),
     };
   }
-  
+
   /// Deduct stock via backend with idempotency protection
   /// This is the ONLY way to deduct stock - local changes are forbidden
   /// PHASE 5 FIX: Prevent negative inventory
@@ -118,32 +120,35 @@ class InventorySyncService {
     String reason = 'SALE',
   }) async {
     const String context = 'INVENTORY_DEDUCT';
-    
+
     try {
-      if (kDebugMode) debugPrint('🔒 Backend Stock Deduction: Product $productId, Qty: $quantity');
+      if (kDebugMode)
+        debugPrint(
+          '🔒 Backend Stock Deduction: Product $productId, Qty: $quantity',
+        );
       final parsedQuantity = parsePositiveQuantity(quantity);
       if (parsedQuantity == null) {
         if (kDebugMode) debugPrint('❌ Invalid quantity: $quantity');
         return {
           'success': false,
           'error': 'INVALID_QUANTITY',
-          'message': 'Quantity must be greater than 0'
+          'message': 'Quantity must be greater than 0',
         };
       }
-      
+
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) {
         if (kDebugMode) debugPrint('❌ No auth token - cannot deduct stock');
         return {
           'success': false,
           'error': 'NOT_AUTHENTICATED',
-          'message': 'Authentication required for stock operations'
+          'message': 'Authentication required for stock operations',
         };
       }
-      
+
       // Generate idempotency key to prevent duplicate deductions
       final idempotencyKey = '${productId}_${referenceId}';
-      
+
       final response = await ApiClient.postJson(
         '/api/inventory-sync/deduct-stock',
         {
@@ -153,18 +158,17 @@ class InventorySyncService {
           'reference_id': referenceId,
           'idempotency_key': idempotencyKey,
         },
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        
+
         // 🔒 PHASE 5 FIX: Verify new stock is not negative
         final newStock = data['new_stock'] ?? 0;
         if (newStock < 0) {
-          if (kDebugMode) debugPrint('⚠️ Backend returned negative stock: $newStock');
+          if (kDebugMode)
+            debugPrint('⚠️ Backend returned negative stock: $newStock');
           return {
             'success': false,
             'error': 'NEGATIVE_STOCK',
@@ -173,16 +177,16 @@ class InventorySyncService {
             'available_stock': data['previous_stock'],
           };
         }
-        
+
         if (kDebugMode) {
           debugPrint('✅ Stock deducted successfully');
           debugPrint('   Previous: ${data['previous_stock']}');
           debugPrint('   New: $newStock');
         }
-        
+
         // Update local cache with backend truth
         await _updateLocalCache(productId, newStock);
-        
+
         return {
           'success': true,
           'product_id': productId,
@@ -194,10 +198,12 @@ class InventorySyncService {
       } else if (response.statusCode == 400) {
         final error = json.decode(response.body);
         final errorMsg = error['detail'] ?? 'Stock deduction failed';
-        
+
         // 🔒 PHASE 5 FIX: Check if error is due to insufficient stock
-        if (errorMsg.toString().contains('insufficient') || errorMsg.toString().contains('negative')) {
-          if (kDebugMode) debugPrint('⚠️ Insufficient stock for product $productId');
+        if (errorMsg.toString().contains('insufficient') ||
+            errorMsg.toString().contains('negative')) {
+          if (kDebugMode)
+            debugPrint('⚠️ Insufficient stock for product $productId');
           return {
             'success': false,
             'error': 'INSUFFICIENT_STOCK',
@@ -205,7 +211,7 @@ class InventorySyncService {
             'status_code': 400,
           };
         }
-        
+
         if (kDebugMode) debugPrint('❌ Stock deduction error: $errorMsg');
         return {
           'success': false,
@@ -230,22 +236,25 @@ class InventorySyncService {
       };
     }
   }
-  
+
   /// Batch stock deduction for multiple products (invoice sync)
   /// PHASE 5 FIX: Prevent negative inventory in batch operations
-  static Future<Map<String, dynamic>> deductStockBatch(List<Map<String, dynamic>> items) async {
+  static Future<Map<String, dynamic>> deductStockBatch(
+    List<Map<String, dynamic>> items,
+  ) async {
     try {
-      if (kDebugMode) debugPrint('🔒 Batch Stock Deduction: ${items.length} items');
-      
+      if (kDebugMode)
+        debugPrint('🔒 Batch Stock Deduction: ${items.length} items');
+
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) {
         return {
           'success': false,
           'error': 'NOT_AUTHENTICATED',
-          'message': 'Authentication required'
+          'message': 'Authentication required',
         };
       }
-      
+
       final prepared = prepareBatchStockUpdates(items);
       final validationErrors = List<String>.from(prepared['errors'] as List);
       final updates = List<Map<String, dynamic>>.from(
@@ -256,7 +265,9 @@ class InventorySyncService {
 
       if (prepared['valid'] != true) {
         if (kDebugMode) {
-          debugPrint('Batch stock validation failed for ${validationErrors.length} item(s).');
+          debugPrint(
+            'Batch stock validation failed for ${validationErrors.length} item(s).',
+          );
         }
         return {
           'success': false,
@@ -272,16 +283,18 @@ class InventorySyncService {
         {'updates': updates},
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 15));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         if (kDebugMode) {
           debugPrint('✅ Batch deduction complete');
-          debugPrint('   Successful: ${data['successful']}/${data['total_items']}');
+          debugPrint(
+            '   Successful: ${data['successful']}/${data['total_items']}',
+          );
           debugPrint('   Failed: ${data['failed']}');
         }
-        
+
         // 🔒 PHASE 5 FIX: Verify no negative stocks were created
         final negativeStocks = <Map<String, dynamic>>[];
         for (var result in data['results']) {
@@ -293,7 +306,7 @@ class InventorySyncService {
             });
           }
         }
-        
+
         if (negativeStocks.isNotEmpty) {
           if (kDebugMode) {
             debugPrint('⚠️ Negative stocks detected after batch deduction:');
@@ -308,14 +321,14 @@ class InventorySyncService {
             'negative_stocks': negativeStocks,
           };
         }
-        
+
         // Update local cache for successful items
         for (var result in data['results']) {
           if (result['success']) {
             await _updateLocalCache(result['product_id'], result['new_stock']);
           }
         }
-        
+
         return {
           'success': data['success'],
           'total_items': data['total_items'],
@@ -340,7 +353,7 @@ class InventorySyncService {
       };
     }
   }
-  
+
   /// Fetch current stock from backend (single source of truth)
   static Future<Map<String, dynamic>> getCurrentStock(int productId) async {
     try {
@@ -348,18 +361,18 @@ class InventorySyncService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.getJson(
         '/api/inventory-sync/current-stock/$productId',
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         // Update local cache
         await _updateLocalCache(productId, data['current_stock']);
-        
+
         return {
           'success': true,
           'product_id': data['product_id'],
@@ -378,7 +391,7 @@ class InventorySyncService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Fetch all inventory from backend and refresh local cache
   static Future<Map<String, dynamic>> refreshAllInventory() async {
     try {
@@ -400,13 +413,12 @@ class InventorySyncService {
 
         final backendProducts = rawProducts is List
             ? rawProducts
-                .whereType<Map>()
-                .map((p) => Map<String, dynamic>.from(p))
-                .toList()
+                  .whereType<Map>()
+                  .map((p) => Map<String, dynamic>.from(p))
+                  .toList()
             : <Map<String, dynamic>>[];
 
-        final cachedProducts =
-            await LocalStorageService.loadBackendProducts();
+        final cachedProducts = await LocalStorageService.loadBackendProducts();
 
         // A 200 response containing zero products is not allowed to erase a
         // healthy non-empty local snapshot. Keep the last known inventory
@@ -456,35 +468,36 @@ class InventorySyncService {
   static Future<Map<String, dynamic>> reconcileInventory() async {
     try {
       if (kDebugMode) debugPrint('🔍 Reconciling inventory with backend...');
-      
+
       final token = await SecureTokenStorage.getToken() ?? '';
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       // Get local inventory
       final localProducts = await LocalStorageService.loadBackendProducts();
-      
+
       final response = await ApiClient.postJson(
         '/api/inventory-sync/reconcile',
         {'local_inventory': localProducts},
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         if (kDebugMode) {
           debugPrint('📊 Reconciliation complete');
           debugPrint('   Discrepancies found: ${data['discrepancies_found']}');
           debugPrint('   Fixes applied: ${data['fixes_applied']}');
         }
-        
+
         // If discrepancies found, refresh from backend
         if (data['discrepancies_found'] > 0) {
-          if (kDebugMode) debugPrint('⚠️ Discrepancies detected - refreshing from backend');
+          if (kDebugMode)
+            debugPrint('⚠️ Discrepancies detected - refreshing from backend');
           await refreshAllInventory();
-          
+
           // Show notification
           NotificationService.show(
             'Inventory Reconciled',
@@ -492,7 +505,7 @@ class InventorySyncService {
             payload: 'inventory_reconciled',
           );
         }
-        
+
         return {
           'success': true,
           'reconciled': data['reconciled'],
@@ -508,20 +521,21 @@ class InventorySyncService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Update local cache with backend stock value
   static Future<void> _updateLocalCache(int productId, int newStock) async {
     try {
       final products = await LocalStorageService.loadBackendProducts();
-      
+
       for (var p in products) {
-        if ((p['id']?.toString() ?? p['product_id']?.toString()) == productId.toString()) {
+        if ((p['id']?.toString() ?? p['product_id']?.toString()) ==
+            productId.toString()) {
           p['current_stock'] = newStock;
           p['stock'] = newStock; // For compatibility
           break;
         }
       }
-      
+
       await LocalStorageService.saveBackendProducts(products);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to update local cache: $e');
@@ -531,7 +545,10 @@ class InventorySyncService {
   /// Decrease stock in local cache immediately (Critical for offline sales)
   static bool _isUpdatingLocalStock = false;
 
-  static Future<void> decreaseLocalStock(int productId, num quantitySold) async {
+  static Future<void> decreaseLocalStock(
+    int productId,
+    num quantitySold,
+  ) async {
     while (_isUpdatingLocalStock) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -539,20 +556,21 @@ class InventorySyncService {
     try {
       final products = await LocalStorageService.loadBackendProducts();
       bool changed = false;
-      
+
       for (var p in products) {
-        if ((p['id']?.toString() ?? p['product_id']?.toString()) == productId.toString()) {
+        if ((p['id']?.toString() ?? p['product_id']?.toString()) ==
+            productId.toString()) {
           final current = InventoryStockHelper.readStock(p);
           var newStock = current - quantitySold.toDouble();
           if (newStock < 0) newStock = 0;
-          
+
           p['current_stock'] = newStock;
           p['stock'] = newStock;
           changed = true;
           break;
         }
       }
-      
+
       if (changed) {
         await LocalStorageService.saveBackendProducts(products);
       }
@@ -562,48 +580,54 @@ class InventorySyncService {
       _isUpdatingLocalStock = false;
     }
   }
-  
+
   /// Get stock from local cache (fallback when offline)
   static Future<double?> getLocalStock(int productId) async {
     try {
       final products = await LocalStorageService.loadBackendProducts();
-      
+
       for (var p in products) {
-        if ((p['id']?.toString() ?? p['product_id']?.toString()) == productId.toString()) {
+        if ((p['id']?.toString() ?? p['product_id']?.toString()) ==
+            productId.toString()) {
           return InventoryStockHelper.readStock(p);
         }
       }
-      
+
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to get local stock: $e');
       return null;
     }
   }
-  
+
   /// Check if local cache is stale (older than 5 minutes)
   static Future<bool> isCacheStale() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final lastSyncStr = prefs.getString('last_inventory_sync');
-      
+
       if (lastSyncStr == null) return true;
-      
+
       final lastSync = DateTime.tryParse(lastSyncStr);
       if (lastSync == null) return true;
-      
-      final staleThreshold = DateTime.now().subtract(const Duration(minutes: 5));
+
+      final staleThreshold = DateTime.now().subtract(
+        const Duration(minutes: 5),
+      );
       return lastSync.isBefore(staleThreshold);
     } catch (e) {
       return true;
     }
   }
-  
+
   /// Update last sync timestamp
   static Future<void> updateLastSyncTimestamp() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_inventory_sync', DateTime.now().toIso8601String());
+      await prefs.setString(
+        'last_inventory_sync',
+        DateTime.now().toIso8601String(),
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Failed to update sync timestamp: $e');
     }

@@ -12,10 +12,8 @@ import '../../screens/owner/online_store_hub_page.dart';
 class ShopModulesSection extends StatefulWidget {
   final VoidCallback onModuleClosed;
 
-  const ShopModulesSection({
-    Key? key,
-    required this.onModuleClosed,
-  }) : super(key: key);
+  const ShopModulesSection({Key? key, required this.onModuleClosed})
+    : super(key: key);
 
   @override
   State<ShopModulesSection> createState() => _ShopModulesSectionState();
@@ -35,32 +33,39 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
   Future<void> _loadOriginalData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // 1. Inventory Count
       try {
-         final prods = await LocalStorageService.loadBackendProducts();
-         _inventoryCount = prods.length;
+        final prods = await LocalStorageService.loadBackendProducts();
+        _inventoryCount = prods.length;
       } catch (e) {}
 
       // 2. Invoices Count
       try {
-          final email = prefs.getString('email') ?? 'default';
-          final rawSales = prefs.getString('all_sales_$email') ?? prefs.getString('all_sales') ?? '[]';
-          final List<dynamic> sales = json.decode(rawSales);
-          _invoicesCount = sales.where((s) {
-            final status = s['payment_status']?.toString().toUpperCase() ?? 'PAID';
-            return status == 'UNPAID' || status == 'PARTIAL';
-          }).length;
+        final email = prefs.getString('email') ?? 'default';
+        final rawSales =
+            prefs.getString('all_sales_$email') ??
+            prefs.getString('all_sales') ??
+            '[]';
+        final List<dynamic> sales = json.decode(rawSales);
+        _invoicesCount = sales.where((s) {
+          final status =
+              s['payment_status']?.toString().toUpperCase() ?? 'PAID';
+          return status == 'UNPAID' || status == 'PARTIAL';
+        }).length;
       } catch (e) {}
 
       // 3. Attendance Count
       try {
-          // Attempt to find any worker key for this shopkeeper or fallback to scanning keys
-          final keys = prefs.getKeys();
-          final workerKey = keys.firstWhere((k) => k.startsWith('workers_'), orElse: () => 'workers_default');
-          final workersJson = prefs.getString(workerKey) ?? '[]';
-          final List<dynamic> workers = json.decode(workersJson);
-          _attendanceCount = workers.length;
+        // Attempt to find any worker key for this shopkeeper or fallback to scanning keys
+        final keys = prefs.getKeys();
+        final workerKey = keys.firstWhere(
+          (k) => k.startsWith('workers_'),
+          orElse: () => 'workers_default',
+        );
+        final workersJson = prefs.getString(workerKey) ?? '[]';
+        final List<dynamic> workers = json.decode(workersJson);
+        _attendanceCount = workers.length;
       } catch (e) {}
 
       if (mounted) setState(() {});
@@ -85,7 +90,11 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: LiveTranslatedText(
                   'Shop modules',
-                  style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF1F2937)),
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF1F2937),
+                  ),
                 ),
               ),
               Wrap(
@@ -99,7 +108,10 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                     label: 'Stock',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/inventory').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/inventory',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
@@ -109,7 +121,10 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                     label: 'Attendance',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/attendance').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/attendance',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
@@ -119,17 +134,23 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                     label: 'Customers',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/customers').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/customers',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
                     ctx,
                     color: const Color(0xFF2563EB),
-                    icon: Icons.receipt_long_rounded,
-                    label: 'Invoices',
+                    icon: Icons.menu_book_rounded,
+                    label: 'Khata',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/invoices').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/invoices',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
@@ -141,28 +162,37 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                       Navigator.pop(ctx);
                       if (await SecurityService.verifyMasterPin(navContext)) {
                         if (!navContext.mounted) return;
-                        Navigator.pushNamed(navContext, '/worker-management').then((_) => widget.onModuleClosed());
+                        Navigator.pushNamed(
+                          navContext,
+                          '/worker-management',
+                        ).then((_) => widget.onModuleClosed());
                       }
                     },
                   ),
                   _buildSheetItem(
                     ctx,
                     color: const Color(0xFF0D9488),
-                    icon: Icons.account_balance_wallet_rounded,
+                    icon: Icons.menu_book_rounded,
                     label: 'Khata\nLedger',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/khata').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/khata',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
                     ctx,
                     color: const Color(0xFFE11D48),
-                    icon: Icons.money_off_rounded,
+                    icon: Icons.account_balance_wallet_rounded,
                     label: 'Expense\nTracker',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/expense').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/expense',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
@@ -183,7 +213,10 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                     subtitle: 'AI & analytics',
                     onTap: () {
                       Navigator.pop(ctx);
-                      Navigator.pushNamed(navContext, '/retail-growth').then((_) => widget.onModuleClosed());
+                      Navigator.pushNamed(
+                        navContext,
+                        '/retail-growth',
+                      ).then((_) => widget.onModuleClosed());
                     },
                   ),
                   _buildSheetItem(
@@ -211,7 +244,8 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
     );
   }
 
-  Widget _buildSheetItem(BuildContext context, {
+  Widget _buildSheetItem(
+    BuildContext context, {
     required Color color,
     required IconData icon,
     required String label,
@@ -356,8 +390,8 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
               Expanded(
                 child: _buildOwnerQuickTile(
                   color: const Color(0xFF16836B),
-                  icon: Icons.receipt_long_outlined,
-                  label: 'Invoices',
+                  icon: Icons.menu_book_rounded,
+                  label: 'Khata',
                   subtitle:
                       '$_invoicesCount ${AppLocalizations.of(context).translate('Pending')}',
                   onTap: () => Navigator.pushNamed(
@@ -370,7 +404,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
               Expanded(
                 child: _buildOwnerQuickTile(
                   color: const Color(0xFF9A6700),
-                  icon: Icons.how_to_reg_outlined,
+                  icon: Icons.fact_check_rounded,
                   label: 'Attendance',
                   subtitle:
                       '$_attendanceCount ${AppLocalizations.of(context).translate('Staff')}',

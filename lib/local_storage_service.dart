@@ -40,6 +40,7 @@ class LocalStorageService {
   static const String _idempotencyBoxBase = 'deductions_idempotency_v2';
   static const String _expensesBoxBase = 'expenses_v2';
   static const String _inventoryBoxBase = 'inventory_v2';
+  static const String _returnsBoxBase = 'returns_v2';
 
   static Future<int?> _getUserId() async {
     final prefs = await SharedPreferences.getInstance();
@@ -322,8 +323,7 @@ class LocalStorageService {
             final ownershipVerified = rawBoxOwner != null
                 ? boxOwner == userId
                 : recordKeys.every(
-                    (key) =>
-                        _legacyValueBelongsToUser(oldBox.get(key), userId),
+                    (key) => _legacyValueBelongsToUser(oldBox.get(key), userId),
                   );
             if (!ownershipVerified) {
               if (kDebugMode) {
@@ -516,7 +516,10 @@ class LocalStorageService {
 
   /// Resolve a Hive box name scoped to the current user.
   /// Never use a shared global sales box — prevents fake/leaked data on new accounts.
-  static Future<String> _getScopedBoxName(String base, {required int userId}) async {
+  static Future<String> _getScopedBoxName(
+    String base, {
+    required int userId,
+  }) async {
     if (userId <= 0) {
       throw Exception(
         'SECURITY: Cannot store data without authenticated user_id. User ID is null or zero.',
@@ -581,7 +584,9 @@ class LocalStorageService {
         // scoped name itself remains user-specific; the normal _getBox path
         // opens it with the configured encryption key.
         if (kDebugMode) {
-          debugPrint('⚠️ Deferred Hive box ownership probe for $scopedName: $e');
+          debugPrint(
+            '⚠️ Deferred Hive box ownership probe for $scopedName: $e',
+          );
         }
       }
 
@@ -777,9 +782,7 @@ class LocalStorageService {
         if (!await Hive.boxExists(name)) continue;
 
         final wasAlreadyOpen = Hive.isBoxOpen(name);
-        final box = wasAlreadyOpen
-            ? Hive.box(name)
-            : await Hive.openBox(name);
+        final box = wasAlreadyOpen ? Hive.box(name) : await Hive.openBox(name);
         if (box.isNotEmpty) {
           if (!wasAlreadyOpen) await box.close();
           if (kDebugMode) {
@@ -861,6 +864,11 @@ class LocalStorageService {
     return Hive.box(name);
   }
 
+  /// Public accessor for the deduction-idempotency box so stock restore can
+  /// record its own once-only marker without duplicating box logic.
+  static Future<Box> getIdempotencyBoxForRestore() =>
+      _getBox(_idempotencyBoxBase);
+
   // =========== SALES (BUSINESS CRITICAL) ===========
 
   static Future<void> saveSales(List<dynamic> salesHistory) async {
@@ -911,7 +919,9 @@ class LocalStorageService {
         throw StateError('Cannot save a sale without an authenticated user.');
       }
       if (saleId.trim().isEmpty || maxRecords <= 0) {
-        throw ArgumentError('A sale ID and positive record limit are required.');
+        throw ArgumentError(
+          'A sale ID and positive record limit are required.',
+        );
       }
 
       final userId = await _getUserId();
@@ -923,10 +933,7 @@ class LocalStorageService {
         encrypted: true,
         authenticatedUserId: userId,
       );
-      final storedRows = box.get(
-        'all_sales',
-        defaultValue: const <dynamic>[],
-      );
+      final storedRows = box.get('all_sales', defaultValue: const <dynamic>[]);
       if (storedRows is! Iterable) {
         throw StateError('Stored sales history has an invalid format.');
       }
@@ -1037,6 +1044,41 @@ class LocalStorageService {
     return rows is Iterable ? rows.length : 0;
   }
 
+  // =========== SALES RETURNS / CREDIT NOTES ==========
+
+  /// Persisted return records. Returns were previously kept only in widget
+  /// memory, so they vanished on restart and never reached the backend.
+  static Future<List<dynamic>> loadSalesReturns() async {
+    if (!await _hasValidUserId()) return [];
+    try {
+      final box = await _getBox(_returnsBoxBase, encrypted: true);
+      final rows = box.get('all_returns', defaultValue: const <dynamic>[]);
+      if (rows is! Iterable) return [];
+      return rows
+          .map((row) => row is Map ? Map<String, dynamic>.from(row) : row)
+          .toList();
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ loadSalesReturns failed: $e');
+      return [];
+    }
+  }
+
+  /// Append a return record idempotently by return_id.
+  static Future<void> saveSalesReturn(Map<String, dynamic> record) async {
+    if (!await _hasValidUserId()) return;
+    final returnId = (record['return_id'] ?? '').toString().trim();
+    if (returnId.isEmpty) return;
+    final box = await _getBox(_returnsBoxBase, encrypted: true);
+    final rows = box.get('all_returns', defaultValue: const <dynamic>[]);
+    final list = rows is Iterable ? rows.toList() : <dynamic>[];
+    final exists = list.any(
+      (row) => row is Map && row['return_id']?.toString() == returnId,
+    );
+    if (exists) return;
+    list.add(Map<String, dynamic>.from(record));
+    await box.put('all_returns', list);
+  }
+
   /// Read invoice-ledger count without canonicalizing or materializing every
   /// record, so opening Dashboard/Khata does not duplicate large collections.
   static Future<int> getLocalInvoiceCount() async {
@@ -1095,14 +1137,18 @@ class LocalStorageService {
     if (rawSales is! List || rawSales.isEmpty) return [];
 
     final boundedLimit = limit.clamp(1, 1000).toInt();
-    final startIndex =
-        (rawSales.length - boundedLimit).clamp(0, rawSales.length).toInt();
+    final startIndex = (rawSales.length - boundedLimit)
+        .clamp(0, rawSales.length)
+        .toInt();
 
-    return rawSales.skip(startIndex).map((sale) {
-      if (sale is StoredSale) return sale.toJson();
-      if (sale is Map) return Map<String, dynamic>.from(sale);
-      return sale;
-    }).toList(growable: false);
+    return rawSales
+        .skip(startIndex)
+        .map((sale) {
+          if (sale is StoredSale) return sale.toJson();
+          if (sale is Map) return Map<String, dynamic>.from(sale);
+          return sale;
+        })
+        .toList(growable: false);
   }
 
   static Future<bool> cancelSale(String saleId) async {
@@ -1319,10 +1365,10 @@ class LocalStorageService {
 
     final keys = customerIdsOrPhones
         .map((value) => value.trim())
-        .where((value) =>
-            value.isNotEmpty &&
-            value != '0' &&
-            value.toLowerCase() != 'null')
+        .where(
+          (value) =>
+              value.isNotEmpty && value != '0' && value.toLowerCase() != 'null',
+        )
         .toSet();
     if (keys.isEmpty) return {};
 
@@ -1359,23 +1405,26 @@ class LocalStorageService {
       final invoiceId = int.tryParse(
         (invoice['customer_id'] ?? invoice['customerId'] ?? '').toString(),
       );
-      final invoicePhone = (invoice['customer_phone'] ??
-              invoice['phone'] ??
-              invoice['mobile'] ??
-              '')
-          .toString()
-          .trim();
+      final invoicePhone =
+          (invoice['customer_phone'] ??
+                  invoice['phone'] ??
+                  invoice['mobile'] ??
+                  '')
+              .toString()
+              .trim();
 
       final matchesCustomer =
           (id != null && invoiceId == id) ||
           (phone.isNotEmpty && invoicePhone == phone);
       if (!matchesCustomer) continue;
 
-      final total = double.tryParse(
+      final total =
+          double.tryParse(
             (invoice['total_amount'] ?? invoice['total'] ?? 0).toString(),
           ) ??
           0.0;
-      final paid = double.tryParse(
+      final paid =
+          double.tryParse(
             (invoice['paid_amount'] ?? invoice['amount_paid'] ?? 0).toString(),
           ) ??
           0.0;
@@ -1390,7 +1439,8 @@ class LocalStorageService {
           .last
           .toUpperCase();
       final hasBalance = total - paid > 0.01;
-      final isReceivable = !{'PAID', 'CANCELLED', 'DRAFT'}.contains(invoiceStatus) &&
+      final isReceivable =
+          !{'PAID', 'CANCELLED', 'DRAFT'}.contains(invoiceStatus) &&
           !{'PAID'}.contains(paymentStatus);
       if (!hasBalance || !isReceivable) continue;
 
@@ -1473,8 +1523,9 @@ class LocalStorageService {
     // mirror lookup constant-time instead of scanning the whole invoice list.
     final firstInvoiceIndexByToken = <String, int>{};
     for (var i = 0; i < invoiceOnlyCanonical.length; i++) {
-      for (final token
-          in InvoiceDedupHelper.identityTokens(invoiceOnlyCanonical[i])) {
+      for (final token in InvoiceDedupHelper.identityTokens(
+        invoiceOnlyCanonical[i],
+      )) {
         firstInvoiceIndexByToken.putIfAbsent(token, () => i);
       }
     }
@@ -1796,178 +1847,179 @@ class LocalStorageService {
     String? idempotencyKey,
   }) async {
     return _paymentWriteLock.synchronized(() async {
-    if (amount <= 0) {
-      throw ArgumentError.value(
-        amount,
-        'amount',
-        'Payment must be greater than zero',
-      );
-    }
-
-    final invoices = await loadLocalInvoices();
-
-    // Idempotency: replaying the same payment action must never add the
-    // payment twice after a timeout/retry.
-    if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty) {
-      final key = idempotencyKey.trim();
-      final alreadyApplied = invoices.any(
-        (raw) =>
-            raw is Map &&
-            PaymentIdempotencyLedger.contains(
-              Map<String, dynamic>.from(raw),
-              key,
-            ),
-      );
-      if (alreadyApplied) return;
-    }
-
-    // Prefer exact invoice settlement. This makes "Mark Paid" an actual
-    // payment-state change instead of simply hiding the customer from the UI.
-    if (invoiceId != null && invoiceId.trim().isNotEmpty ||
-        invoiceNumber != null && invoiceNumber.trim().isNotEmpty) {
-      final target = (invoiceId ?? invoiceNumber)!.trim().toLowerCase();
-      int index = invoices.indexWhere((raw) {
-        if (raw is! Map) return false;
-        final row = Map<String, dynamic>.from(raw);
-        final ids = [
-          row['invoice_id'],
-          row['sale_id'],
-          row['invoice_number'],
-          row['invoiceId'],
-          row['backend_id'],
-          row['id'],
-        ];
-        return ids.any((v) => v?.toString().trim().toLowerCase() == target);
-      });
-
-      // Also match invoice number separately when invoiceId is numeric.
-      if (index < 0 && invoiceNumber != null) {
-        final number = invoiceNumber.trim().toLowerCase();
-        index = invoices.indexWhere(
-          (raw) =>
-              raw is Map &&
-              raw['invoice_number']?.toString().trim().toLowerCase() == number,
+      if (amount <= 0) {
+        throw ArgumentError.value(
+          amount,
+          'amount',
+          'Payment must be greater than zero',
         );
       }
 
-      if (index >= 0) {
-        final row = Map<String, dynamic>.from(invoices[index]);
-        final total =
-            double.tryParse(
-              (row['total_amount'] ??
-                      row['total'] ??
-                      row['invoice_total'] ??
-                      row['grand_total'] ??
-                      0)
-                  .toString(),
-            ) ??
-            0.0;
-        final currentPaid =
-            double.tryParse(
-              (row['paid_amount'] ??
-                      row['amount_paid'] ??
-                      row['paid'] ??
-                      row['received_amount'] ??
-                      0)
-                  .toString(),
-            ) ??
-            0.0;
+      final invoices = await loadLocalInvoices();
 
-        final newPaid = (currentPaid + amount).clamp(0.0, total).toDouble();
-        final outstanding = (total - newPaid)
-            .clamp(0.0, double.infinity)
-            .toDouble();
-
-        row['paid_amount'] = newPaid;
-        row['payment_status'] = _deriveInvoiceStatus(total, newPaid);
-        row['status'] = row['payment_status'];
-        row['pending_amount'] = outstanding;
-        row['last_payment_amount'] = amount;
-        row['last_payment_method'] = paymentMethod;
-        row['payment_method'] = paymentMethod;
-        row['paid_at'] =
-            paymentDate ?? DateTime.now().toUtc().toIso8601String();
-        row['payment_date'] =
-            paymentDate ?? DateTime.now().toUtc().toIso8601String();
-        if (idempotencyKey != null && idempotencyKey.isNotEmpty) {
-          PaymentIdempotencyLedger.remember(row, idempotencyKey);
-        }
-        row['updated_at'] = DateTime.now().toUtc().toIso8601String();
-
-        invoices[index] = row;
-        await saveLocalInvoices(invoices);
-        return;
+      // Idempotency: replaying the same payment action must never add the
+      // payment twice after a timeout/retry.
+      if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty) {
+        final key = idempotencyKey.trim();
+        final alreadyApplied = invoices.any(
+          (raw) =>
+              raw is Map &&
+              PaymentIdempotencyLedger.contains(
+                Map<String, dynamic>.from(raw),
+                key,
+              ),
+        );
+        if (alreadyApplied) return;
       }
-    }
 
-    // Some restored/offline transactions can exist in sales history before
-    // an invoice mirror is available. Persist the payment there too.
-    if (invoiceId != null || invoiceNumber != null) {
-      final sales = await loadSales();
-      final targetIds = {
-        (invoiceId ?? '').trim().toLowerCase(),
-        (invoiceNumber ?? '').trim().toLowerCase(),
-      }..removeWhere((v) => v.isEmpty);
+      // Prefer exact invoice settlement. This makes "Mark Paid" an actual
+      // payment-state change instead of simply hiding the customer from the UI.
+      if (invoiceId != null && invoiceId.trim().isNotEmpty ||
+          invoiceNumber != null && invoiceNumber.trim().isNotEmpty) {
+        final target = (invoiceId ?? invoiceNumber)!.trim().toLowerCase();
+        int index = invoices.indexWhere((raw) {
+          if (raw is! Map) return false;
+          final row = Map<String, dynamic>.from(raw);
+          final ids = [
+            row['invoice_id'],
+            row['sale_id'],
+            row['invoice_number'],
+            row['invoiceId'],
+            row['backend_id'],
+            row['id'],
+          ];
+          return ids.any((v) => v?.toString().trim().toLowerCase() == target);
+        });
 
-      for (var i = 0; i < sales.length; i++) {
-        final raw = sales[i];
-        if (raw is! Map) continue;
-        final sale = Map<String, dynamic>.from(raw);
-        final saleIds = {
-          (sale['sale_id'] ?? '').toString().trim().toLowerCase(),
-          (sale['invoice_number'] ?? '').toString().trim().toLowerCase(),
-          (sale['invoice_id'] ?? '').toString().trim().toLowerCase(),
-          (sale['id'] ?? '').toString().trim().toLowerCase(),
-        }..removeWhere((v) => v.isEmpty);
+        // Also match invoice number separately when invoiceId is numeric.
+        if (index < 0 && invoiceNumber != null) {
+          final number = invoiceNumber.trim().toLowerCase();
+          index = invoices.indexWhere(
+            (raw) =>
+                raw is Map &&
+                raw['invoice_number']?.toString().trim().toLowerCase() ==
+                    number,
+          );
+        }
 
-        if (saleIds.intersection(targetIds).isEmpty) continue;
-        if (idempotencyKey != null &&
-            idempotencyKey.trim().isNotEmpty &&
-            PaymentIdempotencyLedger.contains(sale, idempotencyKey)) {
+        if (index >= 0) {
+          final row = Map<String, dynamic>.from(invoices[index]);
+          final total =
+              double.tryParse(
+                (row['total_amount'] ??
+                        row['total'] ??
+                        row['invoice_total'] ??
+                        row['grand_total'] ??
+                        0)
+                    .toString(),
+              ) ??
+              0.0;
+          final currentPaid =
+              double.tryParse(
+                (row['paid_amount'] ??
+                        row['amount_paid'] ??
+                        row['paid'] ??
+                        row['received_amount'] ??
+                        0)
+                    .toString(),
+              ) ??
+              0.0;
+
+          final newPaid = (currentPaid + amount).clamp(0.0, total).toDouble();
+          final outstanding = (total - newPaid)
+              .clamp(0.0, double.infinity)
+              .toDouble();
+
+          row['paid_amount'] = newPaid;
+          row['payment_status'] = _deriveInvoiceStatus(total, newPaid);
+          row['status'] = row['payment_status'];
+          row['pending_amount'] = outstanding;
+          row['last_payment_amount'] = amount;
+          row['last_payment_method'] = paymentMethod;
+          row['payment_method'] = paymentMethod;
+          row['paid_at'] =
+              paymentDate ?? DateTime.now().toUtc().toIso8601String();
+          row['payment_date'] =
+              paymentDate ?? DateTime.now().toUtc().toIso8601String();
+          if (idempotencyKey != null && idempotencyKey.isNotEmpty) {
+            PaymentIdempotencyLedger.remember(row, idempotencyKey);
+          }
+          row['updated_at'] = DateTime.now().toUtc().toIso8601String();
+
+          invoices[index] = row;
+          await saveLocalInvoices(invoices);
           return;
         }
-
-        final total =
-            double.tryParse(
-              (sale['total_amount'] ?? sale['total'] ?? 0).toString(),
-            ) ??
-            0.0;
-        final currentPaid =
-            double.tryParse(
-              (sale['paid_amount'] ?? sale['amount_paid'] ?? 0).toString(),
-            ) ??
-            0.0;
-        final newPaid = (currentPaid + amount).clamp(0.0, total).toDouble();
-
-        sale['paid_amount'] = newPaid;
-        sale['payment_status'] = _deriveInvoiceStatus(total, newPaid);
-        sale['status'] = sale['payment_status'];
-        sale['pending_amount'] = (total - newPaid)
-            .clamp(0.0, double.infinity)
-            .toDouble();
-        sale['last_payment_amount'] = amount;
-        sale['last_payment_method'] = paymentMethod;
-        sale['payment_method'] = paymentMethod;
-        sale['paid_at'] =
-            paymentDate ?? DateTime.now().toUtc().toIso8601String();
-        sale['payment_date'] =
-            paymentDate ?? DateTime.now().toUtc().toIso8601String();
-        if (idempotencyKey != null && idempotencyKey.isNotEmpty) {
-          PaymentIdempotencyLedger.remember(sale, idempotencyKey);
-        }
-        sale['updated_at'] = DateTime.now().toUtc().toIso8601String();
-        sales[i] = sale;
-        await saveSales(sales);
-        return;
       }
-    }
 
-    // Legacy/manual customer-level Khata balance. Keep this only for old
-    // records that are not attached to a specific invoice yet.
-    final balances = await loadKhataBalances();
-    final current = balances[customerPhone] ?? 0.0;
-    balances[customerPhone] = current - amount;
-    await saveKhataBalances(balances);
+      // Some restored/offline transactions can exist in sales history before
+      // an invoice mirror is available. Persist the payment there too.
+      if (invoiceId != null || invoiceNumber != null) {
+        final sales = await loadSales();
+        final targetIds = {
+          (invoiceId ?? '').trim().toLowerCase(),
+          (invoiceNumber ?? '').trim().toLowerCase(),
+        }..removeWhere((v) => v.isEmpty);
+
+        for (var i = 0; i < sales.length; i++) {
+          final raw = sales[i];
+          if (raw is! Map) continue;
+          final sale = Map<String, dynamic>.from(raw);
+          final saleIds = {
+            (sale['sale_id'] ?? '').toString().trim().toLowerCase(),
+            (sale['invoice_number'] ?? '').toString().trim().toLowerCase(),
+            (sale['invoice_id'] ?? '').toString().trim().toLowerCase(),
+            (sale['id'] ?? '').toString().trim().toLowerCase(),
+          }..removeWhere((v) => v.isEmpty);
+
+          if (saleIds.intersection(targetIds).isEmpty) continue;
+          if (idempotencyKey != null &&
+              idempotencyKey.trim().isNotEmpty &&
+              PaymentIdempotencyLedger.contains(sale, idempotencyKey)) {
+            return;
+          }
+
+          final total =
+              double.tryParse(
+                (sale['total_amount'] ?? sale['total'] ?? 0).toString(),
+              ) ??
+              0.0;
+          final currentPaid =
+              double.tryParse(
+                (sale['paid_amount'] ?? sale['amount_paid'] ?? 0).toString(),
+              ) ??
+              0.0;
+          final newPaid = (currentPaid + amount).clamp(0.0, total).toDouble();
+
+          sale['paid_amount'] = newPaid;
+          sale['payment_status'] = _deriveInvoiceStatus(total, newPaid);
+          sale['status'] = sale['payment_status'];
+          sale['pending_amount'] = (total - newPaid)
+              .clamp(0.0, double.infinity)
+              .toDouble();
+          sale['last_payment_amount'] = amount;
+          sale['last_payment_method'] = paymentMethod;
+          sale['payment_method'] = paymentMethod;
+          sale['paid_at'] =
+              paymentDate ?? DateTime.now().toUtc().toIso8601String();
+          sale['payment_date'] =
+              paymentDate ?? DateTime.now().toUtc().toIso8601String();
+          if (idempotencyKey != null && idempotencyKey.isNotEmpty) {
+            PaymentIdempotencyLedger.remember(sale, idempotencyKey);
+          }
+          sale['updated_at'] = DateTime.now().toUtc().toIso8601String();
+          sales[i] = sale;
+          await saveSales(sales);
+          return;
+        }
+      }
+
+      // Legacy/manual customer-level Khata balance. Keep this only for old
+      // records that are not attached to a specific invoice yet.
+      final balances = await loadKhataBalances();
+      final current = balances[customerPhone] ?? 0.0;
+      balances[customerPhone] = current - amount;
+      await saveKhataBalances(balances);
     });
   }
 
@@ -2168,13 +2220,14 @@ class LocalStorageService {
               );
             }
             final product = Map<String, dynamic>.from(row);
-            final key = (product['product_id'] ??
-                    product['id'] ??
-                    product['barcode'] ??
-                    product['sku'] ??
-                    '')
-                .toString()
-                .trim();
+            final key =
+                (product['product_id'] ??
+                        product['id'] ??
+                        product['barcode'] ??
+                        product['sku'] ??
+                        '')
+                    .toString()
+                    .trim();
             if (key.isEmpty) {
               throw FormatException(
                 'Backup product at index $index has no stable key.',
@@ -2264,9 +2317,10 @@ class LocalStorageService {
         final invoiceBox = await _getBox(_invoicesBoxBase);
         final legacy = invoiceBox.get('all_invoices', defaultValue: const []);
         final legacyRows = legacy is List
-            ? legacy.whereType<Map>().map(
-                (row) => Map<String, dynamic>.from(row),
-              ).toList()
+            ? legacy
+                  .whereType<Map>()
+                  .map((row) => Map<String, dynamic>.from(row))
+                  .toList()
             : <Map<String, dynamic>>[];
         await saveLocalInvoices(<dynamic>[...legacyRows, ...invoices]);
       }

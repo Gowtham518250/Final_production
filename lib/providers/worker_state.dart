@@ -24,10 +24,7 @@ class WorkerState {
     this.lastActive,
   });
 
-  WorkerState copyWith({
-    String? status,
-    DateTime? lastActive,
-  }) => WorkerState(
+  WorkerState copyWith({String? status, DateTime? lastActive}) => WorkerState(
     id: id,
     name: name,
     phone: phone,
@@ -44,7 +41,7 @@ class WorkerStateNotifier extends ChangeNotifier {
   final Map<String, WorkerState> _workers = {};
 
   List<WorkerState> get workers => _workers.values.toList();
-  
+
   WorkerState? getWorker(String id) => _workers[id];
 
   /// Add new worker
@@ -68,9 +65,7 @@ class WorkerStateNotifier extends ChangeNotifier {
   void recordActivity(String workerId) {
     final worker = _workers[workerId];
     if (worker == null) return;
-    _workers[workerId] = worker.copyWith(
-      lastActive: DateTime.now(),
-    );
+    _workers[workerId] = worker.copyWith(lastActive: DateTime.now());
     notifyListeners();
   }
 

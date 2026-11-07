@@ -17,9 +17,9 @@ class InterShopLoyaltyService {
   /// Returns: network_id, shops_in_network, customer_reach
   static Future<Map<String, dynamic>> joinLoyaltyNetwork() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     final networkId = 'NETWORK_${DateTime.now().millisecondsSinceEpoch}';
-    
+
     final networkData = {
       'network_id': networkId,
       'status': 'ACTIVE',
@@ -63,11 +63,11 @@ class InterShopLoyaltyService {
 
     final lock = json.decode(lockData) as Map<String, dynamic>;
     final lockDate = DateTime.parse(lock['locked_since']);
-    
+
     // Bronze: 7 days lock, Silver: 30 days, Gold: 60 days
     final lockDurationDays = _getLockDurationForTier(currentTier);
     final lockExpires = lockDate.add(Duration(days: lockDurationDays));
-    
+
     return {
       'is_locked': DateTime.now().isBefore(lockExpires),
       'tier_name': lock['tier_name'],
@@ -118,7 +118,7 @@ class InterShopLoyaltyService {
   static Future<List<Map<String, dynamic>>> getNetworkShops() async {
     final prefs = await SharedPreferences.getInstance();
     final networkData = prefs.getString(_networkKey);
-    
+
     if (networkData == null) {
       return [];
     }
@@ -126,7 +126,7 @@ class InterShopLoyaltyService {
     // Parse and return actual network shops
     final network = json.decode(networkData) as Map<String, dynamic>;
     final shops = network['shops'] as List? ?? [];
-    
+
     return shops.cast<Map<String, dynamic>>();
   }
 
@@ -139,7 +139,7 @@ class InterShopLoyaltyService {
     String customerTier,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Check tier lock
     final lock = await checkTierLock(customerId, customerTier);
     if (lock['is_locked'] == true) {
@@ -155,7 +155,7 @@ class InterShopLoyaltyService {
     final networkFee = customerTier.toUpperCase() == 'GOLD'
         ? 0
         : (points * 0.01).round();
-    
+
     final pointsAfterFee = points - networkFee;
 
     // Record transfer locally
@@ -189,13 +189,15 @@ class InterShopLoyaltyService {
   }
 
   /// Get transfer history for customer
-  static Future<List<Map<String, dynamic>>> getTransferHistory(int customerId) async {
+  static Future<List<Map<String, dynamic>>> getTransferHistory(
+    int customerId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final historyKey = 'transfer_history_$customerId';
     final history = prefs.getString(historyKey);
-    
+
     if (history == null) return [];
-    
+
     final transfers = json.decode(history) as List;
     return List<Map<String, dynamic>>.from(
       transfers.cast<Map<String, dynamic>>().reversed,
@@ -208,7 +210,7 @@ class InterShopLoyaltyService {
 
   static List<Map<String, dynamic>> _getBenefitsForTier(String tier) {
     final tierUpper = tier.toUpperCase();
-    
+
     switch (tierUpper) {
       case 'GOLD':
         return [
@@ -227,7 +229,8 @@ class InterShopLoyaltyService {
           {
             'id': 'gold_3',
             'name': 'Tier Lock',
-            'description': '60-day lock guarantees tier benefits across network',
+            'description':
+                '60-day lock guarantees tier benefits across network',
             'icon': '🔐',
           },
           {
@@ -318,17 +321,13 @@ class InterShopLoyaltyService {
   /// Get network health and growth metrics
   static Future<Map<String, dynamic>> getNetworkMetrics() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     return {
       'active_shops': 12,
       'total_customers': 45000,
       'monthly_transfer_volume': 125000, // points transferred
       'avg_points_per_transfer': 450,
-      'tier_distribution': {
-        'bronze': 28000,
-        'silver': 12000,
-        'gold': 5000,
-      },
+      'tier_distribution': {'bronze': 28000, 'silver': 12000, 'gold': 5000},
       'network_adoption': 0.68, // 68% of customers active in network
       'repeat_customer_rate': 0.82, // 82% of Gold retained
       'growth_rate_monthly': 0.15, // 15% growth
@@ -343,12 +342,14 @@ class InterShopLoyaltyService {
     final prefs = await SharedPreferences.getInstance();
     final historyKey = 'transfer_history_$customerId';
     final history = prefs.getString(historyKey);
-    
-    final transferCount = history != null ? (json.decode(history) as List).length : 0;
-    
+
+    final transferCount = history != null
+        ? (json.decode(history) as List).length
+        : 0;
+
     // More transfers = more invested in network
     final networkInvestment = transferCount * 100;
-    
+
     // Switching cost = tier penalty + network investment
     final switchingCost = _getSwitchingPenalty(currentTier) + networkInvestment;
 

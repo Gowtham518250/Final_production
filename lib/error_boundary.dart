@@ -20,7 +20,7 @@ class ErrorBoundary extends StatefulWidget {
   State<ErrorBoundary> createState() => _ErrorBoundaryState();
 }
 
-class _ErrorBoundaryState extends State<ErrorBoundary> { 
+class _ErrorBoundaryState extends State<ErrorBoundary> {
   dynamic _error;
   StackTrace? _stackTrace;
   Map<String, dynamic>? _errorContext;
@@ -40,10 +40,10 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       if (widget.errorBuilder != null) {
         return widget.errorBuilder!(_error);
       }
-      
+
       return _buildErrorUI(context);
     }
-    
+
     // No error, show child
     return widget.child;
   }
@@ -79,10 +79,7 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
               const SizedBox(height: 16),
               Text(
                 'The app encountered an unexpected error. Please try again.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.white70),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
@@ -95,53 +92,79 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6366F1),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
                 ),
                 child: const Text('Try Again'),
               ),
               const SizedBox(height: 16),
-      TextButton(
-        onPressed: () {
-          // Show comprehensive error details in debug mode
-          if (kDebugMode) {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Error Details'),
-                content: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Error: $_error', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      if (_errorContext != null) ...[
-                        const Text('Context:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text(_errorContext.toString(), style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
-                        const SizedBox(height: 8),
-                      ],
-                      const Text('Stack Trace:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text('$_stackTrace', style: const TextStyle(fontFamily: 'monospace', fontSize: 10)),
-                    ],
-                  ),
+              TextButton(
+                onPressed: () {
+                  // Show comprehensive error details in debug mode
+                  if (kDebugMode) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Error Details'),
+                        content: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Error: $_error',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (_errorContext != null) ...[
+                                const Text(
+                                  'Context:',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _errorContext.toString(),
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+                              const Text(
+                                'Stack Trace:',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$_stackTrace',
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+                child: Text(
+                  kDebugMode ? 'View Error Details' : '',
+                  style: TextStyle(color: Colors.white70),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
-                ],
               ),
-            );
-          }
-        },
-        child: Text(
-          kDebugMode ? 'View Error Details' : '',
-          style: TextStyle(color: Colors.white70),
-        ),
-      ),
             ],
           ),
         ),
@@ -189,23 +212,28 @@ mixin ErrorBoundaryMixin<T extends StatefulWidget> on State<T> {
 
     // Find error boundary and report error
     ErrorBoundaryProvider? boundary;
-    
+
     if (mounted) {
-      boundary = context.dependOnInheritedWidgetOfExactType<ErrorBoundaryProvider>();
+      boundary = context
+          .dependOnInheritedWidgetOfExactType<ErrorBoundaryProvider>();
     }
-    
+
     if (boundary != null) {
       boundary.onError(error, stackTrace);
     }
   }
-  
+
   void _captureErrorContext(dynamic error, StackTrace? stackTrace) {
     try {
       _lastErrorContext = {
         'widget': widget.runtimeType.toString(),
         'state': runtimeType.toString(),
         'error': error?.toString(),
-        'stackTraceSnippet': stackTrace?.toString().split('\n').take(3).join('\n'),
+        'stackTraceSnippet': stackTrace
+            ?.toString()
+            .split('\n')
+            .take(3)
+            .join('\n'),
         'time': DateTime.now().toIso8601String(),
       };
       if (kDebugMode) {

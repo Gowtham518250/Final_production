@@ -35,11 +35,12 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
         _isLoading = true;
         _errorMessage = '';
       });
-      
+
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() {
-          _errorMessage = 'Location services are disabled. Please enable them to find nearby shops.';
+          _errorMessage =
+              'Location services are disabled. Please enable them to find nearby shops.';
           _errorIcon = Icons.location_off;
           _isLoading = false;
         });
@@ -51,31 +52,35 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           setState(() {
-            _errorMessage = 'Location permissions are denied. Please allow location access.';
+            _errorMessage =
+                'Location permissions are denied. Please allow location access.';
             _errorIcon = Icons.location_disabled;
             _isLoading = false;
           });
           return;
         }
       }
-      
+
       if (permission == LocationPermission.deniedForever) {
         setState(() {
-          _errorMessage = 'Location permissions are permanently denied. Please enable them in app settings.';
+          _errorMessage =
+              'Location permissions are permanently denied. Please enable them in app settings.';
           _errorIcon = Icons.location_off;
           _isLoading = false;
         });
         return;
-      } 
+      }
 
       // Get current location
       _currentPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      
+
       // Fetch nearby shops from backend
-      final response = await ApiClient.getJson('/store/shops/nearby?lat=${_currentPosition!.latitude}&lng=${_currentPosition!.longitude}&radius_km=10');
-      
+      final response = await ApiClient.getJson(
+        '/store/shops/nearby?lat=${_currentPosition!.latitude}&lng=${_currentPosition!.longitude}&radius_km=10',
+      );
+
       final List<Map<String, dynamic>> loadedShops = [];
 
       if (response.statusCode == 200) {
@@ -85,18 +90,22 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
         final rawShops = decoded is Map && decoded['shops'] is List
             ? decoded['shops'] as List
             : decoded is List
-                ? decoded
-                : const <dynamic>[];
+            ? decoded
+            : const <dynamic>[];
         for (final rawShop in rawShops.whereType<Map>()) {
           final shop = Map<String, dynamic>.from(rawShop);
-          final distanceKm = double.tryParse(shop['distance_km']?.toString() ?? '') ?? 0;
+          final distanceKm =
+              double.tryParse(shop['distance_km']?.toString() ?? '') ?? 0;
           loadedShops.add({
             ...shop,
             'id': shop['shop_id']?.toString() ?? '',
             'name': shop['shop_name']?.toString() ?? 'Shop',
             'distance': '${distanceKm.toStringAsFixed(1)} km',
             'rating': shop['rating']?.toString() ?? 'New',
-            'tags': shop['tags'] ?? shop['categories'] ?? const ['Groceries', 'Online'],
+            'tags':
+                shop['tags'] ??
+                shop['categories'] ??
+                const ['Groceries', 'Online'],
             'address': shop['address'] ?? '',
             'phone': shop['phone'] ?? '',
             'is_online': shop['is_online'] ?? true,
@@ -110,40 +119,42 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
         });
         return;
       }
-      
+
       setState(() {
         _realShops = loadedShops;
         _isLoading = false;
       });
-      
     } catch (e) {
       // Distinguish between location errors and API errors
       String errorMsg = 'Failed to fetch shops';
       IconData errorIcon = Icons.error_outline;
-      
+
       if (e.toString().contains('Location') || e.toString().contains('GPS')) {
         errorMsg = 'Unable to get your location. Please ensure GPS is enabled.';
         errorIcon = Icons.location_disabled;
-      } else if (e.toString().contains('Network') || e.toString().contains('Socket') || e.toString().contains('Connection')) {
+      } else if (e.toString().contains('Network') ||
+          e.toString().contains('Socket') ||
+          e.toString().contains('Connection')) {
         errorMsg = 'Network error. Please check your internet connection.';
         errorIcon = Icons.wifi_off;
-      } else if (e.toString().contains('Permission') || e.toString().contains('denied')) {
+      } else if (e.toString().contains('Permission') ||
+          e.toString().contains('denied')) {
         errorMsg = 'Location permission denied. Please allow location access.';
         errorIcon = Icons.location_disabled;
       } else {
         errorMsg = 'Something went wrong. Please try again.';
         errorIcon = Icons.refresh;
       }
-      
+
       setState(() {
         _errorMessage = errorMsg;
         _errorIcon = errorIcon;
         _isLoading = false;
       });
-      
+
       // Log the actual error for debugging
       debugPrint('Nearby shops error: $e');
-      
+
       // Marketplace visibility is backend-controlled. Never show synthetic
       // shops after a network error because that could make a non-enabled shop
       // appear orderable.
@@ -159,7 +170,13 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
   String _shopAddress(Map<String, dynamic> shop) {
     final values = <String>[
       for (final key in const [
-        'address_line1', 'address_line2', 'address', 'location', 'city', 'state', 'postal_code',
+        'address_line1',
+        'address_line2',
+        'address',
+        'location',
+        'city',
+        'state',
+        'postal_code',
       ])
         if ((shop[key]?.toString().trim() ?? '').isNotEmpty)
           shop[key].toString().trim(),
@@ -197,12 +214,15 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: LiveTranslatedText('Nearby Shops', style: TextStyle(color: textColor)),
+        title: LiveTranslatedText(
+          'Nearby Shops',
+          style: TextStyle(color: textColor),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: textColor),
       ),
-      body: _isLoading 
+      body: _isLoading
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -216,7 +236,7 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                 ],
               ),
             )
-        : _errorMessage.isNotEmpty
+          : _errorMessage.isNotEmpty
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -225,20 +245,27 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                   children: [
                     Icon(_errorIcon, size: 64, color: Colors.redAccent),
                     const SizedBox(height: 16),
-                    LiveTranslatedText(_errorMessage, style: TextStyle(color: textColor), textAlign: TextAlign.center),
+                    LiveTranslatedText(
+                      _errorMessage,
+                      style: TextStyle(color: textColor),
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
-                        setState(() { _isLoading = true; _errorMessage = ''; });
+                        setState(() {
+                          _isLoading = true;
+                          _errorMessage = '';
+                        });
                         _fetchLocationAndShops();
                       },
                       child: const LiveTranslatedText('Try Again'),
-                    )
+                    ),
                   ],
                 ),
               ),
             )
-            : RefreshIndicator(
+          : RefreshIndicator(
               onRefresh: _fetchLocationAndShops,
               color: AppColors.primary,
               child: _realShops.isEmpty
@@ -264,10 +291,15 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (ShopLocationsMap.shopsWithCoordinates(_realShops).isNotEmpty) ...[
+                                if (ShopLocationsMap.shopsWithCoordinates(
+                                  _realShops,
+                                ).isNotEmpty) ...[
                                   const LiveTranslatedText(
                                     'Nearby shop locations',
-                                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                   const SizedBox(height: 10),
                                   ShopLocationsMap(
@@ -278,7 +310,10 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                                   const SizedBox(height: 8),
                                   LiveTranslatedText(
                                     'Tap a numbered pin to open directions to that shop.',
-                                    style: TextStyle(fontSize: 11, color: subTextColor),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: subTextColor,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -291,7 +326,11 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                           child: GestureDetector(
                             onTap: () {
                               // Navigate to shop storefront
-                              Navigator.pushNamed(context, '/customer-home', arguments: shop['id']);
+                              Navigator.pushNamed(
+                                context,
+                                '/customer-home',
+                                arguments: shop['id'],
+                              );
                             },
                             child: GlassContainer(
                               padding: const EdgeInsets.all(16),
@@ -301,30 +340,61 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                                     width: 60,
                                     height: 60,
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.1),
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: const Icon(Icons.storefront, color: AppColors.primary, size: 32),
+                                    child: const Icon(
+                                      Icons.storefront,
+                                      color: AppColors.primary,
+                                      size: 32,
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         LiveTranslatedText(
                                           shop['name'],
-                                          style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                            color: textColor,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
-                                            const Icon(Icons.location_on, color: AppColors.primary, size: 14),
+                                            const Icon(
+                                              Icons.location_on,
+                                              color: AppColors.primary,
+                                              size: 14,
+                                            ),
                                             const SizedBox(width: 4),
-                                            LiveTranslatedText(shop['distance'], style: TextStyle(color: subTextColor, fontSize: 13)),
+                                            LiveTranslatedText(
+                                              shop['distance'],
+                                              style: TextStyle(
+                                                color: subTextColor,
+                                                fontSize: 13,
+                                              ),
+                                            ),
                                             const SizedBox(width: 16),
-                                            const Icon(Icons.star, color: Colors.amber, size: 14),
+                                            const Icon(
+                                              Icons.star,
+                                              color: Colors.amber,
+                                              size: 14,
+                                            ),
                                             const SizedBox(width: 4),
-                                            LiveTranslatedText(shop['rating'], style: TextStyle(color: subTextColor, fontSize: 13)),
+                                            LiveTranslatedText(
+                                              shop['rating'],
+                                              style: TextStyle(
+                                                color: subTextColor,
+                                                fontSize: 13,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                         if (_shopAddress(shop).isNotEmpty) ...[
@@ -333,28 +403,45 @@ class _NearbyShopsPageState extends State<NearbyShopsPage> {
                                             _shopAddress(shop),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(fontSize: 11, color: subTextColor),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: subTextColor,
+                                            ),
                                           ),
                                         ],
-                                        if ((shop['phone']?.toString() ?? '').isNotEmpty) ...[
+                                        if ((shop['phone']?.toString() ?? '')
+                                            .isNotEmpty) ...[
                                           const SizedBox(height: 4),
                                           LiveTranslatedText(
                                             'Phone: ${shop['phone']}',
-                                            style: TextStyle(fontSize: 11, color: subTextColor),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: subTextColor,
+                                            ),
                                           ),
                                         ],
                                         Align(
                                           alignment: Alignment.centerLeft,
                                           child: TextButton.icon(
-                                            onPressed: () => _openShopDirections(shop),
-                                            icon: const Icon(Icons.directions_outlined, size: 16),
-                                            label: const LiveTranslatedText('Directions'),
+                                            onPressed: () =>
+                                                _openShopDirections(shop),
+                                            icon: const Icon(
+                                              Icons.directions_outlined,
+                                              size: 16,
+                                            ),
+                                            label: const LiveTranslatedText(
+                                              'Directions',
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  Icon(Icons.arrow_forward_ios, color: subTextColor, size: 16),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: subTextColor,
+                                    size: 16,
+                                  ),
                                 ],
                               ),
                             ),

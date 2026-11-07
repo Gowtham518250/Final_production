@@ -3,19 +3,22 @@ import '../lib/payment_event.dart';
 
 void main() {
   group('PaymentEvent fingerprint', () {
-    test('generates unique IDs for many events created in the same clock tick', () {
-      final ids = List.generate(
-        100,
-        (index) => PaymentEvent(
-          amount: 500,
-          timestamp: DateTime(2026, 10, 9, 10, 11),
-          app: PaymentApp.googlePay,
-          rawText: '₹500 credited to your account #$index',
-        ).id,
-      );
+    test(
+      'generates unique IDs for many events created in the same clock tick',
+      () {
+        final ids = List.generate(
+          100,
+          (index) => PaymentEvent(
+            amount: 500,
+            timestamp: DateTime(2026, 10, 9, 10, 11),
+            app: PaymentApp.googlePay,
+            rawText: '₹500 credited to your account #$index',
+          ).id,
+        );
 
-      expect(ids.toSet(), hasLength(ids.length));
-    });
+        expect(ids.toSet(), hasLength(ids.length));
+      },
+    );
 
     test('does not merge no-reference events into an accounting identity', () {
       final first = PaymentEvent(
@@ -113,8 +116,6 @@ void main() {
       expect(credit.fingerprint, isNot(debit.fingerprint));
     });
 
-
-
     test('normalizes reference identity and excludes amount from the key', () {
       final first = PaymentEvent(
         id: 'reference-1',
@@ -139,43 +140,46 @@ void main() {
       expect(first.hasReferenceConflictWith(conflictingAmount), isTrue);
     });
 
-    test('native notification identity ignores payload hash but preserves new posts', () {
-      final first = PaymentEvent(
-        id: 'phonepe-first',
-        amount: 2,
-        timestamp: DateTime(2026, 10, 27, 18, 22),
-        app: PaymentApp.phonePe,
-        sourceEventKey: 'com.phonepe.app|42|1793125320000|payload-a',
-      );
-      final notificationUpdate = PaymentEvent(
-        id: 'phonepe-update',
-        amount: 2,
-        timestamp: DateTime(2026, 10, 27, 18, 22, 1),
-        app: PaymentApp.phonePe,
-        sourceEventKey: 'com.phonepe.app|42|1793125320000|payload-b',
-      );
-      final nextPayment = PaymentEvent(
-        id: 'phonepe-next-payment',
-        amount: 2,
-        timestamp: DateTime(2026, 10, 27, 18, 22, 2),
-        app: PaymentApp.phonePe,
-        sourceEventKey: 'com.phonepe.app|43|1793125322000|payload-c',
-      );
+    test(
+      'native notification identity ignores payload hash but preserves new posts',
+      () {
+        final first = PaymentEvent(
+          id: 'phonepe-first',
+          amount: 2,
+          timestamp: DateTime(2026, 10, 27, 18, 22),
+          app: PaymentApp.phonePe,
+          sourceEventKey: 'com.phonepe.app|42|1793125320000|payload-a',
+        );
+        final notificationUpdate = PaymentEvent(
+          id: 'phonepe-update',
+          amount: 2,
+          timestamp: DateTime(2026, 10, 27, 18, 22, 1),
+          app: PaymentApp.phonePe,
+          sourceEventKey: 'com.phonepe.app|42|1793125320000|payload-b',
+        );
+        final nextPayment = PaymentEvent(
+          id: 'phonepe-next-payment',
+          amount: 2,
+          timestamp: DateTime(2026, 10, 27, 18, 22, 2),
+          app: PaymentApp.phonePe,
+          sourceEventKey: 'com.phonepe.app|43|1793125322000|payload-c',
+        );
 
-      expect(first.sourceEventIdentity, 'com.phonepe.app|42|1793125320000');
-      expect(
-        first.sourceEventFingerprint,
-        notificationUpdate.sourceEventFingerprint,
-      );
-      expect(
-        first.sourceEventFingerprint,
-        isNot(nextPayment.sourceEventFingerprint),
-      );
-      expect(
-        PaymentEvent.fromJson(first.toJson()).sourceEventKey,
-        first.sourceEventKey,
-      );
-    });
+        expect(first.sourceEventIdentity, 'com.phonepe.app|42|1793125320000');
+        expect(
+          first.sourceEventFingerprint,
+          notificationUpdate.sourceEventFingerprint,
+        );
+        expect(
+          first.sourceEventFingerprint,
+          isNot(nextPayment.sourceEventFingerprint),
+        );
+        expect(
+          PaymentEvent.fromJson(first.toJson()).sourceEventKey,
+          first.sourceEventKey,
+        );
+      },
+    );
 
     test('copyWith increments version and updates revision timestamp', () {
       final original = PaymentEvent(

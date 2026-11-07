@@ -1,4 +1,3 @@
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' as foundation;
@@ -11,7 +10,8 @@ class PaymentConfidence {
   final String status; // NEEDS_CONFIRMATION, MANUAL_REVIEW, or legacy status
   final String reason;
   final Map<String, dynamic> details; // Breakdown of scoring
-  final List<String> conflicts; // If same amount at same time with multiple sales
+  final List<String>
+  conflicts; // If same amount at same time with multiple sales
 
   PaymentConfidence({
     required this.score,
@@ -40,7 +40,8 @@ class SmartPaymentMatcherService {
     Transaction payment,
     List<Map<String, dynamic>> todaySales,
   ) async {
-    if (foundation.kDebugMode) print('$_tag Processing payment: ${payment.name} - ₹${payment.amount}');
+    if (foundation.kDebugMode)
+      print('$_tag Processing payment: ${payment.name} - ₹${payment.amount}');
 
     if (!TransactionService.isEligibleForMerchantConfirmation(payment)) {
       return PaymentConfidence(
@@ -55,9 +56,11 @@ class SmartPaymentMatcherService {
     // ADD: User authentication check
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id') ?? prefs.getInt('userId');
-    
-    final filteredSales = todaySales.where((s) => s['user_id'] == userId).toList();
-    
+
+    final filteredSales = todaySales
+        .where((s) => s['user_id'] == userId)
+        .toList();
+
     if (filteredSales.isEmpty && todaySales.isNotEmpty) {
       return PaymentConfidence(
         score: 0,
@@ -86,7 +89,8 @@ class SmartPaymentMatcherService {
     final recentDuplicates = await _checkRecentDuplicates(payment);
     if (recentDuplicates > 0) {
       confidenceScore -= 30; // Penalize potential duplicate
-      scoreDetails['duplicate_check'] = '-30 (Potential duplicate from same source)';
+      scoreDetails['duplicate_check'] =
+          '-30 (Potential duplicate from same source)';
     } else {
       scoreDetails['duplicate_check'] = '+0 (No recent duplicate)';
     }
@@ -114,7 +118,8 @@ class SmartPaymentMatcherService {
       }
 
       // Phone match bonus
-      if (payment.phone != null && sale['customer_phone']?.toString() == payment.phone) {
+      if (payment.phone != null &&
+          sale['customer_phone']?.toString() == payment.phone) {
         confidenceScore += 20;
         scoreDetails['phone_match'] = '+20 (Phone number matches customer)';
       } else {
@@ -122,7 +127,11 @@ class SmartPaymentMatcherService {
       }
 
       // Name match bonus
-      if (payment.name != null && _namesAreSimilar(payment.name!, sale['customer_name']?.toString() ?? '')) {
+      if (payment.name != null &&
+          _namesAreSimilar(
+            payment.name!,
+            sale['customer_name']?.toString() ?? '',
+          )) {
         confidenceScore += 10;
         scoreDetails['name_match'] = '+10 (Name similarity match)';
       } else {
@@ -140,20 +149,25 @@ class SmartPaymentMatcherService {
         confidenceScore += 20;
         scoreDetails['fuzzy_match'] = '+20 (Close amount match, 1 possibility)';
 
-        if (payment.phone != null && sale['customer_phone']?.toString() == payment.phone) {
+        if (payment.phone != null &&
+            sale['customer_phone']?.toString() == payment.phone) {
           confidenceScore += 15;
           scoreDetails['fuzzy_phone'] = '+15 (Phone confirms match)';
         }
       } else if (fuzzyMatches.length > 1) {
         // CONFLICT: Multiple possible matches with same/similar amount at same time
-        if (foundation.kDebugMode) print('$_tag ⚠️ CONFLICT: ${fuzzyMatches.length} possible matches');
+        if (foundation.kDebugMode)
+          print('$_tag ⚠️ CONFLICT: ${fuzzyMatches.length} possible matches');
 
         for (var match in fuzzyMatches) {
-          conflicts.add('Sale ID: ${match['id']} - ₹${match['total']} - ${match['customer_name']}');
+          conflicts.add(
+            'Sale ID: ${match['id']} - ₹${match['total']} - ${match['customer_name']}',
+          );
         }
 
         confidenceScore += 10; // Very uncertain
-        scoreDetails['fuzzy_match'] = '+10 (${fuzzyMatches.length} possible matches - CONFLICT)';
+        scoreDetails['fuzzy_match'] =
+            '+10 (${fuzzyMatches.length} possible matches - CONFLICT)';
       }
     } else {
       // NO MATCH: Payment detected but no corresponding sale
@@ -162,7 +176,8 @@ class SmartPaymentMatcherService {
       // Give benefit of doubt if SMS is from known source
       if (_isVerifiedSource(payment.source)) {
         confidenceScore += 15;
-        scoreDetails['no_sale_benefit'] = '+15 (SMS from verified source, possibly offline sale)';
+        scoreDetails['no_sale_benefit'] =
+            '+15 (SMS from verified source, possibly offline sale)';
       }
     }
 
@@ -188,10 +203,12 @@ class SmartPaymentMatcherService {
           'Merchant confirmation required; matching score is not proof of settlement';
     } else if (confidenceScore >= 60) {
       status = 'NEEDS_CONFIRMATION';
-      reason = 'Medium confidence, needs customer verification (${confidenceScore.toStringAsFixed(0)}%)';
+      reason =
+          'Medium confidence, needs customer verification (${confidenceScore.toStringAsFixed(0)}%)';
     } else {
       status = 'MANUAL_REVIEW';
-      reason = 'Low confidence or conflicts detected (${confidenceScore.toStringAsFixed(0)}%)';
+      reason =
+          'Low confidence or conflicts detected (${confidenceScore.toStringAsFixed(0)}%)';
     }
 
     // Inject bestMatchSaleId into details for the pipeline
@@ -244,20 +261,16 @@ class SmartPaymentMatcherService {
       if ((paymentAmount - saleAmount).abs() <= 5) {
         final timeDiff = paymentTime.difference(saleTime).inSeconds.abs();
 
-        exactMatches.add({
-          ...sale,
-          'timeDiffSeconds': timeDiff,
-        });
+        exactMatches.add({...sale, 'timeDiffSeconds': timeDiff});
       }
       // Fuzzy match: amount within ±10% (for larger amounts)
-      else if (paymentAmount > 100 && (paymentAmount - saleAmount).abs() / paymentAmount <= 0.1) {
+      else if (paymentAmount > 100 &&
+          (paymentAmount - saleAmount).abs() / paymentAmount <= 0.1) {
         final timeDiff = paymentTime.difference(saleTime).inSeconds.abs();
 
-        if (timeDiff <= 600) { // Within 10 minutes
-          fuzzyMatches.add({
-            ...sale,
-            'timeDiffSeconds': timeDiff,
-          });
+        if (timeDiff <= 600) {
+          // Within 10 minutes
+          fuzzyMatches.add({...sale, 'timeDiffSeconds': timeDiff});
         }
       }
     }
@@ -267,7 +280,11 @@ class SmartPaymentMatcherService {
     }
 
     if (exactMatches.length == 1) {
-      exactMatches.sort((a, b) => (a['timeDiffSeconds'] as int).compareTo(b['timeDiffSeconds'] as int));
+      exactMatches.sort(
+        (a, b) => (a['timeDiffSeconds'] as int).compareTo(
+          b['timeDiffSeconds'] as int,
+        ),
+      );
       return {
         'exactMatch': exactMatches.first,
         'timeDiffSeconds': exactMatches.first['timeDiffSeconds'],
@@ -276,10 +293,12 @@ class SmartPaymentMatcherService {
 
     // Return fuzzy matches if no exact match
     if (fuzzyMatches.isNotEmpty) {
-      fuzzyMatches.sort((a, b) => (a['timeDiffSeconds'] as int).compareTo(b['timeDiffSeconds'] as int));
-      return {
-        'fuzzyMatches': fuzzyMatches,
-      };
+      fuzzyMatches.sort(
+        (a, b) => (a['timeDiffSeconds'] as int).compareTo(
+          b['timeDiffSeconds'] as int,
+        ),
+      );
+      return {'fuzzyMatches': fuzzyMatches};
     }
 
     return {};
@@ -288,7 +307,8 @@ class SmartPaymentMatcherService {
   /// Parse sale date from various formats
   static DateTime? _parseSaleDateTime(Map<String, dynamic> sale) {
     try {
-      final dateStr = sale['date'] ?? sale['sale_date'] ?? sale['created_at'] ?? '';
+      final dateStr =
+          sale['date'] ?? sale['sale_date'] ?? sale['created_at'] ?? '';
       if (dateStr.isEmpty) return null;
       return DateTime.parse(dateStr.toString());
     } catch (e) {
@@ -298,7 +318,13 @@ class SmartPaymentMatcherService {
 
   /// Check if source is verified (has multiple confirmations)
   static bool _isVerifiedSource(String source) {
-    final verifiedSources = ['SMS_BANK', 'GooglePay', 'PhonePe', 'Paytm', 'UPI'];
+    final verifiedSources = [
+      'SMS_BANK',
+      'GooglePay',
+      'PhonePe',
+      'Paytm',
+      'UPI',
+    ];
     return verifiedSources.contains(source);
   }
 
@@ -354,7 +380,8 @@ class SmartPaymentMatcherService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final matchesRaw = prefs.getString(_matchKey) ?? '[]';
-      final matches = (jsonDecode(matchesRaw) as List).cast<Map<String, dynamic>>();
+      final matches = (jsonDecode(matchesRaw) as List)
+          .cast<Map<String, dynamic>>();
 
       matches.add({
         'payment_id': paymentId,
@@ -381,7 +408,8 @@ class SmartPaymentMatcherService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final matchesRaw = prefs.getString(_matchKey) ?? '[]';
-      final matches = (jsonDecode(matchesRaw) as List).cast<Map<String, dynamic>>();
+      final matches = (jsonDecode(matchesRaw) as List)
+          .cast<Map<String, dynamic>>();
 
       final now = DateTime.now();
       final todayMatches = matches.where((m) {
@@ -393,22 +421,36 @@ class SmartPaymentMatcherService {
       }).toList();
 
       return {
-        'auto_confirmed': todayMatches.where((m) => m['status'] == 'AUTO_CONFIRMED').length,
-        'needs_confirmation': todayMatches.where((m) => m['status'] == 'NEEDS_CONFIRMATION').length,
-        'manual_review': todayMatches.where((m) => m['status'] == 'MANUAL_REVIEW').length,
+        'auto_confirmed': todayMatches
+            .where((m) => m['status'] == 'AUTO_CONFIRMED')
+            .length,
+        'needs_confirmation': todayMatches
+            .where((m) => m['status'] == 'NEEDS_CONFIRMATION')
+            .length,
+        'manual_review': todayMatches
+            .where((m) => m['status'] == 'MANUAL_REVIEW')
+            .length,
         'total': todayMatches.length,
       };
     } catch (e) {
-      return {'auto_confirmed': 0, 'needs_confirmation': 0, 'manual_review': 0, 'total': 0};
+      return {
+        'auto_confirmed': 0,
+        'needs_confirmation': 0,
+        'manual_review': 0,
+        'total': 0,
+      };
     }
   }
 
   /// Get match history for audit trail
-  static Future<List<Map<String, dynamic>>> getMatchHistory({int limit = 50}) async {
+  static Future<List<Map<String, dynamic>>> getMatchHistory({
+    int limit = 50,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final matchesRaw = prefs.getString(_matchKey) ?? '[]';
-      final matches = (jsonDecode(matchesRaw) as List).cast<Map<String, dynamic>>();
+      final matches = (jsonDecode(matchesRaw) as List)
+          .cast<Map<String, dynamic>>();
 
       return matches.reversed.take(limit).toList();
     } catch (e) {

@@ -31,7 +31,11 @@ const List<VoiceLanguageOption> kVoiceLanguages = [
   VoiceLanguageOption(name: 'Kashmiri', nativeName: 'کٲشُر', code: 'ks'),
   VoiceLanguageOption(name: 'Konkani', nativeName: 'कोंकणी', code: 'kok'),
   VoiceLanguageOption(name: 'Maithili', nativeName: 'मैथिली', code: 'mai'),
-  VoiceLanguageOption(name: 'Manipuri (Meitei)', nativeName: 'মৈতৈলোন্', code: 'mni'),
+  VoiceLanguageOption(
+    name: 'Manipuri (Meitei)',
+    nativeName: 'মৈতৈলোন্',
+    code: 'mni',
+  ),
   VoiceLanguageOption(name: 'Nepali', nativeName: 'नेपाली', code: 'ne'),
   VoiceLanguageOption(name: 'Sanskrit', nativeName: 'संस्कृतम्', code: 'sa'),
   VoiceLanguageOption(name: 'Santali', nativeName: 'ᱥᱟᱱᱛᱟᱲᱤ', code: 'sat'),
@@ -40,34 +44,57 @@ const List<VoiceLanguageOption> kVoiceLanguages = [
   VoiceLanguageOption(name: 'English', nativeName: 'English', code: 'en'),
 ];
 
-
 /// Locale requested from the device TTS engine for each selected speech language.
 /// Actual playback still depends on a compatible voice being installed on-device.
 String ttsLocaleForLanguageCode(String code) {
   switch (code.toLowerCase()) {
-    case 'as': return 'as-IN';
-    case 'bn': return 'bn-IN';
-    case 'brx': return 'brx-IN';
-    case 'doi': return 'doi-IN';
-    case 'gu': return 'gu-IN';
-    case 'hi': return 'hi-IN';
-    case 'kn': return 'kn-IN';
-    case 'ks': return 'ks-IN';
-    case 'kok': return 'kok-IN';
-    case 'mai': return 'mai-IN';
-    case 'ml': return 'ml-IN';
-    case 'mni': return 'mni-IN';
-    case 'mr': return 'mr-IN';
-    case 'ne': return 'ne-NP';
-    case 'or': return 'or-IN';
-    case 'pa': return 'pa-IN';
-    case 'sa': return 'sa-IN';
-    case 'sat': return 'sat-IN';
-    case 'sd': return 'sd-IN';
-    case 'ta': return 'ta-IN';
-    case 'te': return 'te-IN';
-    case 'ur': return 'ur-IN';
-    case 'en': return 'en-IN';
-    default: return code;
+    case 'as':
+      return 'as-IN';
+    case 'bn':
+      return 'bn-IN';
+    case 'brx':
+      return 'brx-IN';
+    case 'doi':
+      return 'doi-IN';
+    case 'gu':
+      return 'gu-IN';
+    case 'hi':
+      return 'hi-IN';
+    case 'kn':
+      return 'kn-IN';
+    case 'ks':
+      return 'ks-IN';
+    case 'kok':
+      return 'kok-IN';
+    case 'mai':
+      return 'mai-IN';
+    case 'ml':
+      return 'ml-IN';
+    case 'mni':
+      return 'mni-IN';
+    case 'mr':
+      return 'mr-IN';
+    case 'ne':
+      return 'ne-NP';
+    case 'or':
+      return 'or-IN';
+    case 'pa':
+      return 'pa-IN';
+    case 'sa':
+      return 'sa-IN';
+    case 'sat':
+      return 'sat-IN';
+    case 'sd':
+      return 'sd-IN';
+    case 'ta':
+      return 'ta-IN';
+    case 'te':
+      return 'te-IN';
+    case 'ur':
+      return 'ur-IN';
+    case 'en':
+      return 'en-IN';
+    default:
+      return code;
   }
 }

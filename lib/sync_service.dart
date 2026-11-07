@@ -335,7 +335,8 @@ class SyncService {
       // Then refresh canonical sales so all screens converge on the same snapshot.
       if (needsOnlineOrderSalesRefresh) {
         final refreshed = await refreshSalesCacheFromBackend();
-        if (!refreshed) return; // Do not advance the durable cursor; retry next pulse.
+        if (!refreshed)
+          return; // Do not advance the durable cursor; retry next pulse.
       }
 
       if (observedEvents.isNotEmpty && !_durableEventsController.isClosed) {
@@ -628,10 +629,10 @@ class SyncService {
           final sessionIndex = rawSession == 'morning'
               ? AttendanceShiftPolicy.morningIndex
               : ((rawSession == 'afternoon' || rawSession == 'evening')
-                  ? AttendanceShiftPolicy.afternoonIndex
-                  : AttendanceShiftPolicy.indexForRecord(
-                      body is Map ? body : <String, dynamic>{},
-                    ));
+                    ? AttendanceShiftPolicy.afternoonIndex
+                    : AttendanceShiftPolicy.indexForRecord(
+                        body is Map ? body : <String, dynamic>{},
+                      ));
 
           await OfflineAttendanceService.markSynced(
             employeeId: int.parse(workerId),
@@ -715,7 +716,8 @@ class SyncService {
       final rawSessionIndex = int.tryParse(
         (data['session_index'] ?? data['sessionIndex'] ?? '').toString(),
       );
-      final sessionIndex = rawSessionIndex == AttendanceShiftPolicy.morningIndex ||
+      final sessionIndex =
+          rawSessionIndex == AttendanceShiftPolicy.morningIndex ||
               rawSessionIndex == AttendanceShiftPolicy.afternoonIndex
           ? rawSessionIndex!
           : AttendanceShiftPolicy.indexForRecord(data);
@@ -1408,7 +1410,9 @@ class SyncService {
     try {
       final eventKey = (evidence['event_key'] ?? '').toString().trim();
       if (eventKey.length < 8) {
-        throw ArgumentError('Payment detection evidence requires a stable event_key.');
+        throw ArgumentError(
+          'Payment detection evidence requires a stable event_key.',
+        );
       }
 
       // A false enqueue result means the observation was not durably saved.
@@ -1418,7 +1422,9 @@ class SyncService {
         Map<String, dynamic>.from(evidence),
       );
       if (!queued) {
-        throw StateError('Payment detection evidence was not accepted by the durable outbox.');
+        throw StateError(
+          'Payment detection evidence was not accepted by the durable outbox.',
+        );
       }
 
       _syncStatusController.add(await SyncQueueManager.getQueueSize());
@@ -1427,7 +1433,9 @@ class SyncService {
       await processQueueSafe(waitForActiveSync: true);
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ Payment detection evidence could not be queued/synced: $e');
+        debugPrint(
+          '❌ Payment detection evidence could not be queued/synced: $e',
+        );
       }
       await ErrorLogHelper.logException(
         e,
@@ -2587,7 +2595,9 @@ class SyncService {
       if ((payload['customer_phone']?.toString().trim().isEmpty ?? true) &&
           (int.tryParse(payload['customer_id']?.toString() ?? '') ?? 0) <= 0) {
         if (kDebugMode) {
-          debugPrint('❌ Khata deadline sync skipped: customer ID/phone is missing.');
+          debugPrint(
+            '❌ Khata deadline sync skipped: customer ID/phone is missing.',
+          );
         }
         return false;
       }
@@ -2601,8 +2611,12 @@ class SyncService {
       final success = res.statusCode == 200 || res.statusCode == 201;
       if (!success) {
         if (kDebugMode) {
-          final body = res.body.length > 600 ? res.body.substring(0, 600) : res.body;
-          debugPrint('❌ Khata deadline API rejected update: HTTP ${res.statusCode} $body');
+          final body = res.body.length > 600
+              ? res.body.substring(0, 600)
+              : res.body;
+          debugPrint(
+            '❌ Khata deadline API rejected update: HTTP ${res.statusCode} $body',
+          );
         }
         return false;
       }
@@ -2632,7 +2646,9 @@ class SyncService {
           // The server commit already succeeded. A failed local mirror must
           // not turn that acknowledgement into a duplicate backend write.
           if (kDebugMode) {
-            debugPrint('⚠️ Khata deadline committed; local mirror refresh failed: $mirrorError');
+            debugPrint(
+              '⚠️ Khata deadline committed; local mirror refresh failed: $mirrorError',
+            );
           }
         }
       }
@@ -2897,8 +2913,10 @@ class SyncService {
       }
 
       final local = await LocalStorageService.loadSales();
-      final reconciledLocal =
-          CacheConsistencyService.reconcileOnlineOrderSales(local, rawRemote);
+      final reconciledLocal = CacheConsistencyService.reconcileOnlineOrderSales(
+        local,
+        rawRemote,
+      );
       final merged = CacheConsistencyService.mergeLists(
         reconciledLocal,
         rawRemote,

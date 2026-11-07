@@ -18,18 +18,18 @@ void main() {
     });
 
     test('accepts the same language when region differs', () {
-      expect(
-        SpeechLocalePolicy.isAvailable('te-IN', ['te', 'en-US']),
-        isTrue,
-      );
+      expect(SpeechLocalePolicy.isAvailable('te-IN', ['te', 'en-US']), isTrue);
     });
 
-    test('rejects a missing selected language rather than falling back to English', () {
-      expect(
-        SpeechLocalePolicy.isAvailable('te-IN', ['en-IN', 'hi-IN']),
-        isFalse,
-      );
-    });
+    test(
+      'rejects a missing selected language rather than falling back to English',
+      () {
+        expect(
+          SpeechLocalePolicy.isAvailable('te-IN', ['en-IN', 'hi-IN']),
+          isFalse,
+        );
+      },
+    );
 
     test('rejects empty requested locale', () {
       expect(SpeechLocalePolicy.isAvailable('', ['en-IN']), isFalse);

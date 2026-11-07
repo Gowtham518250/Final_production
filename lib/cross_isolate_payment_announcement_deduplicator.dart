@@ -37,6 +37,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     PaymentEvent event, {
     DateTime? now,
     Duration? weakPairWindow,
+    void Function()? onPossibleMatch,
   }) {
     final completer = Completer<bool>();
     _tail = _tail.then((_) async {
@@ -46,6 +47,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
             event,
             now ?? DateTime.now(),
             weakPairWindow ?? PaymentIdentityMatcher.weakModalityWindow,
+            onPossibleMatch,
           ),
         );
       } catch (_) {
@@ -61,6 +63,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
     PaymentEvent event,
     DateTime now,
     Duration weakWindow,
+    void Function()? onPossibleMatch,
   ) async {
     if (event.isDuplicate ||
         event.isMerchantConfirmed ||
@@ -89,23 +92,23 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       final channel = '$origin|$sourcePackage';
       final nativeDecision =
           await NotificationListenerService.shouldSuppressPaymentAnnouncement({
-        'amount': event.amount,
-        'direction': direction,
-        'referenceId': event.normalizedReferenceId,
-        'sourceIdentity': identity,
-        'sourceEventKey': event.sourceEventKey,
-        'sourceTimestamp': event.sourceTimestamp?.millisecondsSinceEpoch,
-        'timestamp': now.millisecondsSinceEpoch,
-        'origin': origin,
-        'channel': channel,
-        'app': event.app.name,
-        'payerName': event.payerName,
-        'accountSuffix': event.accountSuffix,
-        'bankName': event.bankName,
-        'rawText': event.rawText,
-        'weakWindowMs': weakWindow.inMilliseconds,
-      });
-      if (nativeDecision != null) return nativeDecision;
+            'amount': event.amount,
+            'direction': direction,
+            'referenceId': event.normalizedReferenceId,
+            'sourceIdentity': identity,
+            'sourceEventKey': event.sourceEventKey,
+            'sourceTimestamp': event.sourceTimestamp?.millisecondsSinceEpoch,
+            'timestamp': now.millisecondsSinceEpoch,
+            'origin': origin,
+            'channel': channel,
+            'app': event.app.name,
+            'payerName': event.payerName,
+            'accountSuffix': event.accountSuffix,
+            'bankName': event.bankName,
+            'rawText': event.rawText,
+            'weakWindowMs': weakWindow.inMilliseconds,
+          });
+      if (nativeDecision == true) return true;
     }
     if (direction == 'unknown') return false;
 
@@ -189,10 +192,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       sameChannelReplayWindow: _sameChannelReplayWindow,
       weakWindow: weakWindow,
     );
-    developer.log(
-      resolution.describe(event.id),
-      name: 'PAYMENT_DEDUP',
-    );
+    developer.log(resolution.describe(event.id), name: 'PAYMENT_DEDUP');
 
     if (resolution.isEcho) {
       final claimChannel = resolution.claimChannel;
@@ -201,20 +201,18 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
           (resolution.reason == 'same_notification_update' ||
               resolution.reason == 'same_notification_stream_amount')) {
         stored[index]['seenAt'] = now.toIso8601String();
-        stored[index]['notificationAt'] =
-            event.sourceTimestamp?.toIso8601String();
-        stored[index]['sourceEventFingerprint'] =
-            event.sourceEventFingerprint;
-        stored[index]['notificationPayer'] =
-            event.notificationPayerIdentity;
+        stored[index]['notificationAt'] = event.sourceTimestamp
+            ?.toIso8601String();
+        stored[index]['sourceEventFingerprint'] = event.sourceEventFingerprint;
+        stored[index]['notificationPayer'] = event.notificationPayerIdentity;
         stored[index]['account'] = account;
       }
       if (claimChannel != null) {
         if (index >= 0) {
           final claimed = (stored[index]['claimedChannels'] is List)
               ? (stored[index]['claimedChannels'] as List)
-                  .map((v) => v.toString())
-                  .toSet()
+                    .map((v) => v.toString())
+                    .toSet()
               : <String>{};
           claimed.add(claimChannel);
           stored[index]['claimedChannels'] = claimed.toList();
@@ -223,6 +221,7 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
       await prefs.setString(_storageKey, jsonEncode(stored));
       return true;
     }
+    if (resolution.possibleMatch) onPossibleMatch?.call();
 
     // Ambiguous or unmatched candidates are retained independently so a real
     // same-person same-amount payment is not silently swallowed.
@@ -362,5 +361,4 @@ class CrossIsolatePaymentAnnouncementDeduplicator {
 
   static String _normalizeAccount(String? value) =>
       (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').trim();
-
 }

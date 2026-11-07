@@ -46,7 +46,10 @@ void main() {
       expect(gates, contains('release APK builds successfully'));
       expect(gates, contains('two identical rapid sales remain two sales'));
       expect(gates, contains('offline sale sync is idempotent'));
-      expect(gates, contains('inventory deduction is exactly once per committed sale'));
+      expect(
+        gates,
+        contains('inventory deduction is exactly once per committed sale'),
+      );
     });
   });
 }

@@ -18,12 +18,14 @@ void main() {
       final json = {
         'query_engine_version': '2026-09-29-date-aware-sales-v2',
         'query': 'How many sales did I make today?',
-        'generated_sql': 'SELECT COUNT(*) as sales_count FROM sales WHERE user_id = :user_id',
+        'generated_sql':
+            'SELECT COUNT(*) as sales_count FROM sales WHERE user_id = :user_id',
         'generated_model_response': 'You made 18 sales today.',
         'retrieved_table_information': ['sales', 'invoices'],
-        'sql': 'SELECT COUNT(*) as sales_count FROM sales WHERE user_id = :user_id',
+        'sql':
+            'SELECT COUNT(*) as sales_count FROM sales WHERE user_id = :user_id',
         'results': [
-          {'sales_count': 18}
+          {'sales_count': 18},
         ],
       };
 
@@ -34,7 +36,10 @@ void main() {
       expect(response.query, 'How many sales did I make today?');
       expect(response.generatedModelResponse, 'You made 18 sales today.');
       expect(response.displayAnswer, 'You made 18 sales today.');
-      expect(response.effectiveSql, 'SELECT COUNT(*) as sales_count FROM sales WHERE user_id = :user_id');
+      expect(
+        response.effectiveSql,
+        'SELECT COUNT(*) as sales_count FROM sales WHERE user_id = :user_id',
+      );
       expect(response.hasSql, isTrue);
       expect(response.hasResults, isTrue);
       expect(response.isSingleKpi, isTrue);
@@ -47,7 +52,7 @@ void main() {
         'query': 'What is my revenue?',
         'answer': 'Your revenue is ₹12,450',
         'data': [
-          {'total_sales_amount': 12450}
+          {'total_sales_amount': 12450},
         ],
       };
 
@@ -69,11 +74,14 @@ void main() {
         'generated_sql':
             'SELECT product_name, SUM(total) FROM sales WHERE product_name ILIKE \'%fish%\';',
         'results': [
-          {'net_profit': 1250.0}
+          {'net_profit': 1250.0},
         ],
       });
 
-      expect(response.displayAnswer, "Today's recorded net profit is ₹1,250.00.");
+      expect(
+        response.displayAnswer,
+        "Today's recorded net profit is ₹1,250.00.",
+      );
       expect(response.displayAnswer, isNot(contains('SELECT')));
       expect(response.displayAnswer, isNot(contains('fish')));
       expect(response.effectiveSql, contains('SELECT'));
@@ -83,7 +91,7 @@ void main() {
       final json = {
         'query': 'Total sales',
         'results': [
-          {'sales_count': 42}
+          {'sales_count': 42},
         ],
       };
 
@@ -100,12 +108,17 @@ void main() {
       );
 
       expect(errorResponse.isSuccess, isFalse);
-      expect(errorResponse.errorMessage, 'No internet connection. Please check your connection.');
-      expect(errorResponse.displayAnswer, 'No internet connection. Please check your connection.');
+      expect(
+        errorResponse.errorMessage,
+        'No internet connection. Please check your connection.',
+      );
+      expect(
+        errorResponse.displayAnswer,
+        'No internet connection. Please check your connection.',
+      );
       expect(errorResponse.hasResults, isFalse);
     });
   });
-
 
   group('Business and product endpoint separation', () {
     test('business questions and product discovery use separate endpoints', () {
@@ -120,31 +133,36 @@ void main() {
       );
     });
 
-    test('parses online offers and nearby shops as structured discovery data', () {
-      final response = AIQueryResponse.fromJson({
-        'query': 'I need ghee',
-        'answer': 'I found online listings for ghee.',
-        'product_discovery': {
-          'product_query': 'ghee',
-          'location_available': true,
-          'online_offers': [
-            {'title': 'Ghee 1L', 'source': 'Seller A', 'price': 599.0}
-          ],
-          'nearby_shops': [
-            {'name': 'Nearby Grocery', 'distance_km': 0.8, 'price': null}
-          ],
-        },
-        'results': [],
-      });
+    test(
+      'parses online offers and nearby shops as structured discovery data',
+      () {
+        final response = AIQueryResponse.fromJson({
+          'query': 'I need ghee',
+          'answer': 'I found online listings for ghee.',
+          'product_discovery': {
+            'product_query': 'ghee',
+            'location_available': true,
+            'online_offers': [
+              {'title': 'Ghee 1L', 'source': 'Seller A', 'price': 599.0},
+            ],
+            'nearby_shops': [
+              {'name': 'Nearby Grocery', 'distance_km': 0.8, 'price': null},
+            ],
+          },
+          'results': [],
+        });
 
-      expect(response.isSuccess, isTrue);
-      expect(response.productDiscovery?['product_query'], 'ghee');
-      expect((response.productDiscovery?['online_offers'] as List).length, 1);
-      expect((response.productDiscovery?['nearby_shops'] as List).first['name'], 'Nearby Grocery');
-      expect(response.results, isEmpty);
-    });
+        expect(response.isSuccess, isTrue);
+        expect(response.productDiscovery?['product_query'], 'ghee');
+        expect((response.productDiscovery?['online_offers'] as List).length, 1);
+        expect(
+          (response.productDiscovery?['nearby_shops'] as List).first['name'],
+          'Nearby Grocery',
+        );
+        expect(response.results, isEmpty);
+      },
+    );
   });
-
 
   group('ResultCard & Data Formatting Tests', () {
     testWidgets('renders KPI Card for single metric result', (tester) async {
@@ -153,7 +171,7 @@ void main() {
           home: Scaffold(
             body: ResultCard(
               results: [
-                {'total_sales_amount': 12450}
+                {'total_sales_amount': 12450},
               ],
               queryContext: 'Today',
             ),
@@ -196,32 +214,39 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('saves and retrieves query history up to 20 items deduplicated', () async {
-      await AiQueryService.saveQueryToHistory('Sales today');
-      await AiQueryService.saveQueryToHistory('Top customers');
-      await AiQueryService.saveQueryToHistory('Sales today'); // Re-insert to promote to top
+    test(
+      'saves and retrieves query history up to 20 items deduplicated',
+      () async {
+        await AiQueryService.saveQueryToHistory('Sales today');
+        await AiQueryService.saveQueryToHistory('Top customers');
+        await AiQueryService.saveQueryToHistory(
+          'Sales today',
+        ); // Re-insert to promote to top
 
-      final history = await AiQueryService.getQueryHistory();
+        final history = await AiQueryService.getQueryHistory();
 
-      expect(history.length, 2);
-      expect(history.first, 'Sales today');
-      expect(history[1], 'Top customers');
+        expect(history.length, 2);
+        expect(history.first, 'Sales today');
+        expect(history[1], 'Top customers');
 
-      // Test removal
-      await AiQueryService.removeHistoryItem('Top customers');
-      final updatedHistory = await AiQueryService.getQueryHistory();
-      expect(updatedHistory.length, 1);
-      expect(updatedHistory.first, 'Sales today');
+        // Test removal
+        await AiQueryService.removeHistoryItem('Top customers');
+        final updatedHistory = await AiQueryService.getQueryHistory();
+        expect(updatedHistory.length, 1);
+        expect(updatedHistory.first, 'Sales today');
 
-      // Test clear
-      await AiQueryService.clearQueryHistory();
-      final clearedHistory = await AiQueryService.getQueryHistory();
-      expect(clearedHistory, isEmpty);
-    });
+        // Test clear
+        await AiQueryService.clearQueryHistory();
+        final clearedHistory = await AiQueryService.getQueryHistory();
+        expect(clearedHistory, isEmpty);
+      },
+    );
   });
 
   group('Widget Tests', () {
-    testWidgets('SuggestedQuestionsBar renders chips and triggers callback', (tester) async {
+    testWidgets('SuggestedQuestionsBar renders chips and triggers callback', (
+      tester,
+    ) async {
       String? selectedQuery;
 
       await tester.pumpWidget(
@@ -244,7 +269,9 @@ void main() {
       expect(selectedQuery, 'How many sales did I make today?');
     });
 
-    testWidgets('QueryInputCard submits text and handles clear', (tester) async {
+    testWidgets('QueryInputCard submits text and handles clear', (
+      tester,
+    ) async {
       final controller = TextEditingController();
       String? submittedText;
 
@@ -277,7 +304,9 @@ void main() {
       expect(controller.text, isEmpty);
     });
 
-    testWidgets('AIAnswerCard renders answer and toggles technical details', (tester) async {
+    testWidgets('AIAnswerCard renders answer and toggles technical details', (
+      tester,
+    ) async {
       final response = AIQueryResponse(
         query: 'What is my total sales today?',
         generatedModelResponse: 'Your total sales today is ₹12,450.',
@@ -307,19 +336,22 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('GENERATED SQL QUERY'), findsOneWidget);
-      expect(find.text('SELECT SUM(total) FROM sales WHERE user_id = :user_id'), findsOneWidget);
+      expect(
+        find.text('SELECT SUM(total) FROM sales WHERE user_id = :user_id'),
+        findsOneWidget,
+      );
       expect(find.text('2026-09-29-date-aware-sales-v2'), findsOneWidget);
     });
 
-    testWidgets('DashboardAiQueryCard renders and triggers callback', (tester) async {
+    testWidgets('DashboardAiQueryCard renders and triggers callback', (
+      tester,
+    ) async {
       bool tapped = false;
 
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: DashboardAiQueryCard(
-              onTap: () => tapped = true,
-            ),
+            body: DashboardAiQueryCard(onTap: () => tapped = true),
           ),
         ),
       );

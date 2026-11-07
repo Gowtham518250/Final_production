@@ -74,44 +74,50 @@ void main() {
     expect(result.lines.single.barcode, '890000000003');
   });
 
-  test('preserves an explicitly spoken price and warns on a large mismatch', () async {
-    final result = await ProductionVoiceBillingService.parse(
-      transcript: 'sugar 120',
-      localeCode: 'en-IN',
-      catalogService: catalog,
-      knownProducts: const [
-        {'name': 'Sugar', 'price': 60, 'unit': 'kg'},
-      ],
-    );
+  test(
+    'preserves an explicitly spoken price and warns on a large mismatch',
+    () async {
+      final result = await ProductionVoiceBillingService.parse(
+        transcript: 'sugar 120',
+        localeCode: 'en-IN',
+        catalogService: catalog,
+        knownProducts: const [
+          {'name': 'Sugar', 'price': 60, 'unit': 'kg'},
+        ],
+      );
 
-    expect(result.lines, hasLength(1));
-    expect(result.lines.single.price, 120);
-    expect(result.lines.single.priceSource, 'spoken');
-    expect(result.lines.single.priceWarning, isNotNull);
-    expect(result.warnings, isNotEmpty);
-  });
+      expect(result.lines, hasLength(1));
+      expect(result.lines.single.price, 120);
+      expect(result.lines.single.priceSource, 'spoken');
+      expect(result.lines.single.priceWarning, isNotNull);
+      expect(result.warnings, isNotEmpty);
+    },
+  );
 
-  test('keeps an unlisted product and its explicitly spoken price as a custom line', () async {
-    final result = await ProductionVoiceBillingService.parse(
-      transcript: 'chicken 150',
-      localeCode: 'en-IN',
-      catalogService: catalog,
-      knownProducts: const [],
-    );
+  test(
+    'keeps an unlisted product and its explicitly spoken price as a custom line',
+    () async {
+      final result = await ProductionVoiceBillingService.parse(
+        transcript: 'chicken 150',
+        localeCode: 'en-IN',
+        catalogService: catalog,
+        knownProducts: const [],
+      );
 
-    expect(result.lines, hasLength(1));
-    final line = result.lines.single;
-    expect(line.name.toLowerCase(), 'chicken');
-    expect(line.quantity, 1);
-    expect(line.price, 150);
-    expect(line.priceSource, 'spoken');
-    expect(line.catalogMatched, isFalse);
-    expect(line.barcode, isNull);
-    expect(line.toMap()['catalog_matched'], isFalse);
-    expect(line.toMap()['stock_tracked'], isFalse);
-    expect(line.toMap()['is_custom_item'], isTrue);
-    expect(line.toMap()['price_source'], 'spoken');
-  });
+      expect(result.lines, hasLength(1));
+      final line = result.lines.single;
+      expect(line.name.toLowerCase(), 'chicken');
+      expect(line.quantity, 1);
+      expect(line.price, 150);
+      expect(line.priceSource, 'spoken');
+      expect(line.catalogMatched, isFalse);
+      expect(line.barcode, isNull);
+      expect(line.toMap()['catalog_matched'], isFalse);
+      expect(line.toMap()['stock_tracked'], isFalse);
+      expect(line.toMap()['is_custom_item'], isTrue);
+      expect(line.toMap()['price_source'], 'spoken');
+    },
+  );
 
   test('sales-history autocomplete is not treated as live inventory', () async {
     final result = await ProductionVoiceBillingService.parse(
@@ -138,39 +144,50 @@ void main() {
     expect(line.toMap()['stock_tracked'], isFalse);
   });
 
-  test('keeps missing price visible instead of silently inventing one', () async {
-    final result = await ProductionVoiceBillingService.parse(
-      transcript: '2 kg local rice',
-      localeCode: 'en-IN',
-      catalogService: catalog,
-      knownProducts: const [],
-    );
+  test(
+    'keeps missing price visible instead of silently inventing one',
+    () async {
+      final result = await ProductionVoiceBillingService.parse(
+        transcript: '2 kg local rice',
+        localeCode: 'en-IN',
+        catalogService: catalog,
+        knownProducts: const [],
+      );
 
-    expect(result.lines, hasLength(1));
-    expect(result.lines.single.quantity, 2);
-    expect(result.lines.single.price, 0);
-    expect(result.lines.single.priceSource, 'missing');
-    expect(result.lines.single.toMap()['price_missing'], isTrue);
-  });
+      expect(result.lines, hasLength(1));
+      expect(result.lines.single.quantity, 2);
+      expect(result.lines.single.price, 0);
+      expect(result.lines.single.priceSource, 'missing');
+      expect(result.lines.single.toMap()['price_missing'], isTrue);
+    },
+  );
 
-  test('parses Roman Telugu amount words through the full production parser', () async {
-    final result = await ProductionVoiceBillingService.parse(
-      transcript: '2 kg biyyam moodu vandalu',
-      localeCode: 'te-IN',
-      catalogService: catalog,
-      knownProducts: const [
-        {'name': 'Rice', 'price': 50, 'unit': 'kg', 'barcode': '890000000001'},
-      ],
-    );
+  test(
+    'parses Roman Telugu amount words through the full production parser',
+    () async {
+      final result = await ProductionVoiceBillingService.parse(
+        transcript: '2 kg biyyam moodu vandalu',
+        localeCode: 'te-IN',
+        catalogService: catalog,
+        knownProducts: const [
+          {
+            'name': 'Rice',
+            'price': 50,
+            'unit': 'kg',
+            'barcode': '890000000001',
+          },
+        ],
+      );
 
-    expect(result.lines, hasLength(1));
-    expect(result.lines.single.name.toLowerCase(), 'rice');
-    expect(result.lines.single.quantity, 2);
-    // The spoken price must be preserved even when the catalog price differs.
-    expect(result.lines.single.price, 300);
-    expect(result.lines.single.priceSource, 'spoken');
-    expect(result.lines.single.catalogMatched, isTrue);
-  });
+      expect(result.lines, hasLength(1));
+      expect(result.lines.single.name.toLowerCase(), 'rice');
+      expect(result.lines.single.quantity, 2);
+      // The spoken price must be preserved even when the catalog price differs.
+      expect(result.lines.single.price, 300);
+      expect(result.lines.single.priceSource, 'spoken');
+      expect(result.lines.single.catalogMatched, isTrue);
+    },
+  );
 
   test('maps the known Romanized ASR variant to the shop Boost item', () async {
     final result = await ProductionVoiceBillingService.parse(
@@ -196,36 +213,42 @@ void main() {
     expect(result.lines.single.barcode, '890000000004');
   });
 
-  test('does not apply the Boost speech alias to an unrelated catalog item', () async {
-    final result = await ProductionVoiceBillingService.parse(
-      transcript: '3 vandalu bubt',
-      localeCode: 'te-IN',
-      catalogService: catalog,
-      knownProducts: const [
-        {'name': 'Butter', 'price': 50, 'unit': 'packet'},
-      ],
-    );
+  test(
+    'does not apply the Boost speech alias to an unrelated catalog item',
+    () async {
+      final result = await ProductionVoiceBillingService.parse(
+        transcript: '3 vandalu bubt',
+        localeCode: 'te-IN',
+        catalogService: catalog,
+        knownProducts: const [
+          {'name': 'Butter', 'price': 50, 'unit': 'packet'},
+        ],
+      );
 
-    expect(result.lines, isEmpty);
-    expect(result.warnings, isNotEmpty);
-    expect(result.warnings.join(' '), contains('could not safely match'));
-  });
+      expect(result.lines, isEmpty);
+      expect(result.warnings, isNotEmpty);
+      expect(result.warnings.join(' '), contains('could not safely match'));
+    },
+  );
 
-  test('asks for manual selection when Boost alias matches multiple pack sizes', () async {
-    final result = await ProductionVoiceBillingService.parse(
-      transcript: '3 vandalu bubt',
-      localeCode: 'te-IN',
-      catalogService: catalog,
-      knownProducts: const [
-        {'name': 'Boost', 'price': 45, 'unit': 'bottle'},
-        {'name': 'Boost 500g', 'price': 220, 'unit': 'jar'},
-      ],
-    );
+  test(
+    'asks for manual selection when Boost alias matches multiple pack sizes',
+    () async {
+      final result = await ProductionVoiceBillingService.parse(
+        transcript: '3 vandalu bubt',
+        localeCode: 'te-IN',
+        catalogService: catalog,
+        knownProducts: const [
+          {'name': 'Boost', 'price': 45, 'unit': 'bottle'},
+          {'name': 'Boost 500g', 'price': 220, 'unit': 'jar'},
+        ],
+      );
 
-    expect(result.lines, isEmpty);
-    expect(result.warnings, isNotEmpty);
-    expect(result.warnings.join(' '), contains('could not safely match'));
-  });
+      expect(result.lines, isEmpty);
+      expect(result.warnings, isNotEmpty);
+      expect(result.warnings.join(' '), contains('could not safely match'));
+    },
+  );
 
   test('merges genuine duplicate product lines', () async {
     final result = await ProductionVoiceBillingService.parse(
@@ -240,5 +263,17 @@ void main() {
     expect(result.lines, hasLength(1));
     expect(result.lines.single.quantity, 2);
     expect(result.lines.single.price, 50);
+  });
+
+  test('keeps a priced line separate from an unpriced quantity', () async {
+    final result = await ProductionVoiceBillingService.parse(
+      transcript: 'rice 50 and rice',
+      localeCode: 'en-IN',
+      catalogService: catalog,
+    );
+
+    expect(result.lines, hasLength(2));
+    expect(result.lines.map((line) => line.quantity), containsAll([1, 1]));
+    expect(result.lines.map((line) => line.price), containsAll([0, 50]));
   });
 }

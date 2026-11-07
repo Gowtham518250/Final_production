@@ -15,9 +15,12 @@ void main() {
       expect(SaleService.paymentStatusFor(0, 100), 'UNPAID');
     });
 
-    test('small floating point error does not create false outstanding balance', () {
-      expect(SaleService.paymentStatusFor(99.995, 100), 'PAID');
-    });
+    test(
+      'small floating point error does not create false outstanding balance',
+      () {
+        expect(SaleService.paymentStatusFor(99.995, 100), 'PAID');
+      },
+    );
 
     test('real outstanding amount is not marked paid', () {
       expect(SaleService.paymentStatusFor(99, 100), 'PARTIAL');

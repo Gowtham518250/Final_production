@@ -46,7 +46,8 @@ class IndicNumberRepair {
   /// Repairs [transcript] for [languageCode] (`te-IN`, `te`, ...). Languages
   /// without a lexicon are returned unchanged.
   static NumberRepairResult repair(String transcript, String languageCode) {
-    final lexicon = _lexicons[languageCode.toLowerCase().split(RegExp(r'[-_]')).first];
+    final lexicon =
+        _lexicons[languageCode.toLowerCase().split(RegExp(r'[-_]')).first];
     if (lexicon == null || transcript.trim().isEmpty) {
       return NumberRepairResult(transcript, const []);
     }
@@ -74,7 +75,10 @@ class IndicNumberRepair {
             var consumed = 2;
             if (afterNext != null) {
               // Optional remainder, exact spellings only: "రెండు వందలు యాభై".
-              final remainder = lex.matchSmallNumber(afterNext, allowFuzzy: false);
+              final remainder = lex.matchSmallNumber(
+                afterNext,
+                allowFuzzy: false,
+              );
               if (remainder != null &&
                   remainder.exact &&
                   remainder.value >= 1 &&
@@ -139,7 +143,10 @@ class IndicNumberRepair {
   }
 
   static String _clean(String token) => token
-      .replaceAll(RegExp(r'^[\s,.;:!?"\u201c\u201d()]+|[\s,.;:!?"\u201c\u201d()]+$'), '')
+      .replaceAll(
+        RegExp(r'^[\s,.;:!?"\u201c\u201d()]+|[\s,.;:!?"\u201c\u201d()]+$'),
+        '',
+      )
       .toLowerCase();
 
   static final Map<String, _Lexicon> _lexicons = {'te': _teluguLexicon};
@@ -240,10 +247,17 @@ class _Lexicon {
   }) {
     int? valueOf(String key) => ones[key] ?? tens[key] ?? scales[key];
 
-    final scored = candidates.entries
-        .map((e) => (key: e.key, value: valueOf(e.key), dist: _distance(sk, e.value)))
-        .toList()
-      ..sort((a, b) => a.dist.compareTo(b.dist));
+    final scored =
+        candidates.entries
+            .map(
+              (e) => (
+                key: e.key,
+                value: valueOf(e.key),
+                dist: _distance(sk, e.value),
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.dist.compareTo(b.dist));
     if (scored.isEmpty) return null;
 
     final best = scored.first;

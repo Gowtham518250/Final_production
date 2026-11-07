@@ -12,14 +12,16 @@ class OrderHistoryService {
 
   static Future<String> _scopedKey(String base) async {
     final prefs = await SharedPreferences.getInstance();
-    final role = (prefs.getString('user_type') ?? prefs.getString('role') ?? 'CUSTOMER').trim().toUpperCase();
+    final role =
+        (prefs.getString('user_type') ?? prefs.getString('role') ?? 'CUSTOMER')
+            .trim()
+            .toUpperCase();
     // SharedPreferences keys were historically written as both int and
     // String across registration flows. getInt() throws if the stored value
     // is a String, so read dynamically and normalize without a type cast.
     final rawUserId = prefs.get('user_id') ?? prefs.get('userId');
-    final userId = rawUserId?.toString() ??
-        prefs.getString('user_email') ??
-        'anonymous';
+    final userId =
+        rawUserId?.toString() ?? prefs.getString('user_email') ?? 'anonymous';
     return base + '_' + role + '_' + userId;
   }
 
@@ -42,9 +44,9 @@ class OrderHistoryService {
   static Future<List<Map<String, dynamic>>> getAllOrders() async {
     final prefs = await SharedPreferences.getInstance();
     final ordersJson = prefs.getString(await _scopedKey(_ordersKey));
-    
+
     if (ordersJson == null) return [];
-    
+
     try {
       final List<dynamic> decoded = json.decode(ordersJson);
       return decoded.cast<Map<String, dynamic>>();
@@ -75,15 +77,16 @@ class OrderHistoryService {
 
     for (final rawRemote in remoteOrders) {
       final remote = Map<String, dynamic>.from(rawRemote);
-      final remoteId = (remote['order_id'] ?? remote['id'] ?? '').toString().trim();
+      final remoteId = (remote['order_id'] ?? remote['id'] ?? '')
+          .toString()
+          .trim();
       if (remoteId.isEmpty) continue;
 
       var localIndex = -1;
       for (var i = 0; i < localOrders.length; i++) {
         if (consumedLocalIndexes.contains(i)) continue;
         final local = localOrders[i];
-        final existingServerId =
-            (local['server_order_id'] ?? '').toString();
+        final existingServerId = (local['server_order_id'] ?? '').toString();
         final existingOrderId = (local['order_id'] ?? '').toString();
         if (existingServerId == remoteId || existingOrderId == remoteId) {
           localIndex = i;
@@ -102,7 +105,8 @@ class OrderHistoryService {
           .toString()
           .trim()
           .toUpperCase();
-      final total = remote['total_amount'] ??
+      final total =
+          remote['total_amount'] ??
           remote['total'] ??
           existing['total_amount'] ??
           existing['total'] ??
@@ -150,27 +154,32 @@ class OrderHistoryService {
   /// 🔧 FLIPKART-LEVEL: Add new order
   static Future<void> addOrder(Map<String, dynamic> order) async {
     final orders = await getAllOrders();
-    
+
     // Add order with timestamp
-    order['order_id'] = order['order_id'] ?? 'ORD${DateTime.now().millisecondsSinceEpoch}';
-    order['created_at'] = order['created_at'] ?? DateTime.now().toIso8601String();
+    order['order_id'] =
+        order['order_id'] ?? 'ORD${DateTime.now().millisecondsSinceEpoch}';
+    order['created_at'] =
+        order['created_at'] ?? DateTime.now().toIso8601String();
     order['updated_at'] = DateTime.now().toIso8601String();
     order['status'] = order['status'] ?? 'PLACED';
-    
+
     orders.insert(0, order); // Add to beginning
     await saveOrders(orders);
-    await CacheConsistencyService.markLocalMutation('customer_orders', operationId: order['order_id']?.toString());
+    await CacheConsistencyService.markLocalMutation(
+      'customer_orders',
+      operationId: order['order_id']?.toString(),
+    );
   }
 
   /// 🔧 FLIPKART-LEVEL: Update order status
   static Future<void> updateOrderStatus(String orderId, String status) async {
     final orders = await getAllOrders();
-    
+
     for (var order in orders) {
       if (order['order_id'] == orderId) {
         order['status'] = status;
         order['updated_at'] = DateTime.now().toIso8601String();
-        
+
         // Add status history
         final statusHistory = order['status_history'] as List<dynamic>? ?? [];
         statusHistory.add({
@@ -178,13 +187,16 @@ class OrderHistoryService {
           'timestamp': DateTime.now().toIso8601String(),
         });
         order['status_history'] = statusHistory;
-        
+
         break;
       }
     }
-    
+
     await saveOrders(orders);
-    await CacheConsistencyService.markLocalMutation('customer_orders', operationId: orderId);
+    await CacheConsistencyService.markLocalMutation(
+      'customer_orders',
+      operationId: orderId,
+    );
   }
 
   /// Reconcile a locally created order with its server acknowledgement.
@@ -210,31 +222,40 @@ class OrderHistoryService {
       break;
     }
     await saveOrders(orders);
-    await CacheConsistencyService.markLocalMutationAcknowledged('customer_orders', operationId: serverOrderId);
+    await CacheConsistencyService.markLocalMutationAcknowledged(
+      'customer_orders',
+      operationId: serverOrderId,
+    );
   }
+
   /// 🔧 FLIPKART-LEVEL: Get order by ID
   static Future<Map<String, dynamic>?> getOrderById(String orderId) async {
     final orders = await getAllOrders();
-    
+
     for (var order in orders) {
       if (order['order_id'] == orderId) {
         return order;
       }
     }
-    
+
     return null;
   }
 
   /// 🔧 FLIPKART-LEVEL: Get orders by status
-  static Future<List<Map<String, dynamic>>> getOrdersByStatus(String status) async {
+  static Future<List<Map<String, dynamic>>> getOrdersByStatus(
+    String status,
+  ) async {
     final orders = await getAllOrders();
     return orders.where((order) => order['status'] == status).toList();
   }
 
   /// 🔧 FLIPKART-LEVEL: Get orders by date range
-  static Future<List<Map<String, dynamic>>> getOrdersByDateRange(DateTime startDate, DateTime endDate) async {
+  static Future<List<Map<String, dynamic>>> getOrdersByDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
     final orders = await getAllOrders();
-    
+
     return orders.where((order) {
       final createdAt = DateTime.tryParse(order['created_at'] ?? '');
       if (createdAt == null) return false;
@@ -249,7 +270,10 @@ class OrderHistoryService {
     final order = await getOrderById(orderId);
     if (order == null) return false;
 
-    final currentStatus = (order['status'] ?? '').toString().trim().toUpperCase();
+    final currentStatus = (order['status'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
     if (!const {'PENDING', 'ACCEPTED'}.contains(currentStatus)) return false;
 
     final serverOrderId =
@@ -288,12 +312,12 @@ class OrderHistoryService {
   static Future<bool> returnOrder(String orderId, String reason) async {
     final order = await getOrderById(orderId);
     if (order == null) return false;
-    
+
     final currentStatus = order['status'] as String?;
     if (currentStatus != 'DELIVERED') return false;
-    
+
     await updateOrderStatus(orderId, 'RETURNED');
-    
+
     // Add return reason
     final orders = await getAllOrders();
     for (var ord in orders) {
@@ -304,21 +328,23 @@ class OrderHistoryService {
       }
     }
     await saveOrders(orders);
-    
+
     return true;
   }
 
   /// 🔧 FLIPKART-LEVEL: Get order tracking timeline
-  static Future<List<Map<String, dynamic>>> getOrderTracking(String orderId) async {
+  static Future<List<Map<String, dynamic>>> getOrderTracking(
+    String orderId,
+  ) async {
     final order = await getOrderById(orderId);
     if (order == null) return [];
-    
+
     final statusHistory = order['status_history'] as List<dynamic>? ?? [];
     final currentStatus = order['status'] as String?;
-    
+
     // Build timeline from status history
     final timeline = <Map<String, dynamic>>[];
-    
+
     for (var entry in statusHistory) {
       timeline.add({
         'status': entry['status'],
@@ -326,16 +352,17 @@ class OrderHistoryService {
         'completed': true,
       });
     }
-    
+
     // Add current status if not in history
-    if (currentStatus != null && (timeline.isEmpty || timeline.last['status'] != currentStatus)) {
+    if (currentStatus != null &&
+        (timeline.isEmpty || timeline.last['status'] != currentStatus)) {
       timeline.add({
         'status': currentStatus,
         'timestamp': order['updated_at'],
         'completed': true,
       });
     }
-    
+
     // Add future statuses
     final statusIndex = orderStatuses.indexOf(currentStatus ?? 'PLACED');
     if (statusIndex != -1 && statusIndex < orderStatuses.length - 1) {
@@ -347,41 +374,45 @@ class OrderHistoryService {
         });
       }
     }
-    
+
     return timeline;
   }
 
   /// 🔧 FLIPKART-LEVEL: Get order statistics
   static Future<Map<String, dynamic>> getOrderStatistics() async {
     final orders = await getAllOrders();
-    
+
     int totalOrders = orders.length;
     int deliveredOrders = 0;
     int cancelledOrders = 0;
     int returnedOrders = 0;
     double totalSpent = 0.0;
-    
+
     for (var order in orders) {
       final status = order['status'] as String?;
       final total = order['total'] ?? order['amount'] ?? 0;
-      
+
       if (status == 'DELIVERED') {
         deliveredOrders++;
-        totalSpent += total is num ? total.toDouble() : double.tryParse(total.toString()) ?? 0.0;
+        totalSpent += total is num
+            ? total.toDouble()
+            : double.tryParse(total.toString()) ?? 0.0;
       } else if (status == 'CANCELLED') {
         cancelledOrders++;
       } else if (status == 'RETURNED') {
         returnedOrders++;
       }
     }
-    
+
     return {
       'total_orders': totalOrders,
       'delivered_orders': deliveredOrders,
       'cancelled_orders': cancelledOrders,
       'returned_orders': returnedOrders,
       'total_spent': totalSpent,
-      'delivery_rate': totalOrders > 0 ? (deliveredOrders / totalOrders * 100).toStringAsFixed(1) : '0.0',
+      'delivery_rate': totalOrders > 0
+          ? (deliveredOrders / totalOrders * 100).toStringAsFixed(1)
+          : '0.0',
     };
   }
 
@@ -389,15 +420,19 @@ class OrderHistoryService {
   static Future<List<Map<String, dynamic>>> searchOrders(String query) async {
     final orders = await getAllOrders();
     final lowerQuery = query.toLowerCase();
-    
+
     return orders.where((order) {
       final orderId = (order['order_id'] ?? '').toString().toLowerCase();
-      final customerName = (order['customer_name'] ?? '').toString().toLowerCase();
-      final customerPhone = (order['customer_phone'] ?? '').toString().toLowerCase();
-      
+      final customerName = (order['customer_name'] ?? '')
+          .toString()
+          .toLowerCase();
+      final customerPhone = (order['customer_phone'] ?? '')
+          .toString()
+          .toLowerCase();
+
       return orderId.contains(lowerQuery) ||
-             customerName.contains(lowerQuery) ||
-             customerPhone.contains(lowerQuery);
+          customerName.contains(lowerQuery) ||
+          customerPhone.contains(lowerQuery);
     }).toList();
   }
 
@@ -416,7 +451,7 @@ class OrderHistoryService {
       // For now, just update the sync timestamp
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_ordersSyncKey, DateTime.now().toIso8601String());
-      
+
       return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Error syncing orders: $e');

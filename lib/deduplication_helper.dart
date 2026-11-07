@@ -3,7 +3,6 @@ import 'dart:convert' show json, utf8;
 
 /// Deduplication helper to prevent duplicate records
 class DeduplicationHelper {
-  
   /// Generate unique hash for customer (phone + name combo)
   static String getCustomerHash(String phone, String name) {
     if (phone.isEmpty) return '';
@@ -26,7 +25,10 @@ class DeduplicationHelper {
   }
 
   /// Check if customer already exists by phone
-  static bool customerExists(List<Map<String, dynamic>> customers, String phone) {
+  static bool customerExists(
+    List<Map<String, dynamic>> customers,
+    String phone,
+  ) {
     if (phone.isEmpty) return false;
     return customers.any((c) {
       final existingPhone = c['phone']?.toString() ?? '';
@@ -35,7 +37,10 @@ class DeduplicationHelper {
   }
 
   /// Get existing customer by phone
-  static Map<String, dynamic>? getCustomerByPhone(List<Map<String, dynamic>> customers, String phone) {
+  static Map<String, dynamic>? getCustomerByPhone(
+    List<Map<String, dynamic>> customers,
+    String phone,
+  ) {
     if (phone.isEmpty) return null;
     try {
       return customers.firstWhere((c) {
@@ -52,18 +57,23 @@ class DeduplicationHelper {
     if (sku == null || sku.isEmpty) return false;
     final normalizedSku = _normalizeSku(sku);
     return products.any((p) {
-      final existingSku = p['sku']?.toString() ?? p['barcode']?.toString() ?? '';
+      final existingSku =
+          p['sku']?.toString() ?? p['barcode']?.toString() ?? '';
       return _normalizeSku(existingSku) == normalizedSku;
     });
   }
 
   /// Get existing product by SKU/barcode
-  static Map<String, dynamic>? getProductBySku(List<Map<String, dynamic>> products, String? sku) {
+  static Map<String, dynamic>? getProductBySku(
+    List<Map<String, dynamic>> products,
+    String? sku,
+  ) {
     if (sku == null || sku.isEmpty) return null;
     final normalizedSku = _normalizeSku(sku);
     try {
       return products.firstWhere((p) {
-        final existingSku = p['sku']?.toString() ?? p['barcode']?.toString() ?? '';
+        final existingSku =
+            p['sku']?.toString() ?? p['barcode']?.toString() ?? '';
         return _normalizeSku(existingSku) == normalizedSku;
       });
     } catch (e) {
@@ -72,7 +82,11 @@ class DeduplicationHelper {
   }
 
   /// Check if sale item already exists (for deduplication)
-  static bool saleItemExists(List<Map<String, dynamic>> items, String productName, double price) {
+  static bool saleItemExists(
+    List<Map<String, dynamic>> items,
+    String productName,
+    double price,
+  ) {
     return items.any((i) {
       final itemName = (i['product'] as String?)?.toLowerCase().trim() ?? '';
       final itemPrice = (i['price'] as num?)?.toDouble() ?? 0.0;
@@ -91,32 +105,45 @@ class DeduplicationHelper {
   }
 
   /// Check if item is already in sync queue
-  static bool isInQueue(List<Map<String, dynamic>> queue, String action, Map<String, dynamic> data) {
+  static bool isInQueue(
+    List<Map<String, dynamic>> queue,
+    String action,
+    Map<String, dynamic> data,
+  ) {
     try {
       return queue.any((item) {
         if (item['action'] != action) return false;
-        
+
         // For customers: check phone
         if (action == 'save_customer') {
-          final existingPhone = (item['data']['phone'] as String?)?.toString() ?? '';
+          final existingPhone =
+              (item['data']['phone'] as String?)?.toString() ?? '';
           final newPhone = (data['phone'] as String?)?.toString() ?? '';
-          if (_normalizePhone(existingPhone) == _normalizePhone(newPhone)) return true;
+          if (_normalizePhone(existingPhone) == _normalizePhone(newPhone))
+            return true;
         }
-        
+
         // For products: check SKU
         if (action == 'save_product') {
-          final existingSku = (item['data']['sku'] as String?)?.toString() ?? '';
+          final existingSku =
+              (item['data']['sku'] as String?)?.toString() ?? '';
           final newSku = (data['sku'] as String?)?.toString() ?? '';
           if (_normalizeSku(existingSku) == _normalizeSku(newSku)) return true;
         }
-        
+
         // For sales: check unique sale ID
         if (action == 'save_sale') {
-          final existingId = item['data']['sale_id']?.toString() ?? item['data']['invoice_payload']?['invoice_number']?.toString() ?? '';
-          final newId = data['sale_id']?.toString() ?? data['invoice_payload']?['invoice_number']?.toString() ?? '';
+          final existingId =
+              item['data']['sale_id']?.toString() ??
+              item['data']['invoice_payload']?['invoice_number']?.toString() ??
+              '';
+          final newId =
+              data['sale_id']?.toString() ??
+              data['invoice_payload']?['invoice_number']?.toString() ??
+              '';
           if (existingId.isNotEmpty && existingId == newId) return true;
         }
-        
+
         return false;
       });
     } catch (e) {

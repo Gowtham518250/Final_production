@@ -17,7 +17,8 @@ class AppStateReset {
     WorkerStateNotifier? workerNotifier,
   }) {
     if (paymentNotifier != null) payment = paymentNotifier;
-    if (paymentDecisionNotifier != null) paymentDecision = paymentDecisionNotifier;
+    if (paymentDecisionNotifier != null)
+      paymentDecision = paymentDecisionNotifier;
     if (invoiceNotifier != null) invoice = invoiceNotifier;
     if (workerNotifier != null) worker = workerNotifier;
   }

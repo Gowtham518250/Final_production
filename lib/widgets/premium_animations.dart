@@ -12,31 +12,28 @@ class PremiumAnimations {
     bool enabled = true,
   }) {
     if (!enabled) return child;
-    
+
     return Hero(
       tag: tag,
-      child: Material(
-        type: MaterialType.transparency,
-        child: child,
-      ),
-      flightShuttleBuilder: (flightContext, animation, direction, fromContext, toContext) {
-        return AnimatedBuilder(
-          animation: animation,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: Tween<double>(begin: 0.8, end: 1.0).evaluate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOutCubic,
-              )),
-              child: Opacity(
-                opacity: animation.value,
-                child: child,
-              ),
+      child: Material(type: MaterialType.transparency, child: child),
+      flightShuttleBuilder:
+          (flightContext, animation, direction, fromContext, toContext) {
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: Tween<double>(begin: 0.8, end: 1.0).evaluate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+                  child: Opacity(opacity: animation.value, child: child),
+                );
+              },
+              child: child,
             );
           },
-          child: child,
-        );
-      },
     );
   }
 
@@ -216,10 +213,7 @@ class _ShimmerAnimationState extends State<ShimmerAnimation>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
     _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
     );
@@ -239,15 +233,9 @@ class _ShimmerAnimationState extends State<ShimmerAnimation>
         return LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [
-            widget.baseColor,
-            widget.highlightColor,
-            widget.baseColor,
-          ],
+          colors: [widget.baseColor, widget.highlightColor, widget.baseColor],
           stops: const [0.0, 0.5, 1.0],
-          transform: _SlidingGradientTransform(
-            slidePercent: _animation.value,
-          ),
+          transform: _SlidingGradientTransform(slidePercent: _animation.value),
         ).createShader(bounds);
       },
       child: widget.child,
@@ -294,13 +282,11 @@ class _AnimatedCounterState extends State<_AnimatedCounter>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    _animation = IntTween(begin: 0, end: widget.value).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
+    _animation = IntTween(
+      begin: 0,
+      end: widget.value,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller.forward();
   }
 
@@ -309,9 +295,10 @@ class _AnimatedCounterState extends State<_AnimatedCounter>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       _controller.reset();
-      _animation = IntTween(begin: oldWidget.value, end: widget.value).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-      );
+      _animation = IntTween(
+        begin: oldWidget.value,
+        end: widget.value,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
       _controller.forward();
     }
   }
@@ -341,25 +328,26 @@ class PremiumPageTransition extends PageRouteBuilder {
   final Widget child;
 
   PremiumPageTransition({required this.child})
-      : super(
-          transitionDuration: const Duration(milliseconds: 300),
-          reverseTransitionDuration: const Duration(milliseconds: 300),
-          pageBuilder: (context, animation, secondaryAnimation) => child,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(
-              opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOut),
-              ),
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.0, 0.05),
-                  end: Offset.zero,
-                ).animate(
-                  CurvedAnimation(parent: animation, curve: Curves.easeOut),
-                ),
-                child: child,
-              ),
-            );
-          },
-        );
+    : super(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (context, animation, secondaryAnimation) => child,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            ),
+            child: SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0.0, 0.05),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                  ),
+              child: child,
+            ),
+          );
+        },
+      );
 }

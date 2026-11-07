@@ -28,8 +28,12 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
 
     // Generate alerts
     final alerts = FestivalStockAlerts.generateAlerts(
-      (inventory as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-      (sales as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      (inventory as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
+      (sales as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
 
     setState(() {
@@ -41,23 +45,21 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: LiveTranslatedText('Festival Stock Alerts', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Festival Stock Alerts',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAlerts,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAlerts),
         ],
       ),
       body: _alerts.isEmpty
@@ -65,7 +67,11 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle, size: 60, color: Colors.green.shade300),
+                  Icon(
+                    Icons.check_circle,
+                    size: 60,
+                    color: Colors.green.shade300,
+                  ),
                   const SizedBox(height: 16),
                   LiveTranslatedText(
                     'All stocks are well-stocked!',
@@ -87,13 +93,15 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
 
   Widget _buildAlertCard(StockAlert alert) {
     final isUrgent = alert.daysUntilFestival <= 3;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isUrgent ? Colors.red.shade50 : Colors.amber.shade50,
-        border: Border.all(color: isUrgent ? Colors.red.shade200 : Colors.amber.shade200),
+        border: Border.all(
+          color: isUrgent ? Colors.red.shade200 : Colors.amber.shade200,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -108,7 +116,9 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isUrgent ? Colors.red.shade900 : Colors.amber.shade900,
+                    color: isUrgent
+                        ? Colors.red.shade900
+                        : Colors.amber.shade900,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -148,7 +158,10 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
                 children: [
                   LiveTranslatedText(
                     'Current Stock',
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                   LiveTranslatedText(
                     '${alert.currentStock} units',
@@ -164,7 +177,10 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
                 children: [
                   LiveTranslatedText(
                     'Recommended Reorder',
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                   LiveTranslatedText(
                     '+${alert.recommendedReorderQty} units',
@@ -188,7 +204,10 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
             ),
             child: LiveTranslatedText(
               'Demand multiplier for ${alert.category} during ${alert.festivalName}: ${alert.expectedDemandMultiplier}x',
-              style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade700),
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Colors.grey.shade700,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -198,12 +217,16 @@ class _FestivalAlertsPageState extends State<FestivalAlertsPage> {
             child: ElevatedButton(
               onPressed: () {
                 // FIX-6: Navigate to inventory page with low stock filter
-                Navigator.pushNamed(context, '/inventory', arguments: {
-                  'filter': 'low_stock',
-                  'festival': alert.festivalName,
-                  'recommended_qty': alert.recommendedReorderQty,
-                  'item_name': alert.itemName,
-                });
+                Navigator.pushNamed(
+                  context,
+                  '/inventory',
+                  arguments: {
+                    'filter': 'low_stock',
+                    'festival': alert.festivalName,
+                    'recommended_qty': alert.recommendedReorderQty,
+                    'item_name': alert.itemName,
+                  },
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6366F1),

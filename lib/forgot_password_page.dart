@@ -69,13 +69,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: LiveTranslatedText('OTP sent to $email. Check your inbox and spam folder.'),
+            content: LiveTranslatedText(
+              'OTP sent to $email. Check your inbox and spam folder.',
+            ),
           ),
         );
       } else {
         setState(() {
-          _errorMessage =
-              result['message']?.toString() ?? 'Failed to send OTP';
+          _errorMessage = result['message']?.toString() ?? 'Failed to send OTP';
         });
       }
     } catch (e) {
@@ -108,7 +109,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         setState(() {
           _otpVerified = result['success'] == true;
           _currentStep = _otpVerified ? 3 : 2;
-          _errorMessage = _otpVerified ? '' : (result['message']?.toString() ?? 'OTP verification failed.');
+          _errorMessage = _otpVerified
+              ? ''
+              : (result['message']?.toString() ?? 'OTP verification failed.');
         });
       } else {
         setState(() {
@@ -131,8 +134,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     final confirm = _confirmPasswordController.text.trim();
 
     if (!_otpVerified) {
-      setState(() => _errorMessage =
-          'Verify the OTP before resetting your password.');
+      setState(
+        () => _errorMessage = 'Verify the OTP before resetting your password.',
+      );
       return;
     }
 
@@ -140,8 +144,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         !RegExp(r'[A-Z]').hasMatch(pass) ||
         !RegExp(r'[a-z]').hasMatch(pass) ||
         !RegExp(r'\d').hasMatch(pass)) {
-      setState(() => _errorMessage =
-          'Password must be at least 8 characters and contain uppercase, lowercase, and a number.');
+      setState(
+        () => _errorMessage =
+            'Password must be at least 8 characters and contain uppercase, lowercase, and a number.',
+      );
       return;
     }
     if (pass != confirm) {
@@ -155,14 +161,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     });
 
     try {
-      final response = await ApiClient.postJson(
-        '/auth/verify-reset-otp',
-        {
-          'email': _emailController.text.trim(),
-          'otp': _otpController.text.trim(),
-          'password': pass,
-        },
-      );
+      final response = await ApiClient.postJson('/auth/verify-reset-otp', {
+        'email': _emailController.text.trim(),
+        'otp': _otpController.text.trim(),
+        'password': pass,
+      });
 
       if (!mounted) return;
 
@@ -175,13 +178,17 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           final decoded = json.decode(response.body);
           if (decoded is Map<String, dynamic>) data = decoded;
         } catch (_) {}
-        setState(() => _errorMessage =
-            data['detail']?.toString() ?? 'Reset failed. Please request a new code.');
+        setState(
+          () => _errorMessage =
+              data['detail']?.toString() ??
+              'Reset failed. Please request a new code.',
+        );
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _errorMessage =
-            AppLocalizations.of(context).connectionError);
+        setState(
+          () => _errorMessage = AppLocalizations.of(context).connectionError,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -270,7 +277,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           borderRadius: BorderRadius.circular(28),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF0F2447).withValues(alpha: 0.14),
+                              color: const Color(
+                                0xFF0F2447,
+                              ).withValues(alpha: 0.14),
                               blurRadius: 30,
                               offset: const Offset(0, 10),
                             ),
@@ -506,8 +515,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             color: Color(0xFFDCFCE7),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.check_circle_rounded,
-              color: Color(0xFF16A34A), size: 42),
+          child: const Icon(
+            Icons.check_circle_rounded,
+            color: Color(0xFF16A34A),
+            size: 42,
+          ),
         ),
         const SizedBox(height: 20),
         LiveTranslatedText(
@@ -648,8 +660,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: Color(0xFFDC2626), size: 18),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Color(0xFFDC2626),
+            size: 18,
+          ),
           const SizedBox(width: 9),
           Expanded(
             child: LiveTranslatedText(
@@ -682,10 +697,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           type: TextInputType.emailAddress,
         ),
         const SizedBox(height: 28),
-        _buildSubmitButton(
-          label: 'SEND CODE',
-          onTap: _sendResetEmail,
-        ),
+        _buildSubmitButton(label: 'SEND CODE', onTap: _sendResetEmail),
         const SizedBox(height: 22),
         GestureDetector(
           onTap: _goBackToPreviousPage,
@@ -751,10 +763,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           type: TextInputType.number,
         ),
         const SizedBox(height: 28),
-        _buildSubmitButton(
-          label: 'VERIFY CODE',
-          onTap: _verifyOtp,
-        ),
+        _buildSubmitButton(label: 'VERIFY CODE', onTap: _verifyOtp),
         const SizedBox(height: 22),
         TextButton(
           onPressed: () => setState(() => _currentStep = 1),
@@ -786,9 +795,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           icon: Icons.lock_outline_rounded,
           isPassword: true,
           passwordVisible: _passwordVisible,
-          onTogglePasswordVisibility: () => setState(
-            () => _passwordVisible = !_passwordVisible,
-          ),
+          onTogglePasswordVisibility: () =>
+              setState(() => _passwordVisible = !_passwordVisible),
         ),
         const SizedBox(height: 16),
         _buildInputField(
@@ -802,10 +810,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           ),
         ),
         const SizedBox(height: 28),
-        _buildSubmitButton(
-          label: 'RESET PASSWORD',
-          onTap: _resetPassword,
-        ),
+        _buildSubmitButton(label: 'RESET PASSWORD', onTap: _resetPassword),
       ],
     );
   }
@@ -842,11 +847,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 16),
-          prefixIcon: Icon(
-            icon,
-            color: const Color(0xFF64748B),
-            size: 21,
-          ),
+          prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 21),
           suffixIcon: isPassword
               ? IconButton(
                   tooltip: passwordVisible ? 'Hide password' : 'Show password',
@@ -911,7 +912,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       ),
     );
   }
-
 }
 
 class _ResetLanguageButton extends StatelessWidget {

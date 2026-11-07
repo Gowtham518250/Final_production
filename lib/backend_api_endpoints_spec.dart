@@ -1,6 +1,6 @@
 /// Backend API Endpoints Specification
 /// For CommissionTracking, SmartNotifications, DeliveryTracking, and Loyalty
-/// 
+///
 /// BASE_URL: https://retail-mind-vkbp.onrender.com/
 /// All endpoints require JWT Bearer token in Authorization header
 
@@ -10,7 +10,7 @@
 
 /// 1. Record Sale with Commission
 /// POST /api/staff/commissions/record
-/// 
+///
 /// Request:
 /// {
 ///   "staffId": "staff_123",
@@ -20,7 +20,7 @@
 ///   "isPremiumStaff": true,
 ///   "timestamp": "2026-06-18T10:30:00Z"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -33,7 +33,7 @@
 
 /// 2. Get Staff Commission Summary
 /// GET /api/staff/commissions/summary?staffId=staff_123&startDate=2026-06-01&endDate=2026-06-18
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "staffId": "staff_123",
@@ -63,7 +63,7 @@
 
 /// 3. Get Pending Commission Payouts
 /// GET /api/staff/commissions/pending?staffId=staff_123
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "staffId": "staff_123",
@@ -93,7 +93,7 @@
 
 /// 4. Request Commission Payout
 /// POST /api/staff/commissions/payout/request
-/// 
+///
 /// Request:
 /// {
 ///   "staffId": "staff_123",
@@ -101,7 +101,7 @@
 ///   "bankAccount": "1234",
 ///   "paymentMethod": "UPI"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -115,13 +115,13 @@
 
 /// 5. Mark Commission as Paid
 /// PUT /api/staff/commissions/{commissionId}/mark-paid
-/// 
+///
 /// Request:
 /// {
 ///   "payoutId": "payout_501",
 ///   "transactionId": "txn_5001"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -136,7 +136,7 @@
 
 /// 6. Get Customer Loyalty Details
 /// GET /api/loyalty/customer/{customerId}
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "customerId": "cust_123",
@@ -158,7 +158,7 @@
 
 /// 7. Add Loyalty Points on Purchase
 /// POST /api/loyalty/points/add
-/// 
+///
 /// Request:
 /// {
 ///   "customerId": "cust_123",
@@ -166,7 +166,7 @@
 ///   "purchaseAmount": 2499.50,
 ///   "isPremiumMember": false
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -181,14 +181,14 @@
 
 /// 8. Redeem Loyalty Points
 /// POST /api/loyalty/points/redeem
-/// 
+///
 /// Request:
 /// {
 ///   "customerId": "cust_123",
 ///   "pointsToRedeem": 500,
 ///   "redemptionType": "DISCOUNT"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -200,7 +200,7 @@
 
 /// 9. Get Loyalty Leaderboard
 /// GET /api/loyalty/leaderboard?limit=10
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "leaderboard": [
@@ -229,7 +229,7 @@
 
 /// 10. Get Delivery Tracking Info
 /// GET /api/delivery/track/{orderId}
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "orderId": "ORD-12345",
@@ -251,7 +251,7 @@
 
 /// 11. Update Delivery Location (Real-time)
 /// POST /api/delivery/update-location
-/// 
+///
 /// Request:
 /// {
 ///   "orderId": "ORD-12345",
@@ -260,7 +260,7 @@
 ///   "timestamp": "2026-06-18T10:00:00Z",
 ///   "status": "dispatched"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -271,13 +271,13 @@
 
 /// 12. Mark Delivery Complete
 /// PUT /api/delivery/{orderId}/complete
-/// 
+///
 /// Request:
 /// {
 ///   "signature": "base64_encoded_image",
 ///   "notes": "Delivered successfully"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -292,7 +292,7 @@
 
 /// 13. Schedule Daily Summary Notification
 /// POST /api/notifications/schedule
-/// 
+///
 /// Request:
 /// {
 ///   "userId": "user_123",
@@ -301,7 +301,7 @@
 ///   "timezone": "Asia/Kolkata",
 ///   "enabled": true
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -311,7 +311,7 @@
 
 /// 14. Get Today's Daily Summary
 /// GET /api/notifications/daily-summary?date=2026-06-18
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "date": "2026-06-18",
@@ -326,7 +326,7 @@
 
 /// 15. Send Stock Alert
 /// POST /api/notifications/stock-alert
-/// 
+///
 /// Request:
 /// {
 ///   "userId": "user_123",
@@ -335,7 +335,7 @@
 ///     {"productId": "prod_002", "name": "Bread", "current": 3, "threshold": 15}
 ///   ]
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -345,14 +345,14 @@
 
 /// 16. Send Payment Reminder Notification
 /// POST /api/notifications/payment-reminder
-/// 
+///
 /// Request:
 /// {
 ///   "customerId": "cust_123",
 ///   "khataAmount": 5000.0,
 ///   "daysOverdue": 7
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -366,7 +366,7 @@
 
 /// 17. Verify High-Value Payment
 /// POST /api/payments/verify-high-value
-/// 
+///
 /// Request:
 /// {
 ///   "amount": 2500.0,
@@ -375,7 +375,7 @@
 ///   "billMatchConfidence": 0.95,
 ///   "saleId": "sale_5001"
 /// }
-/// 
+///
 /// Response (200 OK):
 /// {
 ///   "success": true,
@@ -390,28 +390,28 @@
 // ============================================================================
 
 /// All endpoints follow standard error format:
-/// 
+///
 /// 400 Bad Request:
 /// {
 ///   "error": "INVALID_REQUEST",
 ///   "message": "Missing required field: staffId",
 ///   "code": "ERR_INVALID_REQUEST"
 /// }
-/// 
+///
 /// 401 Unauthorized:
 /// {
 ///   "error": "UNAUTHORIZED",
 ///   "message": "Invalid or missing JWT token",
 ///   "code": "ERR_UNAUTHORIZED"
 /// }
-/// 
+///
 /// 404 Not Found:
 /// {
 ///   "error": "NOT_FOUND",
 ///   "message": "Staff member not found",
 ///   "code": "ERR_NOT_FOUND"
 /// }
-/// 
+///
 /// 500 Internal Server Error:
 /// {
 ///   "error": "INTERNAL_ERROR",
@@ -428,7 +428,7 @@
 /// - Loyalty endpoints: 200 requests/minute
 /// - Delivery endpoints: 150 requests/minute
 /// - Notifications endpoints: 50 requests/minute
-/// 
+///
 /// Rate limit headers in response:
 /// X-RateLimit-Limit: 100
 /// X-RateLimit-Remaining: 95
@@ -440,20 +440,20 @@
 
 /// WebSocket Connection for Real-time Delivery Updates
 /// wss://retail-mind-vkbp.onrender.com/ws/delivery/track
-/// 
+///
 /// Connect:
 /// {
 ///   "action": "connect",
 ///   "orderId": "ORD-12345",
 ///   "token": "JWT_TOKEN"
 /// }
-/// 
+///
 /// Subscribe to Order:
 /// {
 ///   "action": "subscribe",
 ///   "orderId": "ORD-12345"
 /// }
-/// 
+///
 /// Server broadcasts every 30 seconds:
 /// {
 ///   "action": "location_update",
@@ -464,7 +464,7 @@
 ///   "eta": "2026-06-18T13:45:00Z",
 ///   "timestamp": "2026-06-18T10:00:00Z"
 /// }
-/// 
+///
 /// Order Status Change:
 /// {
 ///   "action": "status_change",
@@ -472,7 +472,7 @@
 ///   "status": "delivered",
 ///   "timestamp": "2026-06-18T13:50:00Z"
 /// }
-/// 
+///
 /// Disconnect:
 /// {
 ///   "action": "disconnect",

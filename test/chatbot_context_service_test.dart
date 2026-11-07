@@ -19,11 +19,14 @@ void main() {
     expect(greeting, contains('Retail Mind'));
   });
 
-  test('chatbot system prompt is built locally without a context API request', () async {
-    final prompt = await ChatbotContextService.getChatbotSystemPrompt();
+  test(
+    'chatbot system prompt is built locally without a context API request',
+    () async {
+      final prompt = await ChatbotContextService.getChatbotSystemPrompt();
 
-    expect(prompt, contains('Test Kirana'));
-    expect(prompt, contains('OWNER'));
-    expect(prompt, contains('authenticated Retail Mind query service'));
-  });
+      expect(prompt, contains('Test Kirana'));
+      expect(prompt, contains('OWNER'));
+      expect(prompt, contains('authenticated Retail Mind query service'));
+    },
+  );
 }

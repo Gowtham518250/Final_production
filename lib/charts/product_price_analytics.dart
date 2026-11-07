@@ -47,15 +47,16 @@ class ProductPriceAnalytics {
     final grouped = <String, Map<String, dynamic>>{};
 
     void addLine(Map<String, dynamic> line) {
-      final rawName = (line['display_name'] ??
-              line['product_name'] ??
-              line['product'] ??
-              line['item'] ??
-              line['description'] ??
-              line['name'] ??
-              '')
-          .toString()
-          .trim();
+      final rawName =
+          (line['display_name'] ??
+                  line['product_name'] ??
+                  line['product'] ??
+                  line['item'] ??
+                  line['description'] ??
+                  line['name'] ??
+                  '')
+              .toString()
+              .trim();
       final name = rawName.isEmpty ? 'Unknown Product' : rawName;
       final normalizedName = _normalizedName(name);
       if (normalizedName.isEmpty || normalizedName == 'unknown product') return;
@@ -88,21 +89,25 @@ class ProductPriceAnalytics {
       }
 
       final hasUnitPrice = unitPrice > 0 && unitPrice.isFinite;
-      final priceIdentity =
-          hasUnitPrice ? unitPrice.toStringAsFixed(2) : 'unknown-price';
+      final priceIdentity = hasUnitPrice
+          ? unitPrice.toStringAsFixed(2)
+          : 'unknown-price';
       final key = 'name:$normalizedName|$priceIdentity';
       final label = hasUnitPrice
           ? '$name · ₹${unitPrice.toStringAsFixed(2)}'
           : '$name · Price unavailable';
 
-      final bucket = grouped.putIfAbsent(key, () => {
-            'product_name': name,
-            'label': label,
-            'unit_price': hasUnitPrice ? unitPrice : 0.0,
-            'has_unit_price': hasUnitPrice,
-            'revenue': 0.0,
-            'quantity': 0.0,
-          });
+      final bucket = grouped.putIfAbsent(
+        key,
+        () => {
+          'product_name': name,
+          'label': label,
+          'unit_price': hasUnitPrice ? unitPrice : 0.0,
+          'has_unit_price': hasUnitPrice,
+          'revenue': 0.0,
+          'quantity': 0.0,
+        },
+      );
       bucket['revenue'] = _number(bucket['revenue']) + revenue;
       bucket['quantity'] = _number(bucket['quantity']) + quantity;
     }
@@ -115,8 +120,8 @@ class ProductPriceAnalytics {
       final rawLines = items is List && items.isNotEmpty
           ? items
           : lineItems is List
-              ? lineItems
-              : null;
+          ? lineItems
+          : null;
 
       if (rawLines is List && rawLines.isNotEmpty) {
         for (final rawLine in rawLines) {
@@ -127,27 +132,27 @@ class ProductPriceAnalytics {
       }
     }
 
-    final result = grouped.entries.map((entry) {
-      final row = entry.value;
-      final name = row['product_name'].toString();
-      final price = _number(row['unit_price']);
-      return ProductPriceBucket(
-        key: entry.key,
-        productName: name,
-        label: row['label'].toString(),
-        unitPrice: price,
-        hasUnitPrice: row['has_unit_price'] == true,
-        revenue: _number(row['revenue']),
-        quantity: _number(row['quantity']),
-      );
-    }).toList()
-      ..sort((a, b) {
-        final revenueOrder = b.revenue.compareTo(a.revenue);
-        if (revenueOrder != 0) return revenueOrder;
-        final quantityOrder = b.quantity.compareTo(a.quantity);
-        if (quantityOrder != 0) return quantityOrder;
-        return a.label.compareTo(b.label);
-      });
+    final result =
+        grouped.entries.map((entry) {
+          final row = entry.value;
+          final name = row['product_name'].toString();
+          final price = _number(row['unit_price']);
+          return ProductPriceBucket(
+            key: entry.key,
+            productName: name,
+            label: row['label'].toString(),
+            unitPrice: price,
+            hasUnitPrice: row['has_unit_price'] == true,
+            revenue: _number(row['revenue']),
+            quantity: _number(row['quantity']),
+          );
+        }).toList()..sort((a, b) {
+          final revenueOrder = b.revenue.compareTo(a.revenue);
+          if (revenueOrder != 0) return revenueOrder;
+          final quantityOrder = b.quantity.compareTo(a.quantity);
+          if (quantityOrder != 0) return quantityOrder;
+          return a.label.compareTo(b.label);
+        });
     return result;
   }
 

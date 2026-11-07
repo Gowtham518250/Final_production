@@ -44,7 +44,7 @@ class TierBenefitsService {
   ) async {
     final prefs = await SharedPreferences.getInstance();
     final progressKey = '${_tierProgressKey}_$customerId';
-    
+
     final current = await getTierProgress(customerId);
     final oldTier = current['current_tier'] as String;
     final totalPoints = (current['total_points'] as int) + newPoints;
@@ -52,7 +52,7 @@ class TierBenefitsService {
     // Determine new tier
     String newTier;
     int tierLevel;
-    
+
     if (totalPoints >= 1000) {
       newTier = 'GOLD';
       tierLevel = 3;
@@ -70,9 +70,7 @@ class TierBenefitsService {
     // Update progress
     final nextTierPoints = newTier == 'GOLD'
         ? 9999 // Max out at Gold
-        : (newTier == 'SILVER'
-            ? 1000
-            : 500);
+        : (newTier == 'SILVER' ? 1000 : 500);
 
     final updatedProgress = {
       'customer_id': customerId,
@@ -80,7 +78,9 @@ class TierBenefitsService {
       'tier_level': tierLevel,
       'total_points': totalPoints,
       'points_progress': totalPoints,
-      'next_tier': newTier == 'GOLD' ? null : (newTier == 'SILVER' ? 'GOLD' : 'SILVER'),
+      'next_tier': newTier == 'GOLD'
+          ? null
+          : (newTier == 'SILVER' ? 'GOLD' : 'SILVER'),
       'points_to_next': newTier == 'GOLD' ? 0 : (nextTierPoints - totalPoints),
       'tier_updated_at': DateTime.now().toIso8601String(),
       'tier_history': current['tier_history'] ?? [],
@@ -113,11 +113,15 @@ class TierBenefitsService {
   }
 
   /// Get tier history for customer (progression timeline)
-  static Future<List<Map<String, dynamic>>> getTierHistory(int customerId) async {
+  static Future<List<Map<String, dynamic>>> getTierHistory(
+    int customerId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final progress = await getTierProgress(customerId);
     final history = progress['tier_history'] ?? [];
-    return List<Map<String, dynamic>>.from(history.cast<Map<String, dynamic>>());
+    return List<Map<String, dynamic>>.from(
+      history.cast<Map<String, dynamic>>(),
+    );
   }
 
   // ==========================================
@@ -153,17 +157,15 @@ class TierBenefitsService {
   }
 
   /// Get active benefit enrollments
-  static Future<Map<String, dynamic>> getActiveEnrollments(int customerId) async {
+  static Future<Map<String, dynamic>> getActiveEnrollments(
+    int customerId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final enrollmentKey = '${_benefitEnrollmentKey}_$customerId';
     final data = prefs.getString(enrollmentKey);
 
     if (data == null) {
-      return {
-        'status': 'NOT_ENROLLED',
-        'tier': 'BRONZE',
-        'benefits': [],
-      };
+      return {'status': 'NOT_ENROLLED', 'tier': 'BRONZE', 'benefits': []};
     }
 
     return json.decode(data) as Map<String, dynamic>;
@@ -184,7 +186,9 @@ class TierBenefitsService {
     }
 
     final enrollmentData = json.decode(enrollment) as Map<String, dynamic>;
-    final activeBenefits = List<String>.from(enrollmentData['active_benefits'] as List? ?? []);
+    final activeBenefits = List<String>.from(
+      enrollmentData['active_benefits'] as List? ?? [],
+    );
 
     if (!activeBenefits.contains(benefitId)) {
       return {'success': false, 'error': 'Benefit not available'};
@@ -207,7 +211,8 @@ class TierBenefitsService {
     await prefs.setString(redemptionKey, json.encode(redemptionList));
 
     // Update enrollment count
-    enrollmentData['redemption_count'] = (enrollmentData['redemption_count'] as int? ?? 0) + 1;
+    enrollmentData['redemption_count'] =
+        (enrollmentData['redemption_count'] as int? ?? 0) + 1;
     await prefs.setString(enrollmentKey, json.encode(enrollmentData));
 
     return {
@@ -220,14 +225,17 @@ class TierBenefitsService {
   }
 
   /// Get benefit redemption history
-  static Future<List<Map<String, dynamic>>> getBenefitRedemptions(int customerId) async {
+  static Future<List<Map<String, dynamic>>> getBenefitRedemptions(
+    int customerId,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     final redemptionKey = 'benefit_redemptions_$customerId';
     final redemptions = prefs.getString(redemptionKey);
 
     if (redemptions == null) return [];
 
-    final redemptionList = (json.decode(redemptions) as List).cast<Map<String, dynamic>>();
+    final redemptionList = (json.decode(redemptions) as List)
+        .cast<Map<String, dynamic>>();
     return redemptionList.reversed.toList();
   }
 
@@ -251,7 +259,8 @@ class TierBenefitsService {
 
     // Calculate moat factors
     final tierDepth = tierLevel == 3 ? 30 : (tierLevel == 2 ? 20 : 10);
-    final benefitDepth = (enrollment['active_benefits'] as List? ?? []).length * 5;
+    final benefitDepth =
+        (enrollment['active_benefits'] as List? ?? []).length * 5;
     final investmentDepth = (history.length * 15) + (redemptions.length * 10);
     final pointsDepth = (totalPoints ~/ 100).clamp(0, 20);
 
@@ -271,7 +280,8 @@ class TierBenefitsService {
       'points_depth_points': pointsDepth,
       'factors': {
         'tier_locked': tier.toUpperCase() != 'BRONZE',
-        'benefits_active': (enrollment['active_benefits'] as List? ?? []).isNotEmpty,
+        'benefits_active':
+            (enrollment['active_benefits'] as List? ?? []).isNotEmpty,
         'tier_history': history.length,
         'points_invested': totalPoints,
         'redemptions': redemptions.length,
@@ -290,11 +300,7 @@ class TierBenefitsService {
   }
 
   static int _calculateSwitchingCost(String tier, int points) {
-    final tierPenalty = tier == 'GOLD'
-        ? 500
-        : (tier == 'SILVER'
-            ? 250
-            : 0);
+    final tierPenalty = tier == 'GOLD' ? 500 : (tier == 'SILVER' ? 250 : 0);
     return tierPenalty + (points ~/ 10);
   }
 
@@ -313,27 +319,92 @@ class TierBenefitsService {
     switch (tierUpper) {
       case 'GOLD':
         return [
-          {'id': 'gold_no_fee', 'name': 'No Transfer Fee', 'value': 0, 'type': 'DISCOUNT'},
-          {'id': 'gold_2x', 'name': '2x Loyalty Points', 'value': 2, 'type': 'MULTIPLIER'},
-          {'id': 'gold_bday', 'name': 'Birthday 500 Points', 'value': 500, 'type': 'BONUS'},
-          {'id': 'gold_tier_lock', 'name': '60-Day Tier Lock', 'value': 60, 'type': 'LOCK'},
-          {'id': 'gold_vip', 'name': 'VIP Customer Support', 'value': 24, 'type': 'SERVICE'},
-          {'id': 'gold_early_access', 'name': 'Early Sale Access', 'value': 7, 'type': 'EXCLUSIVE'},
+          {
+            'id': 'gold_no_fee',
+            'name': 'No Transfer Fee',
+            'value': 0,
+            'type': 'DISCOUNT',
+          },
+          {
+            'id': 'gold_2x',
+            'name': '2x Loyalty Points',
+            'value': 2,
+            'type': 'MULTIPLIER',
+          },
+          {
+            'id': 'gold_bday',
+            'name': 'Birthday 500 Points',
+            'value': 500,
+            'type': 'BONUS',
+          },
+          {
+            'id': 'gold_tier_lock',
+            'name': '60-Day Tier Lock',
+            'value': 60,
+            'type': 'LOCK',
+          },
+          {
+            'id': 'gold_vip',
+            'name': 'VIP Customer Support',
+            'value': 24,
+            'type': 'SERVICE',
+          },
+          {
+            'id': 'gold_early_access',
+            'name': 'Early Sale Access',
+            'value': 7,
+            'type': 'EXCLUSIVE',
+          },
         ];
 
       case 'SILVER':
         return [
-          {'id': 'silver_1pct_fee', 'name': '1% Transfer Fee', 'value': 1, 'type': 'DISCOUNT'},
-          {'id': 'silver_1_5x', 'name': '1.5x Loyalty Points', 'value': 1.5, 'type': 'MULTIPLIER'},
-          {'id': 'silver_bday', 'name': 'Birthday 250 Points', 'value': 250, 'type': 'BONUS'},
-          {'id': 'silver_tier_lock', 'name': '30-Day Tier Lock', 'value': 30, 'type': 'LOCK'},
+          {
+            'id': 'silver_1pct_fee',
+            'name': '1% Transfer Fee',
+            'value': 1,
+            'type': 'DISCOUNT',
+          },
+          {
+            'id': 'silver_1_5x',
+            'name': '1.5x Loyalty Points',
+            'value': 1.5,
+            'type': 'MULTIPLIER',
+          },
+          {
+            'id': 'silver_bday',
+            'name': 'Birthday 250 Points',
+            'value': 250,
+            'type': 'BONUS',
+          },
+          {
+            'id': 'silver_tier_lock',
+            'name': '30-Day Tier Lock',
+            'value': 30,
+            'type': 'LOCK',
+          },
         ];
 
       default: // BRONZE
         return [
-          {'id': 'bronze_access', 'name': 'Network Access', 'value': 0, 'type': 'ACCESS'},
-          {'id': 'bronze_2pct_fee', 'name': '2% Transfer Fee', 'value': 2, 'type': 'DISCOUNT'},
-          {'id': 'bronze_tier_lock', 'name': '7-Day Tier Lock', 'value': 7, 'type': 'LOCK'},
+          {
+            'id': 'bronze_access',
+            'name': 'Network Access',
+            'value': 0,
+            'type': 'ACCESS',
+          },
+          {
+            'id': 'bronze_2pct_fee',
+            'name': '2% Transfer Fee',
+            'value': 2,
+            'type': 'DISCOUNT',
+          },
+          {
+            'id': 'bronze_tier_lock',
+            'name': '7-Day Tier Lock',
+            'value': 7,
+            'type': 'LOCK',
+          },
         ];
     }
   }

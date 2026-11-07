@@ -54,9 +54,8 @@ class GrowthAmbientBackdrop extends StatelessWidget {
             if (!reduced)
               AnimatedBuilder(
                 animation: animation,
-                builder: (context, _) => CustomPaint(
-                  painter: _GrowthOrbPainter(animation.value),
-                ),
+                builder: (context, _) =>
+                    CustomPaint(painter: _GrowthOrbPainter(animation.value)),
               ),
             if (!reduced)
               Align(
@@ -127,11 +126,7 @@ class _GrowthOrbPainter extends CustomPainter {
 }
 
 class GrowthStagger extends StatelessWidget {
-  const GrowthStagger({
-    super.key,
-    required this.index,
-    required this.child,
-  });
+  const GrowthStagger({super.key, required this.index, required this.child});
 
   final int index;
   final Widget child;
@@ -461,9 +456,10 @@ class _PulseMarkState extends State<_PulseMark>
   @override
   Widget build(BuildContext context) {
     return ScaleTransition(
-      scale: Tween(begin: 0.92, end: 1.08).animate(
-        CurvedAnimation(parent: _loop, curve: Curves.easeInOut),
-      ),
+      scale: Tween(
+        begin: 0.92,
+        end: 1.08,
+      ).animate(CurvedAnimation(parent: _loop, curve: Curves.easeInOut)),
       child: Container(
         width: 64,
         height: 64,
@@ -480,11 +476,7 @@ class _PulseMarkState extends State<_PulseMark>
 }
 
 class GrowthStepSwitch extends StatelessWidget {
-  const GrowthStepSwitch({
-    super.key,
-    required this.step,
-    required this.child,
-  });
+  const GrowthStepSwitch({super.key, required this.step, required this.child});
 
   final int step;
   final Widget child;

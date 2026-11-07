@@ -67,7 +67,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       if (res.statusCode == 200 && decoded is Map) {
         final rawItems = decoded['items'];
         final items = rawItems is List
-            ? rawItems.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+            ? rawItems
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
             : <Map<String, dynamic>>[];
         if (!mounted) return;
         setState(() {
@@ -75,14 +78,22 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           _reorderNotice = (decoded['notice'] ?? '').toString();
         });
       } else {
-        final detail = decoded is Map ? (decoded['detail'] ?? decoded['message'])?.toString() : null;
-        if (mounted) setState(() => _reorderNotice = detail?.trim().isNotEmpty == true
-            ? detail!.trim()
-            : 'Could not load stock-reorder suggestions. Refresh to try again.');
+        final detail = decoded is Map
+            ? (decoded['detail'] ?? decoded['message'])?.toString()
+            : null;
+        if (mounted)
+          setState(
+            () => _reorderNotice = detail?.trim().isNotEmpty == true
+                ? detail!.trim()
+                : 'Could not load stock-reorder suggestions. Refresh to try again.',
+          );
       }
     } catch (e) {
-      if (mounted) setState(() => _reorderNotice =
-          'Stock suggestions are temporarily unavailable. Check the connection and refresh.');
+      if (mounted)
+        setState(
+          () => _reorderNotice =
+              'Stock suggestions are temporarily unavailable. Check the connection and refresh.',
+        );
       debugPrint('⚠️ Reorder recommendations unavailable: $e');
     } finally {
       if (mounted) setState(() => _reorderLoading = false);
@@ -93,23 +104,32 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     await Future.wait([_fetchOrders(), _fetchReorderRecommendations()]);
   }
 
-  double _number(dynamic value, [double fallback = 0]) =>
-      value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? fallback;
+  double _number(dynamic value, [double fallback = 0]) => value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '') ?? fallback;
 
   String _money(dynamic value) => '₹${_number(value).toStringAsFixed(2)}';
 
   Future<void> _openOffer(dynamic rawUrl) async {
     final url = Uri.tryParse(rawUrl?.toString() ?? '');
     if (url == null || url.scheme != 'https' || url.host.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('The seller did not provide a usable product link.')),
-      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: LiveTranslatedText(
+              'The seller did not provide a usable product link.',
+            ),
+          ),
+        );
       return;
     }
     final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: LiveTranslatedText('Could not open the seller link.')),
-    );
+    if (!opened && mounted)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: LiveTranslatedText('Could not open the seller link.'),
+        ),
+      );
   }
 
   @override
@@ -152,7 +172,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   List<Map<String, dynamic>> _mapList(dynamic value) {
     if (value is! List) return <Map<String, dynamic>>[];
-    return value.whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+    return value
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
   }
 
   Map<String, dynamic>? get _latestProductDiscovery {
@@ -176,9 +199,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     String? discoverySection,
   }) async {
     if (navigationIndex != null || discoverySection != null) {
-      _openTab(navigationIndex ?? _selectedBottomNavigation, discoverySection: discoverySection);
+      _openTab(
+        navigationIndex ?? _selectedBottomNavigation,
+        discoverySection: discoverySection,
+      );
     }
-    if (navigationIndex != null && navigationIndex != 0 && key != _discoveryResultsKey) {
+    if (navigationIndex != null &&
+        navigationIndex != 0 &&
+        key != _discoveryResultsKey) {
       return;
     }
     await WidgetsBinding.instance.endOfFrame;
@@ -220,7 +248,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         if (!mounted) return;
         setState(() => _isShoppingListening = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Voice search unavailable: ' + message)),
+          SnackBar(
+            content: LiveTranslatedText('Voice search unavailable: ' + message),
+          ),
         );
       },
     );
@@ -288,7 +318,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final cleaned = (phone ?? '').trim();
     if (cleaned.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('This listing has no public phone number.')),
+        const SnackBar(
+          content: LiveTranslatedText(
+            'This listing has no public phone number.',
+          ),
+        ),
       );
       return;
     }
@@ -296,13 +330,17 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       final opened = await launchUrl(Uri(scheme: 'tel', path: cleaned));
       if (!opened && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open the phone app.')),
+          const SnackBar(
+            content: LiveTranslatedText('Could not open the phone app.'),
+          ),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('Could not open the phone app.')),
+          const SnackBar(
+            content: LiveTranslatedText('Could not open the phone app.'),
+          ),
         );
       }
     }
@@ -352,14 +390,18 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         final payload = Map<String, dynamic>.from(decoded);
         final rawDiscovery = payload['product_discovery'];
         if (rawDiscovery is! Map) {
-          throw Exception('No product-comparison data was returned. Please try a product name and pack size.');
+          throw Exception(
+            'No product-comparison data was returned. Please try a product name and pack size.',
+          );
         }
 
         final discovery = Map<String, dynamic>.from(rawDiscovery);
         final offers = _mapList(discovery['online_offers']);
         offers.removeWhere((offer) {
           final value = offer['price'];
-          final price = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
+          final price = value is num
+              ? value.toDouble()
+              : double.tryParse(value?.toString() ?? '');
           return price == null || !price.isFinite || price <= 0;
         });
         offers.sort((a, b) {
@@ -369,15 +411,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         });
         discovery['online_offers'] = offers;
 
-        var answer = (payload['answer'] ?? 'Here are the available product listings.').toString();
+        var answer =
+            (payload['answer'] ?? 'Here are the available product listings.')
+                .toString();
         if (offers.isNotEmpty) {
           final best = offers.first;
           final source = (best['source'] ?? 'online seller').toString();
-          answer = 'Best listed price: ${_money(best['price'])} from $source. '
+          answer =
+              'Best listed price: ${_money(best['price'])} from $source. '
               'This is the lowest returned listing, not a guaranteed best-value deal; confirm the brand, exact pack size, delivery fees and checkout price. '
               '$answer';
         } else {
-          answer = 'I could not find a priced online listing for this product. Try adding a brand or pack size. $answer';
+          answer =
+              'I could not find a priced online listing for this product. Try adding a brand or pack size. $answer';
         }
 
         if (mounted) {
@@ -391,7 +437,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         }
       } else {
         final detail = decoded is Map
-            ? (decoded['detail'] ?? decoded['message'] ?? decoded['error'])?.toString()
+            ? (decoded['detail'] ?? decoded['message'] ?? decoded['error'])
+                  ?.toString()
             : null;
         throw Exception(
           detail != null && detail.trim().isNotEmpty
@@ -401,17 +448,21 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       }
     } on TimeoutException {
       if (mounted) {
-        setState(() => _shoppingChatMessages.add({
-          'role': 'assistant',
-          'text': 'The product search took too long. Please try again.',
-        }));
+        setState(
+          () => _shoppingChatMessages.add({
+            'role': 'assistant',
+            'text': 'The product search took too long. Please try again.',
+          }),
+        );
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _shoppingChatMessages.add({
-          'role': 'assistant',
-          'text': error.toString().replaceFirst('Exception: ', ''),
-        }));
+        setState(
+          () => _shoppingChatMessages.add({
+            'role': 'assistant',
+            'text': error.toString().replaceFirst('Exception: ', ''),
+          }),
+        );
       }
       debugPrint('Purchase-order product search failed: $error');
     } finally {
@@ -461,7 +512,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     ),
                     borderRadius: BorderRadius.circular(17),
                   ),
-                  child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 28),
+                  child: const Icon(
+                    Icons.smart_toy_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -480,7 +535,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       const SizedBox(height: 3),
                       LiveTranslatedText(
                         'Search online or shops near you',
-                        style: GoogleFonts.poppins(color: const Color(0xFF5D6C89), fontSize: 12),
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF5D6C89),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -491,7 +549,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   onPressed: _shoppingSearchLoading
                       ? null
                       : () => setState(_shoppingChatMessages.clear),
-                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFF71809D)),
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xFF71809D),
+                  ),
                 ),
               ],
             ),
@@ -512,19 +573,30 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           color: const Color(0xFFEDEAFF),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.smart_toy_rounded, color: _primary, size: 21),
+                        child: const Icon(
+                          Icons.smart_toy_rounded,
+                          color: _primary,
+                          size: 21,
+                        ),
                       ),
                       const SizedBox(width: 9),
                       Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF3F5FC),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: LiveTranslatedText(
                             'Tell me the product name. I will show online prices and nearby shops you can buy from.',
-                            style: GoogleFonts.poppins(color: _ink, fontSize: 13, height: 1.5),
+                            style: GoogleFonts.poppins(
+                              color: _ink,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
                           ),
                         ),
                       ),
@@ -537,14 +609,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       controller: _shoppingChatScrollController,
                       shrinkWrap: true,
                       padding: EdgeInsets.zero,
-                      itemCount: _shoppingChatMessages.length + (_shoppingSearchLoading ? 1 : 0),
+                      itemCount:
+                          _shoppingChatMessages.length +
+                          (_shoppingSearchLoading ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index >= _shoppingChatMessages.length) {
                           return Align(
                             alignment: Alignment.centerLeft,
                             child: Container(
                               margin: const EdgeInsets.only(top: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 13,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF3F5FC),
                                 borderRadius: BorderRadius.circular(15),
@@ -555,10 +632,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   const SizedBox(
                                     width: 15,
                                     height: 15,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: _primary,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
-                                  LiveTranslatedText('Searching listings…', style: GoogleFonts.poppins(color: _muted, fontSize: 11)),
+                                  LiveTranslatedText(
+                                    'Searching listings…',
+                                    style: GoogleFonts.poppins(
+                                      color: _muted,
+                                      fontSize: 11,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -567,14 +653,26 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         final message = _shoppingChatMessages[index];
                         final isUser = message['role'] == 'user';
                         return Align(
-                          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                          alignment: isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
                           child: Container(
-                            constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+                            ),
                             margin: const EdgeInsets.only(top: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 10,
+                            ),
                             decoration: BoxDecoration(
                               gradient: isUser
-                                  ? const LinearGradient(colors: [Color(0xFF6557F5), Color(0xFF3D83F6)])
+                                  ? const LinearGradient(
+                                      colors: [
+                                        Color(0xFF6557F5),
+                                        Color(0xFF3D83F6),
+                                      ],
+                                    )
                                   : null,
                               color: isUser ? null : const Color(0xFFF3F5FC),
                               borderRadius: BorderRadius.only(
@@ -629,7 +727,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF7986A0), size: 21),
+                      const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        color: Color(0xFF7986A0),
+                        size: 21,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
@@ -640,31 +742,50 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           onSubmitted: (_) => _sendPurchaseShoppingQuery(),
                           style: GoogleFonts.poppins(color: _ink, fontSize: 12),
                           decoration: InputDecoration(
-                            hint: LiveTranslatedText('Type a product, like tea powder'),
-                            hintStyle: GoogleFonts.poppins(color: const Color(0xFF8792A8), fontSize: 10.5),
+                            hint: LiveTranslatedText(
+                              'Type a product, like tea powder',
+                            ),
+                            hintStyle: GoogleFonts.poppins(
+                              color: const Color(0xFF8792A8),
+                              fontSize: 10.5,
+                            ),
                             border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 11,
+                            ),
                           ),
                         ),
                       ),
                       IconButton(
-                        tooltip: _isShoppingListening ? 'Stop voice input' : 'Speak product search',
-                        onPressed: _shoppingSearchLoading ? null : _toggleShoppingVoiceInput,
+                        tooltip: _isShoppingListening
+                            ? 'Stop voice input'
+                            : 'Speak product search',
+                        onPressed: _shoppingSearchLoading
+                            ? null
+                            : _toggleShoppingVoiceInput,
                         icon: Icon(
-                          _isShoppingListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                          color: _isShoppingListening ? const Color(0xFFDB3F62) : _primary,
+                          _isShoppingListening
+                              ? Icons.mic_rounded
+                              : Icons.mic_none_rounded,
+                          color: _isShoppingListening
+                              ? const Color(0xFFDB3F62)
+                              : _primary,
                         ),
                       ),
                       Container(
                         width: 42,
                         height: 42,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFF6557F5), Color(0xFF3D83F6)]),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6557F5), Color(0xFF3D83F6)],
+                          ),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: IconButton(
                           tooltip: 'Search products',
-                          onPressed: _shoppingSearchLoading ? null : () => _sendPurchaseShoppingQuery(),
+                          onPressed: _shoppingSearchLoading
+                              ? null
+                              : () => _sendPurchaseShoppingQuery(),
                           color: Colors.white,
                           icon: const Icon(Icons.send_rounded, size: 19),
                         ),
@@ -676,12 +797,20 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.verified_user_outlined, size: 15, color: Color(0xFF7986A0)),
+                    const Icon(
+                      Icons.verified_user_outlined,
+                      size: 15,
+                      color: Color(0xFF7986A0),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: LiveTranslatedText(
                         'Prices on the internet can change. Confirm the final price with the seller before you pay.',
-                        style: GoogleFonts.poppins(color: _muted, fontSize: 11, height: 1.4),
+                        style: GoogleFonts.poppins(
+                          color: _muted,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                   ],
@@ -698,19 +827,21 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final IconData icon = label.contains('ghee')
         ? Icons.local_offer_rounded
         : label.contains('rice')
-            ? Icons.rice_bowl_rounded
-            : Icons.water_drop_rounded;
+        ? Icons.rice_bowl_rounded
+        : Icons.water_drop_rounded;
     final Color iconColor = label.contains('ghee')
         ? const Color(0xFFD59A25)
         : label.contains('rice')
-            ? const Color(0xFFAE7A51)
-            : const Color(0xFFE0A120);
+        ? const Color(0xFFAE7A51)
+        : const Color(0xFFE0A120);
     return Material(
       color: const Color(0xFFF9FAFF),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: _shoppingSearchLoading ? null : () => _sendPurchaseShoppingQuery(query: label),
+        onTap: _shoppingSearchLoading
+            ? null
+            : () => _sendPurchaseShoppingQuery(query: label),
         child: Container(
           constraints: const BoxConstraints(minHeight: 41),
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
@@ -723,7 +854,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             children: [
               Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: 7),
-              LiveTranslatedText(label, style: GoogleFonts.poppins(color: _ink, fontSize: 10.5, fontWeight: FontWeight.w700)),
+              LiveTranslatedText(
+                label,
+                style: GoogleFonts.poppins(
+                  color: _ink,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
@@ -750,20 +888,32 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(23),
-              border: Border.all(color: selected ? const Color(0xFFD7D2FF) : const Color(0xFFE7ECF6)),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFFD7D2FF)
+                    : const Color(0xFFE7ECF6),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, color: selected ? _primary : _ink, size: 18),
                 const SizedBox(width: 7),
-                LiveTranslatedText(label, style: GoogleFonts.poppins(color: selected ? _primary : _ink, fontSize: 10.5, fontWeight: FontWeight.w700)),
+                LiveTranslatedText(
+                  label,
+                  style: GoogleFonts.poppins(
+                    color: selected ? _primary : _ink,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
           ),
         ),
       );
     }
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -796,19 +946,37 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   Container(
                     width: 46,
                     height: 46,
-                    decoration: BoxDecoration(color: const Color(0xFFEDEAFF), borderRadius: BorderRadius.circular(14)),
-                    child: const Icon(Icons.search_rounded, color: _primary, size: 26),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEDEAFF),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.search_rounded,
+                      color: _primary,
+                      size: 26,
+                    ),
                   ),
                   const SizedBox(width: 11),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LiveTranslatedText('Results show up here', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 14)),
+                        LiveTranslatedText(
+                          'Results show up here',
+                          style: GoogleFonts.poppins(
+                            color: _ink,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         LiveTranslatedText(
                           'Search a product first. Then you will see online shops and shops near you.',
-                          style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.45),
+                          style: GoogleFonts.poppins(
+                            color: _muted,
+                            fontSize: 12,
+                            height: 1.45,
+                          ),
                         ),
                       ],
                     ),
@@ -816,10 +984,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 ],
               ),
             )
-          : ProductDiscoveryCard(
-              data: discovery,
-              purchaseAssistantMode: true,
-            ),
+          : ProductDiscoveryCard(data: discovery, purchaseAssistantMode: true),
     );
   }
 
@@ -832,78 +997,136 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         borderRadius: BorderRadius.circular(23),
         border: Border.all(color: _border),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF233B73).withValues(alpha: 0.04), blurRadius: 18, offset: const Offset(0, 6)),
+          BoxShadow(
+            color: const Color(0xFF233B73).withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(color: const Color(0xFFFFF4DF), borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.inventory_2_outlined, color: Color(0xFFCF8B18)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF4DF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: Color(0xFFCF8B18),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: LiveTranslatedText(
+                  'Items running low',
+                  style: GoogleFonts.poppins(
+                    color: _ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh stock and online prices',
+                onPressed: _reorderLoading
+                    ? null
+                    : () => _fetchReorderRecommendations(),
+                icon: _reorderLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _primary,
+                        ),
+                      )
+                    : const Icon(Icons.refresh_rounded, color: _muted),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(child: LiveTranslatedText('Items running low',
-              style: GoogleFonts.poppins(color: _ink, fontSize: 16, fontWeight: FontWeight.w800))),
-          IconButton(
-            tooltip: 'Refresh stock and online prices',
-            onPressed: _reorderLoading ? null : () => _fetchReorderRecommendations(),
-            icon: _reorderLoading
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _primary))
-                : const Icon(Icons.refresh_rounded, color: _muted),
-          ),
-        ]),
-        LiveTranslatedText(
-          'These products are getting over in your shop. Check prices, then make an order to your supplier. This does not buy from the internet automatically.',
-          style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.5),
-        ),
-        if (_reorderLoading && _reorderSuggestions.isEmpty) ...[
-          const SizedBox(height: 16),
-          const LinearProgressIndicator(color: _primary),
-        ],
-        if (!_reorderLoading && _reorderSuggestions.isEmpty) ...[
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFF8FAFD), borderRadius: BorderRadius.circular(13)),
-            child: LiveTranslatedText(
-              _reorderNotice.contains('SERPAPI_API_KEY')
-                  ? 'Could not check low stock right now. Refresh and try again.'
-                  : 'All products have enough stock. Nothing to reorder now.',
-              style: GoogleFonts.poppins(color: _muted, fontSize: 11.5, height: 1.45),
+          LiveTranslatedText(
+            'These products are getting over in your shop. Check prices, then make an order to your supplier. This does not buy from the internet automatically.',
+            style: GoogleFonts.poppins(
+              color: _muted,
+              fontSize: 12,
+              height: 1.5,
             ),
           ),
+          if (_reorderLoading && _reorderSuggestions.isEmpty) ...[
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(color: _primary),
+          ],
+          if (!_reorderLoading && _reorderSuggestions.isEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFD),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: LiveTranslatedText(
+                _reorderNotice.contains('SERPAPI_API_KEY')
+                    ? 'Could not check low stock right now. Refresh and try again.'
+                    : 'All products have enough stock. Nothing to reorder now.',
+                style: GoogleFonts.poppins(
+                  color: _muted,
+                  fontSize: 11.5,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+          if (_reorderSuggestions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ..._reorderSuggestions.map(_buildReorderCard),
+          ],
+          if (_reorderNotice.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            LiveTranslatedText(
+              _reorderNotice,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF7D8BA4),
+                fontSize: 10,
+                height: 1.35,
+              ),
+            ),
+          ],
         ],
-        if (_reorderSuggestions.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          ..._reorderSuggestions.map(_buildReorderCard),
-        ],
-        if (_reorderNotice.trim().isNotEmpty) ...[
-          const SizedBox(height: 8),
-          LiveTranslatedText(_reorderNotice, style: GoogleFonts.poppins(color: const Color(0xFF7D8BA4), fontSize: 10, height: 1.35)),
-        ],
-      ]),
+      ),
     );
   }
 
   Widget _buildReorderCard(Map<String, dynamic> item) {
     final offers = item['online_offers'] is List
-        ? (item['online_offers'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        ? (item['online_offers'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
         : <Map<String, dynamic>>[];
     final stock = _number(item['current_stock']);
     final minStock = _number(item['min_stock']);
-    final triggerStock = _number(item['reorder_level']) > minStock ? _number(item['reorder_level']) : minStock;
-    final suggestedQty = (_number(item['suggested_reorder_qty'], 1)).ceil().clamp(1, 1000000);
+    final triggerStock = _number(item['reorder_level']) > minStock
+        ? _number(item['reorder_level'])
+        : minStock;
+    final suggestedQty = (_number(
+      item['suggested_reorder_qty'],
+      1,
+    )).ceil().clamp(1, 1000000);
     final recordedCost = _number(item['recorded_purchase_price']);
     final bestPrice = _number(item['best_online_price'], -1);
     final urgency = (item['urgency'] ?? 'REORDER').toString().toUpperCase();
     final urgencyColor = urgency == 'CRITICAL'
         ? const Color(0xFFDC2626)
         : urgency == 'HIGH'
-            ? const Color(0xFFEA580C)
-            : const Color(0xFFD97706);
+        ? const Color(0xFFEA580C)
+        : const Color(0xFFD97706);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -913,65 +1136,166 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: const Color(0xFFE6EAF4)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(child: LiveTranslatedText((item['product_name'] ?? 'Unnamed product').toString(),
-              style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700, fontSize: 13))),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: urgencyColor.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(8)),
-            child: LiveTranslatedText(urgency, style: GoogleFonts.poppins(color: urgencyColor, fontSize: 9, fontWeight: FontWeight.bold)),
-          ),
-        ]),
-        const SizedBox(height: 7),
-        LiveTranslatedText(
-          'You have ${stock.toStringAsFixed(stock % 1 == 0 ? 0 : 2)} left. Buy $suggestedQty more when stock goes to ${triggerStock.toStringAsFixed(triggerStock % 1 == 0 ? 0 : 2)}.',
-          style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.45),
-        ),
-        const SizedBox(height: 8),
-        Wrap(spacing: 12, runSpacing: 5, children: [
-          LiveTranslatedText('Your last buy ${_money(recordedCost)}', style: GoogleFonts.poppins(color: const Color(0xFF53627E), fontSize: 12)),
-          if (bestPrice > 0) LiveTranslatedText('Lowest online ${_money(bestPrice)}', style: GoogleFonts.poppins(color: const Color(0xFF07856D), fontWeight: FontWeight.bold, fontSize: 12)),
-          if (bestPrice > 0 && recordedCost > 0)
-            LiveTranslatedText(bestPrice < recordedCost ? '₹${(recordedCost - bestPrice).toStringAsFixed(0)} cheaper online' : bestPrice > recordedCost ? '₹${(bestPrice - recordedCost).toStringAsFixed(0)} costlier online' : 'Same as your last buy',
-                style: GoogleFonts.poppins(color: bestPrice <= recordedCost ? const Color(0xFF16885E) : const Color(0xFFB7791F), fontSize: 12, fontWeight: FontWeight.w600)),
-        ]),
-        if (offers.isNotEmpty) ...[
-          const SizedBox(height: 7),
-          ...offers.take(3).map((offer) => Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Row(children: [
-              Expanded(child: LiveTranslatedText('${offer['source'] ?? 'Online seller'} · ${offer['title'] ?? item['product_name']}',
-                  maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(color: _muted, fontSize: 10))),
-              const SizedBox(width: 6),
-              LiveTranslatedText(_money(offer['price']), style: GoogleFonts.poppins(color: _ink, fontSize: 10, fontWeight: FontWeight.w700)),
-              TextButton(
-                onPressed: () => _openOffer(offer['url']),
-                style: TextButton.styleFrom(minimumSize: const Size(0, 28), padding: const EdgeInsets.symmetric(horizontal: 7), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: const LiveTranslatedText('Open'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: LiveTranslatedText(
+                  (item['product_name'] ?? 'Unnamed product').toString(),
+                  style: GoogleFonts.poppins(
+                    color: _ink,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-            ]),
-          )),
-        ] else if ((item['online_lookup_message'] ?? '').toString().trim().isNotEmpty) ...[
-          const SizedBox(height: 5),
-          LiveTranslatedText(item['online_lookup_message'].toString(), style: GoogleFonts.poppins(color: const Color(0xFF8490A8), fontSize: 10)),
-        ],
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
-            onPressed: () => _showCreatePO(suggestion: item),
-            icon: const Icon(Icons.playlist_add, size: 17),
-            label: LiveTranslatedText('Make order ($suggestedQty)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _primary,
-              side: const BorderSide(color: Color(0xFFBFCBFF)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: urgencyColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: LiveTranslatedText(
+                  urgency,
+                  style: GoogleFonts.poppins(
+                    color: urgencyColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          LiveTranslatedText(
+            'You have ${stock.toStringAsFixed(stock % 1 == 0 ? 0 : 2)} left. Buy $suggestedQty more when stock goes to ${triggerStock.toStringAsFixed(triggerStock % 1 == 0 ? 0 : 2)}.',
+            style: GoogleFonts.poppins(
+              color: _muted,
+              fontSize: 12,
+              height: 1.45,
             ),
           ),
-        ),
-      ]),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 5,
+            children: [
+              LiveTranslatedText(
+                'Your last buy ${_money(recordedCost)}',
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFF53627E),
+                  fontSize: 12,
+                ),
+              ),
+              if (bestPrice > 0)
+                LiveTranslatedText(
+                  'Lowest online ${_money(bestPrice)}',
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFF07856D),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              if (bestPrice > 0 && recordedCost > 0)
+                LiveTranslatedText(
+                  bestPrice < recordedCost
+                      ? '₹${(recordedCost - bestPrice).toStringAsFixed(0)} cheaper online'
+                      : bestPrice > recordedCost
+                      ? '₹${(bestPrice - recordedCost).toStringAsFixed(0)} costlier online'
+                      : 'Same as your last buy',
+                  style: GoogleFonts.poppins(
+                    color: bestPrice <= recordedCost
+                        ? const Color(0xFF16885E)
+                        : const Color(0xFFB7791F),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+          if (offers.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            ...offers
+                .take(3)
+                .map(
+                  (offer) => Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: LiveTranslatedText(
+                            '${offer['source'] ?? 'Online seller'} · ${offer['title'] ?? item['product_name']}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              color: _muted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        LiveTranslatedText(
+                          _money(offer['price']),
+                          style: GoogleFonts.poppins(
+                            color: _ink,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _openOffer(offer['url']),
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 28),
+                            padding: const EdgeInsets.symmetric(horizontal: 7),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const LiveTranslatedText('Open'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ] else if ((item['online_lookup_message'] ?? '')
+              .toString()
+              .trim()
+              .isNotEmpty) ...[
+            const SizedBox(height: 5),
+            LiveTranslatedText(
+              item['online_lookup_message'].toString(),
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF8490A8),
+                fontSize: 10,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: () => _showCreatePO(suggestion: item),
+              icon: const Icon(Icons.playlist_add, size: 17),
+              label: LiveTranslatedText(
+                'Make order ($suggestedQty)',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _primary,
+                side: const BorderSide(color: Color(0xFFBFCBFF)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -979,10 +1303,16 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     if (rawOrder is! Map) return false;
     final status = (rawOrder['status'] ?? 'PENDING').toString().toUpperCase();
     switch (filter ?? _orderFilter) {
-      case 'Pending': return status == 'PENDING';
-      case 'Received': return status == 'DELIVERED' || status == 'RECEIVED' || status == 'PARTIALLY_RECEIVED';
-      case 'Cancelled': return status == 'CANCELLED';
-      default: return true;
+      case 'Pending':
+        return status == 'PENDING';
+      case 'Received':
+        return status == 'DELIVERED' ||
+            status == 'RECEIVED' ||
+            status == 'PARTIALLY_RECEIVED';
+      case 'Cancelled':
+        return status == 'CANCELLED';
+      default:
+        return true;
     }
   }
 
@@ -992,7 +1322,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   Widget _buildOrderOverview() {
-    Widget metric(String filter, String label, int count, IconData icon, Color color) {
+    Widget metric(
+      String filter,
+      String label,
+      int count,
+      IconData icon,
+      Color color,
+    ) {
       final selected = _orderFilter == filter;
       return Expanded(
         child: Material(
@@ -1005,7 +1341,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               decoration: BoxDecoration(
                 color: selected ? Colors.white : const Color(0xFFF8F8FF),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: selected ? _primary.withValues(alpha: 0.35) : _border),
+                border: Border.all(
+                  color: selected ? _primary.withValues(alpha: 0.35) : _border,
+                ),
               ),
               child: Row(
                 children: [
@@ -1023,9 +1361,25 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        LiveTranslatedText(count.toString(), style: GoogleFonts.poppins(fontSize: 19, height: 1.1, fontWeight: FontWeight.w800, color: _ink)),
+                        LiveTranslatedText(
+                          count.toString(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 19,
+                            height: 1.1,
+                            fontWeight: FontWeight.w800,
+                            color: _ink,
+                          ),
+                        ),
                         const SizedBox(height: 3),
-                        LiveTranslatedText(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(fontSize: 11, color: _muted)),
+                        LiveTranslatedText(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: _muted,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1036,6 +1390,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ),
       );
     }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(8),
@@ -1044,13 +1399,33 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: const Color(0xFFE5EBF7)),
       ),
-      child: Row(children: [
-        metric('All', 'All', _orderCount('All'), Icons.receipt_long_rounded, _primary),
-        const SizedBox(width: 8),
-        metric('Pending', 'Waiting', _orderCount('Pending'), Icons.schedule_rounded, const Color(0xFFD97706)),
-        const SizedBox(width: 8),
-        metric('Received', 'Arrived', _orderCount('Received'), Icons.check_circle_rounded, const Color(0xFF059669)),
-      ]),
+      child: Row(
+        children: [
+          metric(
+            'All',
+            'All',
+            _orderCount('All'),
+            Icons.receipt_long_rounded,
+            _primary,
+          ),
+          const SizedBox(width: 8),
+          metric(
+            'Pending',
+            'Waiting',
+            _orderCount('Pending'),
+            Icons.schedule_rounded,
+            const Color(0xFFD97706),
+          ),
+          const SizedBox(width: 8),
+          metric(
+            'Received',
+            'Arrived',
+            _orderCount('Received'),
+            Icons.check_circle_rounded,
+            const Color(0xFF059669),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1059,14 +1434,24 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     return Padding(
       padding: const EdgeInsets.only(right: 7),
       child: ChoiceChip(
-        label: LiveTranslatedText(label + ' (' + _orderCount(filter).toString() + ')'),
+        label: LiveTranslatedText(
+          label + ' (' + _orderCount(filter).toString() + ')',
+        ),
         selected: selected,
         onSelected: (_) => setState(() => _orderFilter = filter),
         showCheckmark: false,
         selectedColor: const Color(0xFFEDEAFF),
         backgroundColor: const Color(0xFFF7F8FC),
-        side: BorderSide(color: selected ? _primary.withValues(alpha: 0.28) : const Color(0xFFE7EBF4)),
-        labelStyle: GoogleFonts.poppins(color: selected ? _primary : _muted, fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+        side: BorderSide(
+          color: selected
+              ? _primary.withValues(alpha: 0.28)
+              : const Color(0xFFE7EBF4),
+        ),
+        labelStyle: GoogleFonts.poppins(
+          color: selected ? _primary : _muted,
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
     );
@@ -1076,11 +1461,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final status = (po['status'] ?? 'PENDING').toString().toUpperCase();
     final statusLabel = status == 'PENDING'
         ? 'Waiting'
-        : (status == 'DELIVERED' || status == 'RECEIVED' || status == 'PARTIALLY_RECEIVED')
-            ? 'Arrived'
-            : status == 'CANCELLED'
-                ? 'Cancelled'
-                : status;
+        : (status == 'DELIVERED' ||
+              status == 'RECEIVED' ||
+              status == 'PARTIALLY_RECEIVED')
+        ? 'Arrived'
+        : status == 'CANCELLED'
+        ? 'Cancelled'
+        : status;
     final statusColor = _statusColor(status);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1090,37 +1477,93 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         borderRadius: BorderRadius.circular(19),
         border: Border.all(color: _border),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF233B73).withValues(alpha: 0.035), blurRadius: 14, offset: const Offset(0, 5)),
+          BoxShadow(
+            color: const Color(0xFF233B73).withValues(alpha: 0.035),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
         ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          LiveTranslatedText('Order ${po['id'] ?? i + 1}', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 16)),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(8)),
-            child: LiveTranslatedText(statusLabel, style: GoogleFonts.poppins(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              LiveTranslatedText(
+                'Order ${po['id'] ?? i + 1}',
+                style: GoogleFonts.poppins(
+                  color: _ink,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: LiveTranslatedText(
+                  statusLabel,
+                  style: GoogleFonts.poppins(
+                    color: statusColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ]),
-        const SizedBox(height: 8),
-        LiveTranslatedText('From ${po['supplier_name']?.toString() ?? 'your supplier'}', style: GoogleFonts.poppins(color: _muted, fontSize: 13)),
-        const SizedBox(height: 4),
-        LiveTranslatedText('₹${po['total_cost']?.toString() ?? '0'}', style: GoogleFonts.poppins(color: const Color(0xFF079579), fontWeight: FontWeight.w800, fontSize: 20)),
-        if (status == 'PENDING') ...[
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: ElevatedButton.icon(
-              onPressed: () => _markDelivered(po['id']), icon: const Icon(Icons.check_rounded, size: 16), label: const LiveTranslatedText('Goods arrived'),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16885E), foregroundColor: Colors.white),
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: ElevatedButton.icon(
-              onPressed: () => _cancelPO(po['id']), icon: const Icon(Icons.close, size: 16), label: const LiveTranslatedText('Cancel order'),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC4C58), foregroundColor: Colors.white),
-            )),
-          ]),
+          const SizedBox(height: 8),
+          LiveTranslatedText(
+            'From ${po['supplier_name']?.toString() ?? 'your supplier'}',
+            style: GoogleFonts.poppins(color: _muted, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          LiveTranslatedText(
+            '₹${po['total_cost']?.toString() ?? '0'}',
+            style: GoogleFonts.poppins(
+              color: const Color(0xFF079579),
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+            ),
+          ),
+          if (status == 'PENDING') ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _markDelivered(po['id']),
+                    icon: const Icon(Icons.check_rounded, size: 16),
+                    label: const LiveTranslatedText('Goods arrived'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16885E),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _cancelPO(po['id']),
+                    icon: const Icon(Icons.close, size: 16),
+                    label: const LiveTranslatedText('Cancel order'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC4C58),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 
@@ -1132,7 +1575,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       final localPOData = prefs.getString('purchase_orders_data');
       if (localPOData != null && localPOData.isNotEmpty) {
         final d = jsonDecode(localPOData);
-        final raw = d is List ? d : (d is Map && d['orders'] is List ? d['orders'] : const []);
+        final raw = d is List
+            ? d
+            : (d is Map && d['orders'] is List ? d['orders'] : const []);
         localOrders = raw
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
@@ -1149,7 +1594,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       final res = await ApiClient.getJson('/purchase-orders/');
       if (res.statusCode == 200) {
         final d = jsonDecode(res.body);
-        final raw = d is List ? d : (d is Map && d['orders'] is List ? d['orders'] : const []);
+        final raw = d is List
+            ? d
+            : (d is Map && d['orders'] is List ? d['orders'] : const []);
         final remoteOrders = raw
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
@@ -1160,17 +1607,25 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         // offline order before the server has acknowledged it.
         final merged = <String, Map<String, dynamic>>{};
         for (final local in localOrders) {
-          final key = (local['server_id'] ?? local['id'] ?? local['operation_id'] ?? '').toString();
+          final key =
+              (local['server_id'] ?? local['id'] ?? local['operation_id'] ?? '')
+                  .toString();
           if (key.isNotEmpty) merged[key] = local;
         }
         for (final remote in remoteOrders) {
-          final key = (remote['id'] ?? remote['server_id'] ?? remote['order_id'] ?? '').toString();
+          final key =
+              (remote['id'] ?? remote['server_id'] ?? remote['order_id'] ?? '')
+                  .toString();
           if (key.isEmpty) continue;
           final existing = merged[key];
           if (existing != null && existing['sync_status'] == 'pending') {
             merged[key] = {...remote, ...existing, 'sync_status': 'pending'};
           } else {
-            merged[key] = {...?existing, ...remote, 'sync_status': existing?['sync_status'] ?? 'synced'};
+            merged[key] = {
+              ...?existing,
+              ...remote,
+              'sync_status': existing?['sync_status'] ?? 'synced',
+            };
           }
         }
 
@@ -1187,9 +1642,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   Color _statusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'DELIVERED': return const Color(0xFF16885E);
-      case 'CANCELLED': return const Color(0xFFDC4C58);
-      default: return const Color(0xFFCA8A04);
+      case 'DELIVERED':
+        return const Color(0xFF16885E);
+      case 'CANCELLED':
+        return const Color(0xFFDC4C58);
+      default:
+        return const Color(0xFFCA8A04);
     }
   }
 
@@ -1208,7 +1666,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         final value = list[i];
         if (value is! Map) continue;
         if (value['id'].toString() == poId.toString()) {
-          list[i] = {...Map<String, dynamic>.from(value), 'status': 'DELIVERED', 'sync_status': 'pending'};
+          list[i] = {
+            ...Map<String, dynamic>.from(value),
+            'status': 'DELIVERED',
+            'sync_status': 'pending',
+          };
           changed = true;
           break;
         }
@@ -1228,7 +1690,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       debugPrint('❌ Failed to update local PO status: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Could not update purchase order: $e')),
+          SnackBar(
+            content: LiveTranslatedText('Could not update purchase order: $e'),
+          ),
         );
       }
     }
@@ -1249,7 +1713,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         final value = list[i];
         if (value is! Map) continue;
         if (value['id'].toString() == poId.toString()) {
-          list[i] = {...Map<String, dynamic>.from(value), 'status': 'CANCELLED', 'sync_status': 'pending'};
+          list[i] = {
+            ...Map<String, dynamic>.from(value),
+            'status': 'CANCELLED',
+            'sync_status': 'pending',
+          };
           changed = true;
           break;
         }
@@ -1269,7 +1737,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       debugPrint('❌ Failed to cancel PO locally: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Could not cancel purchase order: $e')),
+          SnackBar(
+            content: LiveTranslatedText('Could not cancel purchase order: $e'),
+          ),
         );
       }
     }
@@ -1291,8 +1761,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         if (decoded is List) list.addAll(decoded);
       }
 
-      final operationId =
-          'PO_CREATE_${DateTime.now().millisecondsSinceEpoch}';
+      final operationId = 'PO_CREATE_${DateTime.now().millisecondsSinceEpoch}';
       final localOrder = {
         ...payload,
         'id': 'LOCAL-PO-${DateTime.now().millisecondsSinceEpoch}',
@@ -1318,14 +1787,20 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: LiveTranslatedText('✅ Purchase order saved locally and queued for sync.')),
+          const SnackBar(
+            content: LiveTranslatedText(
+              '✅ Purchase order saved locally and queued for sync.',
+            ),
+          ),
         );
       }
     } catch (e) {
       debugPrint('❌ PO local save failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: LiveTranslatedText('Could not save purchase order: $e')),
+          SnackBar(
+            content: LiveTranslatedText('Could not save purchase order: $e'),
+          ),
         );
       }
     }
@@ -1335,25 +1810,39 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final bestOffer = suggestion?['best_offer'] is Map
         ? Map<String, dynamic>.from(suggestion!['best_offer'] as Map)
         : <String, dynamic>{};
-    final suggestedCost = _number(suggestion?['best_online_price'], _number(suggestion?['recorded_purchase_price']));
-    final supplierC = TextEditingController(text: (bestOffer['source'] ?? '').toString());
-    final notesC = TextEditingController(text: suggestion == null
-        ? ''
-        : 'Draft from low-stock recommendation. Confirm pack size, seller, final price and delivery before ordering.');
-    List<Map<String, dynamic>> orderItems = suggestion == null ? [] : [
-      {
-        'product_id': suggestion['product_id'],
-        'product_name': suggestion['product_name'],
-        'quantity': (_number(suggestion['suggested_reorder_qty'], 1)).ceil().clamp(1, 1000000),
-        'unit_cost': suggestedCost,
-      },
-    ];
+    final suggestedCost = _number(
+      suggestion?['best_online_price'],
+      _number(suggestion?['recorded_purchase_price']),
+    );
+    final supplierC = TextEditingController(
+      text: (bestOffer['source'] ?? '').toString(),
+    );
+    final notesC = TextEditingController(
+      text: suggestion == null
+          ? ''
+          : 'Draft from low-stock recommendation. Confirm pack size, seller, final price and delivery before ordering.',
+    );
+    List<Map<String, dynamic>> orderItems = suggestion == null
+        ? []
+        : [
+            {
+              'product_id': suggestion['product_id'],
+              'product_name': suggestion['product_name'],
+              'quantity': (_number(
+                suggestion['suggested_reorder_qty'],
+                1,
+              )).ceil().clamp(1, 1000000),
+              'unit_cost': suggestedCost,
+            },
+          ];
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: _card,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           Future<void> pickProduct() async {
@@ -1365,19 +1854,33 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               context: ctx,
               builder: (dCtx) => AlertDialog(
                 backgroundColor: _card,
-                title: const LiveTranslatedText('Select Product', style: TextStyle(color: Colors.white)),
+                title: const LiveTranslatedText(
+                  'Select Product',
+                  style: TextStyle(color: Colors.white),
+                ),
                 content: SizedBox(
                   width: double.maxFinite,
                   height: 340,
                   child: products.isEmpty
-                      ? const Center(child: LiveTranslatedText('No products in inventory yet', style: TextStyle(color: Colors.white38)))
+                      ? const Center(
+                          child: LiveTranslatedText(
+                            'No products in inventory yet',
+                            style: TextStyle(color: Colors.white38),
+                          ),
+                        )
                       : ListView.builder(
                           itemCount: products.length,
                           itemBuilder: (_, i) {
                             final p = products[i];
                             return ListTile(
-                              title: LiveTranslatedText(p['product_name']?.toString() ?? 'Unknown', style: const TextStyle(color: Colors.white)),
-                              subtitle: LiveTranslatedText('Stock: ${p['current_stock'] ?? 0}', style: const TextStyle(color: Colors.white38)),
+                              title: LiveTranslatedText(
+                                p['product_name']?.toString() ?? 'Unknown',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              subtitle: LiveTranslatedText(
+                                'Stock: ${p['current_stock'] ?? 0}',
+                                style: const TextStyle(color: Colors.white38),
+                              ),
                               onTap: () => Navigator.pop(dCtx, p),
                             );
                           },
@@ -1388,20 +1891,34 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             if (selected == null || !ctx.mounted) return;
 
             final qtyC = TextEditingController(text: '1');
-            final costC = TextEditingController(text: (selected['price'] ?? 0).toString());
+            final costC = TextEditingController(
+              text: (selected['price'] ?? 0).toString(),
+            );
             final add = await showDialog<bool>(
               context: ctx,
               builder: (dCtx) => AlertDialog(
                 backgroundColor: _card,
-                title: LiveTranslatedText(selected['product_name']?.toString() ?? 'Item', style: const TextStyle(color: Colors.white)),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  _field(qtyC, 'Quantity', numeric: true),
-                  const SizedBox(height: 12),
-                  _field(costC, 'Unit Cost (₹)', numeric: true),
-                ]),
+                title: LiveTranslatedText(
+                  selected['product_name']?.toString() ?? 'Item',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _field(qtyC, 'Quantity', numeric: true),
+                    const SizedBox(height: 12),
+                    _field(costC, 'Unit Cost (₹)', numeric: true),
+                  ],
+                ),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const LiveTranslatedText('Cancel')),
-                  TextButton(onPressed: () => Navigator.pop(dCtx, true), child: const LiveTranslatedText('Add')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, false),
+                    child: const LiveTranslatedText('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, true),
+                    child: const LiveTranslatedText('Add'),
+                  ),
                 ],
               ),
             );
@@ -1420,50 +1937,106 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
           final total = orderItems.fold<double>(
             0.0,
-            (sum, it) => sum + ((it['quantity'] as int) * (it['unit_cost'] as num).toDouble()),
+            (sum, it) =>
+                sum +
+                ((it['quantity'] as int) * (it['unit_cost'] as num).toDouble()),
           );
 
           return Padding(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LiveTranslatedText('New order', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  LiveTranslatedText(
+                    'New order',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   _field(supplierC, 'Supplier Name'),
                   const SizedBox(height: 12),
                   _field(notesC, 'Notes (optional)'),
                   const SizedBox(height: 16),
-                  LiveTranslatedText('Add the products you want to buy', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                  LiveTranslatedText(
+                    'Add the products you want to buy',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   ...orderItems.asMap().entries.map((e) {
                     final i = e.key;
                     final it = e.value;
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10)),
-                      child: Row(children: [
-                        Expanded(child: LiveTranslatedText('${it['product_name']}', style: const TextStyle(color: Colors.white))),
-                        LiveTranslatedText('${it['quantity']} × ₹${it['unit_cost']}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
-                          onPressed: () => setModalState(() => orderItems.removeAt(i)),
-                        ),
-                      ]),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white10,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: LiveTranslatedText(
+                              '${it['product_name']}',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                          LiveTranslatedText(
+                            '${it['quantity']} × ₹${it['unit_cost']}',
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              color: Colors.redAccent,
+                              size: 20,
+                            ),
+                            onPressed: () =>
+                                setModalState(() => orderItems.removeAt(i)),
+                          ),
+                        ],
+                      ),
                     );
                   }),
                   OutlinedButton.icon(
                     onPressed: pickProduct,
                     icon: const Icon(Icons.add, color: Colors.indigoAccent),
-                    label: const LiveTranslatedText('Add Item', style: TextStyle(color: Colors.indigoAccent)),
-                    style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.indigoAccent)),
+                    label: const LiveTranslatedText(
+                      'Add Item',
+                      style: TextStyle(color: Colors.indigoAccent),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.indigoAccent),
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  LiveTranslatedText('Total: ₹${total.toStringAsFixed(2)}',
-                      style: GoogleFonts.poppins(color: Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                  LiveTranslatedText(
+                    'Total: ₹${total.toStringAsFixed(2)}',
+                    style: GoogleFonts.poppins(
+                      color: Colors.tealAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
@@ -1472,24 +2045,41 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         final supplierName = supplierC.text.trim();
                         if (supplierName.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: LiveTranslatedText('Enter the supplier name')));
+                            const SnackBar(
+                              content: LiveTranslatedText(
+                                'Enter the supplier name',
+                              ),
+                            ),
+                          );
                           return;
                         }
                         if (orderItems.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: LiveTranslatedText('Add at least one product')));
+                            const SnackBar(
+                              content: LiveTranslatedText(
+                                'Add at least one product',
+                              ),
+                            ),
+                          );
                           return;
                         }
                         final payload = {
                           'supplier_name': supplierName,
                           'items': orderItems,
-                          if (notesC.text.trim().isNotEmpty) 'notes': notesC.text.trim(),
+                          if (notesC.text.trim().isNotEmpty)
+                            'notes': notesC.text.trim(),
                         };
                         if (ctx.mounted) Navigator.pop(ctx);
                         await _createPurchaseOrder(payload);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.indigoAccent, padding: const EdgeInsets.symmetric(vertical: 14)),
-                      child: const LiveTranslatedText('Save order', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigoAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const LiveTranslatedText(
+                        'Save order',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ],
@@ -1511,7 +2101,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         hintStyle: const TextStyle(color: Colors.white38),
         filled: true,
         fillColor: Colors.white10,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
@@ -1535,12 +2128,34 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             CircleAvatar(
               radius: 16,
               backgroundColor: color,
-              child: Text(number, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w800)),
+              child: Text(
+                number,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
             const SizedBox(height: 8),
-            LiveTranslatedText(title, textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 13)),
+            LiveTranslatedText(
+              title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                color: _ink,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 4),
-            LiveTranslatedText(body, textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _muted, fontSize: 11, height: 1.35)),
+            LiveTranslatedText(
+              body,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                color: _muted,
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
           ],
         ),
       );
@@ -1557,16 +2172,41 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText('How to buy stock', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 16)),
+          LiveTranslatedText(
+            'How to buy stock',
+            style: GoogleFonts.poppins(
+              color: _ink,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
           const SizedBox(height: 4),
-          LiveTranslatedText('Three simple steps. Use any language you like.', style: GoogleFonts.poppins(color: _muted, fontSize: 12)),
+          LiveTranslatedText(
+            'Three simple steps. Use any language you like.',
+            style: GoogleFonts.poppins(color: _muted, fontSize: 12),
+          ),
           const SizedBox(height: 14),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              step('1', 'Search', 'Type the product name.', const Color(0xFF5146F2)),
-              step('2', 'Compare', 'See online and nearby prices.', const Color(0xFF0F766E)),
-              step('3', 'Order', 'Call the seller or tap New order.', const Color(0xFFC2410C)),
+              step(
+                '1',
+                'Search',
+                'Type the product name.',
+                const Color(0xFF5146F2),
+              ),
+              step(
+                '2',
+                'Compare',
+                'See online and nearby prices.',
+                const Color(0xFF0F766E),
+              ),
+              step(
+                '3',
+                'Order',
+                'Call the seller or tap New order.',
+                const Color(0xFFC2410C),
+              ),
             ],
           ),
         ],
@@ -1614,7 +2254,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       color: const Color(0xFFEDEAFF),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.receipt_long_rounded, color: _primary),
+                    child: const Icon(
+                      Icons.receipt_long_rounded,
+                      color: _primary,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1623,11 +2266,18 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       children: [
                         LiveTranslatedText(
                           'Orders to your supplier',
-                          style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 16),
+                          style: GoogleFonts.poppins(
+                            color: _ink,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
                         ),
                         LiveTranslatedText(
                           'See what is waiting and what has arrived.',
-                          style: GoogleFonts.poppins(color: _muted, fontSize: 12),
+                          style: GoogleFonts.poppins(
+                            color: _muted,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -1644,25 +2294,33 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                child: Row(children: [
-                  _orderFilterChip('All', 'All'),
-                  _orderFilterChip('Pending', 'Waiting'),
-                  _orderFilterChip('Received', 'Arrived'),
-                  _orderFilterChip('Cancelled', 'Cancelled'),
-                ]),
+                child: Row(
+                  children: [
+                    _orderFilterChip('All', 'All'),
+                    _orderFilterChip('Pending', 'Waiting'),
+                    _orderFilterChip('Received', 'Arrived'),
+                    _orderFilterChip('Cancelled', 'Cancelled'),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               if (_loading && _orders.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
                   child: Center(
-                    child: CircularProgressIndicator(color: _primary, strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      color: _primary,
+                      strokeWidth: 2,
+                    ),
                   ),
                 )
               else if (_orders.isEmpty)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 22,
+                    horizontal: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFF),
                     borderRadius: BorderRadius.circular(15),
@@ -1670,33 +2328,71 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   ),
                   child: Column(
                     children: [
-                      const Icon(Icons.receipt_long_outlined, color: Color(0xFF8A96B2), size: 36),
+                      const Icon(
+                        Icons.receipt_long_outlined,
+                        color: Color(0xFF8A96B2),
+                        size: 36,
+                      ),
                       const SizedBox(height: 8),
-                      LiveTranslatedText('No orders yet', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700, fontSize: 15)),
+                      LiveTranslatedText(
+                        'No orders yet',
+                        style: GoogleFonts.poppins(
+                          color: _ink,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       LiveTranslatedText(
                         'Tap New order when you want to buy from a supplier.',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.45),
+                        style: GoogleFonts.poppins(
+                          color: _muted,
+                          fontSize: 12,
+                          height: 1.45,
+                        ),
                       ),
                     ],
                   ),
                 )
-              else if (_orders.where((order) => _matchesOrderFilter(order)).isEmpty)
+              else if (_orders
+                  .where((order) => _matchesOrderFilter(order))
+                  .isEmpty)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 22,
+                    horizontal: 12,
+                  ),
                   child: Column(
                     children: [
-                      const Icon(Icons.filter_alt_off_rounded, color: Color(0xFF94A3B8), size: 30),
+                      const Icon(
+                        Icons.filter_alt_off_rounded,
+                        color: Color(0xFF94A3B8),
+                        size: 30,
+                      ),
                       const SizedBox(height: 8),
-                      LiveTranslatedText('Nothing in this list', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700)),
+                      LiveTranslatedText(
+                        'Nothing in this list',
+                        style: GoogleFonts.poppins(
+                          color: _ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      LiveTranslatedText('Tap All, Waiting, or Arrived to see other orders.', textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _muted, fontSize: 12)),
+                      LiveTranslatedText(
+                        'Tap All, Waiting, or Arrived to see other orders.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(color: _muted, fontSize: 12),
+                      ),
                     ],
                   ),
                 )
               else
-                ..._orders.asMap().entries.where((entry) => _matchesOrderFilter(entry.value)).map((entry) => _buildOrderCard(entry.value, entry.key)),
+                ..._orders
+                    .asMap()
+                    .entries
+                    .where((entry) => _matchesOrderFilter(entry.value))
+                    .map((entry) => _buildOrderCard(entry.value, entry.key)),
             ],
           ),
         ),
@@ -1709,10 +2405,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
       children: [
-        KeyedSubtree(
-          key: _lowStockKey,
-          child: _buildReorderSuggestions(),
-        ),
+        KeyedSubtree(key: _lowStockKey, child: _buildReorderSuggestions()),
       ],
     );
   }
@@ -1729,7 +2422,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         elevation: 0,
         title: LiveTranslatedText(
           _pageTitle,
-          style: GoogleFonts.poppins(color: _ink, fontSize: 22, fontWeight: FontWeight.w800),
+          style: GoogleFonts.poppins(
+            color: _ink,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         actions: [
           if (tab == 0)
@@ -1750,7 +2447,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               icon: const Icon(Icons.add_rounded),
               label: LiveTranslatedText(
                 'New order',
-                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700),
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             )
           : null,
@@ -1760,8 +2460,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         child: tab == 1
             ? _buildOrdersTab()
             : tab == 2
-                ? _buildRestockTab()
-                : _buildFindTab(),
+            ? _buildRestockTab()
+            : _buildFindTab(),
       ),
       bottomNavigationBar: _buildBottomNavigation(),
     );
@@ -1787,12 +2487,21 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFFEDEAFF) : Colors.transparent,
+                      color: selected
+                          ? const Color(0xFFEDEAFF)
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Icon(icon, color: selected ? _primary : const Color(0xFF8090AA), size: 22),
+                    child: Icon(
+                      icon,
+                      color: selected ? _primary : const Color(0xFF8090AA),
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   LiveTranslatedText(
@@ -1853,5 +2562,4 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       ),
     );
   }
-
 }

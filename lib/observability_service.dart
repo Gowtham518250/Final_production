@@ -3,26 +3,25 @@ import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
 
-/// 
+///
 /// OBSERVABILITY SERVICE - Backend Monitoring and Diagnostics
 /// ==============================================================
-/// 
+///
 /// Integrates with backend observability endpoints for:
 /// - Health checks
 /// - Metrics collection
 /// - Performance monitoring
 /// - Error logging
 /// - Business analytics
-/// 
+///
 class ObservabilityService {
-  
   /// Check backend health status
   static Future<Map<String, dynamic>> checkHealth() async {
     try {
       final response = await ApiClient.getJson(
         ApiClient.observabilityHealth,
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -39,14 +38,14 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Check backend readiness status
   static Future<Map<String, dynamic>> checkReadiness() async {
     try {
       final response = await ApiClient.getJson(
         ApiClient.observabilityReady,
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -63,7 +62,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Get backend metrics
   static Future<Map<String, dynamic>> getMetrics() async {
     try {
@@ -71,12 +70,12 @@ class ObservabilityService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.getJson(
         ApiClient.observabilityMetrics,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -92,7 +91,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Log event to backend
   static Future<Map<String, dynamic>> logEvent({
     required String event,
@@ -104,7 +103,7 @@ class ObservabilityService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.postJson(
         ApiClient.observabilityLog,
         {
@@ -115,7 +114,7 @@ class ObservabilityService {
         },
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -131,7 +130,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Log error to backend
   static Future<Map<String, dynamic>> logError({
     required String error,
@@ -144,7 +143,7 @@ class ObservabilityService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.postJson(
         ApiClient.observabilityError,
         {
@@ -156,7 +155,7 @@ class ObservabilityService {
         },
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -172,7 +171,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Get performance summary
   static Future<Map<String, dynamic>> getPerformanceSummary() async {
     try {
@@ -180,12 +179,12 @@ class ObservabilityService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.getJson(
         ApiClient.observabilityPerformanceSummary,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -201,7 +200,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Get database performance metrics
   static Future<Map<String, dynamic>> getDatabasePerformance() async {
     try {
@@ -209,12 +208,12 @@ class ObservabilityService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.getJson(
         ApiClient.observabilityPerformanceDatabase,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 5));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -230,7 +229,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Get business overview metrics
   static Future<Map<String, dynamic>> getBusinessOverview() async {
     try {
@@ -238,12 +237,12 @@ class ObservabilityService {
       if (token.isEmpty) {
         return {'success': false, 'error': 'NOT_AUTHENTICATED'};
       }
-      
+
       final response = await ApiClient.getJson(
         ApiClient.observabilityBusinessOverview,
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 10));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return {
@@ -259,7 +258,7 @@ class ObservabilityService {
       return {'success': false, 'error': 'NETWORK_ERROR'};
     }
   }
-  
+
   /// Automatic error logging helper
   static Future<void> logErrorAuto(
     String error,
@@ -273,16 +272,12 @@ class ObservabilityService {
       severity: 'ERROR',
     );
   }
-  
+
   /// Automatic event logging helper
   static Future<void> logEventAuto(
     String event, {
     Map<String, dynamic>? metadata,
   }) async {
-    await logEvent(
-      event: event,
-      metadata: metadata,
-      level: 'INFO',
-    );
+    await logEvent(event: event, metadata: metadata, level: 'INFO');
   }
 }

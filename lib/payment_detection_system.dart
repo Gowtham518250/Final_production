@@ -42,7 +42,8 @@ class PaymentDetectionSystem {
     String senderAddress,
     String senderName,
   ) async {
-    if (kDebugMode) print('$_tag SMS received from $senderName ($senderAddress)');
+    if (kDebugMode)
+      print('$_tag SMS received from $senderName ($senderAddress)');
 
     try {
       // Parse SMS to transaction
@@ -71,7 +72,11 @@ class PaymentDetectionSystem {
     if (kDebugMode) print('$_tag Notification from $packageName');
 
     try {
-      final transaction = await _parseAndCreateTransaction(body, packageName, title);
+      final transaction = await _parseAndCreateTransaction(
+        body,
+        packageName,
+        title,
+      );
 
       if (transaction != null) {
         _pendingPayments.add(transaction);
@@ -93,7 +98,8 @@ class PaymentDetectionSystem {
   static Future<void> _processPayments() async {
     if (_pendingPayments.isEmpty) return;
 
-    if (kDebugMode) print('$_tag Processing ${_pendingPayments.length} pending payments');
+    if (kDebugMode)
+      print('$_tag Processing ${_pendingPayments.length} pending payments');
 
     try {
       // Get today's sales from local storage (real sales data)
@@ -131,7 +137,11 @@ class PaymentDetectionSystem {
     }
     // UPI app detection
     else if (_isUpiNotification(source, senderName)) {
-      transaction = await _parseAsUpiNotification(messageBody, source, senderName);
+      transaction = await _parseAsUpiNotification(
+        messageBody,
+        source,
+        senderName,
+      );
     }
 
     return transaction;
@@ -140,8 +150,20 @@ class PaymentDetectionSystem {
   // ========== BANK SMS PARSING ==========
   static bool _isBankSms(String source, String senderName) {
     final bankPatterns = [
-      'ICICI', 'HDFC', 'AXIS', 'SBI', 'BOI', 'Canara', 'PNB', 'Union',
-      'bank', 'alert', 'txn', '5555', '9999', '9898'
+      'ICICI',
+      'HDFC',
+      'AXIS',
+      'SBI',
+      'BOI',
+      'Canara',
+      'PNB',
+      'Union',
+      'bank',
+      'alert',
+      'txn',
+      '5555',
+      '9999',
+      '9898',
     ];
     final combined = (source + senderName).toLowerCase();
     return bankPatterns.any((p) => combined.contains(p.toLowerCase()));
@@ -156,10 +178,13 @@ class PaymentDetectionSystem {
 
     try {
       // Amount extraction: ₹5000 or Rs.5000 or INR 5000
-      final amountMatch = RegExp(r'[₹Rs\.]*\s*(\d+(?:,\d+)*(?:\.\d{2})?)').firstMatch(message);
+      final amountMatch = RegExp(
+        r'[₹Rs\.]*\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+      ).firstMatch(message);
       if (amountMatch == null) return null;
 
-      double amount = double.parse(amountMatch.group(1)!.replaceAll(',', '')) ?? 0;
+      double amount =
+          double.parse(amountMatch.group(1)!.replaceAll(',', '')) ?? 0;
 
       // Type detection: Debit/Credit/Withdrawal
       final type = TransactionService.transactionDirectionForDetectedMessage(
@@ -168,8 +193,14 @@ class PaymentDetectionSystem {
 
       // Name extraction: "to Rahul" or "from Rahul" or "To/From account holder"
       String name = 'Bank Payment';
-      final toMatch = RegExp(r'to\s+(\w+)', caseSensitive: false).firstMatch(message);
-      final fromMatch = RegExp(r'from\s+(\w+)', caseSensitive: false).firstMatch(message);
+      final toMatch = RegExp(
+        r'to\s+(\w+)',
+        caseSensitive: false,
+      ).firstMatch(message);
+      final fromMatch = RegExp(
+        r'from\s+(\w+)',
+        caseSensitive: false,
+      ).firstMatch(message);
 
       if (toMatch != null) {
         name = toMatch.group(1) ?? 'Bank Payment';
@@ -179,8 +210,10 @@ class PaymentDetectionSystem {
 
       // Reference: Transaction ID / Ref no
       String reference = '';
-      final refMatch = RegExp(r'(?:Ref|Reference|TxnID|ID)[:\s]+(\w+)', caseSensitive: false)
-          .firstMatch(message);
+      final refMatch = RegExp(
+        r'(?:Ref|Reference|TxnID|ID)[:\s]+(\w+)',
+        caseSensitive: false,
+      ).firstMatch(message);
       if (refMatch != null) {
         reference = refMatch.group(1) ?? '';
       }
@@ -192,8 +225,9 @@ class PaymentDetectionSystem {
         phone: null,
         amount: amount,
         type: type,
-        transactionType:
-            TransactionService.transactionTypeForDetectedMessage(message),
+        transactionType: TransactionService.transactionTypeForDetectedMessage(
+          message,
+        ),
         reference: reference,
         createdAt: DateTime.now(),
         notes: 'Bank SMS auto-detected',
@@ -227,8 +261,16 @@ class PaymentDetectionSystem {
   // ========== UPI NOTIFICATION PARSING ==========
   static bool _isUpiNotification(String source, String senderName) {
     final upiPatterns = [
-      'google', 'googlepay', 'phonepe', 'paytm', 'upi',
-      'payment', 'received', 'transferred', 'sent', '₹'
+      'google',
+      'googlepay',
+      'phonepe',
+      'paytm',
+      'upi',
+      'payment',
+      'received',
+      'transferred',
+      'sent',
+      '₹',
     ];
     final combined = (source + senderName).toLowerCase();
     return upiPatterns.any((p) => combined.contains(p));
@@ -243,10 +285,13 @@ class PaymentDetectionSystem {
 
     try {
       // Amount: "₹500" or "Rs 500"
-      final amountMatch = RegExp(r'[₹Rs\.]*\s*(\d+(?:,\d+)*(?:\.\d{2})?)').firstMatch(message);
+      final amountMatch = RegExp(
+        r'[₹Rs\.]*\s*(\d+(?:,\d+)*(?:\.\d{2})?)',
+      ).firstMatch(message);
       if (amountMatch == null) return null;
 
-      double amount = double.parse(amountMatch.group(1)!.replaceAll(',', '')) ?? 0;
+      double amount =
+          double.parse(amountMatch.group(1)!.replaceAll(',', '')) ?? 0;
 
       final type = TransactionService.transactionDirectionForDetectedMessage(
         message,
@@ -273,8 +318,9 @@ class PaymentDetectionSystem {
         phone: phoneMatch != null ? phoneMatch.group(1) : null,
         amount: amount,
         type: type,
-        transactionType:
-            TransactionService.transactionTypeForDetectedMessage(message),
+        transactionType: TransactionService.transactionTypeForDetectedMessage(
+          message,
+        ),
         reference: reference,
         createdAt: DateTime.now(),
         notes: 'UPI notification auto-detected',
@@ -305,19 +351,22 @@ class PaymentDetectionSystem {
     try {
       final sales = await LocalStorageService.loadSales();
       final today = DateTime.now();
-      
+
       // Filter to today's sales only
-      return (sales as List).where((s) {
-        final dateStr = s['date'] ?? s['created_at'] ?? '';
-        if (dateStr.isEmpty) return false;
-        
-        final date = DateTime.tryParse(dateStr);
-        if (date == null) return false;
-        
-        return date.year == today.year &&
-            date.month == today.month &&
-            date.day == today.day;
-      }).map((s) => Map<String, dynamic>.from(s)).toList();
+      return (sales as List)
+          .where((s) {
+            final dateStr = s['date'] ?? s['created_at'] ?? '';
+            if (dateStr.isEmpty) return false;
+
+            final date = DateTime.tryParse(dateStr);
+            if (date == null) return false;
+
+            return date.year == today.year &&
+                date.month == today.month &&
+                date.day == today.day;
+          })
+          .map((s) => Map<String, dynamic>.from(s))
+          .toList();
     } catch (e) {
       debugPrint('PaymentDetectionSystem: Error loading today sales: $e');
       return []; // Return empty list, not mock data

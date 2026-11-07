@@ -6,7 +6,7 @@ import 'commission_tracking_service.dart';
 class CommissionDashboardPage extends StatefulWidget {
   final String staffId;
   final String staffName;
-  
+
   const CommissionDashboardPage({
     this.staffId = 'current_staff',
     this.staffName = 'Staff Member',
@@ -14,7 +14,8 @@ class CommissionDashboardPage extends StatefulWidget {
   });
 
   @override
-  State<CommissionDashboardPage> createState() => _CommissionDashboardPageState();
+  State<CommissionDashboardPage> createState() =>
+      _CommissionDashboardPageState();
 }
 
 class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
@@ -29,7 +30,9 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
 
   void _loadData() {
     _metricsFuture = CommissionTrackingService.getStaffMetrics(widget.staffId);
-    _commissionsFuture = CommissionTrackingService.getPendingCommissions(widget.staffId);
+    _commissionsFuture = CommissionTrackingService.getPendingCommissions(
+      widget.staffId,
+    );
   }
 
   @override
@@ -37,8 +40,10 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: LiveTranslatedText('${widget.staffName} - Commissions',
-            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          '${widget.staffName} - Commissions',
+          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF635BFF),
         elevation: 0,
       ),
@@ -56,7 +61,7 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
                     child: const Center(child: CircularProgressIndicator()),
                   );
                 }
-                
+
                 final metrics = snapshot.data!;
                 return Column(
                   children: [
@@ -65,7 +70,8 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
                         Expanded(
                           child: _buildMetricCard(
                             title: 'Today\'s Earnings',
-                            value: '₹${(metrics['todayEarned'] ?? 0).toStringAsFixed(0)}',
+                            value:
+                                '₹${(metrics['todayEarned'] ?? 0).toStringAsFixed(0)}',
                             icon: '💰',
                           ),
                         ),
@@ -85,7 +91,8 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
                         Expanded(
                           child: _buildMetricCard(
                             title: 'Pending Amount',
-                            value: '₹${(metrics['pendingAmount'] ?? 0).toStringAsFixed(0)}',
+                            value:
+                                '₹${(metrics['pendingAmount'] ?? 0).toStringAsFixed(0)}',
                             icon: '⏳',
                           ),
                         ),
@@ -104,19 +111,24 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
               },
             ),
             const SizedBox(height: 24),
-            
+
             // 📄 Pending Commissions List
-            LiveTranslatedText('Pending Commissions',
-                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold)),
+            LiveTranslatedText(
+              'Pending Commissions',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
-            
+
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _commissionsFuture,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                
+
                 final commissions = snapshot.data!;
                 if (commissions.isEmpty) {
                   return Container(
@@ -125,11 +137,13 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
                       border: Border.all(color: Colors.grey[300]!),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: LiveTranslatedText('No pending commissions',
-                        style: GoogleFonts.poppins(color: Colors.grey)),
+                    child: LiveTranslatedText(
+                      'No pending commissions',
+                      style: GoogleFonts.poppins(color: Colors.grey),
+                    ),
                   );
                 }
-                
+
                 return ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -142,7 +156,7 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
               },
             ),
             const SizedBox(height: 24),
-            
+
             // 💳 Request Payout Button
             SizedBox(
               width: double.infinity,
@@ -151,11 +165,18 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF635BFF),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: LiveTranslatedText('Request Payout',
-                    style: GoogleFonts.poppins(
-                        color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                child: LiveTranslatedText(
+                  'Request Payout',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ),
           ],
@@ -184,14 +205,24 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
               LiveTranslatedText(icon, style: const TextStyle(fontSize: 20)),
               const SizedBox(width: 8),
               Expanded(
-                child: LiveTranslatedText(title,
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600])),
+                child: LiveTranslatedText(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          LiveTranslatedText(value,
-              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -212,12 +243,20 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              LiveTranslatedText('Sale #${(commission['saleId'] as String).substring(0, 6)}',
-                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+              LiveTranslatedText(
+                'Sale #${(commission['saleId'] as String).substring(0, 6)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               LiveTranslatedText(
                 '₹${(commission['totalCommission'] as num).toStringAsFixed(2)}',
                 style: GoogleFonts.poppins(
-                    fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF635BFF)),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF635BFF),
+                ),
               ),
             ],
           ),
@@ -225,10 +264,20 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              LiveTranslatedText('Sale: ₹${(commission['saleAmount'] as num).toStringAsFixed(2)}',
-                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
-              LiveTranslatedText('Rate: ${(commission['commissionRate'] as num).toStringAsFixed(1)}%',
-                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600])),
+              LiveTranslatedText(
+                'Sale: ₹${(commission['saleAmount'] as num).toStringAsFixed(2)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                ),
+              ),
+              LiveTranslatedText(
+                'Rate: ${(commission['commissionRate'] as num).toStringAsFixed(1)}%',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                ),
+              ),
             ],
           ),
         ],
@@ -243,7 +292,10 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: LiveTranslatedText('Request Payout', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        title: LiveTranslatedText(
+          'Request Payout',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -251,7 +303,9 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
               controller: bankController,
               decoration: InputDecoration(
                 hint: LiveTranslatedText('Bank Account (Last 4 digits)'),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -260,7 +314,9 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 hint: LiveTranslatedText('Amount (₹)'),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
@@ -284,8 +340,13 @@ class _CommissionDashboardPageState extends State<CommissionDashboardPage> {
                 setState(() => _loadData());
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF635BFF)),
-            child: const LiveTranslatedText('Request', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF635BFF),
+            ),
+            child: const LiveTranslatedText(
+              'Request',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

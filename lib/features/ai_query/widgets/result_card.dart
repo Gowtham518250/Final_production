@@ -13,11 +13,7 @@ class ResultCard extends StatelessWidget {
   final List<dynamic> results;
   final String? queryContext;
 
-  const ResultCard({
-    super.key,
-    required this.results,
-    this.queryContext,
-  });
+  const ResultCard({super.key, required this.results, this.queryContext});
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +50,11 @@ class ResultCard extends StatelessWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Row(
             children: [
-              const Icon(Icons.insights_rounded, size: 16, color: Color(0xFF818CF8)),
+              const Icon(
+                Icons.insights_rounded,
+                size: 16,
+                color: Color(0xFF818CF8),
+              ),
               const SizedBox(width: 6),
               LiveTranslatedText(
                 'Key Metric',
@@ -131,7 +131,14 @@ class ResultCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: rows.map((r) => LiveTranslatedText('• $r', style: GoogleFonts.inter(color: Colors.white))).toList(),
+          children: rows
+              .map(
+                (r) => LiveTranslatedText(
+                  '• $r',
+                  style: GoogleFonts.inter(color: Colors.white),
+                ),
+              )
+              .toList(),
         ),
       );
     }
@@ -148,7 +155,11 @@ class ResultCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.table_chart_outlined, size: 16, color: Color(0xFF818CF8)),
+                  const Icon(
+                    Icons.table_chart_outlined,
+                    size: 16,
+                    color: Color(0xFF818CF8),
+                  ),
                   const SizedBox(width: 6),
                   LiveTranslatedText(
                     'Result Details',
@@ -285,7 +296,8 @@ class ResultCard extends StatelessWidget {
     if (value == null) return '—';
 
     final lowerKey = key.toLowerCase();
-    final isCurrency = lowerKey.contains('amount') ||
+    final isCurrency =
+        lowerKey.contains('amount') ||
         lowerKey.contains('sales') ||
         lowerKey.contains('revenue') ||
         lowerKey.contains('price') ||
@@ -296,7 +308,10 @@ class ResultCard extends StatelessWidget {
 
     if (value is num) {
       final numberFormat = NumberFormat.decimalPattern('en_IN');
-      if (isCurrency && !lowerKey.contains('count') && !lowerKey.contains('qty') && !lowerKey.contains('quantity')) {
+      if (isCurrency &&
+          !lowerKey.contains('count') &&
+          !lowerKey.contains('qty') &&
+          !lowerKey.contains('quantity')) {
         return '₹${numberFormat.format(value)}';
       }
       return numberFormat.format(value);
@@ -306,7 +321,10 @@ class ResultCard extends StatelessWidget {
     final parsedNum = num.tryParse(strVal);
     if (parsedNum != null) {
       final numberFormat = NumberFormat.decimalPattern('en_IN');
-      if (isCurrency && !lowerKey.contains('count') && !lowerKey.contains('qty') && !lowerKey.contains('quantity')) {
+      if (isCurrency &&
+          !lowerKey.contains('count') &&
+          !lowerKey.contains('qty') &&
+          !lowerKey.contains('quantity')) {
         return '₹${numberFormat.format(parsedNum)}';
       }
       return numberFormat.format(parsedNum);

@@ -21,6 +21,8 @@ class SalesStorageRepository {
   }
 
   static Future<void> saveStoredSales(List<StoredSale> sales) async {
-    await LocalStorageService.saveSales(sales.map((sale) => sale.toJson()).toList());
+    await LocalStorageService.saveSales(
+      sales.map((sale) => sale.toJson()).toList(),
+    );
   }
 }

@@ -120,7 +120,25 @@ final class NativePaymentAnnouncementFallback {
             "\\b(?:debited|withdrawn|withdrawal|spent|you sent|sent to|paid to|purchase at|deducted|transferred to)\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern NOT_FINAL_PATTERN = Pattern.compile(
-            "\\b(?:otp|one.time.password|verification code|collect request|payment request|request received|pending|processing|initiated|failed|declined|reversed|refund|will be credited|to be credited)\\b",
+            "\\b(?:otp|one.time.password|verification code|collect request|payment request|request received|pending|processing|initiated|failed|declined|rejected|reversed|refund|cancelled|canceled|blocked|expired|unsuccessful|timeout|timed\\s+out|not\\s+completed|not\\s+successful|not\\s+processed|not\\s+debited|will be credited|to be credited)\\b"
+                    + "|\\b(?:wrong|incorrect|invalid)\\s+(?:upi\\s+)?pin\\b"
+                    + "|\\b(?:upi\\s+)?pin\\b.{0,30}\\b(?:wrong|incorrect(?:ly)?|invalid)\\b"
+                    + "|\\binsufficient\\s+(?:account\\s+)?(?:balance|funds?)\\b"
+                    + "|\\b(?:account\\s+)?balance\\s+(?:is\\s+)?(?:insufficient|not\\s+sufficient|too\\s+low)\\b"
+                    + "|\\bnot\\s+enough\\s+(?:account\\s+)?(?:balance|funds?)\\b"
+                    + "|\\b(?:low|insufficient)\\s+funds\\b"
+                    + "|\\bbalance\\s+(?:is\\s+)?low\\b"
+                    + "|\\bno\\s+(?:money|funds?|amount)\\s+(?:has\\s+been\\s+)?debited\\b"
+                    + "|\\b(?:money|funds?|amount)\\s+(?:(?:has|was)\\s+)?not\\s+(?:been\\s+)?debited\\b"
+                    + "|(?:₹|rs\\.?|inr)\\s*[\\d,]+(?:\\.[\\d]{1,2})?\\s+(?:(?:has|was)\\s+)?not\\s+(?:been\\s+)?debited\\b"
+                    + "|\\b(?:payment|transaction|transfer|upi)\\s+(?:has\\s+)?(?:failed|declined|rejected|reversed|cancelled|canceled|expired|timed\\s+out|timeout|unsuccessful)\\b"
+                    + "|\\b(?:payment|transaction|transfer|upi)\\s+(?:could\\s+not|couldn.t|cannot|can.t|unable\\s+to)\\s+(?:be\\s+)?(?:processed|completed|debited|transferred)\\b"
+                    + "|\\b(?:unable\\s+to|could\\s+not|couldn.t|cannot|can.t)\\s+(?:process|complete|debit|transfer)\\b.{0,60}\\b(?:payment|transaction|transfer|upi)\\b"
+                    + "|\\b(?:payment|transaction|transfer|upi)\\b.{0,40}\\b(?:did\\s+not|didn.t|does\\s+not|doesn.t|has\\s+not)\\s+(?:go\\s+through|complete|process|debit)\\b"
+                    + "|\\b(?:payment|transaction|transfer|upi)\\s+(?:was\\s+)?not\\s+(?:processed|completed|successful|debited)\\b"
+                    + "|\\b(?:payment|transaction|transfer|upi)\\s+blocked\\b"
+                    + "|\\b(?:transaction|payment)\\s+(?:has\\s+)?timed\\s+out\\b"
+                    + "|(?:असफल|विफल)\\s*(?:भुगतान|लेनदेन|ट्रांजैक्शन)",
             Pattern.CASE_INSENSITIVE);
 
     // Own-account cues, mirrored from lib/payment_direction_speech.dart. A bank

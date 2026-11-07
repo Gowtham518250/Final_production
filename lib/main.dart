@@ -2030,7 +2030,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         '/geometric-registration': (context) =>
                             const GeometricRegistrationPage(),
                         '/sales-entry': (context) {
-                          final args = ModalRoute.of(context)?.settings.arguments;
+                          final args = ModalRoute.of(
+                            context,
+                          )?.settings.arguments;
                           final openVoice =
                               args is Map && args['openVoice'] == true;
                           return SalesEntryPage(openVoiceOnStart: openVoice);

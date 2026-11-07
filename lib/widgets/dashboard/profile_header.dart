@@ -98,7 +98,10 @@ class NavyProfileHeader extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
                 ),
                 child: logoBytes != null
                     ? ClipOval(
@@ -106,14 +109,19 @@ class NavyProfileHeader extends StatelessWidget {
                           logoBytes!,
                           logicalSize: 44,
                           devicePixelRatio:
-                              MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
+                              MediaQuery.maybeOf(context)?.devicePixelRatio ??
+                              2,
                           fit: BoxFit.cover,
                         ),
                       )
                     : Center(
                         child: LiveTranslatedText(
                           shopName.isNotEmpty ? shopName[0].toUpperCase() : 'S',
-                          style: GoogleFonts.inter(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
               ),
@@ -122,8 +130,24 @@ class NavyProfileHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LiveTranslatedText(greeting, style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.75), fontSize: 12, fontWeight: FontWeight.w500)),
-                    LiveTranslatedText(shopName, style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    LiveTranslatedText(
+                      greeting,
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    LiveTranslatedText(
+                      shopName,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
@@ -132,29 +156,59 @@ class NavyProfileHeader extends StatelessWidget {
                 onTap: onSettingsTap,
                 child: Container(
                   padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), shape: BoxShape.circle),
-                  child: const Icon(Icons.settings_rounded, color: Colors.white, size: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.settings_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
           // Revenue display
-          LiveTranslatedText('Today\'s Revenue', style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, fontWeight: FontWeight.w500)),
+          LiveTranslatedText(
+            'Today\'s Revenue',
+            style: GoogleFonts.inter(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           const SizedBox(height: 4),
           LiveTranslatedText(
             '₹${_formatCompactNumber(todayRevenue)}',
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800, letterSpacing: -1),
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 36,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -1,
+            ),
           ),
           const SizedBox(height: 4),
           Row(
             children: [
-              Icon(dailyGrowth >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                  color: dailyGrowth >= 0 ? const Color(0xFF34D399) : const Color(0xFFFCA5A5), size: 16),
+              Icon(
+                dailyGrowth >= 0
+                    ? Icons.trending_up_rounded
+                    : Icons.trending_down_rounded,
+                color: dailyGrowth >= 0
+                    ? const Color(0xFF34D399)
+                    : const Color(0xFFFCA5A5),
+                size: 16,
+              ),
               const SizedBox(width: 4),
               LiveTranslatedText(
                 '${dailyGrowth >= 0 ? '+' : ''}${dailyGrowth.toStringAsFixed(1)}% from yesterday',
-                style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -164,7 +218,10 @@ class NavyProfileHeader extends StatelessWidget {
             children: [
               _navyStatPill('$totalTransactions Bills', Icons.receipt_outlined),
               const SizedBox(width: 8),
-              _navyStatPill('₹${_formatCompactNumber(averageSale)} Avg', Icons.insights_rounded),
+              _navyStatPill(
+                '₹${_formatCompactNumber(averageSale)} Avg',
+                Icons.insights_rounded,
+              ),
               const SizedBox(width: 8),
               if (todayTopProduct.isNotEmpty)
                 _navyStatPill('🔥 $todayTopProduct', Icons.star_rounded),

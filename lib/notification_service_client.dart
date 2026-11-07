@@ -11,14 +11,11 @@ class NotificationServiceClient {
     String? templateId,
   }) async {
     try {
-      final res = await ApiClient.postJson(
-        '$_notificationPrefix/sms/send',
-        {
-          'phone_number': phoneNumber,
-          'message': message,
-          'template_id': templateId,
-        },
-      );
+      final res = await ApiClient.postJson('$_notificationPrefix/sms/send', {
+        'phone_number': phoneNumber,
+        'message': message,
+        'template_id': templateId,
+      });
 
       if (res.statusCode == 200) {
         return json.decode(res.body);
@@ -42,15 +39,12 @@ class NotificationServiceClient {
     List<Map<String, String>>? attachments,
   }) async {
     try {
-      final res = await ApiClient.postJson(
-        '$_notificationPrefix/email/send',
-        {
-          'recipient_email': recipientEmail,
-          'subject': subject,
-          'body': body,
-          'attachments': attachments,
-        },
-      );
+      final res = await ApiClient.postJson('$_notificationPrefix/email/send', {
+        'recipient_email': recipientEmail,
+        'subject': subject,
+        'body': body,
+        'attachments': attachments,
+      });
 
       if (res.statusCode == 200) {
         return json.decode(res.body);
@@ -73,14 +67,12 @@ class NotificationServiceClient {
     Map<String, String>? templateParams,
   }) async {
     try {
-      final res = await ApiClient.postJson(
-        '$_notificationPrefix/whatsapp/send',
-        {
-          'phone_number': phoneNumber,
-          'template_name': templateName,
-          'template_params': templateParams,
-        },
-      );
+      final res =
+          await ApiClient.postJson('$_notificationPrefix/whatsapp/send', {
+            'phone_number': phoneNumber,
+            'template_name': templateName,
+            'template_params': templateParams,
+          });
 
       if (res.statusCode == 200) {
         return json.decode(res.body);
@@ -104,8 +96,9 @@ class NotificationServiceClient {
     required String dueDate,
     required String customerName,
   }) async {
-    final message = 'Hi $customerName, reminder for invoice $invoiceNumber for ₹${amount.toStringAsFixed(0)} due on $dueDate. Reply YES to confirm. -Shop';
-    
+    final message =
+        'Hi $customerName, reminder for invoice $invoiceNumber for ₹${amount.toStringAsFixed(0)} due on $dueDate. Reply YES to confirm. -Shop';
+
     return sendSMS(
       phoneNumber: customerPhone,
       message: message,
@@ -120,8 +113,9 @@ class NotificationServiceClient {
     required double amount,
     required String customerName,
   }) async {
-    final message = 'Hi $customerName, your order $orderId for ₹${amount.toStringAsFixed(0)} has been confirmed. Track status in our app.';
-    
+    final message =
+        'Hi $customerName, your order $orderId for ₹${amount.toStringAsFixed(0)} has been confirmed. Track status in our app.';
+
     return sendSMS(
       phoneNumber: customerPhone,
       message: message,
@@ -140,7 +134,7 @@ class NotificationServiceClient {
     final message = status == 'DELIVERED'
         ? 'Hi $customerName, your order $orderId has been delivered! Thank you for shopping with us.'
         : 'Hi $customerName, your order $orderId is on the way. Estimated delivery: $estimatedTime';
-    
+
     return sendSMS(
       phoneNumber: customerPhone,
       message: message,
@@ -157,7 +151,8 @@ class NotificationServiceClient {
     required int transactions,
     required String date,
   }) async {
-    final body = '''
+    final body =
+        '''
 Daily Closing Report - $date
 
 Shop: $shopName
@@ -181,8 +176,9 @@ Login to dashboard for detailed analytics.
     required String customerName,
     required double discountPercent,
   }) async {
-    final message = 'Happy Birthday $customerName! 🎉 Enjoy $discountPercent% discount on your next purchase. Valid today only!';
-    
+    final message =
+        'Happy Birthday $customerName! 🎉 Enjoy $discountPercent% discount on your next purchase. Valid today only!';
+
     return sendWhatsApp(
       phoneNumber: customerPhone,
       templateName: 'birthday_discount',
@@ -200,8 +196,9 @@ Login to dashboard for detailed analytics.
     required int pointsEarned,
     required int totalPoints,
   }) async {
-    final message = 'Hi $customerName, you earned $pointsEarned loyalty points! Total balance: $totalPoints points.';
-    
+    final message =
+        'Hi $customerName, you earned $pointsEarned loyalty points! Total balance: $totalPoints points.';
+
     return sendSMS(
       phoneNumber: customerPhone,
       message: message,

@@ -51,9 +51,9 @@ class GoogleDriveService {
       // 2. Check if backup already exists
       final q = "name = '$_backupFileName' and trashed = false";
       final fileList = await driveApi.files.list(q: q, spaces: 'drive');
-      
+
       final media = drive.Media(backupFile.openRead(), fileLength);
-      
+
       if (fileList.files != null && fileList.files!.isNotEmpty) {
         // Overwrite existing
         final existingFileId = fileList.files!.first.id!;
@@ -68,11 +68,8 @@ class GoogleDriveService {
         final driveFile = drive.File()
           ..name = _backupFileName
           ..mimeType = 'application/json';
-          
-        await driveApi.files.create(
-          driveFile,
-          uploadMedia: media,
-        );
+
+        await driveApi.files.create(driveFile, uploadMedia: media);
         if (kDebugMode) debugPrint('✅ Google Drive Backup Created!');
       }
 
@@ -98,9 +95,14 @@ class GoogleDriveService {
       }
 
       final fileId = fileList.files!.first.id!;
-      
-      final response = await driveApi.files.get(fileId, downloadOptions: drive.DownloadOptions.fullMedia) as drive.Media;
-      
+
+      final response =
+          await driveApi.files.get(
+                fileId,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+              )
+              as drive.Media;
+
       final bytes = await response.stream.expand((x) => x).toList();
       final jsonPayload = utf8.decode(bytes);
 

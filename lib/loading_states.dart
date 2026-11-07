@@ -92,8 +92,9 @@ class _PulseLoader extends StatelessWidget {
       animation: controller,
       builder: (context, child) {
         return ScaleTransition(
-          scale: Tween<double>(begin: 0.8, end: 1.2)
-              .animate(CurvedAnimation(parent: controller, curve: Curves.easeInOut)),
+          scale: Tween<double>(begin: 0.8, end: 1.2).animate(
+            CurvedAnimation(parent: controller, curve: Curves.easeInOut),
+          ),
           child: Container(
             width: 60,
             height: 60,
@@ -199,8 +200,9 @@ class _WaveLoader extends StatelessWidget {
           return Transform.translate(
             offset: Offset(
               0,
-              Tween<double>(begin: 0, end: -15)
-                  .evaluate(CurvedAnimation(parent: controller, curve: curveInterval)),
+              Tween<double>(begin: 0, end: -15).evaluate(
+                CurvedAnimation(parent: controller, curve: curveInterval),
+              ),
             ),
             child: Container(
               width: 8,
@@ -237,8 +239,9 @@ class _DotsLoader extends StatelessWidget {
           child: AnimatedBuilder(
             animation: controller,
             builder: (context, child) {
-              final opacity = Tween<double>(begin: 0.3, end: 1.0)
-                  .evaluate(CurvedAnimation(parent: controller, curve: curveInterval));
+              final opacity = Tween<double>(begin: 0.3, end: 1.0).evaluate(
+                CurvedAnimation(parent: controller, curve: curveInterval),
+              );
 
               return Opacity(
                 opacity: opacity,
@@ -285,10 +288,7 @@ class _SuccessAnimationState extends State<SuccessAnimation>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
     _controller.forward();
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -380,10 +380,7 @@ class _ErrorAnimationState extends State<ErrorAnimation>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(duration: widget.duration, vsync: this);
     _controller.forward();
   }
 

@@ -89,10 +89,7 @@ class SyncQueueManager {
     _syncTimeoutTimer = null;
   }
 
-  static bool _validateQueueData(
-    String action,
-    Map<String, dynamic> data,
-  ) {
+  static bool _validateQueueData(String action, Map<String, dynamic> data) {
     if (action.trim().isEmpty || data.isEmpty) return false;
 
     switch (action) {
@@ -111,8 +108,7 @@ class SyncQueueManager {
 
       case 'update_inventory':
       case 'decrease_stock':
-        return data['product_id'] != null ||
-            data['product_name'] != null;
+        return data['product_id'] != null || data['product_name'] != null;
 
       case 'delete_product':
         return data['id'] != null || data['product_id'] != null;
@@ -120,7 +116,8 @@ class SyncQueueManager {
       case 'payment_detection_evidence':
         final eventKey = data['event_key']?.toString().trim() ?? '';
         final amount = data['amount'];
-        final direction = data['direction']?.toString().trim().toLowerCase() ?? '';
+        final direction =
+            data['direction']?.toString().trim().toLowerCase() ?? '';
         return eventKey.length >= 8 &&
             amount is num &&
             amount.isFinite &&
@@ -133,13 +130,14 @@ class SyncQueueManager {
         final customerId = int.tryParse(data['customer_id']?.toString() ?? '');
         final dueDate = data['due_date']?.toString().trim() ?? '';
         final parsedDate = DateTime.tryParse(dueDate);
-        final validIsoDate = dueDate.length == 10 &&
+        final validIsoDate =
+            dueDate.length == 10 &&
             dueDate[4] == '-' &&
             dueDate[7] == '-' &&
             parsedDate != null &&
             parsedDate.toIso8601String().startsWith(dueDate);
-        final hasCustomer = phone.isNotEmpty ||
-            (customerId != null && customerId > 0);
+        final hasCustomer =
+            phone.isNotEmpty || (customerId != null && customerId > 0);
         return hasCustomer && validIsoDate;
 
       default:
@@ -179,10 +177,7 @@ class SyncQueueManager {
 
     if (stored == null || stored.isEmpty) {
       final key = Hive.generateSecureKey();
-      await _secureStorage.write(
-        key: keyName,
-        value: base64UrlEncode(key),
-      );
+      await _secureStorage.write(key: keyName, value: base64UrlEncode(key));
       return key;
     }
 
@@ -195,19 +190,17 @@ class SyncQueueManager {
     final intId = prefs.getInt('user_id') ?? prefs.getInt('userId');
     if (intId != null && intId > 0) return intId;
 
-    final stringId =
-        prefs.getString('user_id') ?? prefs.getString('userId');
+    final stringId = prefs.getString('user_id') ?? prefs.getString('userId');
     return int.tryParse(stringId ?? '');
   }
 
   static Future<Box> _getBoxUnlocked() async {
     final userId = await _currentUserId();
     final prefs = await SharedPreferences.getInstance();
-    final role = (prefs.getString('user_type') ??
-            prefs.getString('role') ??
-            'OWNER')
-        .trim()
-        .toUpperCase();
+    final role =
+        (prefs.getString('user_type') ?? prefs.getString('role') ?? 'OWNER')
+            .trim()
+            .toUpperCase();
 
     // Scope durable outbox records by both role and user ID so a customer
     // account can never consume an owner's pending operations with the same
@@ -216,9 +209,7 @@ class SyncQueueManager {
         ? '${_queueBoxName}_quarantine_${role.toLowerCase()}'
         : '${_queueBoxName}_${role.toLowerCase()}_user_$userId';
 
-    if (_box != null &&
-        _box!.isOpen &&
-        _boxName == scopedName) {
+    if (_box != null && _box!.isOpen && _boxName == scopedName) {
       return _box!;
     }
 
@@ -231,10 +222,7 @@ class SyncQueueManager {
     }
 
     final key = await _getHiveKey();
-    _box = await Hive.openBox(
-      scopedName,
-      encryptionCipher: HiveAesCipher(key),
-    );
+    _box = await Hive.openBox(scopedName, encryptionCipher: HiveAesCipher(key));
     _boxName = scopedName;
 
     return _box!;
@@ -251,11 +239,10 @@ class SyncQueueManager {
         if (userId == null || userId <= 0) return 0;
 
         final prefs = await SharedPreferences.getInstance();
-        final role = (prefs.getString('user_type') ??
-                prefs.getString('role') ??
-                'OWNER')
-            .trim()
-            .toLowerCase();
+        final role =
+            (prefs.getString('user_type') ?? prefs.getString('role') ?? 'OWNER')
+                .trim()
+                .toLowerCase();
 
         final key = await _getHiveKey();
         final quarantineNames = <String>{
@@ -277,13 +264,15 @@ class SyncQueueManager {
               final raw = quarantine.get(keyValue);
               if (raw is! Map) continue;
 
-              final ownerId =
-                  int.tryParse(raw['owner_user_id']?.toString() ?? '');
+              final ownerId = int.tryParse(
+                raw['owner_user_id']?.toString() ?? '',
+              );
               if (ownerId != userId) continue;
 
-              final ownerRole =
-                  raw['owner_role']?.toString().toLowerCase();
-              if (ownerRole != null && ownerRole.isNotEmpty && ownerRole != role) {
+              final ownerRole = raw['owner_role']?.toString().toLowerCase();
+              if (ownerRole != null &&
+                  ownerRole.isNotEmpty &&
+                  ownerRole != role) {
                 continue;
               }
 
@@ -292,7 +281,9 @@ class SyncQueueManager {
               moved++;
             }
           } finally {
-            try { await quarantine?.close(); } catch (_) {}
+            try {
+              await quarantine?.close();
+            } catch (_) {}
           }
         }
 
@@ -311,10 +302,7 @@ class SyncQueueManager {
     });
   }
 
-  static Future<bool> enqueue(
-    String action,
-    Map<String, dynamic> data,
-  ) async {
+  static Future<bool> enqueue(String action, Map<String, dynamic> data) async {
     return _queueLock.synchronized(() async {
       try {
         if (!_validateQueueData(action, data)) {
@@ -373,10 +361,7 @@ class SyncQueueManager {
                   existing['last_error'] = null;
                   existing['needs_attention'] = false;
                   existing['updated_at'] = retryNow;
-                  await box.put(
-                    existing['action_id'],
-                    existing,
-                  );
+                  await box.put(existing['action_id'], existing);
                   if (kDebugMode) {
                     debugPrint(
                       '🔁 [SyncQueue] Reactivated attendance operation: '
@@ -400,16 +385,13 @@ class SyncQueueManager {
 
         final now = DateTime.now().toUtc();
         final prefs = await SharedPreferences.getInstance();
-        final ownerRole = (prefs.getString('user_type') ??
-                prefs.getString('role') ??
-                'OWNER')
-            .trim()
-            .toUpperCase();
+        final ownerRole =
+            (prefs.getString('user_type') ?? prefs.getString('role') ?? 'OWNER')
+                .trim()
+                .toUpperCase();
         final actionId = sha256
             .convert(
-              utf8.encode(
-                '$action|$identifier|${now.microsecondsSinceEpoch}',
-              ),
+              utf8.encode('$action|$identifier|${now.microsecondsSinceEpoch}'),
             )
             .toString()
             .substring(0, 24);
@@ -468,10 +450,8 @@ class SyncQueueManager {
               _criticalActions.contains(action)) {
             item['status'] = 'PENDING';
             item['needs_attention'] = false;
-            item['next_attempt_at'] =
-                DateTime.now().toUtc().toIso8601String();
-            item['updated_at'] =
-                DateTime.now().toUtc().toIso8601String();
+            item['next_attempt_at'] = DateTime.now().toUtc().toIso8601String();
+            item['updated_at'] = DateTime.now().toUtc().toIso8601String();
             await box.put(key, item);
             recovered++;
           }
@@ -585,9 +565,9 @@ class SyncQueueManager {
           final item = Map<String, dynamic>.from(raw);
           final created =
               DateTime.tryParse(item['created_at']?.toString() ?? '') ??
-                  DateTime.fromMillisecondsSinceEpoch(
-                    (item['timestamp'] as int?) ?? 0,
-                  );
+              DateTime.fromMillisecondsSinceEpoch(
+                (item['timestamp'] as int?) ?? 0,
+              );
 
           if (oldestTime == null || created.isBefore(oldestTime)) {
             oldestTime = created;
@@ -609,10 +589,7 @@ class SyncQueueManager {
     });
   }
 
-  static Future<bool> update(
-    String actionId,
-    Map<String, dynamic> item,
-  ) async {
+  static Future<bool> update(String actionId, Map<String, dynamic> item) async {
     return _queueLock.synchronized(() async {
       try {
         final box = await _getBoxUnlocked();
@@ -664,9 +641,11 @@ class SyncQueueManager {
         if (keysToRemove.isNotEmpty && kDebugMode) {
           debugPrint(
             '✅ [SyncQueue] Removed ' +
-            keysToRemove.length.toString() +
-            ' completed fallback operation(s): ' +
-            action + '/' + wanted,
+                keysToRemove.length.toString() +
+                ' completed fallback operation(s): ' +
+                action +
+                '/' +
+                wanted,
           );
         }
 
@@ -681,6 +660,7 @@ class SyncQueueManager {
       }
     });
   }
+
   static Future<bool> containsBusinessOperation(
     String action,
     String identifier,
@@ -705,9 +685,7 @@ class SyncQueueManager {
         }
       } catch (e) {
         if (kDebugMode) {
-          debugPrint(
-            '⚠️ [SyncQueue] containsBusinessOperation failed: $e',
-          );
+          debugPrint('⚠️ [SyncQueue] containsBusinessOperation failed: $e');
         }
       }
 
@@ -737,7 +715,8 @@ class SyncQueueManager {
           final action = item['action']?.toString() ?? '';
           if (!actions.contains(action)) continue;
 
-          final status = (item['status']?.toString() ?? 'PENDING').toUpperCase();
+          final status = (item['status']?.toString() ?? 'PENDING')
+              .toUpperCase();
           if (status == 'SYNCED' || status == 'DONE') continue;
 
           item['status'] = 'PENDING';
@@ -751,7 +730,9 @@ class SyncQueueManager {
         }
 
         if (kDebugMode && awakened > 0) {
-          debugPrint('🔁 [SyncQueue] Foreground retry made $awakened critical operation(s) ready');
+          debugPrint(
+            '🔁 [SyncQueue] Foreground retry made $awakened critical operation(s) ready',
+          );
         }
         return awakened;
       } catch (e, st) {

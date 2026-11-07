@@ -12,7 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Result of a Google Sign-In attempt.
 class GoogleSignInResult {
   final bool success;
-  final bool isFallback; // Legacy field retained for callers; backend failures are never treated as success.
+  final bool
+  isFallback; // Legacy field retained for callers; backend failures are never treated as success.
   final bool isNewUser;
   final String? token;
   final String? email;
@@ -55,7 +56,8 @@ class GoogleAuthService {
       try {
         final decoded = json.decode(responseBody);
         if (decoded is Map<String, dynamic>) {
-          final message = decoded['detail'] ?? decoded['message'] ?? decoded['error'];
+          final message =
+              decoded['detail'] ?? decoded['message'] ?? decoded['error'];
           if (message != null && message.toString().trim().isNotEmpty) {
             details.add(message.toString().trim());
           }
@@ -71,7 +73,8 @@ class GoogleAuthService {
     }
 
     if (exception != null) {
-      final text = exception.toString()
+      final text = exception
+          .toString()
           .replaceAll('Exception:', '')
           .replaceAll('Exception ', '')
           .trim();
@@ -102,9 +105,7 @@ class GoogleAuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     // Web uses its Web OAuth client ID.
-    clientId: kIsWeb && _googleClientId.isNotEmpty
-        ? _googleClientId
-        : null,
+    clientId: kIsWeb && _googleClientId.isNotEmpty ? _googleClientId : null,
     // Android reads the Web OAuth client from google-services.json.
     // Do not override serverClientId on Android.
   );
@@ -140,7 +141,6 @@ class GoogleAuthService {
         debugPrint('✅ Google Sign-In: $email');
       }
 
-      
       // 2. Authenticate against the backend using Google's access token.
       // The backend matches the verified Google email to the existing database
       // user, or creates an owner account only when that email is not present.
@@ -179,7 +179,8 @@ class GoogleAuthService {
         if (token == null || token.isEmpty) {
           return const GoogleSignInResult(
             success: false,
-            error: 'Retail Mind did not return a login session. Please try again.',
+            error:
+                'Retail Mind did not return a login session. Please try again.',
           );
         }
 
@@ -193,28 +194,33 @@ class GoogleAuthService {
           );
         }
 
-        final databaseName =
-            (data['username'] ?? data['user_name'] ?? name).toString().trim();
-        final databaseEmail =
-            (data['email'] ?? email).toString().trim().toLowerCase();
-        final accountRole =
-            (data['role'] ?? data['user_type'] ?? 'OWNER').toString();
+        final databaseName = (data['username'] ?? data['user_name'] ?? name)
+            .toString()
+            .trim();
+        final databaseEmail = (data['email'] ?? email)
+            .toString()
+            .trim()
+            .toLowerCase();
+        final accountRole = (data['role'] ?? data['user_type'] ?? 'OWNER')
+            .toString();
         final normalizedAccountRole = accountRole.trim().toUpperCase();
 
         // Preserve same-account offline data and queued operations. Only clear
         // legacy session/cache state when the authenticated database identity
         // differs from the previous session (or cannot be established).
         final prefs = await SharedPreferences.getInstance();
-        final previousUserId = int.tryParse(
+        final previousUserId =
+            int.tryParse(
               (prefs.get('user_id') ?? prefs.get('userId') ?? '').toString(),
             ) ??
             0;
-        final previousRole = (
-          prefs.getString('user_role') ??
-          prefs.getString('user_type') ??
-          prefs.getString('role') ??
-          ''
-        ).trim().toUpperCase();
+        final previousRole =
+            (prefs.getString('user_role') ??
+                    prefs.getString('user_type') ??
+                    prefs.getString('role') ??
+                    '')
+                .trim()
+                .toUpperCase();
         final sameAccount =
             previousUserId > 0 &&
             previousUserId == extractedUserId &&
@@ -222,12 +228,16 @@ class GoogleAuthService {
 
         if (!sameAccount) {
           if (kDebugMode) {
-            debugPrint('Switching Google sign-in to a different account; resetting session cache.');
+            debugPrint(
+              'Switching Google sign-in to a different account; resetting session cache.',
+            );
           }
           await UserDataClearService.clearAllUserData();
           await LocalStorageService.clearOrphanSalesBoxes();
         } else if (kDebugMode) {
-          debugPrint('Same Google account re-authenticated; preserving user-scoped local data.');
+          debugPrint(
+            'Same Google account re-authenticated; preserving user-scoped local data.',
+          );
         }
 
         if (kDebugMode) {
@@ -287,20 +297,12 @@ class GoogleAuthService {
         if (kDebugMode) {
           debugPrint('Backend Google authentication failed: $message');
         }
-        return GoogleSignInResult(
-          success: false,
-          error: message,
-        );
+        return GoogleSignInResult(success: false, error: message);
       }
     } on Exception catch (e) {
-      final message = formatGoogleSignInError(
-        exception: e,
-      );
+      final message = formatGoogleSignInError(exception: e);
       if (kDebugMode) debugPrint('❌ Google Sign-In error: $message');
-      return GoogleSignInResult(
-        success: false,
-        error: message,
-      );
+      return GoogleSignInResult(success: false, error: message);
     }
   }
 

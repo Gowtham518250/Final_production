@@ -13,7 +13,10 @@ class TermsOfServicePage extends StatelessWidget {
       backgroundColor: const Color(0xFF1A1A2E),
       appBar: AppBar(
         backgroundColor: const Color(0xFF16213E),
-        title: LiveTranslatedText('Terms of Service', style: GoogleFonts.poppins(color: Colors.white)),
+        title: LiveTranslatedText(
+          'Terms of Service',
+          style: GoogleFonts.poppins(color: Colors.white),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
@@ -112,9 +115,15 @@ Last Updated: ${DateTime.now().year}
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6366F1),
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 15,
+                  ),
                 ),
-                child: LiveTranslatedText('I Accept', style: GoogleFonts.poppins(color: Colors.white)),
+                child: LiveTranslatedText(
+                  'I Accept',
+                  style: GoogleFonts.poppins(color: Colors.white),
+                ),
               ),
             ),
           ],

@@ -28,19 +28,29 @@ class NavyQuickActionsGrid extends StatelessWidget {
     required BuildContext context,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? color.withValues(alpha: 0.15) : color.withValues(alpha: 0.08),
+          color: isDark
+              ? color.withValues(alpha: 0.15)
+              : color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isDark ? color.withValues(alpha: 0.4) : color.withValues(alpha: 0.2)),
+          border: Border.all(
+            color: isDark
+                ? color.withValues(alpha: 0.4)
+                : color.withValues(alpha: 0.2),
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: isDark ? color.withValues(alpha: 0.9) : color, size: 28),
+            Icon(
+              icon,
+              color: isDark ? color.withValues(alpha: 0.9) : color,
+              size: 28,
+            ),
             const SizedBox(height: 8),
             LiveTranslatedText(
               label,
@@ -48,7 +58,9 @@ class NavyQuickActionsGrid extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white.withValues(alpha: 0.9) : color.withValues(alpha: 0.9),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.9)
+                    : color.withValues(alpha: 0.9),
                 height: 1.2,
               ),
             ),

@@ -11,7 +11,9 @@ void main() {
         {'created_at': '2026-11-04T09:15:00Z'},
       ];
 
-      final dates = sales.map((sale) => ExportService.resolveSalesDate(sale)).toList();
+      final dates = sales
+          .map((sale) => ExportService.resolveSalesDate(sale))
+          .toList();
 
       expect(dates[0], isNotNull);
       expect(dates[1], isNotNull);

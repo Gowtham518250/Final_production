@@ -21,7 +21,8 @@ class OperationsReportsSection extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<OperationsReportsSection> createState() => _OperationsReportsSectionState();
+  State<OperationsReportsSection> createState() =>
+      _OperationsReportsSectionState();
 }
 
 class _OperationsReportsSectionState extends State<OperationsReportsSection> {
@@ -38,20 +39,23 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
   Future<void> _loadOriginalData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // 1. Purchase Orders
       try {
         final orders = await LocalStorageService.loadPurchaseOrders();
         _pendingPurchases = orders.where((o) {
-            final status = o['status']?.toString().toUpperCase() ?? 'PENDING';
-            return status == 'PENDING' || status == 'UNPAID';
+          final status = o['status']?.toString().toUpperCase() ?? 'PENDING';
+          return status == 'PENDING' || status == 'UNPAID';
         }).length;
       } catch (e) {}
 
       // 2. All Transactions
       try {
         final email = prefs.getString('email') ?? 'default';
-        final rawSales = prefs.getString('all_sales_$email') ?? prefs.getString('all_sales') ?? '[]';
+        final rawSales =
+            prefs.getString('all_sales_$email') ??
+            prefs.getString('all_sales') ??
+            '[]';
         final List<dynamic> sales = json.decode(rawSales);
         _allTransactions = sales.length;
       } catch (e) {}
@@ -60,14 +64,23 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
       try {
         final expenses = await LocalStorageService.loadExpenses();
         final now = DateTime.now();
-        _monthlyExpenses = expenses.where((e) {
-          try {
-            final dateStr = e['date'] ?? e['createdAt'] ?? '';
-            if (dateStr.isEmpty) return true; // Include if no date
-            final d = DateTime.parse(dateStr);
-            return d.month == now.month && d.year == now.year;
-          } catch (_) { return true; } // Include on parse error just in case
-        }).fold(0.0, (sum, e) => sum + (double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0));
+        _monthlyExpenses = expenses
+            .where((e) {
+              try {
+                final dateStr = e['date'] ?? e['createdAt'] ?? '';
+                if (dateStr.isEmpty) return true; // Include if no date
+                final d = DateTime.parse(dateStr);
+                return d.month == now.month && d.year == now.year;
+              } catch (_) {
+                return true;
+              } // Include on parse error just in case
+            })
+            .fold(
+              0.0,
+              (sum, e) =>
+                  sum +
+                  (double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0),
+            );
       } catch (e) {}
 
       if (mounted) setState(() {});
@@ -166,10 +179,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 12,
-                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 12),
                   ],
                 ),
               ),
@@ -183,7 +193,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                   color: const Color(0xFF4F46E5),
                   icon: Icons.local_shipping,
                   label: 'Purchases',
-                    subtitle:
+                  subtitle:
                       '$_pendingPurchases ${AppLocalizations.of(context).translate('Pending')}',
                   onTap: () => Navigator.pushNamed(context, '/purchase-orders'),
                 ),
@@ -204,9 +214,10 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                   color: const Color(0xFF8B5CF6),
                   icon: Icons.account_balance_wallet,
                   label: 'History',
-                    subtitle:
+                  subtitle:
                       '$_allTransactions ${AppLocalizations.of(context).translate('Records')}',
-                  onTap: () => Navigator.pushNamed(context, '/all-transactions'),
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/all-transactions'),
                 ),
               ),
             ],
@@ -315,7 +326,11 @@ class _OperationsSheet extends StatelessWidget {
               children: [
                 LiveTranslatedText(
                   'Operations & Reports',
-                  style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF1F2937)),
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1F2937),
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, color: Colors.grey),
@@ -333,7 +348,7 @@ class _OperationsSheet extends StatelessWidget {
                   color: const Color(0xFF4F46E5),
                   icon: Icons.local_shipping_rounded,
                   label: 'Purchase\nOrders',
-                    subtitle:
+                  subtitle:
                       '$pendingPurchases ${AppLocalizations.of(context).translate('Pending')}',
                   onTap: () {
                     Navigator.pop(context);
@@ -359,7 +374,10 @@ class _OperationsSheet extends StatelessWidget {
                     Navigator.pop(context);
                     if (await SecurityService.verifyMasterPin(context)) {
                       if (!context.mounted) return;
-                      Navigator.pushNamed(context, '/worker-management').then((_) => onWorkerManagementClosed());
+                      Navigator.pushNamed(
+                        context,
+                        '/worker-management',
+                      ).then((_) => onWorkerManagementClosed());
                     }
                   },
                 ),
@@ -379,7 +397,7 @@ class _OperationsSheet extends StatelessWidget {
                   color: const Color(0xFF8B5CF6),
                   icon: Icons.receipt_long_rounded,
                   label: 'All\nTransactions',
-                    subtitle:
+                  subtitle:
                       '$allTransactions ${AppLocalizations.of(context).translate('Records')}',
                   onTap: () {
                     Navigator.pop(context);
@@ -404,7 +422,8 @@ class _OperationsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildSheetItem(BuildContext context, {
+  Widget _buildSheetItem(
+    BuildContext context, {
     required Color color,
     required IconData icon,
     required String label,

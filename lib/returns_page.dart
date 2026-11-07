@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'local_storage_service.dart';
-import 'format_helper.dart';
 import 'visual_widgets.dart';
+import 'inventory_stock_helper.dart';
+import 'sync_queue_manager.dart';
+import 'sync_service.dart';
 
 class ReturnsPage extends StatefulWidget {
   const ReturnsPage({super.key});
@@ -13,10 +17,11 @@ class ReturnsPage extends StatefulWidget {
   State<ReturnsPage> createState() => _ReturnsPageState();
 }
 
-class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStateMixin {
+class _ReturnsPageState extends State<ReturnsPage>
+    with SingleTickerProviderStateMixin {
   // Modern SaaS Colors - synced with visual_widgets.dart
-  static const Color _primary = AppColors.primary;  // #635BFF
-  
+  static const Color _primary = AppColors.primary; // #635BFF
+
   List<Map<String, dynamic>> _sales = [];
   List<Map<String, dynamic>> _returns = [];
   bool _loading = true;
@@ -43,78 +48,211 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
     setState(() => _loading = true);
     try {
       final sales = await LocalStorageService.loadSales();
-      
+      final returns = await LocalStorageService.loadSalesReturns();
+
       setState(() {
-        _sales = sales.cast<Map<String, dynamic>>();
+        _sales = sales
+            .whereType<Map>()
+            .map((s) => Map<String, dynamic>.from(s))
+            .toList();
+        _returns = returns
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList();
         _loading = false;
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: LiveTranslatedText('Error: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: LiveTranslatedText('Error: $e')));
       setState(() => _loading = false);
     }
+  }
+
+  static double _num(dynamic v, [double fallback = 0]) {
+    if (v is num) return v.toDouble();
+    return double.tryParse(v?.toString() ?? '') ?? fallback;
+  }
+
+  static double _round2(double v) => double.parse(v.toStringAsFixed(2));
+
+  /// Quantity of [productName] already returned against [invoiceId].
+  double _alreadyReturnedQty(String invoiceId, String productName) {
+    final key = productName.trim().toLowerCase();
+    var total = 0.0;
+    for (final r in _returns) {
+      if ((r['original_invoice_id'] ?? '').toString() != invoiceId) continue;
+      if ((r['product_name'] ?? '').toString().trim().toLowerCase() != key) {
+        continue;
+      }
+      total += _num(r['quantity_returned']);
+    }
+    return total;
+  }
+
+  /// Credit owed for returning [quantity] of a sold line. Uses the stored
+  /// line total (discount applied, tax included) so the credit note matches
+  /// what the customer was actually charged — not qty x unit price.
+  static double _creditForQuantity(Map<String, dynamic> item, double quantity) {
+    final qty = _num(item['qty'] ?? item['quantity'], 1);
+    if (qty <= 0) return 0;
+    final lineBasis = _num(
+      item['total_with_tax'] ?? item['line_total'] ?? item['total'],
+      -1,
+    );
+    final unitCredit = lineBasis >= 0
+        ? lineBasis / qty
+        : _num(item['unit_price'] ?? item['price']);
+    return _round2(unitCredit * quantity);
   }
 
   Future<void> _processReturn({
     required String invoiceId,
     required String productName,
     required double quantity,
-    required double returnAmount,
+    required Map<String, dynamic> saleItem,
     String? reason,
   }) async {
-    // Find original sale
+    if (!mounted) return;
+
     final originalSale = _sales.firstWhere(
       (s) => (s['sale_id'] ?? s['id'] ?? '').toString() == invoiceId,
-      orElse: () => {},
+      orElse: () => <String, dynamic>{},
     );
 
     if (originalSale.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Original invoice not found')),
+        const SnackBar(
+          content: LiveTranslatedText('Original invoice not found'),
+        ),
       );
       return;
     }
 
-    // Create return record
+    // Validate against quantity actually sold minus prior returns.
+    final soldQty = _num(saleItem['qty'] ?? saleItem['quantity'], 1);
+    final alreadyReturned = _alreadyReturnedQty(invoiceId, productName);
+    final remainingQty = soldQty - alreadyReturned;
+    if (!quantity.isFinite ||
+        quantity <= 0 ||
+        quantity > remainingQty + 0.001) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: LiveTranslatedText(
+            'Cannot return ₹${quantity} — only ${remainingQty.toStringAsFixed(2)} remaining of $productName.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final credit = _creditForQuantity(saleItem, quantity);
+
     final returnRecord = {
       'return_id': 'RET-${DateTime.now().millisecondsSinceEpoch}',
       'original_invoice_id': invoiceId,
       'product_name': productName,
+      'product_id': saleItem['product_id'] ?? saleItem['id'],
+      'unit': saleItem['unit'] ?? saleItem['unit_name'],
       'quantity_returned': quantity,
-      'return_amount': returnAmount,
+      'sold_quantity': soldQty,
+      'return_amount': credit,
       'reason': reason ?? 'Damage/Defect',
       'original_amount': originalSale['total'],
       'customer_name': originalSale['customer_name'],
       'customer_phone': originalSale['customer_phone'],
-      'return_date': DateTime.now().toIso8601String(),
+      'return_date': DateTime.now().toUtc().toIso8601String(),
       'status': 'PROCESSED',
       'credit_note_generated': true,
     };
 
-    // Save return
-    setState(() => _returns.add(returnRecord));
+    // Durable persistence first — a return must survive restarts.
+    await LocalStorageService.saveSalesReturn(returnRecord);
 
-    // Reverse inventory
-    if (originalSale['items'] is List) {
-      for (var item in originalSale['items'] as List) {
-        if (item['product_name'] == productName) {
-          final products = await LocalStorageService.loadBackendProducts();
-          for (var product in products) {
-            if (product['product_name'] == productName) {
-              product['current_stock'] = (double.tryParse(product['current_stock']?.toString() ?? '0') ?? 0) + quantity;
-              break;
-            }
+    // Record the return against the sale so revenue and stock stay consistent.
+    try {
+      final sales = await LocalStorageService.loadSales();
+      final saleIdx = sales.indexWhere(
+        (s) =>
+            s is Map && (s['sale_id'] ?? s['id'] ?? '').toString() == invoiceId,
+      );
+      if (saleIdx >= 0 && sales[saleIdx] is Map) {
+        final sale = Map<String, dynamic>.from(sales[saleIdx] as Map);
+        final items = sale['items'];
+        if (items is List) {
+          final key = productName.trim().toLowerCase();
+          for (final raw in items) {
+            if (raw is! Map) continue;
+            final itemName =
+                (raw['product_name'] ?? raw['name'] ?? raw['item'] ?? '')
+                    .toString()
+                    .trim()
+                    .toLowerCase();
+            if (itemName != key) continue;
+            final prevQty = _num(raw['returned_qty']);
+            final prevAmt = _num(raw['returned_amount']);
+            raw['returned_qty'] = _round2(prevQty + quantity);
+            raw['returned_amount'] = _round2(prevAmt + credit);
+            break;
           }
-          await LocalStorageService.saveBackendProducts(products);
-          break;
         }
+        final prevReturned = _num(sale['returned_amount']);
+        sale['returned_amount'] = _round2(prevReturned + credit);
+        final totalReturnedQty = _num(sale['returned_qty']) + quantity;
+        sale['returned_qty'] = _round2(totalReturnedQty);
+        final invoiceTotal = _num(
+          sale['total_amount'] ?? sale['total'] ?? sale['grand_total'],
+        );
+        sale['return_status'] =
+            totalReturnedQty > 0 &&
+                (invoiceTotal <= 0 ||
+                    prevReturned + credit >= invoiceTotal - 0.01)
+            ? 'RETURNED'
+            : 'PARTIALLY_RETURNED';
+        sale['updated_at'] = DateTime.now().toUtc().toIso8601String();
+        sales[saleIdx] = sale;
+        await LocalStorageService.replaceSalesCanonical(sales);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: LiveTranslatedText(
+              'Return saved locally; sale update failed: $e',
+            ),
+          ),
+        );
+      }
+    }
+
+    // Restore stock through the shared helper on BOTH catalog copies, then
+    // enqueue a durable backend update so server stock does not stay deducted.
+    try {
+      await _restoreStockForReturn(
+        saleItem,
+        quantity,
+        returnRecord['return_id'].toString(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: LiveTranslatedText(
+              'Return saved; stock sync needs attention: $e',
+            ),
+          ),
+        );
       }
     }
 
     if (mounted) {
+      setState(() => _returns.add(returnRecord));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText('Return processed! Credit Note: ${returnRecord['return_id']}'),
+          content: LiveTranslatedText(
+            'Return processed! Credit Note: ${returnRecord['return_id']} — ₹${credit.toStringAsFixed(2)}',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -122,16 +260,104 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
     }
   }
 
+  /// Adds returned quantity back to local + backend product caches and queues
+  /// a backend product update when the product has a server identity.
+  Future<void> _restoreStockForReturn(
+    Map<String, dynamic> saleItem,
+    double quantity,
+    String returnId,
+  ) async {
+    final productId = int.tryParse(
+      (saleItem['product_id'] ?? saleItem['id'] ?? '').toString(),
+    );
+    final name = (saleItem['product_name'] ?? saleItem['name'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (productId == null && name.isEmpty) return;
+
+    String norm(Map<String, dynamic> p) =>
+        (p['product_name'] ?? p['name'] ?? '').toString().trim().toLowerCase();
+
+    // Backend product cache.
+    final backend = await LocalStorageService.loadBackendProducts();
+    int backendIdx = -1;
+    Map<String, dynamic>? backendHit;
+    for (var i = 0; i < backend.length; i++) {
+      final raw = backend[i];
+      final p = Map<String, dynamic>.from(raw);
+      final pid = int.tryParse(
+        (p['id'] ?? p['product_id'] ?? p['backend_id'] ?? '').toString(),
+      );
+      if ((productId != null && pid == productId) ||
+          (name.isNotEmpty && norm(p) == name)) {
+        backendIdx = i;
+        backendHit = p;
+        break;
+      }
+    }
+    if (backendHit != null) {
+      InventoryStockHelper.writeStock(
+        backendHit,
+        InventoryStockHelper.readStock(backendHit) + quantity,
+      );
+      backend[backendIdx] = backendHit;
+      await LocalStorageService.saveBackendProducts(backend);
+
+      final serverId = int.tryParse(
+        (backendHit['id'] ?? backendHit['backend_id'] ?? '').toString(),
+      );
+      if (serverId != null && serverId > 0) {
+        final userId = backendHit['user_id'];
+        await SyncQueueManager.enqueue('update_local_product', {
+          'id': serverId,
+          'user_id': userId,
+          'operation_id': 'RETURN_STOCK_$returnId',
+          'payload': Map<String, dynamic>.from(backendHit),
+        });
+        unawaited(SyncService.processQueueSafe());
+      }
+    }
+
+    // Local-only product cache.
+    final local = await LocalStorageService.loadLocalProducts();
+    var localChanged = false;
+    for (final raw in local.values) {
+      if (raw is! Map) continue;
+      final p = Map<String, dynamic>.from(raw);
+      final pid = int.tryParse((p['id'] ?? p['product_id'] ?? '').toString());
+      if ((productId != null && pid == productId) ||
+          (name.isNotEmpty && norm(p) == name)) {
+        InventoryStockHelper.writeStock(
+          p,
+          InventoryStockHelper.readStock(p) + quantity,
+        );
+        // Write the updated fields back onto the stored map.
+        for (final entry in p.entries) {
+          raw[entry.key] = entry.value;
+        }
+        localChanged = true;
+      }
+    }
+    if (localChanged) await LocalStorageService.saveLocalProducts(local);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const LiveTranslatedText('Returns & Credit Notes'), backgroundColor: _primary),
+        appBar: AppBar(
+          title: const LiveTranslatedText('Returns & Credit Notes'),
+          backgroundColor: _primary,
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    final totalReturned = _returns.fold<double>(0, (sum, r) => sum + (r['return_amount'] as double? ?? 0));
+    final totalReturned = _returns.fold<double>(
+      0,
+      (sum, r) => sum + (r['return_amount'] as double? ?? 0),
+    );
     final returnCount = _returns.length;
 
     return Scaffold(
@@ -185,7 +411,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                 // Returns List
                 LiveTranslatedText(
                   'Return History',
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 ..._buildReturnsList(),
@@ -207,18 +436,25 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
             const SizedBox(height: 20),
             LiveTranslatedText(
               'No Sales Found',
-              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade700,
+              ),
             ),
             const SizedBox(height: 8),
             LiveTranslatedText(
               'Create a sale first to process returns',
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade600),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
             ),
           ],
         ),
       );
     }
-    
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -227,7 +463,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
           // Phone Number Input
           LiveTranslatedText(
             'Enter Phone Number',
-            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold),
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -237,15 +476,23 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
             decoration: InputDecoration(
               hint: LiveTranslatedText('Enter customer phone (10 digits)'),
               prefixIcon: const Icon(Icons.phone_rounded),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
           ),
           const SizedBox(height: 20),
-          
+
           LiveTranslatedText(
             'Select Original Invoice (Last 3)',
-            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold),
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -256,11 +503,17 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
               final filteredSales = phone.isEmpty
                   ? []
                   : _sales
-                      .where((sale) => sale['customer_phone']?.toString().contains(phone) ?? false)
-                      .toList()
-                      .reversed
-                      .take(3)
-                      .toList();
+                        .where(
+                          (sale) =>
+                              sale['customer_phone']?.toString().contains(
+                                phone,
+                              ) ??
+                              false,
+                        )
+                        .toList()
+                        .reversed
+                        .take(3)
+                        .toList();
 
               if (phone.isEmpty) {
                 return Container(
@@ -277,7 +530,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                       Expanded(
                         child: LiveTranslatedText(
                           'Enter phone number to see available invoices',
-                          style: GoogleFonts.poppins(color: Colors.amber.shade700, fontSize: 13),
+                          style: GoogleFonts.poppins(
+                            color: Colors.amber.shade700,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -300,7 +556,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                       Expanded(
                         child: LiveTranslatedText(
                           'No invoices found for this phone number',
-                          style: GoogleFonts.poppins(color: Colors.red.shade700, fontSize: 13),
+                          style: GoogleFonts.poppins(
+                            color: Colors.red.shade700,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ],
@@ -317,18 +576,25 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                 child: DropdownButtonFormField<String>(
                   value: _selectedInvoiceId.isEmpty ? null : _selectedInvoiceId,
                   items: filteredSales.map((sale) {
-                    final invoiceId = sale['sale_id'] ?? sale['id'] ?? 'Unknown';
+                    final invoiceId =
+                        sale['sale_id'] ?? sale['id'] ?? 'Unknown';
                     final customerName = sale['customer_name'] ?? 'Guest';
                     final amount = sale['total'] ?? 0;
-                    
+
                     return DropdownMenuItem(
                       value: invoiceId.toString(),
-                      child: LiveTranslatedText('$invoiceId - $customerName (₹$amount)'),
+                      child: LiveTranslatedText(
+                        '$invoiceId - $customerName (₹$amount)',
+                      ),
                     );
                   }).toList(),
-                  onChanged: (val) => setState(() => _selectedInvoiceId = val ?? ''),
+                  onChanged: (val) =>
+                      setState(() => _selectedInvoiceId = val ?? ''),
                   decoration: const InputDecoration(
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     border: InputBorder.none,
                     hint: LiveTranslatedText('Choose invoice'),
                   ),
@@ -351,7 +617,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
               child: Center(
                 child: LiveTranslatedText(
                   'Select an invoice above to create a return',
-                  style: GoogleFonts.poppins(fontSize: 14, color: Colors.blue.shade700),
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.blue.shade700,
+                  ),
                 ),
               ),
             ),
@@ -386,24 +655,51 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  LiveTranslatedText('Invoice', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
-                  LiveTranslatedText(_selectedInvoiceId, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  LiveTranslatedText(
+                    'Invoice',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  LiveTranslatedText(
+                    _selectedInvoiceId,
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  LiveTranslatedText('Customer', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
-                  LiveTranslatedText(sale['customer_name'] ?? 'Other', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  LiveTranslatedText(
+                    'Customer',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  LiveTranslatedText(
+                    sale['customer_name'] ?? 'Other',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  LiveTranslatedText('Total Amount', style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
-                  LiveTranslatedText('₹${sale['total']}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  LiveTranslatedText(
+                    'Total Amount',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  LiveTranslatedText(
+                    '₹${sale['total']}',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
             ],
@@ -417,9 +713,8 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
           style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        ...items.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final item = entry.value as Map;
+        ...items.map((entry) {
+          final item = entry as Map;
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -433,8 +728,7 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
               onTap: () => _showReturnDialog(
                 invoiceId: _selectedInvoiceId,
                 productName: item['product_name']?.toString() ?? 'Unknown',
-                salePrice: double.tryParse(item['price']?.toString() ?? '0') ?? 0,
-                saleQty: double.tryParse(item['qty']?.toString() ?? '1') ?? 1,
+                saleItem: Map<String, dynamic>.from(item),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -445,11 +739,16 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                       children: [
                         LiveTranslatedText(
                           item['product_name']?.toString() ?? 'Unknown',
-                          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         LiveTranslatedText(
                           'Qty: ${item['qty']} @ ₹${item['price']}',
-                          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ],
                     ),
@@ -467,11 +766,14 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
   void _showReturnDialog({
     required String invoiceId,
     required String productName,
-    required double salePrice,
-    required double saleQty,
+    required Map<String, dynamic> saleItem,
   }) {
-    double returnQty = 1;
+    final soldQty = _num(saleItem['qty'] ?? saleItem['quantity'], 1);
+    final alreadyReturned = _alreadyReturnedQty(invoiceId, productName);
+    final remainingQty = soldQty - alreadyReturned;
+    double returnQty = remainingQty > 0 ? remainingQty : 1;
     String reason = 'Damage/Defect';
+    final qtyCtrl = TextEditingController(text: returnQty.toStringAsFixed(0));
 
     showDialog(
       context: context,
@@ -482,49 +784,74 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  label: LiveTranslatedText('Quantity to Return'),
-                  hint: LiveTranslatedText('1'),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                controller: qtyCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-                onChanged: (val) => returnQty = double.tryParse(val) ?? 1,
+                decoration: InputDecoration(
+                  label: LiveTranslatedText(
+                    'Quantity to Return (max ${remainingQty.toStringAsFixed(2)})',
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onChanged: (val) =>
+                    setState(() => returnQty = double.tryParse(val) ?? 0),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: reason,
-                items: [
-                  'Damage/Defect',
-                  'Wrong Item',
-                  'Customer Return',
-                  'Expired',
-                  'Other',
-                ].map((r) => DropdownMenuItem(value: r, child: LiveTranslatedText(r))).toList(),
-                onChanged: (val) => setState(() => reason = val ?? 'Damage/Defect'),
+                items:
+                    [
+                          'Damage/Defect',
+                          'Wrong Item',
+                          'Customer Return',
+                          'Expired',
+                          'Other',
+                        ]
+                        .map(
+                          (r) => DropdownMenuItem(
+                            value: r,
+                            child: LiveTranslatedText(r),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (val) =>
+                    setState(() => reason = val ?? 'Damage/Defect'),
                 decoration: InputDecoration(
                   label: LiveTranslatedText('Return Reason'),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               LiveTranslatedText(
-                'Return Amount: ₹${(returnQty * salePrice).toStringAsFixed(0)}',
-                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: _primary),
+                'Return Amount: ₹${_creditForQuantity(saleItem, returnQty.isFinite && returnQty > 0 ? returnQty : 0).toStringAsFixed(2)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: _primary,
+                ),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const LiveTranslatedText('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const LiveTranslatedText('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
+                Navigator.pop(ctx);
                 _processReturn(
                   invoiceId: invoiceId,
                   productName: productName,
                   quantity: returnQty,
-                  returnAmount: returnQty * salePrice,
+                  saleItem: saleItem,
                   reason: reason,
                 );
-                Navigator.pop(ctx);
                 _tabController.animateTo(1);
               },
               style: ElevatedButton.styleFrom(backgroundColor: _primary),
@@ -566,7 +893,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                         style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.green.shade100,
                           borderRadius: BorderRadius.circular(4),
@@ -585,7 +915,10 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                   const SizedBox(height: 8),
                   LiveTranslatedText(
                     'Invoice: ${returnData['original_invoice_id']}',
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                   LiveTranslatedText(
                     'Product: ${returnData['product_name']} (Qty: ${returnData['quantity_returned']})',
@@ -593,19 +926,33 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
                   ),
                   LiveTranslatedText(
                     'Reason: ${returnData['reason']}',
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       LiveTranslatedText(
-                        DateFormat('yyyy-MM-dd').format(DateTime.parse(returnData['return_date']?.toString() ?? '')),
-                        style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600),
+                        DateFormat('yyyy-MM-dd').format(
+                          DateTime.parse(
+                            returnData['return_date']?.toString() ?? '',
+                          ),
+                        ),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                       LiveTranslatedText(
                         '₹${returnData['return_amount']}',
-                        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange),
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
                       ),
                     ],
                   ),
@@ -628,9 +975,22 @@ class _ReturnsPageState extends State<ReturnsPage> with SingleTickerProviderStat
         children: [
           Icon(icon, color: color, size: 24),
           const SizedBox(height: 8),
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600)),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
           const SizedBox(height: 4),
-          LiveTranslatedText(value, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

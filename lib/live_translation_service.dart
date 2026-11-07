@@ -6,7 +6,8 @@ import 'package:flutter/foundation.dart' show ValueNotifier, ValueListenable;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'live_translation_web.dart'
-    if (dart.library.io) 'live_translation_native.dart' as platform;
+    if (dart.library.io) 'live_translation_native.dart'
+    as platform;
 import 'device_capability_service.dart';
 import 'dynamic_translation_load_policy.dart';
 
@@ -24,14 +25,21 @@ class LiveTranslationService {
   static const int _standardMaxCachedTextCharacters = 256 * 1024;
 
   // Keep translation work and retained text much smaller on entry-level phones.
-  int get _maxBatchItems =>
-      DeviceCapabilityService.instance.isLowEndDevice ? 8 : _standardMaxBatchItems;
+  int get _maxBatchItems => DeviceCapabilityService.instance.isLowEndDevice
+      ? 8
+      : _standardMaxBatchItems;
   int get _maxCachedTranslations =>
-      DeviceCapabilityService.instance.isLowEndDevice ? 400 : _standardMaxCachedTranslations;
+      DeviceCapabilityService.instance.isLowEndDevice
+      ? 400
+      : _standardMaxCachedTranslations;
   int get _maxCacheableTextCharacters =>
-      DeviceCapabilityService.instance.isLowEndDevice ? 480 : _standardMaxCacheableTextCharacters;
+      DeviceCapabilityService.instance.isLowEndDevice
+      ? 480
+      : _standardMaxCacheableTextCharacters;
   int get _maxCachedTextCharacters =>
-      DeviceCapabilityService.instance.isLowEndDevice ? 96 * 1024 : _standardMaxCachedTextCharacters;
+      DeviceCapabilityService.instance.isLowEndDevice
+      ? 96 * 1024
+      : _standardMaxCachedTextCharacters;
 
   // Start conservatively and only allow two batches when device detection says
   // this is not a low-RAM/low-core device.
@@ -39,8 +47,8 @@ class LiveTranslationService {
       DeviceCapabilityService.instance.isLowEndDevice ? 1 : 2;
   Duration get _batchCoalesceDelay =>
       DeviceCapabilityService.instance.isLowEndDevice
-          ? const Duration(milliseconds: 80)
-          : const Duration(milliseconds: 25);
+      ? const Duration(milliseconds: 80)
+      : const Duration(milliseconds: 25);
 
   final LinkedHashMap<String, String> _cache = LinkedHashMap<String, String>();
   final Map<String, Future<String>> _inFlight = <String, Future<String>>{};
@@ -54,9 +62,13 @@ class LiveTranslationService {
   static const int _standardMaxDeferredUniqueRequests = 600;
   static const int _standardMaxRetryCooldownEntries = 240;
   int get _maxDeferredUniqueRequests =>
-      DeviceCapabilityService.instance.isLowEndDevice ? 180 : _standardMaxDeferredUniqueRequests;
+      DeviceCapabilityService.instance.isLowEndDevice
+      ? 180
+      : _standardMaxDeferredUniqueRequests;
   int get _maxRetryCooldownEntries =>
-      DeviceCapabilityService.instance.isLowEndDevice ? 120 : _standardMaxRetryCooldownEntries;
+      DeviceCapabilityService.instance.isLowEndDevice
+      ? 120
+      : _standardMaxRetryCooldownEntries;
   static const Duration _translationRetryCooldown = Duration(seconds: 45);
 
   final Set<String> _deferred = <String>{};
@@ -90,9 +102,8 @@ class LiveTranslationService {
     if (!hasDeferredRequest && !hasCachedResult) return false;
     final lowEnd = DeviceCapabilityService.instance.isLowEndDevice;
     return hasCachedResult ||
-        _inFlight.length < DynamicTranslationLoadPolicy.maxPending(
-          lowEndDevice: lowEnd,
-        );
+        _inFlight.length <
+            DynamicTranslationLoadPolicy.maxPending(lowEndDevice: lowEnd);
   }
 
   Future<String> translateForDisplay(
@@ -196,10 +207,7 @@ class LiveTranslationService {
     _persistCacheTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(
-          _persistentCacheKey,
-          jsonEncode(_cache),
-        );
+        await prefs.setString(_persistentCacheKey, jsonEncode(_cache));
       } catch (_) {
         // Dynamic translations remain in memory for this session.
       }
@@ -247,8 +255,8 @@ class LiveTranslationService {
       );
       for (var index = 0; index < batch.length; index++) {
         final task = batch[index];
-        final value = index < translated.length &&
-                translated[index].trim().isNotEmpty
+        final value =
+            index < translated.length && translated[index].trim().isNotEmpty
             ? translated[index]
             : task.text;
         // Avoid caching a transient offline/auth fallback forever. A later
@@ -317,8 +325,7 @@ class LiveTranslationService {
     if (persist) _scheduleCachePersistence();
   }
 
-  static final RegExp _latinLetterPattern =
-      RegExp(r'[A-Za-z\u00C0-\u024F]');
+  static final RegExp _latinLetterPattern = RegExp(r'[A-Za-z\u00C0-\u024F]');
   static final RegExp _neverTargetScriptPattern = RegExp(r'(?!)');
   static final Map<String, RegExp> _targetScriptPatterns = {
     'te': RegExp(r'[\u0C00-\u0C7F]'),

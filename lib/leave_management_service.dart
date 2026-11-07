@@ -9,7 +9,7 @@ class LeaveManagementService {
   /// Request leave
   static Future<bool> requestLeave({
     required int workerId,
-    required String leaveType,  // 'sick', 'casual', 'personal', 'unpaid'
+    required String leaveType, // 'sick', 'casual', 'personal', 'unpaid'
     required DateTime startDate,
     required DateTime endDate,
     String? reason,
@@ -23,14 +23,18 @@ class LeaveManagementService {
         if (reason != null) 'reason': reason,
       };
 
-      final response = await ApiClient.postJson('/api/attendance/leave-request', body);
-      
+      final response = await ApiClient.postJson(
+        '/api/attendance/leave-request',
+        body,
+      );
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         if (kDebugMode) debugPrint('✅ Leave request submitted');
         return true;
       }
-      
-      if (kDebugMode) debugPrint('❌ Leave request failed: ${response.statusCode}');
+
+      if (kDebugMode)
+        debugPrint('❌ Leave request failed: ${response.statusCode}');
       return false;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Leave request error: $e');
@@ -40,23 +44,23 @@ class LeaveManagementService {
 
   /// Get all leave requests
   static Future<List<LeaveRequest>> getLeaveRequests({
-    String? status,  // 'pending', 'approved', 'rejected'
+    String? status, // 'pending', 'approved', 'rejected'
     int limit = 100,
   }) async {
     try {
-      final query = status != null 
+      final query = status != null
           ? '/api/attendance/leave-requests?status=$status&limit=$limit'
           : '/api/attendance/leave-requests?limit=$limit';
-      
+
       final response = await ApiClient.getJson(query);
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List items = data['leave_requests'] ?? data['items'] ?? [];
-        
+
         return items.map((item) => LeaveRequest.fromJson(item)).toList();
       }
-      
+
       return [];
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Get leave requests error: $e');
@@ -71,12 +75,12 @@ class LeaveManagementService {
         '/api/attendance/leave-request/$leaveId/approve',
         {},
       );
-      
+
       if (response.statusCode == 200) {
         if (kDebugMode) debugPrint('✅ Leave approved');
         return true;
       }
-      
+
       return false;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Approve leave error: $e');
@@ -87,20 +91,18 @@ class LeaveManagementService {
   /// Reject leave request
   static Future<bool> rejectLeave(int leaveId, {String? reason}) async {
     try {
-      final body = {
-        if (reason != null) 'reason': reason,
-      };
+      final body = {if (reason != null) 'reason': reason};
 
       final response = await ApiClient.putJson(
         '/api/attendance/leave-request/$leaveId/reject',
         body,
       );
-      
+
       if (response.statusCode == 200) {
         if (kDebugMode) debugPrint('✅ Leave rejected');
         return true;
       }
-      
+
       return false;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Reject leave error: $e');
@@ -114,12 +116,12 @@ class LeaveManagementService {
       final response = await ApiClient.getJson(
         '/api/attendance/analytics/employee/$employeeId',
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return AttendanceSummary.fromJson(data);
       }
-      
+
       return null;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Get attendance summary error: $e');
@@ -128,20 +130,20 @@ class LeaveManagementService {
   }
 
   /// Get attendance by date
-  static Future<List<AttendanceRecord>> getAttendanceByDate(DateTime date) async {
+  static Future<List<AttendanceRecord>> getAttendanceByDate(
+    DateTime date,
+  ) async {
     try {
       final dateStr = date.toIso8601String().split('T')[0];
-      final response = await ApiClient.getJson(
-        '/api/attendance/date/$dateStr',
-      );
-      
+      final response = await ApiClient.getJson('/api/attendance/date/$dateStr');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List items = data['attendance'] ?? data['items'] ?? [];
-        
+
         return items.map((item) => AttendanceRecord.fromJson(item)).toList();
       }
-      
+
       return [];
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Get attendance by date error: $e');
@@ -158,7 +160,7 @@ class LeaveRequest {
   final String leaveType;
   final DateTime startDate;
   final DateTime endDate;
-  final String status;  // 'pending', 'approved', 'rejected'
+  final String status; // 'pending', 'approved', 'rejected'
   final String? reason;
   final String? approverComment;
   final DateTime createdAt;
@@ -187,7 +189,9 @@ class LeaveRequest {
       status: json['status'] ?? 'pending',
       reason: json['reason'],
       approverComment: json['approver_comment'],
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toString()),
+      createdAt: DateTime.parse(
+        json['created_at'] ?? DateTime.now().toString(),
+      ),
     );
   }
 
@@ -195,17 +199,23 @@ class LeaveRequest {
 
   String get statusLabel {
     switch (status) {
-      case 'approved': return '✅ Approved';
-      case 'rejected': return '❌ Rejected';
-      default: return '⏳ Pending';
+      case 'approved':
+        return '✅ Approved';
+      case 'rejected':
+        return '❌ Rejected';
+      default:
+        return '⏳ Pending';
     }
   }
 
   Color get statusColor {
     switch (status) {
-      case 'approved': return const Color(0xFF16A34A);
-      case 'rejected': return const Color(0xFFDC2626);
-      default: return const Color(0xFFFBBF24);
+      case 'approved':
+        return const Color(0xFF16A34A);
+      case 'rejected':
+        return const Color(0xFFDC2626);
+      default:
+        return const Color(0xFFFBBF24);
     }
   }
 }
@@ -257,7 +267,7 @@ class AttendanceRecord {
   final String workerName;
   final DateTime checkInTime;
   final DateTime? checkOutTime;
-  final String? status;  // 'present', 'absent', 'on_leave'
+  final String? status; // 'present', 'absent', 'on_leave'
 
   AttendanceRecord({
     required this.id,
@@ -273,8 +283,13 @@ class AttendanceRecord {
       id: json['id'] ?? 0,
       workerId: json['worker_id'] ?? 0,
       workerName: json['worker_name'] ?? json['name'] ?? '',
-      checkInTime: DateTime.parse(json['check_in_time'] ?? json['checkin_time'] ?? DateTime.now().toString()),
-      checkOutTime: json['check_out_time'] != null || json['checkout_time'] != null
+      checkInTime: DateTime.parse(
+        json['check_in_time'] ??
+            json['checkin_time'] ??
+            DateTime.now().toString(),
+      ),
+      checkOutTime:
+          json['check_out_time'] != null || json['checkout_time'] != null
           ? DateTime.parse(json['check_out_time'] ?? json['checkout_time'])
           : null,
       status: json['status'],

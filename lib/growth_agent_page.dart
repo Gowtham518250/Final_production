@@ -1787,10 +1787,30 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
 
   Widget _buildCampaignGoalStep() {
     const goals = <({String id, String title, String detail, IconData icon})>[
-      (id: 'nearby', title: 'Shop spotlight', detail: 'Reach nearby shoppers', icon: Icons.storefront_rounded),
-      (id: 'new_product', title: 'New products', detail: 'Showcase an arrival', icon: Icons.inventory_2_rounded),
-      (id: 'clear_stock', title: 'Clear stock', detail: 'Promote available items', icon: Icons.sell_rounded),
-      (id: 'regular_customers', title: 'Bring customers back', detail: 'Invite a return visit', icon: Icons.favorite_rounded),
+      (
+        id: 'nearby',
+        title: 'Shop spotlight',
+        detail: 'Reach nearby shoppers',
+        icon: Icons.storefront_rounded,
+      ),
+      (
+        id: 'new_product',
+        title: 'New products',
+        detail: 'Showcase an arrival',
+        icon: Icons.inventory_2_rounded,
+      ),
+      (
+        id: 'clear_stock',
+        title: 'Clear stock',
+        detail: 'Promote available items',
+        icon: Icons.sell_rounded,
+      ),
+      (
+        id: 'regular_customers',
+        title: 'Bring customers back',
+        detail: 'Invite a return visit',
+        icon: Icons.favorite_rounded,
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1803,8 +1823,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = constraints.maxWidth >= 540 ? 4 : 2;
-            final width =
-                (constraints.maxWidth - (columns - 1) * 10) / columns;
+            final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
             return Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -1820,56 +1839,67 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
                       duration: AppMotion.medium,
                       curve: Curves.easeOutBack,
                       child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      constraints: const BoxConstraints(minHeight: 112),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: selected ? const Color(0xFFF3EFFF) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: selected ? _purple : const Color(0xFFE2E8F0),
-                          width: selected ? 1.6 : 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _purple.withValues(alpha: selected ? 0.08 : 0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
+                        duration: const Duration(milliseconds: 180),
+                        constraints: const BoxConstraints(minHeight: 112),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? const Color(0xFFF3EFFF)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: selected ? _purple : const Color(0xFFE2E8F0),
+                            width: selected ? 1.6 : 1,
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(goal.icon, color: _purple, size: 21),
-                              const Spacer(),
-                              if (selected)
-                                const Icon(Icons.check_circle, color: _purple, size: 18),
-                            ],
-                          ),
-                          const SizedBox(height: 9),
-                          LiveTranslatedText(
-                            goal.title,
-                            style: const TextStyle(
-                              color: _ink,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                          boxShadow: [
+                            BoxShadow(
+                              color: _purple.withValues(
+                                alpha: selected ? 0.08 : 0.02,
+                              ),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 3),
-                          LiveTranslatedText(
-                            goal.detail,
-                            style: const TextStyle(color: _muted, fontSize: 10),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(goal.icon, color: _purple, size: 21),
+                                const Spacer(),
+                                if (selected)
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: _purple,
+                                    size: 18,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 9),
+                            LiveTranslatedText(
+                              goal.title,
+                              style: const TextStyle(
+                                color: _ink,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            LiveTranslatedText(
+                              goal.detail,
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 10,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                     ),
                   ),
                 );
@@ -2144,11 +2174,27 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
   }
 
   Widget _shareDestinationCards({required bool enabled}) {
-    const items = <({String title, String subtitle, IconData icon, Color color})>[
-      (title: 'WhatsApp', subtitle: 'Status or customer chat', icon: Icons.chat_rounded, color: Color(0xFF25A75A)),
-      (title: 'Instagram', subtitle: 'Feed or story', icon: Icons.camera_alt_rounded, color: Color(0xFFC13584)),
-      (title: 'Facebook', subtitle: 'Shop page or feed', icon: Icons.facebook_rounded, color: Color(0xFF1877F2)),
-    ];
+    const items =
+        <({String title, String subtitle, IconData icon, Color color})>[
+          (
+            title: 'WhatsApp',
+            subtitle: 'Status or customer chat',
+            icon: Icons.chat_rounded,
+            color: Color(0xFF25A75A),
+          ),
+          (
+            title: 'Instagram',
+            subtitle: 'Feed or story',
+            icon: Icons.camera_alt_rounded,
+            color: Color(0xFFC13584),
+          ),
+          (
+            title: 'Facebook',
+            subtitle: 'Shop page or feed',
+            icon: Icons.facebook_rounded,
+            color: Color(0xFF1877F2),
+          ),
+        ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2172,7 +2218,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
               leading: Icon(item.icon, color: item.color),
               title: LiveTranslatedText(
                 item.title,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               subtitle: LiveTranslatedText(
                 item.subtitle,
@@ -2287,144 +2336,180 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                    _sectionTitle(
-                      'Review your promotion',
-                      'Check the poster and details. Sharing unlocks only after approval.',
-                    ),
-                    const SizedBox(height: 10),
-                    if (_currentDraft == null)
-                      _emptyPreview()
-                    else
-                      AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      child: Column(
-                        key: ValueKey<String>(_currentDraft!['id'].toString()),
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _posterPreview(),
-                          const SizedBox(height: 12),
-                          _editFields(),
-                          const SizedBox(height: 12),
-                          _shareDestinationCards(enabled: isApproved),
-                          const SizedBox(height: 12),
-                          if (needsApproval) ...[
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFFBEB),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFFDE68A),
-                                ),
+                              _sectionTitle(
+                                'Review your promotion',
+                                'Check the poster and details. Sharing unlocks only after approval.',
                               ),
-                              child: const Text(
-                                'Review this exact campaign version. Sharing is disabled until the owner approves it.',
-                                style: TextStyle(
-                                  color: Color(0xFF92400E),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            FilledButton.icon(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _approveCampaign(_currentDraft!),
-                              icon: const Icon(Icons.check_circle_outline),
-                              label: const Text('Approve campaign'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF15803D),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                              ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _rejectCampaign(_currentDraft!),
-                              icon: const Icon(Icons.cancel_outlined),
-                              label: const Text('Reject campaign'),
-                            ),
-                          ] else if (isApproved) ...[
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0FDF4),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFBBF7D0),
-                                ),
-                              ),
-                              child: const Text(
-                                'Approved version. You can now share this poster manually.',
-                                style: TextStyle(
-                                  color: Color(0xFF166534),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            FilledButton.icon(
-                              onPressed: _busy ? null : _sharePoster,
-                              icon: _busy
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
+                              const SizedBox(height: 10),
+                              if (_currentDraft == null)
+                                _emptyPreview()
+                              else
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  child: Column(
+                                    key: ValueKey<String>(
+                                      _currentDraft!['id'].toString(),
+                                    ),
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _posterPreview(),
+                                      const SizedBox(height: 12),
+                                      _editFields(),
+                                      const SizedBox(height: 12),
+                                      _shareDestinationCards(
+                                        enabled: isApproved,
                                       ),
-                                    )
-                                  : const Icon(Icons.share_rounded),
-                              label: Text(
-                                _busy
-                                    ? 'Preparing poster…'
-                                    : 'Share approved poster',
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _purple,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 15,
+                                      const SizedBox(height: 12),
+                                      if (needsApproval) ...[
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFFBEB),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFFFDE68A),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Review this exact campaign version. Sharing is disabled until the owner approves it.',
+                                            style: TextStyle(
+                                              color: Color(0xFF92400E),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        FilledButton.icon(
+                                          onPressed: _busy
+                                              ? null
+                                              : () => _approveCampaign(
+                                                  _currentDraft!,
+                                                ),
+                                          icon: const Icon(
+                                            Icons.check_circle_outline,
+                                          ),
+                                          label: const Text('Approve campaign'),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: const Color(
+                                              0xFF15803D,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        OutlinedButton.icon(
+                                          onPressed: _busy
+                                              ? null
+                                              : () => _rejectCampaign(
+                                                  _currentDraft!,
+                                                ),
+                                          icon: const Icon(
+                                            Icons.cancel_outlined,
+                                          ),
+                                          label: const Text('Reject campaign'),
+                                        ),
+                                      ] else if (isApproved) ...[
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF0FDF4),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFFBBF7D0),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Approved version. You can now share this poster manually.',
+                                            style: TextStyle(
+                                              color: Color(0xFF166534),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        FilledButton.icon(
+                                          onPressed: _busy
+                                              ? null
+                                              : _sharePoster,
+                                          icon: _busy
+                                              ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
+                                                )
+                                              : const Icon(Icons.share_rounded),
+                                          label: Text(
+                                            _busy
+                                                ? 'Preparing poster…'
+                                                : 'Share approved poster',
+                                          ),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: _purple,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 15,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                          ),
+                                        ),
+                                        OutlinedButton.icon(
+                                          onPressed: _busy
+                                              ? null
+                                              : () => _shareCaption(
+                                                  _currentDraft!,
+                                                ),
+                                          icon: const Icon(
+                                            Icons.text_snippet_outlined,
+                                          ),
+                                          label: const Text(
+                                            'Share approved caption',
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF8FAFC),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFFE2E8F0),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'This campaign is not approved. Save it to the server and submit it for owner review before sharing.',
+                                            style: TextStyle(
+                                              color: _muted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                              OutlinedButton.icon(
+                                onPressed: () => _openWizardStep(1),
+                                icon: const Icon(Icons.edit_outlined),
+                                label: const LiveTranslatedText(
+                                  'Edit campaign design',
                                 ),
                               ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _shareCaption(_currentDraft!),
-                              icon: const Icon(Icons.text_snippet_outlined),
-                              label: const Text('Share approved caption'),
-                            ),
-                          ] else ...[
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                ),
-                              ),
-                              child: const Text(
-                                'This campaign is not approved. Save it to the server and submit it for owner review before sharing.',
-                                style: TextStyle(color: _muted, fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _openWizardStep(1),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const LiveTranslatedText('Edit campaign design'),
-                    ),
                             ],
                           ),
                   ),
@@ -2488,11 +2573,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
             if (_festivalName.isNotEmpty) ...[
               const SizedBox(height: 14),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.24),
+                  ),
                 ),
                 child: Text(
                   'UP NEXT  ·  $_festivalName',
@@ -3472,7 +3562,8 @@ class _PosterArtwork extends StatelessWidget {
         style.id == 'ruby' ||
         style.id == 'gold' ||
         style.id == 'lotus';
-    final isFresh = style.id == 'emerald' || style.id == 'mint' || style.id == 'forest';
+    final isFresh =
+        style.id == 'emerald' || style.id == 'mint' || style.id == 'forest';
     final isMinimal = style.light;
     final isStory = format == 'story';
     final isSquare = format == 'square';
@@ -3847,7 +3938,8 @@ class _PosterArtwork extends StatelessWidget {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'PRODUCT LOGO',
@@ -4151,7 +4243,11 @@ class _PosterBrandMark extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child:
           image ??
-          Icon(fallback, color: light ? Colors.white : accent, size: size * 0.55),
+          Icon(
+            fallback,
+            color: light ? Colors.white : accent,
+            size: size * 0.55,
+          ),
     );
   }
 }
@@ -4188,7 +4284,9 @@ class _BlessingMark extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: light ? const Color(0xFF111827) : Colors.white.withValues(alpha: 0.18),
+        color: light
+            ? const Color(0xFF111827)
+            : Colors.white.withValues(alpha: 0.18),
         shape: BoxShape.circle,
         border: Border.all(
           color: light ? accent : Colors.white.withValues(alpha: 0.55),

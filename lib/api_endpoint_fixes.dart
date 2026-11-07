@@ -1,17 +1,17 @@
 /// API Endpoint Field Mapping - FIXED
-/// 
+///
 /// ISSUE 1: Login Endpoint Mismatch
 /// ❌ App sends: { email, password, device_id }
 /// ✅ Backend expects: { username, password }
-/// 
+///
 /// ISSUE 2: Register Endpoint Mismatch
 /// ❌ App sends: { user_name, phone, email, password }
 /// ✅ Backend expects: { username, email, password }
-/// 
+///
 /// ISSUE 3: Login Response Parsing Wrong
 /// ❌ App expects: { token, user_id, refresh_token }
 /// ✅ Backend returns: { access_token, token_type, role }
-/// 
+///
 /// ============================================================================
 /// BACKEND API CONTRACTS (CORRECTED)
 /// ============================================================================

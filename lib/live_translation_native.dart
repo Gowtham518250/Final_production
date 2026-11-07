@@ -194,8 +194,7 @@ Future<List<String>> translateTexts(
     }
 
     if (translator != null) {
-      final chunkSize =
-          DeviceCapabilityService.instance.isLowEndDevice ? 2 : 4;
+      final chunkSize = DeviceCapabilityService.instance.isLowEndDevice ? 2 : 4;
       for (var offset = 0; offset < localIndexes.length; offset += chunkSize) {
         final chunkIndexes = localIndexes
             .skip(offset)
@@ -231,8 +230,9 @@ Future<List<String>> translateTexts(
 
   if (remoteIndexes.isNotEmpty) {
     final uniqueRemoteIndexes = remoteIndexes.toSet().toList(growable: false);
-    final remoteTexts =
-        uniqueRemoteIndexes.map((index) => texts[index]).toList();
+    final remoteTexts = uniqueRemoteIndexes
+        .map((index) => texts[index])
+        .toList();
     final translated = await translateTextBatchRemotely(
       remoteTexts,
       targetLanguageCode,

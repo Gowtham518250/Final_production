@@ -138,7 +138,7 @@ class _TrackingAwareFormState extends State<TrackingAwareForm> {
     try {
       // Get form data if available
       final formData = widget.getFormData?.call();
-      
+
       // Call submit handler if provided
       bool success = true;
       if (widget.onSubmit != null) {
@@ -167,9 +167,7 @@ class _TrackingAwareFormState extends State<TrackingAwareForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Form(
-      child: widget.child,
-    );
+    return Form(child: widget.child);
   }
 }
 
@@ -212,17 +210,15 @@ class WidgetTracker {
     return Builder(
       builder: (context) {
         // Store screen name in widget tree for descendant widgets
-        return InheritedScreenName(
-          screenName: screenName,
-          child: child,
-        );
+        return InheritedScreenName(screenName: screenName, child: child);
       },
     );
   }
 
   /// Get current screen name from context
   static String? getScreenName(BuildContext context) {
-    final inherited = context.dependOnInheritedWidgetOfExactType<InheritedScreenName>();
+    final inherited = context
+        .dependOnInheritedWidgetOfExactType<InheritedScreenName>();
     return inherited?.screenName;
   }
 }

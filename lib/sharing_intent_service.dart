@@ -8,18 +8,29 @@ class SharingIntentService {
 
   static void init() {
     // For sharing images coming from outside the app while the app is in the memory
-    _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
-      if (value.isNotEmpty && (value.first.type == SharedMediaType.text || value.first.type == SharedMediaType.url)) {
-        final text = value.first.path;
-        _saveToBackend(text);
-      }
-    }, onError: (err) {
-      debugPrint("getMediaStream error: $err");
-    });
+    _intentDataStreamSubscription = ReceiveSharingIntent.instance
+        .getMediaStream()
+        .listen(
+          (List<SharedMediaFile> value) {
+            if (value.isNotEmpty &&
+                (value.first.type == SharedMediaType.text ||
+                    value.first.type == SharedMediaType.url)) {
+              final text = value.first.path;
+              _saveToBackend(text);
+            }
+          },
+          onError: (err) {
+            debugPrint("getMediaStream error: $err");
+          },
+        );
 
     // For sharing images coming from outside the app while the app is closed
-    ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
-      if (value.isNotEmpty && (value.first.type == SharedMediaType.text || value.first.type == SharedMediaType.url)) {
+    ReceiveSharingIntent.instance.getInitialMedia().then((
+      List<SharedMediaFile> value,
+    ) {
+      if (value.isNotEmpty &&
+          (value.first.type == SharedMediaType.text ||
+              value.first.type == SharedMediaType.url)) {
         final text = value.first.path;
         // Small delay to let the UI mount and ApiClient initialize
         Future.delayed(const Duration(seconds: 2), () {
@@ -28,14 +39,14 @@ class SharingIntentService {
       }
     });
   }
-  
+
   static Future<void> _saveToBackend(String text) async {
     try {
       debugPrint("Parsing WhatsApp Order...");
-      final response = await ApiClient.postJson(
-        ApiClient.whatsappOrders,
-        {'raw_text': text, 'total_amount': 0.0},
-      );
+      final response = await ApiClient.postJson(ApiClient.whatsappOrders, {
+        'raw_text': text,
+        'total_amount': 0.0,
+      });
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint("Order added to Pending Queue!");
       } else {

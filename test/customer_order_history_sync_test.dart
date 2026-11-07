@@ -38,43 +38,51 @@ void main() {
     });
   });
 
-  test('remote order refresh updates a local mirror without duplicating it', () async {
-    final merged = await OrderHistoryService.mergeRemoteOrders([
-      {
-        'order_id': 900,
-        'shop_name': 'Corner Shop',
-        'status': 'ACCEPTED',
-        'total_amount': 275.0,
-        'created_at': '2026-10-15T14:00:00Z',
-        'items': [
-          {'product_id': 5, 'quantity': 1},
-        ],
-      },
-      {
-        'order_id': 901,
-        'shop_name': 'Market Shop',
-        'status': 'PENDING',
-        'total_amount': 85.0,
-        'created_at': '2026-10-16T08:00:00Z',
-        'items': <dynamic>[],
-      },
-    ]);
+  test(
+    'remote order refresh updates a local mirror without duplicating it',
+    () async {
+      final merged = await OrderHistoryService.mergeRemoteOrders([
+        {
+          'order_id': 900,
+          'shop_name': 'Corner Shop',
+          'status': 'ACCEPTED',
+          'total_amount': 275.0,
+          'created_at': '2026-10-15T14:00:00Z',
+          'items': [
+            {'product_id': 5, 'quantity': 1},
+          ],
+        },
+        {
+          'order_id': 901,
+          'shop_name': 'Market Shop',
+          'status': 'PENDING',
+          'total_amount': 85.0,
+          'created_at': '2026-10-16T08:00:00Z',
+          'items': <dynamic>[],
+        },
+      ]);
 
-    expect(merged, hasLength(3));
-    final refreshed = merged.singleWhere((order) => order['order_id'] == '900');
-    expect(refreshed['status'], 'ACCEPTED');
-    expect(refreshed['total_amount'], 275.0);
-    expect(refreshed['shop_name'], 'Corner Shop');
-    expect(refreshed['local_order_id'], 'LOCAL_ORDER_1');
+      expect(merged, hasLength(3));
+      final refreshed = merged.singleWhere(
+        (order) => order['order_id'] == '900',
+      );
+      expect(refreshed['status'], 'ACCEPTED');
+      expect(refreshed['total_amount'], 275.0);
+      expect(refreshed['shop_name'], 'Corner Shop');
+      expect(refreshed['local_order_id'], 'LOCAL_ORDER_1');
 
-    final newRemote = merged.singleWhere((order) => order['order_id'] == '901');
-    expect(newRemote['sync_status'], 'synced');
+      final newRemote = merged.singleWhere(
+        (order) => order['order_id'] == '901',
+      );
+      expect(newRemote['sync_status'], 'synced');
 
-    final pendingLocal =
-        merged.singleWhere((order) => order['order_id'] == 'LOCAL_ORDER_2');
-    expect(pendingLocal['status'], 'PENDING_SYNC');
-    expect(pendingLocal['sync_status'], 'pending');
-  });
+      final pendingLocal = merged.singleWhere(
+        (order) => order['order_id'] == 'LOCAL_ORDER_2',
+      );
+      expect(pendingLocal['status'], 'PENDING_SYNC');
+      expect(pendingLocal['sync_status'], 'pending');
+    },
+  );
 
   test('server pending statuses are available to the order filter UI', () {
     expect(OrderHistoryService.orderStatuses, contains('PENDING'));

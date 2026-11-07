@@ -188,24 +188,30 @@ class PaymentUiState {
   String get displayText {
     if (isFailed) return '❌ Failed — ₹${_fmt(amount)} · $timeAgo';
     if (direction == PaymentTransactionDirection.outgoingDebit) {
-      return '↗ ₹${_fmt(amount)} debited · $timeAgo';
+      final possibleRepeat = isPossibleRepeat ? ' · possible repeat' : '';
+      return '↗ ₹${_fmt(amount)} debited$possibleRepeat · $timeAgo';
     }
     if (isPartial) {
       return '⚠️ Partial ₹${_fmt(amount)} '
           '(₹${_fmt(shortfall ?? 0)} short) · $timeAgo';
     }
     final from = payerName != null ? ' from $payerName' : '';
+    final possibleRepeat = isPossibleRepeat ? ' · possible repeat' : '';
     switch (decision) {
       case PaymentDecision.confirmed:
         if (!isUserConfirmed) {
-          return 'ℹ️ ₹${_fmt(amount)}$from detected automatically · $timeAgo';
+          return 'ℹ️ ₹${_fmt(amount)}$from detected automatically'
+              '$possibleRepeat · $timeAgo';
         }
-        return '✅ ₹${_fmt(amount)}$from received ✓ · $timeAgo';
+        return '✅ ₹${_fmt(amount)}$from received ✓'
+            '$possibleRepeat · $timeAgo';
       case PaymentDecision.likely:
         if (isUserConfirmed)
-          return '✅ ₹${_fmt(amount)}$from confirmed · $timeAgo';
+          return '✅ ₹${_fmt(amount)}$from confirmed'
+              '$possibleRepeat · $timeAgo';
         if (isUserRejected) return '❌ ₹${_fmt(amount)} rejected · $timeAgo';
-        return '⚠️ ₹${_fmt(amount)}$from — please confirm · $timeAgo';
+        return '⚠️ ₹${_fmt(amount)}$from — please confirm'
+            '$possibleRepeat · $timeAgo';
       case PaymentDecision.rejected:
         return '';
     }
@@ -906,8 +912,10 @@ class PdsConfig {
 
   // Voice
   static const Duration voiceMinGap = Duration(seconds: 2);
+
   /// In-app speech hold so SMS/UTR can join before the phone announces.
-  static Duration soundboxHoldWindow = const Duration(milliseconds: 1500);
+  /// Increased from 1.5s to 4s to allow bank SMS to arrive after UPI app notification
+  static Duration soundboxHoldWindow = const Duration(seconds: 4);
   static const int voiceBurstCount = 3;
   static const Duration voiceBurstWindow = Duration(seconds: 5);
   // FIX-3: language removed from PdsConfig — now on PaymentDetectionService
@@ -1925,6 +1933,23 @@ class _VI implements Comparable<_VI> {
   }
 }
 
+class _WeakVoiceClaim {
+  final String eventId;
+  final String origin;
+  final String? account;
+  final String? payer;
+  final String? reference;
+  final DateTime at;
+  const _WeakVoiceClaim({
+    required this.eventId,
+    required this.origin,
+    this.account,
+    this.payer,
+    this.reference,
+    required this.at,
+  });
+}
+
 class _RecentVoicePayment {
   final PaymentEvent event;
   final DateTime recordedAt;
@@ -1986,6 +2011,7 @@ class PriorityVoiceQueue {
     _spokenFps.clear();
     _recentPayments.clear();
     _echoClaims.clear();
+    _weakClaims.clear();
   }
 
   // Spoken fingerprints with expiry — blocks any repeat within 5 minutes.
@@ -1998,6 +2024,116 @@ class PriorityVoiceQueue {
   // This prevents one payment alert from swallowing a second real payment.
   final Map<String, Set<String>> _echoClaims = {};
 
+  /// Weak voice-dedup claims for payments WITHOUT a transaction reference.
+  /// A UPI app notification and the matching bank SMS share no UTR at voice
+  /// time, so fingerprint dedup alone cannot pair them. Claims are keyed by
+  /// amount+direction and expire quickly; each claim keeps the account/payer
+  /// it was spoken with so two genuinely different payments to different
+  /// accounts are NOT swallowed.
+  static const Duration _weakClaimWindow = Duration(minutes: 8);
+  final Map<String, List<_WeakVoiceClaim>> _weakClaims = {};
+
+  static String? _normVoiceField(String? value) {
+    final t = value?.trim().toLowerCase();
+    return (t == null || t.isEmpty) ? null : t;
+  }
+
+  static String _weakVoiceKey(PaymentEvent e) {
+    final dir = PaymentDetectionService._eventPaymentDirection(e);
+    final dirStr = dir == PaymentDirection.credited
+        ? 'c'
+        : dir == PaymentDirection.debited
+        ? 'd'
+        : 'u';
+    return 'weak_${(e.amount * 100).round()}_$dirStr';
+  }
+
+  /// True when a recently spoken/queued payment matches this event on
+  /// amount+direction+time with no conflicting account or payer. Applies to
+  /// referenced events too: a bank SMS carrying a UTR is the most common
+  /// echo of a UTR-less app notification, and its unique UTR fingerprint
+  /// would otherwise bypass every dedup layer.
+  bool _isWeakDuplicate(PaymentEvent e) {
+    final key = _weakVoiceKey(e);
+    final claims = _weakClaims[key];
+    if (claims == null || claims.isEmpty) return false;
+    final now = DateTime.now();
+    claims.removeWhere((c) => now.difference(c.at) > _weakClaimWindow);
+    if (claims.isEmpty) {
+      _weakClaims.remove(key);
+      return false;
+    }
+    final account = _normVoiceField(e.accountSuffix);
+    final payer = _normalizedVoicePayer(e.payerName);
+    final reference = e.normalizedReferenceId;
+    final origin = PaymentDetectionService._eventOrigin(e.detectionSource);
+    for (final claim in claims) {
+      // Same event retrying after a failed TTS is governed by the fingerprint
+      // release path, not by weak dedup.
+      if (claim.eventId == e.id) continue;
+      // Same-channel repeats are handled by the same-channel echo window and
+      // source-identity fingerprints. Weak claims exist ONLY to pair echoes
+      // across channels (app notification vs bank SMS vs Truecaller), where
+      // no shared reference exists. Two same-amount payments from the same
+      // channel are far more likely to be genuinely different transactions.
+      if (claim.origin == origin) continue;
+      final claimAccount = claim.account;
+      final claimPayer = claim.payer;
+      final claimReference = claim.reference;
+      // Two DIFFERENT known references are definitively different payments.
+      if (reference != null &&
+          claimReference != null &&
+          reference != claimReference) {
+        continue;
+      }
+      // Conflicting account or payer => these are two different payments.
+      if (account != null &&
+          claimAccount != null &&
+          account != claimAccount) {
+        continue;
+      }
+      if (payer != null &&
+          claimPayer != null &&
+          payer != claimPayer &&
+          !payer.contains(claimPayer) &&
+          !claimPayer.contains(payer)) {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  void _claimWeak(PaymentEvent e) {
+    final key = _weakVoiceKey(e);
+    (_weakClaims[key] ??= <_WeakVoiceClaim>[]).add(
+      _WeakVoiceClaim(
+        eventId: e.id,
+        origin: PaymentDetectionService._eventOrigin(e.detectionSource),
+        account: _normVoiceField(e.accountSuffix),
+        payer: _normalizedVoicePayer(e.payerName),
+        reference: e.normalizedReferenceId,
+        at: DateTime.now(),
+      ),
+    );
+  }
+
+  void _releaseWeak(PaymentEvent? e, {required bool keepForFallback}) {
+    if (e == null || keepForFallback) return;
+    final key = _weakVoiceKey(e);
+    final claims = _weakClaims[key];
+    if (claims == null) return;
+    // Prefer removing this event's own claim; fall back to the newest claim
+    // since echoes of the same payment share amount+direction.
+    final ownIndex = claims.lastIndexWhere((c) => c.eventId == e.id);
+    if (ownIndex >= 0) {
+      claims.removeAt(ownIndex);
+    } else if (claims.isNotEmpty) {
+      claims.removeLast();
+    }
+    if (claims.isEmpty) _weakClaims.remove(key);
+  }
+
   static String? _normalizedVoicePayer(String? value) {
     final normalized = value
         ?.toLowerCase()
@@ -2006,10 +2142,8 @@ class PriorityVoiceQueue {
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
-  /// Suppresses repeat announcements only when transaction identity is
-  /// credible: same event/reference, an exact immediate same-channel replay,
-  /// or a cross-channel event with a matching account suffix or known payer.
-  /// Amount alone is never enough to merge two otherwise unrelated payments.
+  /// Suppresses only a shared transaction reference or native notification.
+  /// Other similarities are surfaced as possible repeats, never suppressed.
   bool _isRecentCrossSourceEcho(PaymentEvent event) {
     if (event.isMerchantConfirmed || event.hasReferenceConflict) return false;
     final currentDirection = PaymentDetectionService._eventPaymentDirection(
@@ -2026,7 +2160,7 @@ class PriorityVoiceQueue {
     _echoClaims.removeWhere((id, _) => !liveVoiceEventIds.contains(id));
     final currentReference = event.normalizedReferenceId;
     final currentChannel = PaymentDetectionService._channelKey(event);
-    final echoCandidates = <PaymentEvent>[];
+    var possibleMatch = false;
 
     for (final previous in _recentPayments) {
       final old = previous.event;
@@ -2069,6 +2203,7 @@ class PriorityVoiceQueue {
           (event.amount - old.amount).abs() < 0.01 &&
           currentDirection ==
               PaymentDetectionService._eventPaymentDirection(old);
+      if (sameNativePost && sameAmountAndDirection) return true;
       final notificationAt = event.sourceTimestamp ?? event.timestamp;
       final previousNotificationAt = old.sourceTimestamp ?? old.timestamp;
       final currentNotificationPayer = event.notificationPayerIdentity;
@@ -2099,11 +2234,7 @@ class PriorityVoiceQueue {
           !notificationAccountConflict &&
           !notificationPayerConflict &&
           (sameNotificationAccount || sameNotificationPayer)) {
-        PdsLogger.d(
-          'VOICE',
-          'Reposted notification update announcement suppressed',
-        );
-        return true;
+        possibleMatch = true;
       }
       final currentPayer = _normalizedVoicePayer(event.payerName);
       final priorPayer = _normalizedVoicePayer(old.payerName);
@@ -2129,16 +2260,13 @@ class PriorityVoiceQueue {
           // Different native posts remain separate, even if payer and amount match.
           continue;
         }
-        if (sameNativePost && sameAmountAndDirection) {
-          // Same Android notification identity with a changed payload hash.
-          return true;
-        }
-
         final noNativeIdentityOnEitherSide =
             currentSourceFingerprint == null && oldSourceFingerprint == null;
+        // FIX: Tighten same-channel echo window from 3s to 30s to prevent duplicate announcements
+        // Same-channel replays (e.g., PhonePe notifying twice) should be merged
         final identicalImmediateReplay =
             noNativeIdentityOnEitherSide &&
-            age <= const Duration(seconds: 3) &&
+            age <= const Duration(seconds: 30) &&
             sameAmountAndDirection &&
             PaymentDetectionService._echoText(event.rawText).isNotEmpty &&
             PaymentDetectionService._echoText(event.rawText) ==
@@ -2153,12 +2281,7 @@ class PriorityVoiceQueue {
                 'truecaller_notification' &&
             (sameAccount || sameKnownPayer);
         if (identicalImmediateReplay || sameTruecallerPaymentClues) {
-          PdsLogger.d(
-            'VOICE',
-            identicalImmediateReplay
-                ? 'Immediate exact same-channel replay suppressed'
-                : 'Truecaller repeat without native identity suppressed',
-          );
+          // FIX: Return true to suppress same-channel duplicates immediately
           return true;
         }
         continue;
@@ -2187,36 +2310,11 @@ class PriorityVoiceQueue {
           );
       if (!sameAccount && !sameKnownPayer && !weakModalityPair) continue;
 
-      // More than one plausible same-value event is ambiguous; preserve the
-      // current announcement rather than suppress a possibly distinct payment.
-      echoCandidates.add(old);
+      possibleMatch = true;
     }
 
-    PaymentEvent? echoOf;
-    if (echoCandidates.length == 1) {
-      echoOf = echoCandidates.single;
-    } else if (echoCandidates.length > 1) {
-      final byAge = [...echoCandidates]
-        ..sort(
-          (a, b) => event.timestamp
-              .difference(a.timestamp)
-              .abs()
-              .compareTo(event.timestamp.difference(b.timestamp).abs()),
-        );
-      final nearest = event.timestamp.difference(byAge[0].timestamp).abs();
-      final next = event.timestamp.difference(byAge[1].timestamp).abs();
-      if (nearest <= _echoNearWindow && next > _echoFarWindow) {
-        echoOf = byAge[0];
-      }
-    }
-
-    if (echoOf != null) {
-      (_echoClaims[echoOf.id] ??= <String>{}).add(currentChannel);
-      PdsLogger.d('VOICE', 'Unique cross-channel echo suppressed');
-      return true;
-    }
-    if (echoCandidates.length > 1) {
-      PdsLogger.d('VOICE', 'Ambiguous cross-channel match kept as separate');
+    if (possibleMatch) {
+      PaymentDetectionService()._markPossibleRepeat(event.id);
     }
     return false;
   }
@@ -2301,6 +2399,10 @@ class PriorityVoiceQueue {
           alertedByFallback: fallback != null,
         );
       }
+      // Weak claims follow the same rule as fingerprints: when the audible
+      // fallback already told the owner, keep the claim so SMS/notification
+      // echoes of THIS payment cannot speak a second time.
+      _releaseWeak(item.event, keepForFallback: fallback != null);
     }
 
     if (fallback == null) return;
@@ -2361,8 +2463,13 @@ class PriorityVoiceQueue {
       return;
     }
 
+    final crossSourceEcho = _isRecentCrossSourceEcho(e);
+    final isPossibleRepeat =
+        ui.isPossibleRepeat ||
+        PaymentDetectionService()._possibleRepeatEventIds.contains(e.id);
+
     // Keep possible repeats available for review without speaking them twice.
-    if (ui.isPossibleRepeat &&
+    if (isPossibleRepeat &&
         !PdsConfig.speakPossibleRepeatAlert &&
         !(ui.decision == PaymentDecision.confirmed && ui.isUserConfirmed)) {
       PdsLogger.d(
@@ -2386,23 +2493,27 @@ class PriorityVoiceQueue {
               ? 'voice_${sourceIdentity}'
               : 'voice_event_${e.id}');
     final fingerprint = baseFingerprint;
+    // Weak-claim dedup for UTR-less payments: catches app-notification →
+    // bank-SMS echoes even when neither side shares a reference, account or
+    // payer. Conflicting account/payer still allows the second payment.
+    final weakDuplicate = _isWeakDuplicate(e);
+    final repeatedFingerprint = _isAlreadySpoken(fingerprint);
     final postedAt = e.sourceTimestamp;
     if (postedAt != null &&
         DateTime.now().difference(postedAt) > _spokenMemory) {
       PdsLogger.t('DROP', 'reason=voice_stale_notification');
       return;
     }
-    final repeatedFingerprint = _isAlreadySpoken(fingerprint);
-    final crossSourceEcho = _isRecentCrossSourceEcho(e);
-    if (repeatedFingerprint || crossSourceEcho) {
+    if (repeatedFingerprint || crossSourceEcho || weakDuplicate) {
       PdsLogger.d(
         'VOICE',
         'DUPLICATE ANNOUNCEMENT BLOCKED: fp=$fingerprint '
-            'crossSource=$crossSourceEcho',
+            'crossSource=$crossSourceEcho weak=$weakDuplicate',
       );
       PdsLogger.t(
         'DROP',
-        'reason=voice_echo repeatedFp=$repeatedFingerprint crossSource=$crossSourceEcho',
+        'reason=voice_echo repeatedFp=$repeatedFingerprint '
+            'crossSource=$crossSourceEcho weak=$weakDuplicate',
       );
       // Do not let a suppressed echo become a new anchor that could suppress
       // another later transaction with the same amount.
@@ -2421,6 +2532,7 @@ class PriorityVoiceQueue {
     }
 
     _claimSpoken(fingerprint);
+    _claimWeak(e);
     _rememberPayment(e);
     // Payment events are operationally important, including low-value and
     // unverified candidates. Keep them ahead of routine voice prompts; the
@@ -3186,8 +3298,7 @@ class PaymentDetectionService {
   final Set<String> _nativeNotificationHistoryPending = <String>{};
   final Map<String, Completer<bool>> _nativeNotificationHistoryWaiters =
       <String, Completer<bool>>{};
-  final Map<String, String> _nativeHistorySourceIdentities =
-      <String, String>{};
+  final Map<String, String> _nativeHistorySourceIdentities = <String, String>{};
   final Map<String, String> _nativeHistoryEventIds = <String, String>{};
   final Map<String, String> _nativeHistoryDedupFingerprints =
       <String, String>{};
@@ -3390,9 +3501,7 @@ class PaymentDetectionService {
       );
     }
 
-    final isFailed =
-        _Re.failure.hasMatch(cleanText) &&
-        !_Classifier.hasPaymentContext(cleanText);
+    final isFailed = _Classifier.isFailedPaymentText(cleanText);
 
     // Apply strict UTR validation check
     final _numericUtrRe = RegExp(r'^[A-Za-z0-9]{4,22}$');
@@ -4580,9 +4689,7 @@ class PaymentDetectionService {
   /// Android can surface the same event through a live relay and stream replay
   /// while its first asynchronous history write is still running.
   Future<void> _processNotificationOnce(ServiceNotificationEvent event) async {
-    final key = _safe(
-      () => (event as dynamic).eventKey as String?,
-    )?.trim();
+    final key = _safe(() => (event as dynamic).eventKey as String?)?.trim();
     if (key == null || key.isEmpty) {
       await _processNotificationWithRetry(event);
       return;
@@ -4612,7 +4719,10 @@ class PaymentDetectionService {
     if (key == null || key.isEmpty) {
       final handled = await _handleNotification(event);
       if (!handled) {
-        PdsLogger.w('L1', 'Notification without a durable key could not be routed');
+        PdsLogger.w(
+          'L1',
+          'Notification without a durable key could not be routed',
+        );
       }
       return;
     }
@@ -4654,8 +4764,7 @@ class PaymentDetectionService {
           'L1',
           'Payment history is not durable yet; native event remains queued',
         );
-        final replayAttempt =
-            (_nativeHistoryReplayAttempts[key] ?? 0) + 1;
+        final replayAttempt = (_nativeHistoryReplayAttempts[key] ?? 0) + 1;
         _nativeHistoryReplayAttempts[key] = replayAttempt;
         if (replayAttempt <= 2) {
           // Reattach to the plugin stream. Its onListen callback replays
@@ -4687,7 +4796,12 @@ class PaymentDetectionService {
         );
       }
     } catch (error, stackTrace) {
-      PdsLogger.e('L1', 'Could not acknowledge routed notification', error, stackTrace);
+      PdsLogger.e(
+        'L1',
+        'Could not acknowledge routed notification',
+        error,
+        stackTrace,
+      );
     }
   }
 
@@ -4710,10 +4824,8 @@ class PaymentDetectionService {
       // A persisted payment record is the source of truth. Only now commit the
       // native transport replay key, so a failed history write cannot leave a
       // durable dedup marker that blocks recovery after process restart.
-      final transportFingerprint =
-          _nativeHistoryTransportFingerprints[key];
-      if (transportFingerprint != null &&
-          transportFingerprint.isNotEmpty) {
+      final transportFingerprint = _nativeHistoryTransportFingerprints[key];
+      if (transportFingerprint != null && transportFingerprint.isNotEmpty) {
         _dedupStore[transportFingerprint] = DateTime.now().add(
           PdsConfig.dedupNativeNotificationTtl,
         );
@@ -4772,8 +4884,7 @@ class PaymentDetectionService {
         _dedupStore.remove(dedupFingerprint);
         _activeFingerprints.remove(dedupFingerprint);
       }
-      if (transportFingerprint != null &&
-          transportFingerprint.isNotEmpty) {
+      if (transportFingerprint != null && transportFingerprint.isNotEmpty) {
         _dedupStore.remove(transportFingerprint);
         _dedupDirty = true;
         await PdsStateStore.saveDedup(_dedupStore);
@@ -4834,8 +4945,8 @@ class PaymentDetectionService {
     String sourceIdentity;
     if (key != null && key.isNotEmpty) {
       final parts = key.split('|');
-      final hasStableNativeSlot = parts.length >= 4 &&
-          int.tryParse(parts[parts.length - 2]) != null;
+      final hasStableNativeSlot =
+          parts.length >= 4 && int.tryParse(parts[parts.length - 2]) != null;
       sourceIdentity = hasStableNativeSlot
           ? parts.take(parts.length - 1).join('|')
           : key;
@@ -4857,7 +4968,10 @@ class PaymentDetectionService {
   }) => _notificationPayloadFingerprint(
     packageName: packageName,
     sender: sender,
-    normalizedPayload: payload.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim(),
+    normalizedPayload: payload
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim(),
     eventKey: eventKey,
   );
 
@@ -4874,9 +4988,7 @@ class PaymentDetectionService {
   }
 
   Future<bool> _handleNotification(ServiceNotificationEvent event) async {
-    final key = _safe(
-      () => (event as dynamic).eventKey as String?,
-    )?.trim();
+    final key = _safe(() => (event as dynamic).eventKey as String?)?.trim();
     final emissions = <Future<void>>[];
     if (key != null && key.isNotEmpty) {
       _notificationEmissionFutures[key] = emissions;
@@ -5360,8 +5472,7 @@ class PaymentDetectionService {
       return;
     }
 
-    final bool isFailed =
-        _Re.failure.hasMatch(text) && !_Classifier.hasPaymentContext(text);
+    final bool isFailed = _Classifier.isFailedPaymentText(text);
     final String? refId = _Extractor.referenceId(text);
     final String? name = _Extractor.payerName(text);
     final String? vpa = _Extractor.vpa(text);
@@ -5945,12 +6056,13 @@ class PaymentDetectionService {
         PdsLogger.t('EMIT', 'source=$source decision=${event.decision.name}');
         _pendingBuffer.add(event, voiceSpoken: false);
         unawaited(
-          _emitTrackedFromNotification(
-            event,
-            isBillSettlement: isBillSettled,
-          ),
+          _emitTrackedFromNotification(event, isBillSettlement: isBillSettled),
         );
-        _pendingBuffer.markVoiceSpoken(event.id);
+        // FIX: Delay voiceSpoken marking until after TTS actually completes
+        // This prevents the buffer from dropping a late-arriving SMS before the first alert has spoken
+        Future.delayed(const Duration(seconds: 2), () {
+          _pendingBuffer.markVoiceSpoken(event.id);
+        });
         return;
       }
 
@@ -6069,10 +6181,8 @@ class PaymentDetectionService {
   ///  * Same channel: only an immediate identical re-post (a few seconds) is a
   ///    duplicate. A second PhonePe notification for the same amount a bit
   ///    later is a NEW payment (the same customer can pay Rs 5 twice).
-  ///  * Different channel: it is an echo only if it can be paired one-to-one
-  ///    with an earlier event that has not yet been echoed by that channel.
-  ///    Two Rs 5 payments therefore need two SMS to be fully paired; an SMS
-  ///    arriving 20+ minutes after the notification still pairs with it.
+  ///  * Different channel: merge only when payer/account evidence gives one
+  ///    clear match. Amount/modality-only candidates remain separate.
   bool _isRecentCrossSourceDuplicate(PaymentEvent event) {
     // Never discard confirmations, failures, conflicts, or pre-classified duplicates.
     if (event.isMerchantConfirmed ||
@@ -6092,7 +6202,7 @@ class PaymentDetectionService {
     final currentReference = event.normalizedReferenceId;
     final currentText = _echoText(event.rawText);
     final currentIsSms = _eventOrigin(event.detectionSource).contains('sms');
-    final echoCandidates = <PaymentEvent>[];
+    final strongCandidates = <PaymentEvent>[];
 
     for (final old in _recentEmittedPayments) {
       if (old.isMerchantConfirmed ||
@@ -6114,17 +6224,20 @@ class PaymentDetectionService {
         return true;
       }
       // Exactly one side has a reference: it cannot prove identity, but it
-      // does not disprove it either. Fall through to the strict cross-channel
-      // checks below (payer/account, or the short weak-pair window).
+      // does not disprove a strong payer/account match either.
 
       // Weak pairing is based on when the two source signals occurred,
       // not on the wall clock when the detector happens to process them.
       final age = event.timestamp.difference(old.timestamp).abs();
+      final currentSourceFingerprint = event.sourceEventFingerprint;
+      final oldSourceFingerprint = old.sourceEventFingerprint;
+      if (currentSourceFingerprint != null &&
+          currentSourceFingerprint == oldSourceFingerprint) {
+        return true;
+      }
       final oldChannel = _channelKey(old);
 
       if (oldChannel == channel) {
-        final currentSourceFingerprint = event.sourceEventFingerprint;
-        final oldSourceFingerprint = old.sourceEventFingerprint;
         if (currentSourceFingerprint != null || oldSourceFingerprint != null) {
           // Different native notification posts are different payment candidates.
           if (currentSourceFingerprint == null ||
@@ -6136,13 +6249,11 @@ class PaymentDetectionService {
           return true;
         }
 
-        // Without a native ID, only an immediate exact-text replay is safe
-        // to coalesce. Fuzzy amount/payer matching could hide a second payment.
+        // Similar text is a clue, not proof: leave the payment visible.
         if (age <= const Duration(seconds: 3) &&
             currentText.isNotEmpty &&
             currentText == _echoText(old.rawText)) {
-          PdsLogger.t('DROP', 'reason=same_channel_repost_without_native_id');
-          return true;
+          _markPossibleRepeat(event.id);
         }
         continue;
       }
@@ -6184,28 +6295,28 @@ class PaymentDetectionService {
       );
       final weakModalityPair =
           weakWindow > Duration.zero && age <= weakWindow && modalityPair;
-      if (!sameAccount && !sameKnownPayer && !weakModalityPair) {
-        if (modalityPair &&
-            weakWindow == Duration.zero &&
-            age <= PaymentIdentityMatcher.weakModalityWindow) {
-          _possibleRepeatEventIds.add(event.id);
-          if (_possibleRepeatEventIds.length > 200) {
-            _possibleRepeatEventIds.remove(_possibleRepeatEventIds.first);
-          }
+      if (!sameAccount && !sameKnownPayer) {
+        if (weakModalityPair ||
+            (modalityPair &&
+                weakWindow == Duration.zero &&
+                age <= PaymentIdentityMatcher.weakModalityWindow)) {
+          _markPossibleRepeat(event.id);
         }
         continue;
       }
 
-      // If several earlier payments could explain this signal, the match is
-      // ambiguous. Keep the event instead of hiding a potentially real payment.
-      echoCandidates.add(old);
+      strongCandidates.add(old);
+    }
+
+    if (strongCandidates.isNotEmpty) {
+      _markPossibleRepeat(event.id);
     }
 
     PaymentEvent? echoOf;
-    if (echoCandidates.length == 1) {
-      echoOf = echoCandidates.single;
-    } else if (echoCandidates.length > 1) {
-      final byAge = [...echoCandidates]
+    if (strongCandidates.length == 1) {
+      echoOf = strongCandidates.single;
+    } else if (strongCandidates.length > 1) {
+      final byAge = [...strongCandidates]
         ..sort(
           (a, b) => event.timestamp
               .difference(a.timestamp)
@@ -6224,16 +6335,18 @@ class PaymentDetectionService {
       (_echoClaims[echoOf.id] ??= <String>{}).add(channel);
       final merged = _applyEchoEnrichment(echoOf, event);
       _soundbox.noteEcho(merged, event);
-      PdsLogger.t('DROP', 'reason=unique_echo_paired');
+      PdsLogger.t('DROP', 'reason=unique_strong_echo_merged');
       return true;
     }
-    if (echoCandidates.length > 1) {
-      PdsLogger.t(
-        'KEEP',
-        'reason=ambiguous_cross_source_match; preserving distinct payment candidate',
-      );
-    }
     return false;
+  }
+
+  void _markPossibleRepeat(String eventId) {
+    if (eventId.isEmpty) return;
+    _possibleRepeatEventIds.add(eventId);
+    while (_possibleRepeatEventIds.length > 200) {
+      _possibleRepeatEventIds.remove(_possibleRepeatEventIds.first);
+    }
   }
 
   static String _channelKey(PaymentEvent e) =>
@@ -6267,7 +6380,9 @@ class PaymentDetectionService {
 
   PaymentEvent _applyEchoEnrichment(PaymentEvent primary, PaymentEvent echo) {
     final merged = SoundboxAnnouncementCoordinator.enrich(primary, echo);
-    final index = _recentEmittedPayments.indexWhere((old) => old.id == primary.id);
+    final index = _recentEmittedPayments.indexWhere(
+      (old) => old.id == primary.id,
+    );
     if (index >= 0) {
       _recentEmittedPayments[index] = merged;
     }
@@ -6287,9 +6402,7 @@ class PaymentDetectionService {
     final normalized = digits.startsWith('91') && digits.length == 12
         ? digits.substring(2)
         : digits;
-    return RegExp(r'^[6-9]\d{9}$').hasMatch(normalized)
-        ? normalized
-        : null;
+    return RegExp(r'^[6-9]\d{9}$').hasMatch(normalized) ? normalized : null;
   }
 
   Map<String, dynamic> _paymentDetectionEvidencePayload(PaymentEvent event) {
@@ -6308,8 +6421,7 @@ class PaymentDetectionService {
         'payer_name': event.payerName!.trim(),
       if (_paymentDetectionPhone(event.rawText) != null)
         'payer_phone': _paymentDetectionPhone(event.rawText),
-      if (event.vpa?.trim().isNotEmpty == true)
-        'payer_vpa': event.vpa!.trim(),
+      if (event.vpa?.trim().isNotEmpty == true) 'payer_vpa': event.vpa!.trim(),
       if (event.bankName?.trim().isNotEmpty == true)
         'bank_name': event.bankName!.trim(),
       if (event.accountSuffix?.trim().isNotEmpty == true)
@@ -6328,7 +6440,8 @@ class PaymentDetectionService {
       'source_event_hash': sha256
           .convert(utf8.encode(event.sourceEventIdentity ?? event.id))
           .toString(),
-      'detected_at': (event.sourceTimestamp ?? event.timestamp).toIso8601String(),
+      'detected_at': (event.sourceTimestamp ?? event.timestamp)
+          .toIso8601String(),
     };
   }
 
@@ -6337,7 +6450,6 @@ class PaymentDetectionService {
     bool isBillSettlement = false,
     bool forceMute = false,
   }) async {
-    var suppressRepeatedAnnouncement = false;
     event = requireMerchantConfirmation(event);
     // Preserve the native fallback marker as payment events cross isolates.
     // Classification/history still run, but later Flutter speech/alerts are muted.
@@ -6370,36 +6482,53 @@ class PaymentDetectionService {
     if (event.decision == PaymentDecision.rejected) return;
 
     if (_isRecentCrossSourceDuplicate(event)) {
+      _possibleRepeatEventIds.remove(event.id);
       _stats.recordDupe();
       PdsLogger.i(
         'EMIT',
-        'Cross-source echo suppressed: amount=' +
+        'Cross-source signal merged into its existing payment: amount=' +
             event.amount.toString() +
             ', origin=' +
             _eventOrigin(event.detectionSource) +
             ', account=' +
             (event.accountSuffix ?? 'unknown'),
       );
+      if (event.amount.isFinite && event.amount > 0) {
+        unawaited(
+          SyncService.recordPaymentDetectionEvidence(
+            _paymentDetectionEvidencePayload(event),
+          ),
+        );
+      }
       return;
     }
     _rememberEmittedPayment(event);
 
     // The foreground and background service isolates have independent in-memory
-    // replay lists. Consult a small persisted one-to-one cross-source guard
-    // before any UI event or voice/OS announcement is emitted.
+    // replay lists. Use persisted identity to coalesce a repeated signal before
+    // it creates another visible payment row or announcement.
     if (await CrossIsolatePaymentAnnouncementDeduplicator.shouldSuppress(
       event,
       weakPairWindow: billContext.weakPairWindow(event.amount),
+      onPossibleMatch: () => _markPossibleRepeat(event.id),
     )) {
       _recentEmittedPayments.removeWhere((old) => old.id == event.id);
       _echoClaims.remove(event.id);
+      _possibleRepeatEventIds.remove(event.id);
       _stats.recordDupe();
       PdsLogger.i(
         'EMIT',
-        'Cross-isolate duplicate announcement muted; candidate retained: '
+        'Cross-isolate duplicate merged into its existing payment: '
             'amount=${event.amount} origin=${_eventOrigin(event.detectionSource)}',
       );
-      suppressRepeatedAnnouncement = true;
+      if (event.amount.isFinite && event.amount > 0 && !event.isFailed) {
+        unawaited(
+          SyncService.recordPaymentDetectionEvidence(
+            _paymentDetectionEvidencePayload(event),
+          ),
+        );
+      }
+      return;
     }
 
     // Cross-device UTR check happens before UI/voice emission. Serialize
@@ -6465,8 +6594,7 @@ class PaymentDetectionService {
       }
     }
 
-    if (!suppressRepeatedAnnouncement &&
-        billContext.isActive &&
+    if (billContext.isActive &&
         event.decision == PaymentDecision.likely &&
         !event.isMerchantConfirmed &&
         isSafeIncomingCredit(event)) {
@@ -6582,19 +6710,14 @@ class PaymentDetectionService {
     _uiCtrl.add(finalUi);
 
     // Voice Rule: Bill settlement message PREVENTS standard amount voice
-    if (isSettled &&
-        !forceMute &&
-        !suppressRepeatedAnnouncement &&
-        !finalEvent.nativeAnnouncementHandled) {
+    if (isSettled && !forceMute && !finalEvent.nativeAnnouncementHandled) {
       final t = VoiceBuilder.received(finalEvent.amount, null, _voiceLanguage);
       _voice.enqueueRaw(
         'Payment Confirmed. $t',
         _VP.high,
         fingerprint: finalEvent.fingerprint,
       );
-    } else if (!forceMute &&
-        !suppressRepeatedAnnouncement &&
-        !finalEvent.nativeAnnouncementHandled) {
+    } else if (!forceMute && !finalEvent.nativeAnnouncementHandled) {
       final deferred = _soundbox.notePrimary(finalEvent, finalUi);
       if (!deferred) {
         _voice.enqueue(finalEvent, finalUi);
@@ -7362,6 +7485,7 @@ abstract class _Classifier {
   }
 
   static _ClassifyResult classify(String t) {
+    if (isFailedPaymentText(t)) return _ClassifyResult.fraud;
     if (_fraudStrict.hasMatch(t)) return _ClassifyResult.fraud;
     // Incoming language must not override refund/reversal/pending states.
     // These describe money movement or non-final states, not customer payment
@@ -7413,6 +7537,7 @@ abstract class _Classifier {
   /// SMS, confirmation and sale-accounting gates. Explicit debit/conflicting
   /// direction always wins; ambiguous messages remain unclassified.
   static bool isIncomingCreditText(String text) {
+    if (isFailedPaymentText(text)) return false;
     final direction = VoiceBuilder.detectDirection(text);
     if (direction == PaymentDirection.credited) return true;
     if (direction == PaymentDirection.debited || _debit.hasMatch(text)) {
@@ -7421,6 +7546,43 @@ abstract class _Classifier {
     return _incomingCredit.hasMatch(text) ||
         _incomingAccountTransfer.hasMatch(text);
   }
+
+  static bool isFailedPaymentText(String text) =>
+      _failedPaymentStatus.hasMatch(text) ||
+      (_Re.failure.hasMatch(text) &&
+          (_paymentAttempt.hasMatch(text) || hasPaymentContext(text))) ||
+      _incorrectPin.hasMatch(text);
+
+  static final _failedPaymentStatus = RegExp(
+    r'(?:\b(?:insufficient\s+(?:account\s+)?(?:balance|funds?)'
+    r'|(?:account\s+)?balance\s+(?:is\s+)?(?:insufficient|not\s+sufficient|too\s+low)'
+    r'|not\s+enough\s+(?:account\s+)?(?:balance|funds?)'
+    r'|(?:low|insufficient)\s+funds'
+    r'|balance\s+(?:is\s+)?low'
+    r'|(?:payment|transaction|transfer|upi)\s+(?:has\s+)?(?:failed|declined|rejected|reversed|cancelled|canceled|expired|timed\s+out|timeout|unsuccessful)'
+    r'|no\s+(?:money|funds?|amount)\s+(?:has\s+been\s+)?debited'
+    r'|(?:money|funds?|amount)\s+(?:(?:has|was)\s+)?not\s+(?:been\s+)?debited'
+    r'|(?:payment|transaction|transfer|upi)\s+(?:could\s+not|couldn.t|cannot|can.t|unable\s+to)\s+(?:be\s+)?(?:processed|completed|debited|transferred)'
+    r'|(?:unable\s+to|could\s+not|couldn.t|cannot|can.t)\s+(?:process|complete|debit|transfer)\b.{0,60}\b(?:payment|transaction|transfer|upi)\b'
+    r'|(?:payment|transaction|transfer|upi)\b.{0,40}\b(?:did\s+not|didn.t|does\s+not|doesn.t|has\s+not)\s+(?:go\s+through|complete|process|debit)'
+    r'|(?:payment|transaction|transfer|upi)\s+(?:was\s+)?not\s+(?:processed|completed|successful|debited)'
+    r'|(?:payment|transaction|transfer|upi)\s+blocked'
+    r'|(?:transaction|payment)\s+(?:has\s+)?timed\s+out'
+    r')\b'
+    r'|(?:₹|rs\.?|inr)\s*[\d,]+(?:\.\d{1,2})?\s+(?:(?:has|was)\s+)?not\s+(?:been\s+)?debited\b'
+    r'|(?:असफल|विफल)\s*(?:भुगतान|लेनदेन|ट्रांजैक्शन))',
+    caseSensitive: false,
+  );
+  static final _paymentAttempt = RegExp(
+    r'\b(?:payment|transaction|transfer|upi|funds?|txn|debit|credit|withdrawal)\b',
+    caseSensitive: false,
+  );
+  static final _incorrectPin = RegExp(
+    r'\b(?:wrong|incorrect|invalid)\s+(?:upi\s+)?pin\b'
+    r'|\b(?:upi\s+)?pin\b.{0,30}\b(?:wrong|incorrect(?:ly)?|invalid)\b'
+    r'|\b(?:wrong|incorrect|invalid)\s+pin\s+(?:entered|input)\b',
+    caseSensitive: false,
+  );
 
   // FIX-57: Multilanguage credit verbs (10 languages, not 5)
   // NOW includes Bengali, Malayalam, Punjabi for regional shops
@@ -7640,8 +7802,9 @@ abstract class _Extractor {
 
 abstract class _Re {
   static final failure = RegExp(
-    r'\b(failed|failure|declined|rejected|reversed|cancelled|'
-    r'timeout|timed\s+out|unsuccessful|not\s+completed|असफल)\b',
+    r'\b(failed|failure|declined|rejected|reversed|cancelled|canceled|'
+    r'blocked|expired|timeout|timed\s+out|unsuccessful|not\s+completed|'
+    r'not\s+successful|not\s+processed|not\s+debited|असफल|विफल)\b',
     caseSensitive: false,
   );
 }

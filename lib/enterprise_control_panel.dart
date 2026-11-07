@@ -36,17 +36,14 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
   }
 
   TextStyle get _sectionStyle => GoogleFonts.poppins(
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
-        color: _text,
-        letterSpacing: -0.3,
-      );
+    fontSize: 20,
+    fontWeight: FontWeight.w800,
+    color: _text,
+    letterSpacing: -0.3,
+  );
 
-  TextStyle get _bodyStyle => GoogleFonts.poppins(
-        fontSize: 13,
-        color: _muted,
-        height: 1.45,
-      );
+  TextStyle get _bodyStyle =>
+      GoogleFonts.poppins(fontSize: 13, color: _muted, height: 1.45);
 
   @override
   Widget build(BuildContext context) {
@@ -87,8 +84,11 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
                   IconButton(
                     tooltip: 'Back',
                     onPressed: () => Navigator.maybePop(context),
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 21),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 21,
+                    ),
                   ),
                   Expanded(
                     child: Text(
@@ -108,8 +108,11 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
                       color: Colors.white.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.tune_rounded,
-                        color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.tune_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ],
               ),
@@ -131,9 +134,18 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
                 fontWeight: FontWeight.w500,
               ),
               tabs: const [
-                Tab(icon: Icon(Icons.insights_rounded, size: 19), text: 'Analytics'),
-                Tab(icon: Icon(Icons.verified_rounded, size: 19), text: 'Compliance'),
-                Tab(icon: Icon(Icons.notifications_active_rounded, size: 19), text: 'Notifications'),
+                Tab(
+                  icon: Icon(Icons.insights_rounded, size: 19),
+                  text: 'Analytics',
+                ),
+                Tab(
+                  icon: Icon(Icons.verified_rounded, size: 19),
+                  text: 'Compliance',
+                ),
+                Tab(
+                  icon: Icon(Icons.notifications_active_rounded, size: 19),
+                  text: 'Notifications',
+                ),
               ],
             ),
           ],
@@ -261,8 +273,10 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
               prefixIcon: const Icon(Icons.badge_outlined, color: _muted),
               filled: true,
               fillColor: _bg,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 15,
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(13),
                 borderSide: const BorderSide(color: _border),
@@ -328,8 +342,11 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded,
-              color: Color(0xFF16A34A), size: 22),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: Color(0xFF16A34A),
+            size: 22,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -367,9 +384,24 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
   List<Widget> _buildGSTRatesTable() {
     const rates = [
       ('Essentials', 'Food, Medicine', '5%', Icons.medication_outlined),
-      ('Textiles & Fabrics', 'Clothing and fabric', '5%', Icons.checkroom_rounded),
-      ('Electronics', 'Devices & accessories', '12%', Icons.devices_other_rounded),
-      ('General Services', 'Standard services', '18%', Icons.miscellaneous_services_rounded),
+      (
+        'Textiles & Fabrics',
+        'Clothing and fabric',
+        '5%',
+        Icons.checkroom_rounded,
+      ),
+      (
+        'Electronics',
+        'Devices & accessories',
+        '12%',
+        Icons.devices_other_rounded,
+      ),
+      (
+        'General Services',
+        'Standard services',
+        '18%',
+        Icons.miscellaneous_services_rounded,
+      ),
       ('Luxury & Premium', 'Premium category', '28%', Icons.diamond_outlined),
     ];
 
@@ -406,10 +438,10 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
                       color: _text,
                     ),
                   ),
-                  Text(item.$2, style: GoogleFonts.poppins(
-                    fontSize: 10.5,
-                    color: _muted,
-                  )),
+                  Text(
+                    item.$2,
+                    style: GoogleFonts.poppins(fontSize: 10.5, color: _muted),
+                  ),
                 ],
               ),
             ),
@@ -586,21 +618,30 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _text,
-                      )),
+                      Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _text,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text(desc, style: GoogleFonts.poppins(
-                        fontSize: 10.5,
-                        color: _muted,
-                      )),
+                      Text(
+                        desc,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10.5,
+                          color: _muted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: _muted, size: 23),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: _muted,
+                  size: 23,
+                ),
               ],
             ),
           ),
@@ -655,10 +696,10 @@ class _EnterpriseControlPanelState extends State<EnterpriseControlPanel>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: GoogleFonts.poppins(
-          fontWeight: FontWeight.w700,
-          color: _text,
-        )),
+        title: Text(
+          title,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: _text),
+        ),
         content: Text(body, style: _bodyStyle),
         actions: [
           TextButton(

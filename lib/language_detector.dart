@@ -12,43 +12,43 @@ enum SupportedLang { en, hi, mr, ta, te, kn, ml, bn, gu, pa }
 
 extension SupportedLangX on SupportedLang {
   String get code => switch (this) {
-        SupportedLang.en => 'en',
-        SupportedLang.hi => 'hi',
-        SupportedLang.mr => 'mr',
-        SupportedLang.ta => 'ta',
-        SupportedLang.te => 'te',
-        SupportedLang.kn => 'kn',
-        SupportedLang.ml => 'ml',
-        SupportedLang.bn => 'bn',
-        SupportedLang.gu => 'gu',
-        SupportedLang.pa => 'pa',
-      };
+    SupportedLang.en => 'en',
+    SupportedLang.hi => 'hi',
+    SupportedLang.mr => 'mr',
+    SupportedLang.ta => 'ta',
+    SupportedLang.te => 'te',
+    SupportedLang.kn => 'kn',
+    SupportedLang.ml => 'ml',
+    SupportedLang.bn => 'bn',
+    SupportedLang.gu => 'gu',
+    SupportedLang.pa => 'pa',
+  };
 
   String get locale => switch (this) {
-        SupportedLang.en => 'en-IN',
-        SupportedLang.hi => 'hi-IN',
-        SupportedLang.mr => 'mr-IN',
-        SupportedLang.ta => 'ta-IN',
-        SupportedLang.te => 'te-IN',
-        SupportedLang.kn => 'kn-IN',
-        SupportedLang.ml => 'ml-IN',
-        SupportedLang.bn => 'bn-IN',
-        SupportedLang.gu => 'gu-IN',
-        SupportedLang.pa => 'pa-IN',
-      };
+    SupportedLang.en => 'en-IN',
+    SupportedLang.hi => 'hi-IN',
+    SupportedLang.mr => 'mr-IN',
+    SupportedLang.ta => 'ta-IN',
+    SupportedLang.te => 'te-IN',
+    SupportedLang.kn => 'kn-IN',
+    SupportedLang.ml => 'ml-IN',
+    SupportedLang.bn => 'bn-IN',
+    SupportedLang.gu => 'gu-IN',
+    SupportedLang.pa => 'pa-IN',
+  };
 
   String get displayName => switch (this) {
-        SupportedLang.en => 'English',
-        SupportedLang.hi => 'Hindi',
-        SupportedLang.mr => 'Marathi',
-        SupportedLang.ta => 'Tamil',
-        SupportedLang.te => 'Telugu',
-        SupportedLang.kn => 'Kannada',
-        SupportedLang.ml => 'Malayalam',
-        SupportedLang.bn => 'Bengali',
-        SupportedLang.gu => 'Gujarati',
-        SupportedLang.pa => 'Punjabi',
-      };
+    SupportedLang.en => 'English',
+    SupportedLang.hi => 'Hindi',
+    SupportedLang.mr => 'Marathi',
+    SupportedLang.ta => 'Tamil',
+    SupportedLang.te => 'Telugu',
+    SupportedLang.kn => 'Kannada',
+    SupportedLang.ml => 'Malayalam',
+    SupportedLang.bn => 'Bengali',
+    SupportedLang.gu => 'Gujarati',
+    SupportedLang.pa => 'Punjabi',
+  };
 
   static SupportedLang fromCode(String code) {
     final k = code.split('-').first.toLowerCase();
@@ -91,126 +91,488 @@ class _LangSignature {
 final Map<SupportedLang, _LangSignature> _signatures = {
   SupportedLang.en: const _LangSignature(
     numbers: {
-      'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
-      'nine', 'ten', 'eleven', 'twelve', 'twenty', 'thirty', 'forty', 'fifty',
-      'hundred', 'thousand', 'half', 'dozen', 'couple',
+      'zero',
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+      'eight',
+      'nine',
+      'ten',
+      'eleven',
+      'twelve',
+      'twenty',
+      'thirty',
+      'forty',
+      'fifty',
+      'hundred',
+      'thousand',
+      'half',
+      'dozen',
+      'couple',
     },
     markers: {
-      'the', 'is', 'are', 'want', 'need', 'give', 'me', 'please', 'and',
-      'how', 'much', 'total', 'price', 'cost', 'rupees', 'add', 'bill',
-      'this', 'that', 'for', 'with', 'have', 'kilo', 'liter', 'litre',
+      'the',
+      'is',
+      'are',
+      'want',
+      'need',
+      'give',
+      'me',
+      'please',
+      'and',
+      'how',
+      'much',
+      'total',
+      'price',
+      'cost',
+      'rupees',
+      'add',
+      'bill',
+      'this',
+      'that',
+      'for',
+      'with',
+      'have',
+      'kilo',
+      'liter',
+      'litre',
     },
   ),
   SupportedLang.hi: const _LangSignature(
     numbers: {
-      'ek', 'do', 'teen', 'char', 'panch', 'chhe', 'che', 'saat', 'aath',
-      'nau', 'das', 'gyarah', 'baarah', 'terah', 'chaudah', 'pandrah',
-      'solah', 'sattarah', 'athaarah', 'unnees', 'bees', 'tees', 'chaalis',
-      'pachaas', 'saath', 'sattar', 'assi', 'nabbe', 'sau', 'hazaar', 'lakh',
-      'aadha', 'dedh', 'dhai',
-      'एक', 'दो', 'तीन', 'चार', 'पांच', 'पाँच', 'छह', 'सात', 'आठ', 'नौ', 'दस',
-      'सौ', 'हजार', 'आधा', 'डेढ़',
+      'ek',
+      'do',
+      'teen',
+      'char',
+      'panch',
+      'chhe',
+      'che',
+      'saat',
+      'aath',
+      'nau',
+      'das',
+      'gyarah',
+      'baarah',
+      'terah',
+      'chaudah',
+      'pandrah',
+      'solah',
+      'sattarah',
+      'athaarah',
+      'unnees',
+      'bees',
+      'tees',
+      'chaalis',
+      'pachaas',
+      'saath',
+      'sattar',
+      'assi',
+      'nabbe',
+      'sau',
+      'hazaar',
+      'lakh',
+      'aadha',
+      'dedh',
+      'dhai',
+      'एक',
+      'दो',
+      'तीन',
+      'चार',
+      'पांच',
+      'पाँच',
+      'छह',
+      'सात',
+      'आठ',
+      'नौ',
+      'दस',
+      'सौ',
+      'हजार',
+      'आधा',
+      'डेढ़',
     },
     markers: {
-      'hai', 'hain', 'chahiye', 'mujhe', 'tumhe', 'kitna', 'kitne', 'aur',
-      'bhi', 'karo', 'mein', 'main', 'se', 'ko', 'wala', 'accha', 'thik',
-      'nahi', 'haan', 'de', 'do', 'kya', 'kaisa',
-      'है', 'हैं', 'चाहिए', 'मुझे', 'कितना', 'और', 'भी', 'करो', 'में', 'से',
-      'को', 'वाला', 'अच्छा', 'ठीक', 'नहीं', 'हाँ', 'क्या',
+      'hai',
+      'hain',
+      'chahiye',
+      'mujhe',
+      'tumhe',
+      'kitna',
+      'kitne',
+      'aur',
+      'bhi',
+      'karo',
+      'mein',
+      'main',
+      'se',
+      'ko',
+      'wala',
+      'accha',
+      'thik',
+      'nahi',
+      'haan',
+      'de',
+      'do',
+      'kya',
+      'kaisa',
+      'है',
+      'हैं',
+      'चाहिए',
+      'मुझे',
+      'कितना',
+      'और',
+      'भी',
+      'करो',
+      'में',
+      'से',
+      'को',
+      'वाला',
+      'अच्छा',
+      'ठीक',
+      'नहीं',
+      'हाँ',
+      'क्या',
     },
   ),
   SupportedLang.mr: const _LangSignature(
     numbers: {
-      'ek', 'don', 'teen', 'char', 'pach', 'saha', 'saat', 'aath', 'nau',
-      'daha', 'agyara', 'bara', 'tera', 'pandhra', 'sola', 'satra', 'vees',
-      'tees', 'chalis', 'pannas', 'saath', 'sattar', 'aishi', 'navvad',
-      'shambhar', 'hazaar',
-      'एक', 'दोन', 'तीन', 'चार', 'पाच', 'सहा', 'सात', 'आठ', 'नऊ', 'दहा',
+      'ek',
+      'don',
+      'teen',
+      'char',
+      'pach',
+      'saha',
+      'saat',
+      'aath',
+      'nau',
+      'daha',
+      'agyara',
+      'bara',
+      'tera',
+      'pandhra',
+      'sola',
+      'satra',
+      'vees',
+      'tees',
+      'chalis',
+      'pannas',
+      'saath',
+      'sattar',
+      'aishi',
+      'navvad',
+      'shambhar',
+      'hazaar',
+      'एक',
+      'दोन',
+      'तीन',
+      'चार',
+      'पाच',
+      'सहा',
+      'सात',
+      'आठ',
+      'नऊ',
+      'दहा',
     },
     markers: {
-      'ahe', 'nahi', 'pahije', 'zala', 'zali', 'tyala', 'mala', 'tumhala',
-      'kiti', 'ani', 'karto', 'karte', 'yeto', 'aahe', 'kititla', 'kay',
-      'आहे', 'नाही', 'पाहिजे', 'झाला', 'झाली', 'त्याला', 'मला', 'तुम्हाला',
-      'किती', 'आणि', 'करतो', 'करते', 'येतो', 'काय',
+      'ahe',
+      'nahi',
+      'pahije',
+      'zala',
+      'zali',
+      'tyala',
+      'mala',
+      'tumhala',
+      'kiti',
+      'ani',
+      'karto',
+      'karte',
+      'yeto',
+      'aahe',
+      'kititla',
+      'kay',
+      'आहे',
+      'नाही',
+      'पाहिजे',
+      'झाला',
+      'झाली',
+      'त्याला',
+      'मला',
+      'तुम्हाला',
+      'किती',
+      'आणि',
+      'करतो',
+      'करते',
+      'येतो',
+      'काय',
     },
   ),
   SupportedLang.ta: const _LangSignature(
     numbers: {
-      'onnu', 'rendu', 'moonu', 'moondru', 'naalu', 'anju', 'aaru', 'elu',
-      'ezhu', 'ettu', 'onbathu', 'pathu', 'pathinonnu', 'panniranndu',
-      'irupathu', 'muppathu', 'naarpathu', 'aimpathu',
+      'onnu',
+      'rendu',
+      'moonu',
+      'moondru',
+      'naalu',
+      'anju',
+      'aaru',
+      'elu',
+      'ezhu',
+      'ettu',
+      'onbathu',
+      'pathu',
+      'pathinonnu',
+      'panniranndu',
+      'irupathu',
+      'muppathu',
+      'naarpathu',
+      'aimpathu',
     },
     markers: {
-      'venum', 'irukku', 'illa', 'konjam', 'romba', 'epdi', 'vanga', 'seri',
-      'dhaan', 'thaan', 'pannunga', 'kudu', 'vaangi', 'thevai', 'ippo',
-      'anga', 'inga', 'enna', 'sollunga', 'poidalam', 'venam',
+      'venum',
+      'irukku',
+      'illa',
+      'konjam',
+      'romba',
+      'epdi',
+      'vanga',
+      'seri',
+      'dhaan',
+      'thaan',
+      'pannunga',
+      'kudu',
+      'vaangi',
+      'thevai',
+      'ippo',
+      'anga',
+      'inga',
+      'enna',
+      'sollunga',
+      'poidalam',
+      'venam',
     },
   ),
   SupportedLang.te: const _LangSignature(
     numbers: {
-      'okati', 'rendu', 'moodu', 'naalugu', 'aidu', 'aaru', 'edu', 'enimidi',
-      'tommidi', 'padi', 'padakondu', 'pannendu', 'iravai', 'muppai',
-      'nalabhai', 'yabhai',
+      'okati',
+      'rendu',
+      'moodu',
+      'naalugu',
+      'aidu',
+      'aaru',
+      'edu',
+      'enimidi',
+      'tommidi',
+      'padi',
+      'padakondu',
+      'pannendu',
+      'iravai',
+      'muppai',
+      'nalabhai',
+      'yabhai',
     },
     markers: {
-      'kavali', 'undi', 'ledu', 'enti', 'chala', 'cheppu', 'ivvu', 'ela',
-      'ekkada', 'ippudu', 'bagundi', 'teesuko', 'kaani', 'cheyandi', 'chestha',
-      'unna', 'nenu', 'meeku',
+      'kavali',
+      'undi',
+      'ledu',
+      'enti',
+      'chala',
+      'cheppu',
+      'ivvu',
+      'ela',
+      'ekkada',
+      'ippudu',
+      'bagundi',
+      'teesuko',
+      'kaani',
+      'cheyandi',
+      'chestha',
+      'unna',
+      'nenu',
+      'meeku',
     },
   ),
   SupportedLang.kn: const _LangSignature(
     numbers: {
-      'ondu', 'eradu', 'moru', 'muru', 'naalku', 'aidu', 'aaru', 'elu',
-      'entu', 'ombattu', 'hattu', 'hannondu', 'hanneradu', 'ippattu',
-      'moovattu', 'naalvattu', 'aivattu',
+      'ondu',
+      'eradu',
+      'moru',
+      'muru',
+      'naalku',
+      'aidu',
+      'aaru',
+      'elu',
+      'entu',
+      'ombattu',
+      'hattu',
+      'hannondu',
+      'hanneradu',
+      'ippattu',
+      'moovattu',
+      'naalvattu',
+      'aivattu',
     },
     markers: {
-      'beku', 'ide', 'illa', 'enu', 'thumba', 'kodi', 'barali', 'hege',
-      'yenu', 'swalpa', 'tagond', 'madi', 'illave', 'nanage', 'neevu',
+      'beku',
+      'ide',
+      'illa',
+      'enu',
+      'thumba',
+      'kodi',
+      'barali',
+      'hege',
+      'yenu',
+      'swalpa',
+      'tagond',
+      'madi',
+      'illave',
+      'nanage',
+      'neevu',
       'hogide',
     },
   ),
   SupportedLang.ml: const _LangSignature(
     numbers: {
-      'onnu', 'randu', 'moonu', 'naalu', 'anju', 'aaru', 'ezhu', 'ettu',
-      'ompathu', 'pathu', 'pathinonnu', 'irupathu', 'muppathu', 'nalpathu',
+      'onnu',
+      'randu',
+      'moonu',
+      'naalu',
+      'anju',
+      'aaru',
+      'ezhu',
+      'ettu',
+      'ompathu',
+      'pathu',
+      'pathinonnu',
+      'irupathu',
+      'muppathu',
+      'nalpathu',
       'anpathu',
     },
     markers: {
-      'venam', 'undu', 'illa', 'enthu', 'ippol', 'evide', 'kodukku', 'enik',
-      'ninak', 'kore', 'adipoli', 'ithu', 'sheri', 'venda',
+      'venam',
+      'undu',
+      'illa',
+      'enthu',
+      'ippol',
+      'evide',
+      'kodukku',
+      'enik',
+      'ninak',
+      'kore',
+      'adipoli',
+      'ithu',
+      'sheri',
+      'venda',
     },
   ),
   SupportedLang.bn: const _LangSignature(
     numbers: {
-      'ek', 'dui', 'tin', 'char', 'panch', 'choy', 'chhoy', 'saat', 'aat',
-      'noy', 'dosh', 'egaro', 'baro', 'tero', 'bish', 'trish', 'challish',
+      'ek',
+      'dui',
+      'tin',
+      'char',
+      'panch',
+      'choy',
+      'chhoy',
+      'saat',
+      'aat',
+      'noy',
+      'dosh',
+      'egaro',
+      'baro',
+      'tero',
+      'bish',
+      'trish',
+      'challish',
       'ponchash',
     },
     markers: {
-      'chai', 'ache', 'nei', 'koto', 'dao', 'bhalo', 'ekta', 'tumi', 'ami',
-      'korbo', 'lagbe', 'ekhon', 'ki', 'kotha',
+      'chai',
+      'ache',
+      'nei',
+      'koto',
+      'dao',
+      'bhalo',
+      'ekta',
+      'tumi',
+      'ami',
+      'korbo',
+      'lagbe',
+      'ekhon',
+      'ki',
+      'kotha',
     },
   ),
   SupportedLang.gu: const _LangSignature(
     numbers: {
-      'ek', 'be', 'tran', 'char', 'panch', 'chha', 'saat', 'aath', 'nav',
-      'dus', 'agiyar', 'baar', 'ter', 'chaud', 'vees', 'trees', 'chalis',
+      'ek',
+      'be',
+      'tran',
+      'char',
+      'panch',
+      'chha',
+      'saat',
+      'aath',
+      'nav',
+      'dus',
+      'agiyar',
+      'baar',
+      'ter',
+      'chaud',
+      'vees',
+      'trees',
+      'chalis',
       'pachas',
     },
     markers: {
-      'joiye', 'che', 'nathi', 'ketlu', 'aapo', 'tame', 'hun', 'karo',
-      'saru', 'thodu', 'su', 'kem',
+      'joiye',
+      'che',
+      'nathi',
+      'ketlu',
+      'aapo',
+      'tame',
+      'hun',
+      'karo',
+      'saru',
+      'thodu',
+      'su',
+      'kem',
     },
   ),
   SupportedLang.pa: const _LangSignature(
     numbers: {
-      'ikk', 'do', 'tinn', 'char', 'panj', 'chhe', 'satt', 'ath', 'nau',
-      'das', 'gyaran', 'baran', 'teran', 'vih', 'chali', 'panjaah',
+      'ikk',
+      'do',
+      'tinn',
+      'char',
+      'panj',
+      'chhe',
+      'satt',
+      'ath',
+      'nau',
+      'das',
+      'gyaran',
+      'baran',
+      'teran',
+      'vih',
+      'chali',
+      'panjaah',
     },
     markers: {
-      'chahida', 'nahi', 'kinna', 'tuhanu', 'mainu', 'changa', 'karo',
-      'thoda', 'ki', 'hai', 'de',
+      'chahida',
+      'nahi',
+      'kinna',
+      'tuhanu',
+      'mainu',
+      'changa',
+      'karo',
+      'thoda',
+      'ki',
+      'hai',
+      'de',
     },
   ),
 };
@@ -296,8 +658,8 @@ class LanguageDetector {
 
   static LanguageDetectionResult detect(
     String transcript, {
-      String? sttLocaleHint,
-    }) {
+    String? sttLocaleHint,
+  }) {
     final text = transcript.trim().toLowerCase();
     if (text.isEmpty) {
       final fallback = sttLocaleHint != null
@@ -313,9 +675,14 @@ class LanguageDetector {
       );
     }
 
-    final rawTokens = _tokenRe.allMatches(text).map((match) => match.group(0)!).toList();
+    final rawTokens = _tokenRe
+        .allMatches(text)
+        .map((match) => match.group(0)!)
+        .toList();
     final tags = <TokenTag>[];
-    final scores = <SupportedLang, double>{for (final lang in SupportedLang.values) lang: 0.0};
+    final scores = <SupportedLang, double>{
+      for (final lang in SupportedLang.values) lang: 0.0,
+    };
 
     for (final token in rawTokens) {
       if (_digitRe.hasMatch(token)) {
@@ -338,7 +705,8 @@ class LanguageDetector {
       }
 
       if (_devanagariRange.contains(firstRune)) {
-        final isMarathiMarker = _signatures[SupportedLang.mr]!.markers.contains(token) ||
+        final isMarathiMarker =
+            _signatures[SupportedLang.mr]!.markers.contains(token) ||
             _signatures[SupportedLang.mr]!.numbers.contains(token);
         final lang = isMarathiMarker ? SupportedLang.mr : SupportedLang.hi;
         final weight = isMarathiMarker ? 3.2 : 2.6;
@@ -372,7 +740,9 @@ class LanguageDetector {
 
       if (perLangScore.isNotEmpty) {
         final top = perLangScore.values.reduce((a, b) => a > b ? a : b);
-        final tied = perLangScore.entries.where((entry) => entry.value == top).toList();
+        final tied = perLangScore.entries
+            .where((entry) => entry.value == top)
+            .toList();
         final splitWeight = top / tied.length;
         for (final entry in tied) {
           scores[entry.key] = scores[entry.key]! + splitWeight;
@@ -393,13 +763,16 @@ class LanguageDetector {
           : SupportedLang.en;
       confidence = 0.15;
     } else {
-      final sorted = scores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      final sorted = scores.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
       dominant = sorted.first.key;
       confidence = (sorted.first.value / totalScore).clamp(0.0, 1.0);
     }
 
-    final sortedScores = scores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final isMixed = totalScore > 0 &&
+    final sortedScores = scores.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final isMixed =
+        totalScore > 0 &&
         sortedScores.length > 1 &&
         sortedScores[1].value >= 0.30 * sortedScores[0].value &&
         sortedScores[1].value > 1.0;
@@ -441,7 +814,8 @@ class LanguageDetector {
     }
 
     for (final tag in tags) {
-      final shouldFlip = tag.lang != null &&
+      final shouldFlip =
+          tag.lang != null &&
           tag.lang != current &&
           tag.weight >= _segmentFlipThreshold;
 
@@ -517,8 +891,7 @@ List<ParsedItemV2> _parseSinglePricedVoiceCommand(
   required String langCode,
   List<Map<String, dynamic>>? catalog,
 }) {
-  final numberCount =
-      RegExp(r'\b\d+\.?\d*\b').allMatches(transcript).length;
+  final numberCount = RegExp(r'\b\d+\.?\d*\b').allMatches(transcript).length;
 
   if (numberCount != 1 ||
       !_hasExplicitPriceMarker(transcript) ||
@@ -526,18 +899,15 @@ List<ParsedItemV2> _parseSinglePricedVoiceCommand(
     return [];
   }
 
-  final parsed = VoiceNlpEngineV2.parse(
-    transcript,
-    langCode,
-    catalog: catalog,
-  );
+  final parsed = VoiceNlpEngineV2.parse(transcript, langCode, catalog: catalog);
 
   // Exactly one numeric value + an explicit currency marker means that
   // number is the price. No spoken quantity was supplied, so quantity=1.
-  final priced = parsed
-      .where((item) => item.price > 0 && item.name.trim().length >= 2)
-      .toList()
-    ..sort((a, b) => b.confidenceScore.compareTo(a.confidenceScore));
+  final priced =
+      parsed
+          .where((item) => item.price > 0 && item.name.trim().length >= 2)
+          .toList()
+        ..sort((a, b) => b.confidenceScore.compareTo(a.confidenceScore));
 
   if (priced.isEmpty) return [];
 
@@ -560,8 +930,10 @@ List<ParsedItemV2> parseMultilingualVoiceInput(
   List<Map<String, dynamic>>? catalog,
   String? sttLocaleHint,
 }) {
-  final detection =
-      LanguageDetector.detect(transcript, sttLocaleHint: sttLocaleHint);
+  final detection = LanguageDetector.detect(
+    transcript,
+    sttLocaleHint: sttLocaleHint,
+  );
   if (detection.segments.isEmpty) return [];
 
   // Deterministic fast-path for natural speech such as:
@@ -586,15 +958,21 @@ List<ParsedItemV2> parseMultilingualVoiceInput(
   final merged = <ParsedItemV2>[];
   for (final segment in detection.segments) {
     if (segment.text.trim().isEmpty) continue;
-    final items =
-        VoiceNlpEngineV2.parse(segment.text, segment.lang.code, catalog: catalog);
+    final items = VoiceNlpEngineV2.parse(
+      segment.text,
+      segment.lang.code,
+      catalog: catalog,
+    );
     for (final item in items) {
-      final duplicateIndex = merged.indexWhere((entry) =>
-          entry.name.toLowerCase() == item.name.toLowerCase() &&
-          (entry.price - item.price).abs() < 1.0);
+      final duplicateIndex = merged.indexWhere(
+        (entry) =>
+            entry.name.toLowerCase() == item.name.toLowerCase() &&
+            (entry.price - item.price).abs() < 1.0,
+      );
       if (duplicateIndex == -1) {
         merged.add(item);
-      } else if (item.confidenceScore > merged[duplicateIndex].confidenceScore) {
+      } else if (item.confidenceScore >
+          merged[duplicateIndex].confidenceScore) {
         merged[duplicateIndex] = item;
       }
     }
@@ -606,7 +984,11 @@ class SelfTestCase {
   final String transcript;
   final SupportedLang? expected;
   final bool expectMixed;
-  const SelfTestCase(this.transcript, this.expected, {this.expectMixed = false});
+  const SelfTestCase(
+    this.transcript,
+    this.expected, {
+    this.expectMixed = false,
+  });
 }
 
 class SelfTestReport {
@@ -619,8 +1001,10 @@ class SelfTestReport {
   @override
   String toString() {
     final buffer = StringBuffer();
-    buffer.writeln('Language detection self-test: $passed/$total passed '
-        '(${(accuracy * 100).toStringAsFixed(1)}%)');
+    buffer.writeln(
+      'Language detection self-test: $passed/$total passed '
+      '(${(accuracy * 100).toStringAsFixed(1)}%)',
+    );
     for (final failure in failures) {
       buffer.writeln('  FAIL: $failure');
     }
@@ -649,5 +1033,9 @@ const List<SelfTestCase> _selfTestCases = [
   SelfTestCase('mare be kilo chokha joiye aapo', SupportedLang.gu),
   SelfTestCase('ਮੈਨੂੰ ਦੋ ਕਿਲੋ ਚੌਲ ਚਾਹੀਦੇ', SupportedLang.pa),
   SelfTestCase('mainu do kilo chawal chahida hai', SupportedLang.pa),
-  SelfTestCase('rendu kilo sugar and one packet biscuit', null, expectMixed: true),
+  SelfTestCase(
+    'rendu kilo sugar and one packet biscuit',
+    null,
+    expectMixed: true,
+  ),
 ];

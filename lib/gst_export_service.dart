@@ -66,8 +66,9 @@ class GstExportService {
     required DateTime toDate,
   }) async {
     try {
-      final query = '/api/reports/gst-summary?from=${fromDate.toIso8601String().split('T')[0]}&to=${toDate.toIso8601String().split('T')[0]}';
-      
+      final query =
+          '/api/reports/gst-summary?from=${fromDate.toIso8601String().split('T')[0]}&to=${toDate.toIso8601String().split('T')[0]}';
+
       final response = await ApiClient.getJson(query);
 
       if (response.statusCode == 200) {
@@ -125,7 +126,7 @@ class GstSummary {
 
   factory GstSummary.fromJson(Map<String, dynamic> json) {
     final Map<int, GstRateSummary> rateMap = {};
-    
+
     if (json['by_rate'] is Map) {
       (json['by_rate'] as Map).forEach((key, value) {
         final rate = int.tryParse(key.toString()) ?? 0;
@@ -139,15 +140,20 @@ class GstSummary {
       totalPurchases: (json['total_purchases'] ?? 0).toDouble(),
       totalGstPaid: (json['total_gst_paid'] ?? 0).toDouble(),
       gstPayable: (json['gst_payable'] ?? 0).toDouble(),
-      periodStart: DateTime.parse(json['period_start'] ?? DateTime.now().toString()),
-      periodEnd: DateTime.parse(json['period_end'] ?? DateTime.now().toString()),
+      periodStart: DateTime.parse(
+        json['period_start'] ?? DateTime.now().toString(),
+      ),
+      periodEnd: DateTime.parse(
+        json['period_end'] ?? DateTime.now().toString(),
+      ),
       gstByRate: rateMap,
     );
   }
 
   String get gstPayableFormatted => '₹${gstPayable.toStringAsFixed(2)}';
   String get totalSalesFormatted => '₹${totalSales.toStringAsFixed(2)}';
-  String get totalGstCollectedFormatted => '₹${totalGstCollected.toStringAsFixed(2)}';
+  String get totalGstCollectedFormatted =>
+      '₹${totalGstCollected.toStringAsFixed(2)}';
 }
 
 /// GST Rate-wise Summary

@@ -9,20 +9,23 @@ void main() {
   });
 
   group('persisted identity verification', () {
-    test('verification survives subsequent checks for the same user and role', () async {
-      await SessionManagementService.markIdentityVerified(
-        userId: 42,
-        role: 'OWNER',
-      );
-
-      expect(
-        await SessionManagementService.isIdentityVerified(
+    test(
+      'verification survives subsequent checks for the same user and role',
+      () async {
+        await SessionManagementService.markIdentityVerified(
           userId: 42,
           role: 'OWNER',
-        ),
-        isTrue,
-      );
-    });
+        );
+
+        expect(
+          await SessionManagementService.isIdentityVerified(
+            userId: 42,
+            role: 'OWNER',
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('verification is isolated by user and role', () async {
       await SessionManagementService.markIdentityVerified(

@@ -6,7 +6,8 @@ class GeometricRegistrationPage extends StatefulWidget {
   const GeometricRegistrationPage({super.key});
 
   @override
-  State<GeometricRegistrationPage> createState() => _GeometricRegistrationPageState();
+  State<GeometricRegistrationPage> createState() =>
+      _GeometricRegistrationPageState();
 }
 
 class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
@@ -49,7 +50,9 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: LiveTranslatedText('Geometric registration created successfully.'),
+        content: LiveTranslatedText(
+          'Geometric registration created successfully.',
+        ),
       ),
     );
 
@@ -69,11 +72,7 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _GeoBackgroundPainter(),
-            ),
-          ),
+          Positioned.fill(child: CustomPaint(painter: _GeoBackgroundPainter())),
           SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             child: Column(
@@ -109,33 +108,46 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
-        ..._examples.map((example) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 2,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  leading: const Icon(Icons.auto_awesome_rounded, color: Colors.indigo),
-                  title: LiveTranslatedText(example['title']!, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: LiveTranslatedText(example['subtitle']!),
-                  trailing: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _shapeType = example['title']!.contains('Circle')
-                            ? 'Circle'
-                            : example['title']!.contains('Hexagon')
-                                ? 'Hexagon'
-                                : 'Triangle';
-                        _nameController.text = example['title']!;
-                        _detailsController.text = example['subtitle']!;
-                      });
-                    },
-                    child: const LiveTranslatedText('Use'),
-                  ),
+        ..._examples.map(
+          (example) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 2,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                leading: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.indigo,
+                ),
+                title: LiveTranslatedText(
+                  example['title']!,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: LiveTranslatedText(example['subtitle']!),
+                trailing: TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _shapeType = example['title']!.contains('Circle')
+                          ? 'Circle'
+                          : example['title']!.contains('Hexagon')
+                          ? 'Hexagon'
+                          : 'Triangle';
+                      _nameController.text = example['title']!;
+                      _detailsController.text = example['subtitle']!;
+                    });
+                  },
+                  child: const LiveTranslatedText('Use'),
                 ),
               ),
-            )),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -151,13 +163,23 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const LiveTranslatedText('New Geometric Registration', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const LiveTranslatedText(
+                'New Geometric Registration',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _shapeType,
-                decoration: const InputDecoration(label: LiveTranslatedText('Shape type')),
+                decoration: const InputDecoration(
+                  label: LiveTranslatedText('Shape type'),
+                ),
                 items: _shapeOptions
-                    .map((option) => DropdownMenuItem(value: option, child: LiveTranslatedText(option)))
+                    .map(
+                      (option) => DropdownMenuItem(
+                        value: option,
+                        child: LiveTranslatedText(option),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -170,15 +192,23 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(label: LiveTranslatedText('Registration name')),
-                validator: (value) => (value == null || value.trim().isEmpty) ? 'Enter a name' : null,
+                decoration: const InputDecoration(
+                  label: LiveTranslatedText('Registration name'),
+                ),
+                validator: (value) => (value == null || value.trim().isEmpty)
+                    ? 'Enter a name'
+                    : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _detailsController,
-                decoration: const InputDecoration(label: LiveTranslatedText('Details')),
+                decoration: const InputDecoration(
+                  label: LiveTranslatedText('Details'),
+                ),
                 maxLines: 3,
-                validator: (value) => (value == null || value.trim().isEmpty) ? 'Enter details' : null,
+                validator: (value) => (value == null || value.trim().isEmpty)
+                    ? 'Enter details'
+                    : null,
               ),
               const SizedBox(height: 24),
               Row(
@@ -186,8 +216,13 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
                   ElevatedButton(
                     onPressed: _submitRegistration,
                     style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 14,
+                      ),
                     ),
                     child: const LiveTranslatedText('Register asset'),
                   ),
@@ -195,7 +230,10 @@ class _GeometricRegistrationPageState extends State<GeometricRegistrationPage> {
                   Expanded(
                     child: LiveTranslatedText(
                       'Current shape: $_shapeType',
-                      style: const TextStyle(fontSize: 15, color: Colors.black54),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black54,
+                      ),
                     ),
                   ),
                 ],

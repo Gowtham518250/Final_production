@@ -8,9 +8,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: FirstSaleGuide(onStartSale: () => started = true),
-        ),
+        home: Scaffold(body: FirstSaleGuide(onStartSale: () => started = true)),
       ),
     );
     await tester.pump(const Duration(milliseconds: 100));

@@ -11,7 +11,7 @@ void main() {
           'offline_id': 'SAME-1',
           'total': 100,
           'items': [
-            {'product_name': 'A', 'qty': 1, 'price': 100}
+            {'product_name': 'A', 'qty': 1, 'price': 100},
           ],
         },
         {
@@ -19,7 +19,7 @@ void main() {
           'offline_id': 'SAME-1',
           'total': 100,
           'items': [
-            {'product_name': 'A', 'qty': 1, 'price': 100}
+            {'product_name': 'A', 'qty': 1, 'price': 100},
           ],
         },
       ];
@@ -34,7 +34,7 @@ void main() {
           'offline_id': 'SALE-A',
           'total': 100,
           'items': [
-            {'product_name': 'A', 'qty': 1, 'price': 100}
+            {'product_name': 'A', 'qty': 1, 'price': 100},
           ],
         },
         {
@@ -42,7 +42,7 @@ void main() {
           'offline_id': 'SALE-B',
           'total': 100,
           'items': [
-            {'product_name': 'A', 'qty': 1, 'price': 100}
+            {'product_name': 'A', 'qty': 1, 'price': 100},
           ],
         },
       ];
@@ -50,13 +50,16 @@ void main() {
       expect(SalesDedupHelper.dedupeBills(sales).length, 2);
     });
 
-    test('financial state obeys paid + outstanding = grand total conceptually', () {
-      const total = 100.0;
-      const paid = 70.0;
-      final outstanding = total - paid;
+    test(
+      'financial state obeys paid + outstanding = grand total conceptually',
+      () {
+        const total = 100.0;
+        const paid = 70.0;
+        final outstanding = total - paid;
 
-      expect(outstanding, 30);
-      expect(SaleService.paymentStatusFor(paid, total), 'PARTIAL');
-    });
+        expect(outstanding, 30);
+        expect(SaleService.paymentStatusFor(paid, total), 'PARTIAL');
+      },
+    );
   });
 }

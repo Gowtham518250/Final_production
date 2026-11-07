@@ -7,38 +7,38 @@ class ErrorMessageFormatter {
     final errorStr = error.toString().toLowerCase();
 
     // Authentication Errors
-    if (errorStr.contains('username already registered') || 
+    if (errorStr.contains('username already registered') ||
         errorStr.contains('already exists')) {
       return 'This user is already registered. Please login instead.';
     }
-    if (errorStr.contains('invalid credentials') || 
+    if (errorStr.contains('invalid credentials') ||
         errorStr.contains('wrong password')) {
       return 'Wrong username or password. Please try again.';
     }
-    if (errorStr.contains('user not found') || 
+    if (errorStr.contains('user not found') ||
         errorStr.contains('does not exist')) {
       return 'User account not found. Please register first.';
     }
 
     // Network Errors
-    if (errorStr.contains('socket') || 
+    if (errorStr.contains('socket') ||
         errorStr.contains('connection refused')) {
       return 'Server not responding. Please check your internet connection and try again.';
     }
     if (errorStr.contains('timeout')) {
       return 'Request took too long. Please check your internet and try again.';
     }
-    if (errorStr.contains('no internet') || 
+    if (errorStr.contains('no internet') ||
         errorStr.contains('network unreachable')) {
       return 'No internet connection. Please connect to WiFi or mobile data and try again.';
     }
 
     // Validation Errors
-    if (errorStr.contains('email') && 
+    if (errorStr.contains('email') &&
         (errorStr.contains('invalid') || errorStr.contains('format'))) {
       return 'Please enter a valid email address.';
     }
-    if (errorStr.contains('password') && 
+    if (errorStr.contains('password') &&
         (errorStr.contains('too short') || errorStr.contains('weak'))) {
       return 'Password must be at least 8 characters with uppercase, lowercase, and numbers.';
     }
@@ -47,11 +47,11 @@ class ErrorMessageFormatter {
     }
 
     // Business Logic Errors
-    if (errorStr.contains('insufficient inventory') || 
+    if (errorStr.contains('insufficient inventory') ||
         errorStr.contains('out of stock')) {
       return 'Insufficient stock. Please check inventory.';
     }
-    if (errorStr.contains('duplicate invoice') || 
+    if (errorStr.contains('duplicate invoice') ||
         errorStr.contains('already exists')) {
       return 'This invoice/transaction already exists.';
     }
@@ -66,24 +66,23 @@ class ErrorMessageFormatter {
     }
 
     // Permission Errors
-    if (errorStr.contains('403') || 
-        errorStr.contains('forbidden') || 
+    if (errorStr.contains('403') ||
+        errorStr.contains('forbidden') ||
         errorStr.contains('not authorized')) {
       return 'You do not have permission for this action. Please contact administrator.';
     }
-    if (errorStr.contains('401') || 
-        errorStr.contains('unauthorized') || 
+    if (errorStr.contains('401') ||
+        errorStr.contains('unauthorized') ||
         errorStr.contains('token')) {
       return 'Your session has expired. Please login again.';
     }
 
     // Server Errors
-    if (errorStr.contains('500') || 
+    if (errorStr.contains('500') ||
         errorStr.contains('internal server error')) {
       return 'Server error. Please try again in a moment.';
     }
-    if (errorStr.contains('503') || 
-        errorStr.contains('service unavailable')) {
+    if (errorStr.contains('503') || errorStr.contains('service unavailable')) {
       return 'Server is temporarily down. Please try again later.';
     }
 
@@ -107,13 +106,16 @@ class ErrorMessageFormatter {
     VoidCallback? onRetry,
   }) {
     final message = format(error);
-    
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
           title,
-          style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.red,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text(message),
         actions: [

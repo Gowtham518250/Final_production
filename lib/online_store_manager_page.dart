@@ -22,8 +22,9 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
   final TextEditingController _storeNameController = TextEditingController();
   final TextEditingController _minOrderController = TextEditingController();
   final TextEditingController _deliveryFeeController = TextEditingController();
-  final TextEditingController _onlineSetupFeeController = TextEditingController();
-  
+  final TextEditingController _onlineSetupFeeController =
+      TextEditingController();
+
   bool _offerDelivery = true;
   bool _offerPickup = true;
   bool _acceptCOD = true;
@@ -49,7 +50,9 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
     try {
       final online = await OnlineStoreService.getOnlineSettings();
       if (online['success'] != true) {
-        throw StateError(online['error']?.toString() ?? 'Online settings are unavailable.');
+        throw StateError(
+          online['error']?.toString() ?? 'Online settings are unavailable.',
+        );
       }
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
@@ -67,12 +70,14 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
             (double.tryParse(online['delivery_fee']?.toString() ?? '0') ?? 0)
                 .toStringAsFixed(0);
         _onlineSetupFeeController.text =
-            (double.tryParse(online['online_setup_fee']?.toString() ?? '0') ?? 0)
+            (double.tryParse(online['online_setup_fee']?.toString() ?? '0') ??
+                    0)
                 .toStringAsFixed(2);
         _offerDelivery = online['offer_delivery'] != false;
         _offerPickup = online['offer_pickup'] != false;
         _acceptCOD = online['accept_cod'] != false;
-        _acceptOnline = false; // online collection is not yet supported by the backend
+        _acceptOnline =
+            false; // online collection is not yet supported by the backend
         _isLoading = false;
       });
     } catch (e) {
@@ -82,21 +87,24 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
         _isStoreActive = prefs.getBool('online_store_active') ?? false;
         _storeNameController.text =
             prefs.getString('shop_name') ?? 'My Kirana Store';
-        _minOrderController.text =
-            (prefs.getInt('online_min_order') ?? 100).toString();
+        _minOrderController.text = (prefs.getInt('online_min_order') ?? 100)
+            .toString();
         _deliveryFeeController.text =
             (prefs.getInt('online_delivery_fee') ?? 20).toString();
         _onlineSetupFeeController.text = '0.00';
         _offerDelivery = prefs.getBool('online_offer_delivery') ?? true;
         _offerPickup = prefs.getBool('online_offer_pickup') ?? true;
         _acceptCOD = prefs.getBool('online_accept_cod') ?? true;
-        _acceptOnline = false; // prevent stale local settings from enabling an unsupported payment method
+        _acceptOnline =
+            false; // prevent stale local settings from enabling an unsupported payment method
         _isLoading = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: LiveTranslatedText('Could not verify server settings. Showing saved device settings; changes may not sync.'),
+            content: LiveTranslatedText(
+              'Could not verify server settings. Showing saved device settings; changes may not sync.',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -109,11 +117,15 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
 
     try {
       final minOrder = double.tryParse(_minOrderController.text.trim()) ?? -1;
-      final deliveryFee = double.tryParse(_deliveryFeeController.text.trim()) ?? -1;
-      final onlineFee = double.tryParse(_onlineSetupFeeController.text.trim()) ?? -1;
+      final deliveryFee =
+          double.tryParse(_deliveryFeeController.text.trim()) ?? -1;
+      final onlineFee =
+          double.tryParse(_onlineSetupFeeController.text.trim()) ?? -1;
 
       if (minOrder < 0 || deliveryFee < 0 || onlineFee < 0) {
-        throw StateError('Fees and minimum order must be valid non-negative numbers.');
+        throw StateError(
+          'Fees and minimum order must be valid non-negative numbers.',
+        );
       }
 
       // Submit the complete configuration once so publication status and
@@ -130,7 +142,8 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
       );
       if (settingsResult['success'] != true) {
         throw StateError(
-          settingsResult['error']?.toString() ?? 'Unable to save online settings.',
+          settingsResult['error']?.toString() ??
+              'Unable to save online settings.',
         );
       }
 
@@ -179,7 +192,10 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: LiveTranslatedText('Online Store Manager', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Online Store Manager',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
@@ -187,13 +203,20 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
           if (_isSaving)
             const Padding(
               padding: EdgeInsets.all(16.0),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             )
           else
             TextButton.icon(
               onPressed: _saveSettings,
               icon: const Icon(Icons.save),
-              label: LiveTranslatedText('Save', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+              label: LiveTranslatedText(
+                'Save',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              ),
             ),
         ],
       ),
@@ -205,24 +228,40 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
             // Master Switch
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               color: _isStoreActive ? Colors.green[50] : Colors.white,
               child: SwitchListTile(
-                title: LiveTranslatedText('Enable Online Store', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
-                subtitle: LiveTranslatedText('Make this shop discoverable in the customer marketplace on app and web.'),
+                title: LiveTranslatedText(
+                  'Enable Online Store',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: LiveTranslatedText(
+                  'Make this shop discoverable in the customer marketplace on app and web.',
+                ),
                 value: _isStoreActive,
                 activeColor: Colors.green,
-                onChanged: _isSaving ? null : (val) {
-                  setState(() => _isStoreActive = val);
-                  HapticFeedback.lightImpact();
-                },
+                onChanged: _isSaving
+                    ? null
+                    : (val) {
+                        setState(() => _isStoreActive = val);
+                        HapticFeedback.lightImpact();
+                      },
                 secondary: _isSaving
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.storefront_rounded),
               ),
             ),
             const SizedBox(height: 24),
-            
+
             if (_isStoreActive) ...[
               // Marketplace discovery replaces link-first ordering.
               Container(
@@ -245,7 +284,10 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                         color: Colors.white.withValues(alpha: 0.8),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.travel_explore_rounded, color: Color(0xFF4F46E5)),
+                      child: const Icon(
+                        Icons.travel_explore_rounded,
+                        color: Color(0xFF4F46E5),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -254,7 +296,10 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                         children: [
                           LiveTranslatedText(
                             'Marketplace discovery',
-                            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800),
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                           const SizedBox(height: 5),
                           LiveTranslatedText(
@@ -274,21 +319,36 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
               const SizedBox(height: 24),
 
               // Settings
-              LiveTranslatedText('Delivery & Pickup', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+              LiveTranslatedText(
+                'Delivery & Pickup',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
               const SizedBox(height: 8),
               Card(
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[200]!)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey[200]!),
+                ),
                 child: Column(
                   children: [
                     SwitchListTile(
-                      title: LiveTranslatedText('Offer Delivery', style: GoogleFonts.poppins()),
+                      title: LiveTranslatedText(
+                        'Offer Delivery',
+                        style: GoogleFonts.poppins(),
+                      ),
                       value: _offerDelivery,
                       onChanged: (v) => setState(() => _offerDelivery = v),
                     ),
                     const Divider(height: 1),
                     SwitchListTile(
-                      title: LiveTranslatedText('Offer Store Pickup', style: GoogleFonts.poppins()),
+                      title: LiveTranslatedText(
+                        'Offer Store Pickup',
+                        style: GoogleFonts.poppins(),
+                      ),
                       value: _offerPickup,
                       onChanged: (v) => setState(() => _offerPickup = v),
                     ),
@@ -298,7 +358,13 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
               const SizedBox(height: 24),
 
               // Fees & Limits
-              LiveTranslatedText('Order Constraints', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+              LiveTranslatedText(
+                'Order Constraints',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -308,7 +374,9 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         label: LiveTranslatedText('Min Order (₹)'),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                       ),
@@ -321,7 +389,9 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         label: LiveTranslatedText('Delivery Fee (₹)'),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                       ),
@@ -334,7 +404,10 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
               // Online-only fee
               LiveTranslatedText(
                 'Online Order Fee',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 8),
               Container(
@@ -356,16 +429,24 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.tune_rounded, color: Color(0xFF4F46E5)),
+                        const Icon(
+                          Icons.tune_rounded,
+                          color: Color(0xFF4F46E5),
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: LiveTranslatedText(
                             'Online setup / service fee',
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEEF2FF),
                             borderRadius: BorderRadius.circular(999),
@@ -393,7 +474,9 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
                     const SizedBox(height: 13),
                     TextField(
                       controller: _onlineSetupFeeController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: InputDecoration(
                         label: LiveTranslatedText('Fee per online order (₹)'),
                         prefixText: '₹ ',
@@ -410,21 +493,36 @@ class _OnlineStoreManagerPageState extends State<OnlineStoreManagerPage> {
               const SizedBox(height: 24),
 
               // Payment Methods
-              LiveTranslatedText('Accepted Payments', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+              LiveTranslatedText(
+                'Accepted Payments',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
               const SizedBox(height: 8),
               Card(
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[200]!)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey[200]!),
+                ),
                 child: Column(
                   children: [
                     SwitchListTile(
-                      title: LiveTranslatedText('Cash on Delivery (COD)', style: GoogleFonts.poppins()),
+                      title: LiveTranslatedText(
+                        'Cash on Delivery (COD)',
+                        style: GoogleFonts.poppins(),
+                      ),
                       value: _acceptCOD,
                       onChanged: (v) => setState(() => _acceptCOD = v),
                     ),
                     const Divider(height: 1),
                     SwitchListTile(
-                      title: LiveTranslatedText('Online Payments (UPI/Cards)', style: GoogleFonts.poppins()),
+                      title: LiveTranslatedText(
+                        'Online Payments (UPI/Cards)',
+                        style: GoogleFonts.poppins(),
+                      ),
                       subtitle: const LiveTranslatedText(
                         'Coming soon. Online payment collection is not configured yet; use COD for now.',
                       ),

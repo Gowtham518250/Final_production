@@ -35,7 +35,8 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
   double _selectedMinPrice = 0;
   double _selectedMaxPrice = 10000;
   bool _inStockOnly = false;
-  String _sortBy = 'relevance'; // relevance, price_low, price_high, rating, newest
+  String _sortBy =
+      'relevance'; // relevance, price_low, price_high, rating, newest
   List<String> _selectedBrands = [];
 
   @override
@@ -46,12 +47,14 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    
+
     final categories = await ProductCatalogService.getCategories();
     List<Map<String, dynamic>> products = [];
     if (widget.shopId != null && widget.shopId!.isNotEmpty) {
       try {
-        final res = await ApiClient.getJson('/store/shops/${widget.shopId}/products');
+        final res = await ApiClient.getJson(
+          '/store/shops/${widget.shopId}/products',
+        );
         if (res.statusCode == 200) {
           final d = jsonDecode(res.body);
           final rawProducts = d is List ? d : (d['products'] ?? []);
@@ -63,14 +66,16 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
     } else {
       products = await LocalStorageService.loadBackendProducts();
     }
-    
+
     // Calculate price range from products
     if (products.isNotEmpty) {
       final prices = products.map((p) {
         final price = p['price'] ?? p['selling_price'] ?? 0;
-        return price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0.0;
+        return price is num
+            ? price.toDouble()
+            : double.tryParse(price.toString()) ?? 0.0;
       }).toList();
-      
+
       if (prices.isNotEmpty) {
         _minPrice = prices.reduce((a, b) => a < b ? a : b);
         _maxPrice = prices.reduce((a, b) => a > b ? a : b);
@@ -78,7 +83,7 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
         _selectedMaxPrice = _maxPrice;
       }
     }
-    
+
     setState(() {
       _categories = categories;
       _products = products.cast<Map<String, dynamic>>();
@@ -89,42 +94,45 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
 
   Future<void> _filterProducts() async {
     List<Map<String, dynamic>> filtered = List.from(_products);
-    
+
     // Category filter
     if (_selectedCategory != null) {
       final categoryId = _selectedCategory!['id'] as String;
       final subcategoryId = _selectedSubcategory?['id'] as String?;
-      
+
       final productIds = await ProductCatalogService.getProductsByCategory(
         categoryId,
         subcategoryId: subcategoryId,
       );
-      
+
       filtered = filtered.where((product) {
         final productId = (product['id'] ?? product['product_id']).toString();
         return productIds.contains(productId);
       }).toList();
     }
-    
+
     // Search filter
     if (_searchQuery.isNotEmpty) {
       filtered = filtered.where((product) {
         final name = (product['name'] ?? '').toString().toLowerCase();
         final category = (product['category'] ?? '').toString().toLowerCase();
         final brand = (product['brand'] ?? '').toString().toLowerCase();
-        return name.contains(_searchQuery) || 
-               category.contains(_searchQuery) || 
-               brand.contains(_searchQuery);
+        return name.contains(_searchQuery) ||
+            category.contains(_searchQuery) ||
+            brand.contains(_searchQuery);
       }).toList();
     }
-    
+
     // Price range filter
     filtered = filtered.where((product) {
       final price = product['price'] ?? product['selling_price'] ?? 0;
-      final productPrice = price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0.0;
-      return productPrice >= _selectedMinPrice && productPrice <= _selectedMaxPrice;
+      final productPrice = price is num
+          ? price.toDouble()
+          : double.tryParse(price.toString()) ?? 0.0;
+      return productPrice >= _selectedMinPrice &&
+          productPrice <= _selectedMaxPrice;
     }).toList();
-    
+
     // Stock filter
     if (_inStockOnly) {
       filtered = filtered.where((product) {
@@ -132,26 +140,28 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
         return stock > 0;
       }).toList();
     }
-    
+
     // Brand filter
     if (_selectedBrands.isNotEmpty) {
       filtered = filtered.where((product) {
         final brand = (product['brand'] ?? '').toString().toLowerCase();
-        return _selectedBrands.any((selectedBrand) => 
-          brand.contains(selectedBrand.toLowerCase())
+        return _selectedBrands.any(
+          (selectedBrand) => brand.contains(selectedBrand.toLowerCase()),
         );
       }).toList();
     }
-    
+
     // Sort
     filtered = _sortProducts(filtered);
-    
+
     setState(() {
       _filteredProducts = filtered;
     });
   }
 
-  List<Map<String, dynamic>> _sortProducts(List<Map<String, dynamic>> products) {
+  List<Map<String, dynamic>> _sortProducts(
+    List<Map<String, dynamic>> products,
+  ) {
     switch (_sortBy) {
       case 'price_low':
         return products..sort((a, b) {
@@ -184,7 +194,9 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
 
   double _getProductPrice(Map<String, dynamic> product) {
     final price = product['price'] ?? product['selling_price'] ?? 0;
-    return price is num ? price.toDouble() : double.tryParse(price.toString()) ?? 0.0;
+    return price is num
+        ? price.toDouble()
+        : double.tryParse(price.toString()) ?? 0.0;
   }
 
   Future<void> _onSearch(String query) async {
@@ -199,7 +211,10 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
       appBar: AppBar(
         title: LiveTranslatedText(
           'Product Catalog',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: const Color(0xFF1F2937)),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF1F2937),
+          ),
         ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1F2937),
@@ -223,11 +238,26 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
               _filterProducts();
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'relevance', child: LiveTranslatedText('Relevance')),
-              const PopupMenuItem(value: 'price_low', child: LiveTranslatedText('Price: Low to High')),
-              const PopupMenuItem(value: 'price_high', child: LiveTranslatedText('Price: High to Low')),
-              const PopupMenuItem(value: 'rating', child: LiveTranslatedText('Customer Rating')),
-              const PopupMenuItem(value: 'newest', child: LiveTranslatedText('Newest First')),
+              const PopupMenuItem(
+                value: 'relevance',
+                child: LiveTranslatedText('Relevance'),
+              ),
+              const PopupMenuItem(
+                value: 'price_low',
+                child: LiveTranslatedText('Price: Low to High'),
+              ),
+              const PopupMenuItem(
+                value: 'price_high',
+                child: LiveTranslatedText('Price: High to Low'),
+              ),
+              const PopupMenuItem(
+                value: 'rating',
+                child: LiveTranslatedText('Customer Rating'),
+              ),
+              const PopupMenuItem(
+                value: 'newest',
+                child: LiveTranslatedText('Newest First'),
+              ),
             ],
           ),
         ],
@@ -243,9 +273,7 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
                 // 🔧 FLIPKART-LEVEL: Subcategory chips
                 if (_selectedCategory != null) _buildSubcategoryChips(),
                 // 🔧 FLIPKART-LEVEL: Product grid
-                Expanded(
-                  child: _buildProductGrid(),
-                ),
+                Expanded(child: _buildProductGrid()),
               ],
             ),
     );
@@ -270,7 +298,9 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1)),
+                  border: Border(
+                    bottom: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -332,7 +362,9 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Color(0xFFE5E7EB), width: 1)),
+                  border: Border(
+                    top: BorderSide(color: Color(0xFFE5E7EB), width: 1),
+                  ),
                 ),
                 child: SizedBox(
                   width: double.infinity,
@@ -452,12 +484,13 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
 
   Widget _buildBrandFilter(StateSetter setModalState) {
     // Extract unique brands from products
-    final brands = _products
-        .map((p) => (p['brand'] ?? '').toString())
-        .where((b) => b.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final brands =
+        _products
+            .map((p) => (p['brand'] ?? '').toString())
+            .where((b) => b.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
 
     if (brands.isEmpty) {
       return const SizedBox.shrink();
@@ -539,7 +572,10 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
         onChanged: _onSearch,
       ),
@@ -608,7 +644,9 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF6366F1) : const Color(0xFFF3F4F6),
+            color: isSelected
+                ? const Color(0xFF6366F1)
+                : const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isSelected ? const Color(0xFF6366F1) : Colors.transparent,
@@ -618,7 +656,11 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: isSelected ? Colors.white : const Color(0xFF6B7280)),
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? Colors.white : const Color(0xFF6B7280),
+              ),
               const SizedBox(width: 8),
               LiveTranslatedText(
                 name,
@@ -637,7 +679,8 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
 
   Widget _buildSubcategoryChips() {
     final subcategories = _selectedCategory?['subcategories'] as List<dynamic>?;
-    if (subcategories == null || subcategories.isEmpty) return const SizedBox.shrink();
+    if (subcategories == null || subcategories.isEmpty)
+      return const SizedBox.shrink();
 
     return Container(
       height: 50,
@@ -664,12 +707,19 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
               },
               borderRadius: BorderRadius.circular(16),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF10B981) : const Color(0xFFF3F4F6),
+                  color: isSelected
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF3F4F6),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isSelected ? const Color(0xFF10B981) : Colors.transparent,
+                    color: isSelected
+                        ? const Color(0xFF10B981)
+                        : Colors.transparent,
                     width: 1,
                   ),
                 ),
@@ -762,13 +812,20 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Center(
-                            child: Icon(Icons.image_not_supported, color: Colors.grey[400]),
+                            child: Icon(
+                              Icons.image_not_supported,
+                              color: Colors.grey[400],
+                            ),
                           );
                         },
                       ),
                     )
                   : Center(
-                      child: Icon(Icons.shopping_bag_outlined, size: 48, color: Colors.grey[300]),
+                      child: Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 48,
+                        color: Colors.grey[300],
+                      ),
                     ),
             ),
           ),
@@ -801,7 +858,9 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
               Icon(
                 stock > 0 ? Icons.check_circle : Icons.cancel,
                 size: 14,
-                color: stock > 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                color: stock > 0
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFEF4444),
               ),
               const SizedBox(width: 4),
               LiveTranslatedText(
@@ -809,7 +868,9 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: stock > 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  color: stock > 0
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFEF4444),
                 ),
               ),
             ],
@@ -821,13 +882,20 @@ class _ProductCatalogPageState extends State<ProductCatalogPage> {
 
   IconData _getIconForCategory(String? iconName) {
     switch (iconName) {
-      case 'devices': return Icons.devices;
-      case 'checkroom': return Icons.checkroom;
-      case 'shopping_basket': return Icons.shopping_basket;
-      case 'home': return Icons.home;
-      case 'face': return Icons.face;
-      case 'sports_soccer': return Icons.sports_soccer;
-      default: return Icons.category;
+      case 'devices':
+        return Icons.devices;
+      case 'checkroom':
+        return Icons.checkroom;
+      case 'shopping_basket':
+        return Icons.shopping_basket;
+      case 'home':
+        return Icons.home;
+      case 'face':
+        return Icons.face;
+      case 'sports_soccer':
+        return Icons.sports_soccer;
+      default:
+        return Icons.category;
     }
   }
 }

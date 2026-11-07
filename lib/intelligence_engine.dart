@@ -21,12 +21,7 @@ class TxRecord {
   });
 }
 
-enum AnomalyType {
-  largeTx,
-  rapidRepeat,
-  firstOfDay,
-  quietPeriodBroken,
-}
+enum AnomalyType { largeTx, rapidRepeat, firstOfDay, quietPeriodBroken }
 
 class AnomalyEvent {
   final AnomalyType type;
@@ -53,12 +48,12 @@ class FraudRiskAssessment {
   bool get requiresReview => level == 'HIGH';
 
   Map<String, dynamic> toJson() => {
-        'score': score,
-        'level': level,
-        'requires_review': requiresReview,
-        'reasons': reasons,
-        'signals': signals,
-      };
+    'score': score,
+    'level': level,
+    'requires_review': requiresReview,
+    'reasons': reasons,
+    'signals': signals,
+  };
 }
 
 class DailyLedger {
@@ -79,9 +74,7 @@ class DailyLedger {
 
   int get peakHour {
     if (_hourBuckets.every((v) => v == 0)) return DateTime.now().hour;
-    return _hourBuckets.indexOf(
-      _hourBuckets.reduce((a, b) => a > b ? a : b),
-    );
+    return _hourBuckets.indexOf(_hourBuckets.reduce((a, b) => a > b ? a : b));
   }
 
   double get averageAmount => txCount == 0 ? 0.0 : totalAmount / txCount;
@@ -94,8 +87,7 @@ class DailyLedger {
     return _records.where((r) => r.time.isAfter(cutoff)).toList();
   }
 
-  DateTime? get lastTxTime =>
-      _records.isEmpty ? null : _records.last.time;
+  DateTime? get lastTxTime => _records.isEmpty ? null : _records.last.time;
 }
 
 class IntelligenceEngine {
@@ -241,12 +233,12 @@ class IntelligenceEngine {
   }
 
   Map<String, dynamic> todaySnapshot() => {
-        'date': _ledger.date.toIso8601String().substring(0, 10),
-        'totalAmount': _ledger.totalAmount,
-        'txCount': _ledger.txCount,
-        'averageAmount': _ledger.averageAmount,
-        'peakHour': _ledger.peakHour,
-      };
+    'date': _ledger.date.toIso8601String().substring(0, 10),
+    'totalAmount': _ledger.totalAmount,
+    'txCount': _ledger.txCount,
+    'averageAmount': _ledger.averageAmount,
+    'peakHour': _ledger.peakHour,
+  };
 
   // ---------------------------------------------------------------------------
   // FRAUD / ANOMALY RISK
@@ -333,8 +325,8 @@ class IntelligenceEngine {
     final level = score >= 60
         ? 'HIGH'
         : score >= 30
-            ? 'MEDIUM'
-            : 'LOW';
+        ? 'MEDIUM'
+        : 'LOW';
 
     return FraudRiskAssessment(
       score: score,

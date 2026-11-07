@@ -19,7 +19,9 @@ class SmsNotificationReaderService {
         final txn = TransactionService.parseSmsBanking(smsBody);
         if (txn != null) {
           if (kDebugMode) {
-            print('$_tag Bank transaction parsed for review: ${txn.name} - ₹${txn.amount}');
+            print(
+              '$_tag Bank transaction parsed for review: ${txn.name} - ₹${txn.amount}',
+            );
           }
           return txn;
         }
@@ -32,11 +34,12 @@ class SmsNotificationReaderService {
         final txn = TransactionService.parseUpiNotification(smsBody, source);
         if (txn != null) {
           if (kDebugMode) {
-            print('$_tag UPI transaction parsed for review: ${txn.name} - ₹${txn.amount}');
+            print(
+              '$_tag UPI transaction parsed for review: ${txn.name} - ₹${txn.amount}',
+            );
           }
           return txn;
         }
-
       }
 
       if (kDebugMode) print('$_tag ⚠️ Could not parse: $smsBody');
@@ -116,7 +119,7 @@ class SmsNotificationReaderService {
     for (var sms in smsList) {
       final sender = sms['sender'] ?? '';
       final body = sms['body'] ?? '';
-      
+
       if (sender.isNotEmpty && body.isNotEmpty) {
         final txn = await parseFromSms(body, sender);
         if (txn != null) {
@@ -139,12 +142,13 @@ class SmsNotificationReaderService {
     String? senderPhone,
   ) async {
     try {
-      if (kDebugMode) print('$_tag Parsing WhatsApp: "$message" from $senderName');
+      if (kDebugMode)
+        print('$_tag Parsing WhatsApp: "$message" from $senderName');
 
       // Pattern: "sent ₹500" or "paid ₹1000"
       final amountRegex = RegExp(r'₹\s*([\d,]+\.?\d*)');
       final amountMatch = amountRegex.firstMatch(message);
-      
+
       if (amountMatch == null) return null;
 
       double amount = double.parse(amountMatch.group(1)!.replaceAll(',', ''));
@@ -160,14 +164,17 @@ class SmsNotificationReaderService {
         phone: senderPhone,
         amount: amount,
         type: type,
-        transactionType:
-            TransactionService.transactionTypeForDetectedMessage(message),
+        transactionType: TransactionService.transactionTypeForDetectedMessage(
+          message,
+        ),
         createdAt: DateTime.now(),
         rawMessage: message,
       );
 
       if (kDebugMode) {
-        print('$_tag WhatsApp transaction parsed for review: $senderName - ₹$amount');
+        print(
+          '$_tag WhatsApp transaction parsed for review: $senderName - ₹$amount',
+        );
       }
       return txn;
     } catch (e) {

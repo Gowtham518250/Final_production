@@ -15,7 +15,7 @@ class UserDataClearService {
     // 🚨 CRITICAL: User ID must be cleared to prevent multi-user device contamination
     'user_id',
     'userId',
-    
+
     // Session Cache (SAFE to CLEAR)
     'sales_cache',
     'daily_sales',
@@ -23,11 +23,11 @@ class UserDataClearService {
     'yearly_sales',
     'backend_sales',
     'local_sales',
-    
+
     // Inventory Cache (SAFE to CLEAR - not the actual product/inventory data in Hive)
     'inventory_cache',
     'products_cache',
-    
+
     // Workers & Attendance
     'workers_cache',
     'backend_workers',
@@ -36,22 +36,22 @@ class UserDataClearService {
     'attendance_cache',
     'backend_attendance',
     'attendance_data',
-    
+
     // Customers Cache (SAFE to CLEAR - not actual customer data in Hive)
     'customers_cache',
     'invoices_cache',
     'backend_customers',
-    
+
     // Analytics & Reports
     'analytics_cache',
     'analytics_summary',
     'performance_stats',
     'daily_insight',
     'product_analytics',
-    
+
     // Stock alerts
     'stock_alerts',
-    
+
     // Role / staff / customer session (CRITICAL)
     'is_staff_mode',
     'role',
@@ -79,17 +79,17 @@ class UserDataClearService {
     'last_sync_time',
     'quotes_cache',
     'shop_logo_url',
-    
+
     // Notifications
     'notifications_cache',
     'recent_notifications',
-    
+
     'shop_profile_json',
 
     // Account data
     'account_invoices',
     'account_workers',
-    
+
     // Shop Profile & Images
     'logo_base64',
     'payment_qr_b64',
@@ -109,7 +109,7 @@ class UserDataClearService {
     'shop_categories',
     'opening_hour',
     'closing_hour',
-    
+
     // Other session data
     'bg_sms_queue',
     'master_pin',
@@ -134,7 +134,8 @@ class UserDataClearService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      if (kDebugMode) debugPrint('🧹 Clearing ONLY session-specific user data...');
+      if (kDebugMode)
+        debugPrint('🧹 Clearing ONLY session-specific user data...');
 
       List<dynamic> salesHistory = [];
       List<dynamic> allInvoices = [];
@@ -144,13 +145,17 @@ class UserDataClearService {
 
       final storageReady = await _storageBackendsAvailable();
       if (!storageReady) {
-        if (kDebugMode) debugPrint('⚠️ Platform storage unavailable; skipping business-data preservation during clear.');
+        if (kDebugMode)
+          debugPrint(
+            '⚠️ Platform storage unavailable; skipping business-data preservation during clear.',
+          );
       } else {
         // Preserve business data when storage is available; otherwise skip.
         try {
           await _ensureHiveInitialized();
           salesHistory = await LocalStorageService.loadSales();
-          if (kDebugMode) debugPrint('📦 Preserving ${salesHistory.length} sales records');
+          if (kDebugMode)
+            debugPrint('📦 Preserving ${salesHistory.length} sales records');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to preserve sales history: $e');
         }
@@ -158,7 +163,8 @@ class UserDataClearService {
         try {
           await _ensureHiveInitialized();
           allInvoices = await LocalStorageService.loadLocalInvoices();
-          if (kDebugMode) debugPrint('📦 Preserving ${allInvoices.length} invoices');
+          if (kDebugMode)
+            debugPrint('📦 Preserving ${allInvoices.length} invoices');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to preserve invoices: $e');
         }
@@ -166,7 +172,8 @@ class UserDataClearService {
         try {
           await _ensureHiveInitialized();
           customers = await LocalStorageService.loadLocalCustomers();
-          if (kDebugMode) debugPrint('📦 Preserving ${customers.length} customers');
+          if (kDebugMode)
+            debugPrint('📦 Preserving ${customers.length} customers');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to preserve customers: $e');
         }
@@ -187,7 +194,8 @@ class UserDataClearService {
         try {
           await _ensureHiveInitialized();
           inventory = await LocalStorageService.loadInventory();
-          if (kDebugMode) debugPrint('📦 Preserving ${inventory.length} inventory records');
+          if (kDebugMode)
+            debugPrint('📦 Preserving ${inventory.length} inventory records');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to preserve inventory: $e');
         }
@@ -214,7 +222,7 @@ class UserDataClearService {
           if (kDebugMode) debugPrint('  ✓ Cleared: $key');
         }
       }
-      
+
       // Clear dynamic per-account keys (EXCEPT SYNC QUEUE KEYS!)
       const dynamicPrefixes = [
         'local_customers_',
@@ -250,7 +258,7 @@ class UserDataClearService {
         }
       }
       await prefs.remove('product_catalog_v2'); // legacy unscoped key
-      
+
       // Now that sales/invoices/customers/products/inventory have been
       // durably restored (using the preserved user_id), it's safe to clear
       // user_id/userId as originally intended — the new session's
@@ -266,39 +274,43 @@ class UserDataClearService {
       try {
         await SecurePreferencesService.clearAllPaymentData();
       } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Failed to clear payment credentials: $e');
+        if (kDebugMode)
+          debugPrint('⚠️ Failed to clear payment credentials: $e');
       }
 
       // DO NOT clear orphan sales boxes - they're already user-scoped!
-      
+
       // 🔧 RESTORE ALL BUSINESS DATA
       if (salesHistory.isNotEmpty) {
         try {
           await LocalStorageService.saveSales(salesHistory);
-          if (kDebugMode) debugPrint('✅ Restored ${salesHistory.length} sales records');
+          if (kDebugMode)
+            debugPrint('✅ Restored ${salesHistory.length} sales records');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to restore sales history: $e');
         }
       }
-      
+
       if (allInvoices.isNotEmpty) {
         try {
           await LocalStorageService.saveLocalInvoices(allInvoices);
-          if (kDebugMode) debugPrint('✅ Restored ${allInvoices.length} invoices');
+          if (kDebugMode)
+            debugPrint('✅ Restored ${allInvoices.length} invoices');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to restore invoices: $e');
         }
       }
-      
+
       if (customers.isNotEmpty) {
         try {
           await LocalStorageService.saveLocalCustomers(customers);
-          if (kDebugMode) debugPrint('✅ Restored ${customers.length} customers');
+          if (kDebugMode)
+            debugPrint('✅ Restored ${customers.length} customers');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to restore customers: $e');
         }
       }
-      
+
       if (productData.isNotEmpty) {
         try {
           await LocalStorageService.saveLocalProducts(productData);
@@ -307,16 +319,17 @@ class UserDataClearService {
           if (kDebugMode) debugPrint('⚠️ Failed to restore product data: $e');
         }
       }
-      
+
       if (inventory.isNotEmpty) {
         try {
           await LocalStorageService.saveInventory(inventory);
-          if (kDebugMode) debugPrint('✅ Restored ${inventory.length} inventory records');
+          if (kDebugMode)
+            debugPrint('✅ Restored ${inventory.length} inventory records');
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Failed to restore inventory: $e');
         }
       }
-      
+
       // 🔧 FIX: Remove user_id only after restore completes
       // This ensures LocalStorageService can access user-scoped Hive boxes during restore
       // We kept user_id during restore by skipping it in the clear loop above
@@ -324,7 +337,7 @@ class UserDataClearService {
       await prefs.remove('user_id');
       await prefs.remove('userId');
       if (kDebugMode) debugPrint('✅ Removed user_id after restore complete');
-      
+
       // Refresh inventory from backend when storage is available.
       if (storageReady) {
         try {
@@ -336,7 +349,10 @@ class UserDataClearService {
         }
       }
 
-      if (kDebugMode) debugPrint('✅ Session data cleared successfully (business data preserved)');
+      if (kDebugMode)
+        debugPrint(
+          '✅ Session data cleared successfully (business data preserved)',
+        );
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error clearing user data: $e');
     }
@@ -367,7 +383,7 @@ class UserDataClearService {
   static Future<void> clearAllButAuthData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Keys to KEEP
       final keysToKeep = {
         'auth_token',
@@ -384,9 +400,9 @@ class UserDataClearService {
         'app_password',
         'email_credentials_configured',
       };
-      
+
       if (kDebugMode) debugPrint('🧹 Clearing all user data except auth...');
-      
+
       final allKeys = prefs.getKeys();
       for (final key in allKeys) {
         if (!keysToKeep.contains(key)) {
@@ -394,7 +410,7 @@ class UserDataClearService {
           if (kDebugMode) debugPrint('  ✓ Cleared: $key');
         }
       }
-      
+
       if (kDebugMode) debugPrint('✅ User data cleared (auth preserved)');
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error clearing data: $e');
@@ -406,7 +422,7 @@ class UserDataClearService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final leakedKeys = <String, List<String>>{};
-      
+
       for (final key in userDataKeys) {
         if (prefs.containsKey(key)) {
           final value = prefs.get(key);
@@ -417,11 +433,11 @@ class UserDataClearService {
           }
         }
       }
-      
+
       if (leakedKeys.isEmpty) {
         if (kDebugMode) debugPrint('✅ No data leakage detected');
       }
-      
+
       return leakedKeys;
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error checking leakage: $e');

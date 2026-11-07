@@ -29,29 +29,32 @@ class RecentTransaction {
     this.paymentMethod,
   });
 
-  factory RecentTransaction.fromMap(Map<String, dynamic> map) => RecentTransaction(
-    transactionId: map['id']?.toString() ?? '',
-    type: map['type']?.toString() ?? 'CASH',
-    customerName: map['customerName']?.toString() ?? 'Unknown',
-    customerPhone: map['customerPhone']?.toString() ?? '',
-    amount: double.tryParse(map['amount']?.toString() ?? '0') ?? 0,
-    timestamp: map['timestamp'] != null 
-      ? DateTime.parse(map['timestamp'].toString())
-      : DateTime.now(),
-    status: map['status']?.toString() ?? 'COMPLETED',
-    reference: map['reference']?.toString(),
-    paymentMethod: map['paymentMethod']?.toString(),
-  );
+  factory RecentTransaction.fromMap(Map<String, dynamic> map) =>
+      RecentTransaction(
+        transactionId: map['id']?.toString() ?? '',
+        type: map['type']?.toString() ?? 'CASH',
+        customerName: map['customerName']?.toString() ?? 'Unknown',
+        customerPhone: map['customerPhone']?.toString() ?? '',
+        amount: double.tryParse(map['amount']?.toString() ?? '0') ?? 0,
+        timestamp: map['timestamp'] != null
+            ? DateTime.parse(map['timestamp'].toString())
+            : DateTime.now(),
+        status: map['status']?.toString() ?? 'COMPLETED',
+        reference: map['reference']?.toString(),
+        paymentMethod: map['paymentMethod']?.toString(),
+      );
 }
 
 class RecentTransactionsService {
-  static Future<List<RecentTransaction>> fetchRecentTransactions({int limit = 50}) async {
+  static Future<List<RecentTransaction>> fetchRecentTransactions({
+    int limit = 50,
+  }) async {
     try {
       final sales = await LocalStorageService.loadSales();
       final transactions = <RecentTransaction>[];
 
       final today = DateTime.now();
-      
+
       for (var sale in sales) {
         if (sale is! Map) continue;
 
@@ -59,21 +62,25 @@ class RecentTransactionsService {
         if (saleDate == null) continue;
 
         // Only get today's transactions
-        if (!(saleDate.year == today.year && 
-              saleDate.month == today.month && 
-              saleDate.day == today.day)) continue;
+        if (!(saleDate.year == today.year &&
+            saleDate.month == today.month &&
+            saleDate.day == today.day))
+          continue;
 
-        transactions.add(RecentTransaction(
-          transactionId: sale['id']?.toString() ?? '',
-          type: sale['payment_method']?.toString() ?? 'CASH',
-          customerName: sale['customer_name']?.toString() ?? 'Walk-in Customer',
-          customerPhone: sale['phone']?.toString() ?? '',
-          amount: double.tryParse(sale['total']?.toString() ?? '0') ?? 0,
-          timestamp: saleDate,
-          status: 'COMPLETED',
-          reference: sale['reference']?.toString(),
-          paymentMethod: sale['payment_method']?.toString() ?? 'CASH',
-        ));
+        transactions.add(
+          RecentTransaction(
+            transactionId: sale['id']?.toString() ?? '',
+            type: sale['payment_method']?.toString() ?? 'CASH',
+            customerName:
+                sale['customer_name']?.toString() ?? 'Walk-in Customer',
+            customerPhone: sale['phone']?.toString() ?? '',
+            amount: double.tryParse(sale['total']?.toString() ?? '0') ?? 0,
+            timestamp: saleDate,
+            status: 'COMPLETED',
+            reference: sale['reference']?.toString(),
+            paymentMethod: sale['payment_method']?.toString() ?? 'CASH',
+          ),
+        );
       }
 
       // Sort by timestamp descending
@@ -100,16 +107,19 @@ class RecentTransactionsService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final transactions = (data['transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-        
+        final transactions =
+            (data['transactions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
         return transactions.map((t) {
           DateTime timestamp;
           try {
-            timestamp = DateTime.parse(t['timestamp']?.toString() ?? DateTime.now().toIso8601String());
+            timestamp = DateTime.parse(
+              t['timestamp']?.toString() ?? DateTime.now().toIso8601String(),
+            );
           } catch (e) {
             timestamp = DateTime.now();
           }
-          
+
           return RecentTransaction(
             transactionId: t['transactionId']?.toString() ?? '',
             type: 'UPI', // Online payments are marked as UPI
@@ -176,7 +186,10 @@ class _RecentTransactionsPageState extends State<RecentTransactionsPage>
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: LiveTranslatedText('Transactions', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Transactions',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -228,7 +241,8 @@ class _RecentTransactionsPageState extends State<RecentTransactionsPage>
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: transactions.length,
-      itemBuilder: (context, index) => _buildTransactionCard(transactions[index]),
+      itemBuilder: (context, index) =>
+          _buildTransactionCard(transactions[index]),
     );
   }
 
@@ -313,7 +327,9 @@ class _RecentTransactionsPageState extends State<RecentTransactionsPage>
                     txn.status,
                     style: GoogleFonts.poppins(
                       fontSize: 11,
-                      color: txn.status == 'COMPLETED' ? Colors.green : Colors.orange,
+                      color: txn.status == 'COMPLETED'
+                          ? Colors.green
+                          : Colors.orange,
                     ),
                   ),
                 ],
@@ -326,11 +342,18 @@ class _RecentTransactionsPageState extends State<RecentTransactionsPage>
             children: [
               Row(
                 children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade600),
+                  Icon(
+                    Icons.access_time,
+                    size: 14,
+                    color: Colors.grey.shade600,
+                  ),
                   const SizedBox(width: 4),
                   LiveTranslatedText(
                     _formatTime(txn.timestamp),
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                 ],
               ),
@@ -362,7 +385,10 @@ class _RecentTransactionsPageState extends State<RecentTransactionsPage>
               ),
               child: LiveTranslatedText(
                 'Ref: ${txn.reference}',
-                style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade700),
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.grey.shade700,
+                ),
               ),
             ),
           ],

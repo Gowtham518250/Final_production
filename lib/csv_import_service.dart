@@ -25,15 +25,24 @@ class CSVImportService {
       if (bytes == null) return {'success': false, 'message': 'File is empty'};
 
       final String csvContent = utf8.decode(bytes);
-      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
+      final List<List<dynamic>> rows = const CsvToListConverter().convert(
+        csvContent,
+      );
 
       if (rows.length < 2) {
-        return {'success': false, 'message': 'Empty CSV file or invalid format'};
+        return {
+          'success': false,
+          'message': 'Empty CSV file or invalid format',
+        };
       }
 
       // Skip header if first row contains non-numeric strings where numbers expected
       int startAt = 0;
-      if (rows[0].any((cell) => cell.toString().toLowerCase().contains('name') || cell.toString().toLowerCase().contains('item'))) {
+      if (rows[0].any(
+        (cell) =>
+            cell.toString().toLowerCase().contains('name') ||
+            cell.toString().toLowerCase().contains('item'),
+      )) {
         startAt = 1;
       }
 
@@ -46,8 +55,12 @@ class CSVImportService {
 
         // Smart Mapping: [Item Name, Amount/Price, Qty/Date]
         final String itemName = row[0].toString().trim();
-        final double amount = double.tryParse(row[1].toString().replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
-        
+        final double amount =
+            double.tryParse(
+              row[1].toString().replaceAll(RegExp(r'[^0-9.]'), ''),
+            ) ??
+            0.0;
+
         if (itemName.isEmpty || amount <= 0) continue;
 
         // Create a compliant sale record
@@ -65,8 +78,8 @@ class CSVImportService {
               'price': amount,
               'total': amount,
               'total_with_tax': amount,
-            }
-          ]
+            },
+          ],
         };
 
         allSales.add(saleRecord);
@@ -75,9 +88,10 @@ class CSVImportService {
 
       await LocalStorageService.saveSales(allSales);
       return {
-        'success': true, 
-        'message': 'Successfully imported $importedCount records from your file!',
-        'count': importedCount
+        'success': true,
+        'message':
+            'Successfully imported $importedCount records from your file!',
+        'count': importedCount,
       };
     } catch (e) {
       return {'success': false, 'message': 'Import Error: ${e.toString()}'};

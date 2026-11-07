@@ -63,7 +63,7 @@ import 'format_helper.dart';
 import 'local_storage_service.dart';
 import 'inventory_stock_helper.dart';
 import 'scheme_engine.dart';
-import 'offline_payment_queue.dart';
+import 'gst_calculator.dart';
 import 'package:vibration/vibration.dart';
 import 'session_management.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -311,7 +311,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final hasMissingPrices = entries.any((entry) {
         final name = entry['item']?.text.trim() ?? '';
         final price = double.tryParse(entry['price']?.text.trim() ?? '');
-        return name.isNotEmpty && (price == null || !price.isFinite || price <= 0);
+        return name.isNotEmpty &&
+            (price == null || !price.isFinite || price <= 0);
       });
       if (hasMissingPrices) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -327,12 +328,14 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     final missingRows = entries.where((entry) {
       final name = entry['item']?.text.trim() ?? '';
       final price = double.tryParse(entry['price']?.text.trim() ?? '');
-      return name.isNotEmpty && (price == null || !price.isFinite || price <= 0);
+      return name.isNotEmpty &&
+          (price == null || !price.isFinite || price <= 0);
     }).toList();
 
     if (missingRows.isEmpty) return;
 
-    final priceControllers = <TextEditingController, Map<String, TextEditingController>>{};
+    final priceControllers =
+        <TextEditingController, Map<String, TextEditingController>>{};
     for (final row in missingRows) {
       priceControllers[TextEditingController()] = row;
     }
@@ -363,7 +366,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         TextField(
                           controller: entry.key,
                           autofocus: priceControllers.keys.first == entry.key,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
                             prefixText: '₹ ',
                             labelText: 'Selling price per unit',
@@ -450,8 +455,30 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             .join("\n") +
         "\n\nTotal: ₹${totalAmount.toStringAsFixed(2)}\n\nThank you for shopping!";
 
-    final url =
-        "https://wa.me/91$customerPhone?text=${Uri.encodeComponent(billText)}";
+    // Normalize to international digits for wa.me: strip formatting, drop a
+    // leading trunk 0, and add 91 only for 10-digit local numbers. Previously
+    // the code always prepended "91", breaking numbers that already had a
+    // country code or were non-Indian.
+    var digits = customerPhone.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('00')) digits = digits.substring(2);
+    if (digits.length == 11 && digits.startsWith('0')) {
+      digits = digits.substring(1);
+    }
+    if (digits.length == 10) digits = '91$digits';
+    if (digits.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: LiveTranslatedText(
+              'Please enter a valid customer phone number first',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final url = "https://wa.me/$digits?text=${Uri.encodeComponent(billText)}";
     if (await canLaunchUrl(Uri.parse(url))) {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } else if (mounted) {
@@ -471,9 +498,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         builder: (_) => RetailMindFeatureGate(
           featureCode: 'voice_billing',
           child: Scaffold(
-            appBar: AppBar(
-              title: const LiveTranslatedText('Voice billing'),
-            ),
+            appBar: AppBar(title: const LiveTranslatedText('Voice billing')),
             body: SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -817,10 +842,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   [
                         {'code': 'en-IN', 'name': 'English'},
                         {'code': 'hi-IN', 'name': 'Hindi / हिन्दी'},
-                        {
-                          'code': 'te-IN',
-                          'name': 'Telugu / తెలుగు',
-                        },
+                        {'code': 'te-IN', 'name': 'Telugu / తెలుగు'},
                         {'code': 'ta-IN', 'name': 'Tamil / தமிழ்'},
                         {'code': 'mr-IN', 'name': 'Marathi / मराठी'},
                       ]
@@ -943,9 +965,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   List<BluetoothDevice> _devices = [];
   BluetoothDevice? _selectedDevice;
   bool _connected = false;
-
-  // Offline Queue for failed API writes
-  final OfflinePaymentQueue _offlineQueue = OfflinePaymentQueue();
 
   Future<void> _printBluetooth({
     required String billNumber,
@@ -1565,36 +1584,41 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // backend and local database for every spoken phrase. This removes repeated
     // disk/network latency from the hot billing path.
     await _productCatalogLoadFuture;
-    final List<Map<String, dynamic>> allCatalog = _knownProducts.map((raw) {
-      final name = (raw['product_name'] ??
-              raw['name'] ??
-              raw['itemName'] ??
-              raw['product'] ??
-              '')
-          .toString()
-          .trim();
-      final productPrice =
-          raw['price'] ?? raw['unit_price'] ?? raw['selling_price'] ?? 0;
-      final gst =
-          raw['gst_percent'] ?? raw['gst'] ?? raw['tax_percent'] ?? 18;
-      return <String, dynamic>{
-        ...raw,
-        'product_name': name,
-        'name': name,
-        'id': (raw['id'] ?? raw['product_id'] ?? raw['backend_id'] ?? '')
-            .toString(),
-        'price': productPrice,
-        'unit_price': productPrice,
-        'gst_percent': gst,
-        'gst': gst,
-        'barcode': raw['barcode'] ?? raw['sku'] ?? '',
-        'current_stock':
-            raw['current_stock'] ?? raw['stock'] ?? raw['stock_quantity'],
-      };
-    }).where((product) =>
-        product['source'] != 'Sales History' &&
-        (product['product_name'] ?? '').toString().trim().isNotEmpty
-    ).toList(growable: false);
+    final List<Map<String, dynamic>> allCatalog = _knownProducts
+        .map((raw) {
+          final name =
+              (raw['product_name'] ??
+                      raw['name'] ??
+                      raw['itemName'] ??
+                      raw['product'] ??
+                      '')
+                  .toString()
+                  .trim();
+          final productPrice =
+              raw['price'] ?? raw['unit_price'] ?? raw['selling_price'] ?? 0;
+          final gst =
+              raw['gst_percent'] ?? raw['gst'] ?? raw['tax_percent'] ?? 18;
+          return <String, dynamic>{
+            ...raw,
+            'product_name': name,
+            'name': name,
+            'id': (raw['id'] ?? raw['product_id'] ?? raw['backend_id'] ?? '')
+                .toString(),
+            'price': productPrice,
+            'unit_price': productPrice,
+            'gst_percent': gst,
+            'gst': gst,
+            'barcode': raw['barcode'] ?? raw['sku'] ?? '',
+            'current_stock':
+                raw['current_stock'] ?? raw['stock'] ?? raw['stock_quantity'],
+          };
+        })
+        .where(
+          (product) =>
+              product['source'] != 'Sales History' &&
+              (product['product_name'] ?? '').toString().trim().isNotEmpty,
+        )
+        .toList(growable: false);
 
     for (final product in allCatalog) {
       final pName = product['product_name'].toString().toLowerCase();
@@ -1608,14 +1632,15 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     final finalPrice = price > 0
         ? price
         : double.tryParse(
-              (bestMatch?['price'] ??
-                      bestMatch?['unit_price'] ??
-                      bestMatch?['selling_price'] ??
-                      '0')
-                  .toString(),
-            ) ??
-            0.0;
-    final finalGst = double.tryParse(
+                (bestMatch?['price'] ??
+                        bestMatch?['unit_price'] ??
+                        bestMatch?['selling_price'] ??
+                        '0')
+                    .toString(),
+              ) ??
+              0.0;
+    final finalGst =
+        double.tryParse(
           (bestMatch?['gst_percent'] ??
                   bestMatch?['gst'] ??
                   bestMatch?['tax_percent'] ??
@@ -1627,7 +1652,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     if (bestMatch != null && bestScore > 0.75) {
       // HIGH CONFIDENCE: Add immediately
       _addVoiceItem(
-        bestMatch['product_name']?.toString() ?? bestMatch['name']?.toString() ?? itemName,
+        bestMatch['product_name']?.toString() ??
+            bestMatch['name']?.toString() ??
+            itemName,
         qty,
         providedPrice: finalPrice,
         providedGst: finalGst,
@@ -1679,7 +1706,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     LiveTranslatedText(
-                      bestMatch?['product_name']?.toString() ?? bestMatch?['name']?.toString() ?? itemName,
+                      bestMatch?['product_name']?.toString() ??
+                          bestMatch?['name']?.toString() ??
+                          itemName,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -1721,7 +1750,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             ElevatedButton(
               onPressed: () {
                 _addVoiceItem(
-                  bestMatch?['product_name']?.toString() ?? bestMatch?['name']?.toString() ?? itemName,
+                  bestMatch?['product_name']?.toString() ??
+                      bestMatch?['name']?.toString() ??
+                      itemName,
                   qty,
                   providedPrice: finalPrice,
                   providedGst: finalGst,
@@ -1780,8 +1811,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             : rounded.toStringAsFixed(2);
       }
 
-      // Same product + same price = one bill line. Merge quantity instead
-      // of creating a second identical row.
+      // Same product + compatible price = one bill line. Merge quantity instead
+      // of creating a second identical row. A barcode match alone must never
+      // merge lines billed at different prices, and a missing price must not be
+      // treated as "same price" — otherwise "2 kg rice" + "1 kg rice ₹50"
+      // collapses into 3 kg @ ₹50.
       int existingIdx = -1;
       for (int i = 0; i < entries.length; i++) {
         final rowName = entries[i]['item']?.text.trim().toLowerCase() ?? '';
@@ -1789,18 +1823,20 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
         final rowPrice =
             double.tryParse(entries[i]['price']?.text.trim() ?? '') ?? 0.0;
-        final rowBarcode = entries[i]['barcode']?.text.trim() ?? '';
 
-        final sameBarcode =
-            incomingBarcode.isNotEmpty &&
-            rowBarcode.isNotEmpty &&
-            incomingBarcode == rowBarcode;
-        final samePrice =
-            incomingPrice <= 0 ||
-            rowPrice <= 0 ||
-            (rowPrice - incomingPrice).abs() < 0.01;
+        final bool pricesCompatible;
+        if (incomingPrice > 0 && rowPrice > 0) {
+          pricesCompatible = (rowPrice - incomingPrice).abs() < 0.01;
+        } else if (incomingPrice <= 0 && rowPrice > 0) {
+          // An unpriced voice line joins the priced row for the same product.
+          pricesCompatible = true;
+        } else {
+          // Priced line vs unpriced row, or both unpriced-but-different intent:
+          // keep separate rows so each keeps its own price review.
+          pricesCompatible = incomingPrice <= 0 && rowPrice <= 0;
+        }
 
-        if (sameBarcode || samePrice) {
+        if (pricesCompatible) {
           existingIdx = i;
           break;
         }
@@ -2351,16 +2387,24 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             '';
         final pBarcode = _normalizeBarcode(rawBarcode.toString());
         final pData = {
-          'id': (p['id'] ?? p['product_id'] ?? p['backend_id'] ?? '').toString(),
+          'id': (p['id'] ?? p['product_id'] ?? p['backend_id'] ?? '')
+              .toString(),
           'product_name': p['product_name'] ?? p['name'] ?? '',
           'name': p['product_name'] ?? p['name'] ?? '',
-          'price': (p['price'] ?? p['unit_price'] ?? p['selling_price'] ?? '0').toString(),
-          'unit_price': (p['unit_price'] ?? p['price'] ?? p['selling_price'] ?? '0').toString(),
-          'gst': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18').toString(),
-          'gst_percent': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18').toString(),
+          'price': (p['price'] ?? p['unit_price'] ?? p['selling_price'] ?? '0')
+              .toString(),
+          'unit_price':
+              (p['unit_price'] ?? p['price'] ?? p['selling_price'] ?? '0')
+                  .toString(),
+          'gst': (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18')
+              .toString(),
+          'gst_percent':
+              (p['gst_percent'] ?? p['gst'] ?? p['tax_percent'] ?? '18')
+                  .toString(),
           'barcode': pBarcode,
           'sku': p['sku']?.toString() ?? pBarcode,
-          'current_stock': p['current_stock'] ?? p['stock'] ?? p['stock_quantity'],
+          'current_stock':
+              p['current_stock'] ?? p['stock'] ?? p['stock_quantity'],
           'stock': p['stock'] ?? p['current_stock'] ?? p['stock_quantity'],
           'min_stock': p['min_stock'] ?? p['minimum_stock'] ?? 0,
           'category': p['category'] ?? p['category_name'] ?? '',
@@ -2382,11 +2426,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     try {
       final localMap = await LocalStorageService.loadLocalProducts();
       final legacyPriceLearningKeys = localMap.entries
-          .where((entry) =>
-              entry.value is Map &&
-              InventoryStockHelper.isLegacySalesPriceLearningProduct(
-                Map<String, dynamic>.from(entry.value as Map),
-              ))
+          .where(
+            (entry) =>
+                entry.value is Map &&
+                InventoryStockHelper.isLegacySalesPriceLearningProduct(
+                  Map<String, dynamic>.from(entry.value as Map),
+                ),
+          )
           .map((entry) => entry.key)
           .toList(growable: false);
       for (final key in legacyPriceLearningKeys) {
@@ -2420,10 +2466,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
 
       _localProducts = mergedProducts;
       known.addAll(
-        localMap.values.map((v) => CatalogWorkingSet.forBilling(<String, dynamic>{
-          ...Map<String, dynamic>.from(v),
-          'source': 'Local Catalog',
-        })),
+        localMap.values.map(
+          (v) => CatalogWorkingSet.forBilling(<String, dynamic>{
+            ...Map<String, dynamic>.from(v),
+            'source': 'Local Catalog',
+          }),
+        ),
       );
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading local products: $e');
@@ -2433,8 +2481,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // products and barcode entries above remain authoritative; history only
     // contributes lightweight name suggestions for older/unregistered items.
     try {
-      final history =
-          await LocalStorageService.loadRecentSalesForAutocomplete(limit: 300);
+      final history = await LocalStorageService.loadRecentSalesForAutocomplete(
+        limit: 300,
+      );
       final Set<String> seenNames = known
           .map((e) => e['name'].toString().toLowerCase().trim())
           .toSet();
@@ -3083,11 +3132,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       Map<String, dynamic>? matched;
       for (final product in _knownProducts) {
         if (product['source'] == 'Sales History') continue;
-        final productName = (product['product_name'] ??
-                product['name'] ??
-                product['productName'] ??
-                '')
-            .toString();
+        final productName =
+            (product['product_name'] ??
+                    product['name'] ??
+                    product['productName'] ??
+                    '')
+                .toString();
         final productCodes = <String>{
           (product['barcode'] ??
                   product['bar_code'] ??
@@ -3110,7 +3160,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       // No current inventory match means a custom bill line; leave it alone.
       if (matched == null) continue;
 
-      final stockRaw = matched['current_stock'] ??
+      final stockRaw =
+          matched['current_stock'] ??
           matched['stock'] ??
           matched['stock_quantity'] ??
           matched['available_stock'] ??
@@ -3125,7 +3176,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (quantity > stock) {
         if (mounted) {
           setState(() {
-            message = 'Insufficient stock for ' +
+            message =
+                'Insufficient stock for ' +
                 itemName +
                 '. Available: ' +
                 stock.toStringAsFixed(stock % 1 == 0 ? 0 : 3) +
@@ -3234,7 +3286,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 if (acceptedAmount <= 0) return;
                 setState(() {
                   _paidAmount += acceptedAmount;
-                  if (SalePaymentPolicy.isFullyPaid(_paidAmount, currentTotal)) {
+                  if (SalePaymentPolicy.isFullyPaid(
+                    _paidAmount,
+                    currentTotal,
+                  )) {
                     _paidAmount = currentTotal;
                     _paymentConfirmed = true;
                   }
@@ -3301,13 +3356,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // 🔧 FIX: Refresh session when app starts to ensure authentication is valid
     _refreshSessionIfNeeded();
 
-    // 🔄 Auto-sync queued actions when app starts
-    _processSyncQueue();
-
-    // ✅ Periodic sync check every 30 seconds
-    Future.delayed(const Duration(seconds: 30), () {
-      if (mounted) _processSyncQueue();
-    });
+    // 🔄 Auto-sync queued actions when app starts — handled app-wide by
+    // main.dart's _processSyncQueue; a second processor here could POST the
+    // same legacy queued sale twice.
 
     // Optimized: Unused animations removed for better performance on small phones
     _totalPulseController = AnimationController(
@@ -3377,7 +3428,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   Future<void> _loadPosContrastPref() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() => _posHighContrast = prefs.getBool('pos_high_contrast') ?? false);
+    setState(
+      () => _posHighContrast = prefs.getBool('pos_high_contrast') ?? false,
+    );
   }
 
   Future<void> _togglePosContrast() async {
@@ -3682,7 +3735,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             final covered = SalePaymentEchoPolicy.billAlreadyCovered(
               remainingDue: math.max(0.0, freshTotal - _paidAmount).toDouble(),
               pendingAmounts: [
-                ..._pendingPaymentConfirmations.map((pending) => pending.amount),
+                ..._pendingPaymentConfirmations.map(
+                  (pending) => pending.amount,
+                ),
                 if (_confirmationInDialog != null)
                   _confirmationInDialog!.amount,
               ],
@@ -3735,7 +3790,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         if (normalizedReference != null) {
           _processedReferenceEvents[normalizedReference] = event;
           if (_processedReferenceEvents.length > 100) {
-            _processedReferenceEvents.remove(_processedReferenceEvents.keys.first);
+            _processedReferenceEvents.remove(
+              _processedReferenceEvents.keys.first,
+            );
           }
         }
         _recentAppliedPaymentEvents.add(event);
@@ -4007,7 +4064,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     final now = DateTime.now();
     _recentPaymentCandidates.removeWhere(
       (candidate) =>
-          now.difference(candidate.timestamp).abs() > const Duration(minutes: 12),
+          now.difference(candidate.timestamp).abs() >
+          const Duration(minutes: 12),
     );
     for (final candidate in _recentPaymentCandidates.reversed) {
       if (candidate.normalizedReferenceId == reference) return candidate;
@@ -4016,7 +4074,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   }
 
   void _rememberRecentPaymentCandidate(PaymentEvent event) {
-    _recentPaymentCandidates.removeWhere((candidate) => candidate.id == event.id);
+    _recentPaymentCandidates.removeWhere(
+      (candidate) => candidate.id == event.id,
+    );
     _recentPaymentCandidates.add(event);
     if (_recentPaymentCandidates.length > 100) {
       _recentPaymentCandidates.removeAt(0);
@@ -4060,7 +4120,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     final now = event.timestamp;
     _recentPaymentCandidates.removeWhere(
       (candidate) =>
-          now.difference(candidate.timestamp).abs() > const Duration(minutes: 12),
+          now.difference(candidate.timestamp).abs() >
+          const Duration(minutes: 12),
     );
     final result = SalePaymentEchoPolicy.classify(
       _echoCandidateOf(event),
@@ -4466,70 +4527,160 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
   }
 
-  Map<String, double> calculateTotal() {
-    double subTotal = 0.0;
-    double gstTotal = 0.0;
+  double _money2(double value) => double.parse(value.toStringAsFixed(2));
 
-    for (var entry in entries) {
-      final String qtyText = entry['qty']?.text.trim() ?? '1';
-      final String priceText = entry['price']?.text.trim() ?? '0';
-      final String discText = entry['discount']?.text.trim() ?? '0';
+  double _money3(double value) => double.parse(value.toStringAsFixed(3));
 
-      final double qty = qtyText.isEmpty
-          ? 1.0
-          : (double.tryParse(qtyText) ?? 0.0);
-      final double price = double.tryParse(priceText) ?? 0.0;
-      final double discount = double.tryParse(discText) ?? 0.0;
-      final double gstPct = double.tryParse(entry['gst']?.text ?? '0') ?? 0.0;
+  /// Per-line amounts BEFORE the bill-level scheme discount.
+  ///
+  /// Shared by calculateTotal() and _getProcessedItems() so the displayed
+  /// total, the local history record and the backend invoice payload all use
+  /// identical paise rounding. Only named rows count — an unnamed row with a
+  /// price must never inflate the bill.
+  Map<String, double> _lineBaseAmounts(
+    Map<String, TextEditingController> entry,
+  ) {
+    final qtyText = entry['qty']?.text.trim() ?? '1';
+    final qty = qtyText.isEmpty ? 1.0 : (double.tryParse(qtyText) ?? 0.0);
+    final price = double.tryParse(entry['price']?.text.trim() ?? '0') ?? 0.0;
+    final disc = double.tryParse(entry['discount']?.text.trim() ?? '0') ?? 0.0;
+    var gstPct = double.tryParse(entry['gst']?.text.trim() ?? '0') ?? 0.0;
+    if (!gstPct.isFinite) gstPct = 0.0;
+    // The backend rejects GST rates outside 0–100; clamp instead of letting a
+    // bad entry wedge the sale in the sync queue.
+    gstPct = gstPct.clamp(0.0, 100.0);
 
-      final double effectivePrice = math.max(0.0, price - discount);
-      final double lineSubtotal = qty * effectivePrice;
+    final q = _money3(qty);
+    final p = _money2(price);
+    final gross = _money2(q * p);
+    final manualTotal = _money2((q * disc).clamp(0.0, gross));
+    var flash = _money2(_flashSaleDiscountForEntry(entry));
+    if (!flash.isFinite || flash < 0) flash = 0.0;
+    flash = math.min(flash, math.max(0.0, gross - manualTotal));
+    final preSchemeDiscount = _money2(math.min(manualTotal + flash, gross));
+    final base = _money2(math.max(0.0, gross - preSchemeDiscount));
+    return {
+      'qty': q,
+      'price': p,
+      'gross': gross,
+      'manualDiscount': manualTotal,
+      'flashDiscount': flash,
+      'preSchemeDiscount': preSchemeDiscount,
+      'base': base,
+      'gstRate': gstPct,
+    };
+  }
 
-      subTotal += lineSubtotal;
-      if (_withTax) {
-        gstTotal += lineSubtotal * (gstPct / 100);
-      }
+  /// Allocates the bill-level scheme discount across lines in exact paise
+  /// (largest remainder) and computes each line's tax with the same
+  /// GstCalculator call the backend sync path uses, so frontend totals,
+  /// local history and the synced invoice agree to the paisa.
+  List<Map<String, double>> _finalizeBillLines(
+    List<Map<String, double>> lines,
+    double schemeDiscount, {
+    required bool withTax,
+  }) {
+    final basePaise = lines.map((l) => (l['base']! * 100).round()).toList();
+    final totalBasePaise = basePaise.fold<int>(0, (sum, v) => sum + v);
+    var schemePaise = (schemeDiscount * 100).round();
+    if (schemePaise < 0) schemePaise = 0;
+    if (schemePaise > totalBasePaise) schemePaise = totalBasePaise;
+
+    final rawShares = List<double>.filled(lines.length, 0.0);
+    final floors = List<int>.filled(lines.length, 0);
+    var assigned = 0;
+    for (var i = 0; i < lines.length; i++) {
+      final raw = totalBasePaise == 0
+          ? 0.0
+          : schemePaise * basePaise[i] / totalBasePaise;
+      rawShares[i] = raw;
+      floors[i] = raw.floor();
+      assigned += floors[i];
+    }
+    final order = List<int>.generate(lines.length, (i) => i)
+      ..sort(
+        (a, b) =>
+            (rawShares[b] - floors[b]).compareTo(rawShares[a] - floors[a]),
+      );
+    final shares = List<int>.from(floors);
+    var remaining = schemePaise - assigned;
+    var cursor = 0;
+    var guard = 0;
+    while (remaining > 0 && lines.isNotEmpty && guard < lines.length * 2) {
+      shares[order[cursor % order.length]]++;
+      cursor++;
+      remaining--;
+      guard++;
     }
 
-    final double cgst = double.parse((gstTotal / 2).toStringAsFixed(2));
-    final double sgst = double.parse((gstTotal / 2).toStringAsFixed(2));
-    double grand = double.parse((subTotal + gstTotal).toStringAsFixed(2));
+    final finalized = <Map<String, double>>[];
+    for (var i = 0; i < lines.length; i++) {
+      final l = lines[i];
+      final discount = _money2(
+        math.min(l['preSchemeDiscount']! + shares[i] / 100.0, l['gross']!),
+      );
+      final taxable = _money2(math.max(0.0, l['gross']! - discount));
+      final tax = withTax
+          ? GstCalculator.calculateItemGST(
+              price: taxable,
+              quantity: 1,
+              gstRate: l['gstRate']!,
+            ).totalGST
+          : 0.0;
+      finalized.add({
+        ...l,
+        'schemeShare': shares[i] / 100.0,
+        'discount': discount,
+        'taxable': taxable,
+        'tax': _money2(tax),
+        'totalWithTax': _money2(taxable + tax),
+      });
+    }
+    return finalized;
+  }
+
+  Map<String, double> calculateTotal() {
+    // Only named rows contribute — identical to _getProcessedItems(), which
+    // is what actually gets billed. Previously an unnamed row containing a
+    // price silently inflated the total without appearing on the invoice.
+    final namedEntries = entries
+        .where((e) => e['item']?.text.trim().isNotEmpty ?? false)
+        .toList();
+    final lines = namedEntries.map(_lineBaseAmounts).toList();
+
+    double subTotal = 0.0;
+    double flashTotal = 0.0;
+    for (final l in lines) {
+      subTotal += l['gross']! - l['manualDiscount']!;
+      flashTotal += l['flashDiscount']!;
+    }
+    subTotal = _money2(subTotal);
+    flashTotal = _money2(flashTotal);
 
     // Apply best scheme discount
     try {
-      final schemeItems = entries
-          .where((e) => e['item']?.text.isNotEmpty ?? false)
-          .map(
-            (e) => {
-              'quantity': double.tryParse(e['qty']?.text ?? '1') ?? 1,
-              'price': double.tryParse(e['price']?.text ?? '0') ?? 0,
-              'product_name': e['item']?.text ?? '',
-            },
-          )
-          .toList();
+      final schemeItems = List.generate(namedEntries.length, (i) {
+        final l = lines[i];
+        return <String, dynamic>{
+          'quantity': l['qty'],
+          'price': l['price'],
+          'product_name': namedEntries[i]['item']?.text ?? '',
+        };
+      });
 
       final schemeResult = SchemeEngine.applyBestScheme(schemeItems, subTotal);
-
-      if (mounted) {
-        setState(() {
-          _schemeDiscount =
-              (schemeResult['discount_amount'] as num?)?.toDouble() ?? 0;
-          _activeSchemeName = schemeResult['scheme_name']?.toString() ?? '';
-        });
-      }
+      final schemeDiscount = _money2(
+        (schemeResult['discount_amount'] as num?)?.toDouble() ?? 0,
+      );
+      _schemeDiscount = schemeDiscount;
+      _activeSchemeName = schemeResult['scheme_name']?.toString() ?? '';
+      if (mounted) setState(() {});
 
       // Flash sale discount requires an async SharedPreferences lookup, so it
       // can't be resolved inside this synchronous method. Kick it off here;
       // once it resolves, it updates _flashSaleDiscount and triggers a
       // recalculation so the total reflects it.
       _applyFlashSaleDiscount(subTotal);
-
-      final totalDiscount = _schemeDiscount + _flashSaleDiscount;
-      if (totalDiscount > 0) {
-        grand = double.parse(
-          ((subTotal + gstTotal - totalDiscount)).toStringAsFixed(2),
-        );
-      }
     } catch (e) {
       // Keep the deterministic normal total, but surface the failed scheme
       // evaluation in diagnostics instead of silently hiding it.
@@ -4539,9 +4690,29 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       _activeSchemeName = '';
     }
 
+    final finalized = _finalizeBillLines(
+      lines,
+      _schemeDiscount,
+      withTax: _withTax,
+    );
+    double gstTotal = 0.0;
+    double grand = 0.0;
+    for (final f in finalized) {
+      gstTotal += f['tax']!;
+      grand += f['totalWithTax']!;
+    }
+    gstTotal = _money2(gstTotal);
+    grand = _money2(grand);
+
+    // Paise-exact CGST/SGST split: the two halves must always add back to
+    // the total GST (previously both were total/2, off by 1 paisa on odd
+    // totals).
+    final double cgst = _money2(gstTotal / 2);
+    final double sgst = _money2(gstTotal - cgst);
+
     if (mounted) {
       setState(() {
-        totalSubtotal = double.parse(subTotal.toStringAsFixed(2));
+        totalSubtotal = subTotal;
         totalCgst = cgst;
         totalSgst = sgst;
         totalAmount = grand;
@@ -4558,7 +4729,15 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       }
     }
 
-    return {'subtotal': subTotal, 'cgst': cgst, 'sgst': sgst, 'total': grand};
+    return {
+      'subtotal': subTotal,
+      'cgst': cgst,
+      'sgst': sgst,
+      'tax': gstTotal,
+      'total': grand,
+      'flash_discount': flashTotal,
+      'scheme_discount': _schemeDiscount,
+    };
   }
 
   void _clearSaleInterface() {
@@ -4650,34 +4829,46 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         }
         return false;
       }
+      // The backend stores quantity at 3 decimals; a value that rounds to
+      // zero (e.g. 0.0004) would be rejected at sync time. Catch it here.
+      if (double.parse(qty.toStringAsFixed(3)) <= 0) {
+        if (mounted) {
+          setState(
+            () => message =
+                'Item "${entry['item']?.text}" quantity is too small to bill.',
+          );
+        }
+        return false;
+      }
     }
 
     return true;
   }
 
   List<Map<String, dynamic>> _getProcessedItems() {
-    return entries.where((e) => e['item']?.text.trim().isNotEmpty ?? false).map((
-      e,
-    ) {
+    final namedEntries = entries
+        .where((e) => e['item']?.text.trim().isNotEmpty ?? false)
+        .toList();
+    // Use the exact same per-line money breakdown as calculateTotal() so the
+    // invoice payload's discount_amount/line_total/total_with_tax match what
+    // the cashier saw and what the backend will recompute.
+    final money = _finalizeBillLines(
+      namedEntries.map(_lineBaseAmounts).toList(),
+      _schemeDiscount,
+      withTax: _withTax,
+    );
+    return namedEntries.asMap().entries.map((pair) {
+      final e = pair.value;
+      final m = money[pair.key];
       final barcode = e['barcode']?.text.trim() ?? '';
       final rawName = e['item']?.text.trim() ?? '';
-      final qty = double.tryParse(e['qty']?.text.trim() ?? '1') ?? 1.0;
-      final price = double.tryParse(e['price']?.text.trim() ?? '0') ?? 0.0;
-      final gstPct = double.tryParse(e['gst']?.text.trim() ?? '0') ?? 0.0;
-
-      final lineSub = qty * price;
-      final manualDiscountPerUnit =
-          double.tryParse(e['discount']?.text.trim() ?? '0') ?? 0;
-      final manualDiscountTotal = (qty * manualDiscountPerUnit).clamp(
-        0,
-        lineSub,
-      );
-      final flashDiscountTotal = _flashSaleDiscountForEntry(e);
-      final totalLineDiscount = (manualDiscountTotal + flashDiscountTotal)
-          .clamp(0, lineSub);
-      final discountedLineSub = math.max(0.0, lineSub - totalLineDiscount);
-      final lineGst = _withTax ? lineSub * (gstPct / 100) : 0.0;
-      final lineTotal = double.parse(discountedLineSub.toStringAsFixed(2));
+      final qty = m['qty']!;
+      final price = m['price']!;
+      final gstPct = m['gstRate']!;
+      final lineTotal = m['taxable']!;
+      final manualDiscountTotal = m['manualDiscount']!;
+      final flashDiscountTotal = m['flashDiscount']!;
+      final totalLineDiscount = m['discount']!;
 
       final discountReasons = <String>[];
       if (manualDiscountTotal > 0) {
@@ -4689,6 +4880,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             _activeFlashSale?['discount'] ??
             0;
         discountReasons.add('Special Discount: Flash Sale $salePct%');
+      }
+      if ((m['schemeShare'] ?? 0) > 0) {
+        discountReasons.add('Scheme Discount');
       }
 
       // Resolve the saved line back to this shop's real catalogue record.
@@ -4724,9 +4918,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       // a match in the current inventory catalog receives stock identity.
       final stockTracked = match.isNotEmpty;
       final realProductId = match.isNotEmpty
-          ? (match['id'] ??
-                match['product_id'] ??
-                match['productId'])
+          ? (match['id'] ?? match['product_id'] ?? match['productId'])
           : null;
 
       return {
@@ -4739,9 +4931,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         'qty': qty,
         'quantity': qty,
         'gst_percent': gstPct.toString(),
-        'total_with_tax': lineTotal.toString(),
+        'total_with_tax': m['totalWithTax'].toString(),
         'line_total': lineTotal,
-        'discount_amount': double.parse(totalLineDiscount.toStringAsFixed(2)),
+        'discount_amount': totalLineDiscount,
         'discount_reason': discountReasons.join(' + '),
         'discount_source': flashDiscountTotal > 0 ? 'FLASH_SALE' : null,
         'original_unit_price': price,
@@ -4830,12 +5022,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       current = math.max(current, await _highestBackendBillSequence());
     }
 
+    // Calculate next number but do NOT persist it — caller persists on successful save
     final next = current + 1;
-    await prefs.setInt(key, next);
-
-    if (userId <= 0) {
-      await prefs.setInt('last_bill_number', next);
-    }
 
     return 'BILL-' + next.toString().padLeft(4, '0');
   }
@@ -4956,6 +5144,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     final billNumber = _draftBillNumber ?? await _allocateNextBillNumber();
     _draftBillNumber = billNumber;
 
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
+    final key = userId > 0 ? 'last_bill_number_$userId' : 'last_bill_number';
+    final previousBillNumber = prefs.getInt(key) ?? 0;
+
     try {
       final items = _getProcessedItems();
       final paidAmountForSubmission = SalePaymentPolicy.resolvePaidAmount(
@@ -5045,6 +5238,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         // Local durable save is confirmed; the next sale gets a new number.
         _draftBillNumber = null;
         _hapticSuccess();
+        // Capture bill-document values BEFORE _clearSaleInterface() resets
+        // _paidAmount and clears the customer field — the success-dialog PDF
+        // must reflect what was actually billed, not the blank next-bill form.
+        final double billPaidAmount = paidAmountForSubmission;
+        final String billCustomerName = customerNameController.text.trim();
         // ✅ CRITICAL: Reset loading BEFORE clearing interface so buttons re-enable
         if (mounted)
           setState(() {
@@ -5099,7 +5297,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           final shopPhone2 = prefs2.getString('shop_phone') ?? '';
           final shopAddress2 = prefs2.getString('location') ?? '';
           final gstNumber2 = prefs2.getString('gst_number') ?? '';
-          final customerName2 = customerNameController.text.trim();
 
           // 📄 Generate real PDF bill
           String billFilePath = '';
@@ -5110,10 +5307,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               shopPhone: shopPhone2,
               shopAddress: shopAddress2,
               gstNumber: gstNumber2,
-              customerName: customerName2,
+              customerName: billCustomerName,
               items: items,
               totalAmount: grandTotal,
-              paidAmount: _paidAmount,
+              paidAmount: billPaidAmount,
               withTax: _withTax,
             );
           } catch (e) {
@@ -5125,7 +5322,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               : 'https://wa.me/?text=${Uri.encodeComponent("Bill for $saleId — ₹${grandTotal.toStringAsFixed(2)}")}';
 
           final String capturedBillPath = billFilePath;
-          final String capturedCustomer = customerName2;
+          final String capturedCustomer = billCustomerName;
 
           showDialog(
             context: context,
@@ -5391,6 +5588,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             ),
           );
         }
+
+        // Commit bill number to persistent storage after successful save
+        await prefs.setInt(key, previousBillNumber + 1);
+        if (userId <= 0) {
+          await prefs.setInt('last_bill_number', previousBillNumber + 1);
+        }
+
         return true;
       } else {
         final errorCode = result['error']?.toString() ?? 'UNKNOWN_ERROR';
@@ -5417,6 +5621,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         throw Exception(result['error'] ?? 'Unknown Error');
       }
     } catch (e) {
+      // Roll back bill number on failure to prevent gaps in sequence
+      await prefs.setInt(key, previousBillNumber);
+      if (userId <= 0) {
+        await prefs.setInt('last_bill_number', previousBillNumber);
+      }
+      _draftBillNumber = null;
+
       if (mounted) {
         final lowerError = e.toString().toLowerCase();
         setState(() {
@@ -5893,7 +6104,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.poppins(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isEnabled ? Colors.white : const Color(0xFF9CA3AF),
                   ),
@@ -5930,7 +6141,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         LiveTranslatedText(
           '₹${totalAmount.toStringAsFixed(0)}',
           style: GoogleFonts.spaceMono(
-            fontSize: 22,
+            fontSize: 18,
             fontWeight: FontWeight.w900,
             color: const Color(0xFF111827),
           ),
@@ -5970,376 +6181,384 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     return Stack(
       children: [
         Scaffold(
-      extendBodyBehindAppBar: false,
-      backgroundColor: const Color(0xFFF8F9FC),
-      appBar: _buildAppBar(),
-      // â”€â”€ Sticky bottom action bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      bottomSheet: Container(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 12,
-          bottom: MediaQuery.of(context).viewInsets.bottom > 0
-              ? 12
-              : MediaQuery.of(context).padding.bottom + 12,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: const Color(0xFFE5E7EB))),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 16,
-              offset: const Offset(0, -4),
+          extendBodyBehindAppBar: false,
+          backgroundColor: const Color(0xFFF8F9FC),
+          appBar: _buildAppBar(),
+          // â”€â”€ Sticky bottom action bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          bottomSheet: Container(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(context).viewInsets.bottom > 0
+                  ? 12
+                  : MediaQuery.of(context).padding.bottom + 12,
             ),
-          ],
-        ),
-        child: compactBottomLayout
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  totalDisplay,
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        saveSalesButton,
-                        const SizedBox(height: 8),
-                        generateBillButton,
-                        if (totalAmount > 0) ...[
-                          const SizedBox(height: 8),
-                          borrowButton,
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: const Color(0xFFE5E7EB))),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: compactBottomLayout
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // â”€â”€ Total amount display â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          LiveTranslatedText(
-                            'TOTAL',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF9CA3AF),
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          LiveTranslatedText(
-                            '₹${totalAmount.toStringAsFixed(0)}',
-                            style: GoogleFonts.spaceMono(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF111827),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
-                      // â”€â”€ First row buttons: Save Sales + Generate Bill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                      totalDisplay,
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildBottomButton(
-                                    label: 'Save Sales',
-                                    icon: Icons.save_rounded,
-                                    color: const Color(0xFF10B981),
-                                    isEnabled:
-                                        totalAmount > 0 &&
-                                        !isLoading &&
-                                        billReady,
-                                    isLoading: isLoading,
-                                    onTap: (isLoading || !billReady)
-                                        ? null
-                                        : submitAllSales,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _buildBottomButton(
-                                    label: 'Generate Bill',
-                                    icon: Icons.receipt_long_rounded,
-                                    color: const Color(0xFF4F46E5),
-                                    isEnabled:
-                                        totalAmount > 0 &&
-                                        !isLoading &&
-                                        billReady,
-                                    isLoading: false,
-                                    onTap: (isLoading || !billReady)
-                                        ? null
-                                        : generateBill,
-                                  ),
-                                ),
-                              ],
-                            ),
+                            saveSalesButton,
+                            const SizedBox(height: 8),
+                            generateBillButton,
                             if (totalAmount > 0) ...[
                               const SizedBox(height: 8),
-                              _buildBottomButton(
-                                label: isLoading
-                                    ? 'Recording...'
-                                    : (_borrowWaitingForCustomer
-                                          ? 'Record Borrow'
-                                          : 'Borrow'),
-                                icon: Icons.assignment_late_rounded,
-                                color: const Color(0xFF8B5CF6),
-                                isEnabled: !isLoading,
-                                isLoading: isLoading,
-                                onTap: isLoading ? null : borrowSale,
-                              ),
+                              borrowButton,
                             ],
                           ],
                         ),
                       ),
                     ],
-                  ),
-                ],
-              ),
-      ),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              // Extra bottom padding so sticky bar doesn't cover content
-              padding: EdgeInsets.fromLTRB(
-                14,
-                8,
-                14,
-                compactBottomLayout ? (totalAmount > 0 ? 250 : 190) : 90,
-              ),
-              child: Column(
-                children: [
-                  _buildTotalCard(),
-                  const SizedBox(height: 12),
-                  _buildFormCard(),
-                ],
-              ),
-            ),
-            // ✨ Barcode Scan Flash Effect
-            if (_scanFlashOpacity > 0)
-              AnimatedOpacity(
-                opacity: _scanFlashOpacity,
-                duration: const Duration(milliseconds: 300),
-                child: Container(color: Colors.green.withValues(alpha: 0.3)),
-              ),
-            if (_isListening)
-              AnimatedOpacity(
-                opacity: 1.0,
-                duration: const Duration(milliseconds: 300),
-                child: Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.85),
-                          Colors.black.withOpacity(0.95),
-                        ],
-                      ),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
                         children: [
-                          // Animated mic with multiple pulsing circles
-                          Stack(
-                            alignment: Alignment.center,
+                          // â”€â”€ Total amount display â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              for (int i = 0; i < 3; i++)
-                                AnimatedBuilder(
-                                  animation: _voicePulseControllers[i],
-                                  builder: (context, child) {
-                                    final value =
-                                        _voicePulseControllers[i].value;
-                                    return Transform.scale(
-                                      scale: 1.0 + (i * 0.3 * value),
-                                      child: Opacity(
-                                        opacity: 1.0 - value,
-                                        child: Container(
-                                          width: 100,
-                                          height: 100,
-                                          decoration: BoxDecoration(
-                                            color: const Color(
-                                              0xFF6366F1,
-                                            ).withOpacity(0.3),
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: const Color(
-                                                0xFF6366F1,
-                                              ).withOpacity(0.6),
-                                              width: 3,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
+                              LiveTranslatedText(
+                                'TOTAL',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF9CA3AF),
+                                  letterSpacing: 1.2,
                                 ),
-                              // Main mic container
-                              Container(
-                                width: 100,
-                                height: 100,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF6366F1),
-                                      Color(0xFF4F46E5),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF6366F1,
-                                      ).withOpacity(0.5),
-                                      blurRadius: 30,
-                                      spreadRadius: 5,
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.mic_rounded,
-                                  color: Colors.white,
-                                  size: 50,
+                              ),
+                              LiveTranslatedText(
+                                '₹${totalAmount.toStringAsFixed(0)}',
+                                style: GoogleFonts.spaceMono(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: const Color(0xFF111827),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 40),
-                          // Detected text display
-                          Container(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width - 60,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
-                                width: 1,
-                              ),
-                            ),
+                          const SizedBox(width: 12),
+                          // â”€â”€ First row buttons: Save Sales + Generate Bill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                          Expanded(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                LiveTranslatedText(
-                                  _lastWords.isEmpty
-                                      ? 'Listening...'
-                                      : '"$_lastWords"',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white,
-                                    fontSize: _lastWords.isEmpty ? 20 : 26,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.3,
-                                  ),
-                                ),
-                                if (_lastWords.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _voiceConfidence > 0.7
-                                          ? const Color(
-                                              0xFF10B981,
-                                            ).withOpacity(0.2)
-                                          : Colors.orange.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: LiveTranslatedText(
-                                      'Confidence: ${(_voiceConfidence * 100).toStringAsFixed(0)}%',
-                                      style: GoogleFonts.poppins(
-                                        color: _voiceConfidence > 0.7
-                                            ? const Color(0xFF10B981)
-                                            : Colors.orange,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildBottomButton(
+                                        label: 'Save Sales',
+                                        icon: Icons.save_rounded,
+                                        color: const Color(0xFF10B981),
+                                        isEnabled:
+                                            totalAmount > 0 &&
+                                            !isLoading &&
+                                            billReady,
+                                        isLoading: isLoading,
+                                        onTap: (isLoading || !billReady)
+                                            ? null
+                                            : submitAllSales,
                                       ),
                                     ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _buildBottomButton(
+                                        label: 'Generate Bill',
+                                        icon: Icons.receipt_long_rounded,
+                                        color: const Color(0xFF4F46E5),
+                                        isEnabled:
+                                            totalAmount > 0 &&
+                                            !isLoading &&
+                                            billReady,
+                                        isLoading: false,
+                                        onTap: (isLoading || !billReady)
+                                            ? null
+                                            : generateBill,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (totalAmount > 0) ...[
+                                  const SizedBox(height: 8),
+                                  _buildBottomButton(
+                                    label: isLoading
+                                        ? 'Recording...'
+                                        : (_borrowWaitingForCustomer
+                                              ? 'Record Borrow'
+                                              : 'Borrow'),
+                                    icon: Icons.assignment_late_rounded,
+                                    color: const Color(0xFF8B5CF6),
+                                    isEnabled: !isLoading,
+                                    isLoading: isLoading,
+                                    onTap: isLoading ? null : borrowSale,
                                   ),
                                 ],
                               ],
                             ),
                           ),
-                          const SizedBox(height: 50),
-                          // Stop button
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(30),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.red.withOpacity(0.3),
-                                  blurRadius: 15,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            child: ElevatedButton.icon(
-                              onPressed: _stopListening,
-                              icon: const Icon(Icons.stop_rounded, size: 20),
-                              label: LiveTranslatedText(
-                                'STOP LISTENING',
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.redAccent,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 28,
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                elevation: 0,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          // Tip text
-                          LiveTranslatedText(
-                            'Speak your order clearly, e.g., "2 kg rice 100"',
-                            style: GoogleFonts.poppins(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
                         ],
+                      ),
+                    ],
+                  ),
+          ),
+          body: SafeArea(
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  // Extra bottom padding so sticky bar doesn't cover content
+                  padding: EdgeInsets.fromLTRB(
+                    14,
+                    8,
+                    14,
+                    compactBottomLayout ? (totalAmount > 0 ? 250 : 190) : 90,
+                  ),
+                  child: Column(
+                    children: [
+                      _buildTotalCard(),
+                      const SizedBox(height: 12),
+                      _buildFormCard(),
+                    ],
+                  ),
+                ),
+                // ✨ Barcode Scan Flash Effect
+                if (_scanFlashOpacity > 0)
+                  AnimatedOpacity(
+                    opacity: _scanFlashOpacity,
+                    duration: const Duration(milliseconds: 300),
+                    child: Container(
+                      color: Colors.green.withValues(alpha: 0.3),
+                    ),
+                  ),
+                if (_isListening)
+                  AnimatedOpacity(
+                    opacity: 1.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.85),
+                              Colors.black.withOpacity(0.95),
+                            ],
+                          ),
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Animated mic with multiple pulsing circles
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  for (int i = 0; i < 3; i++)
+                                    AnimatedBuilder(
+                                      animation: _voicePulseControllers[i],
+                                      builder: (context, child) {
+                                        final value =
+                                            _voicePulseControllers[i].value;
+                                        return Transform.scale(
+                                          scale: 1.0 + (i * 0.3 * value),
+                                          child: Opacity(
+                                            opacity: 1.0 - value,
+                                            child: Container(
+                                              width: 100,
+                                              height: 100,
+                                              decoration: BoxDecoration(
+                                                color: const Color(
+                                                  0xFF6366F1,
+                                                ).withOpacity(0.3),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: const Color(
+                                                    0xFF6366F1,
+                                                  ).withOpacity(0.6),
+                                                  width: 3,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  // Main mic container
+                                  Container(
+                                    width: 100,
+                                    height: 100,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF6366F1),
+                                          Color(0xFF4F46E5),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF6366F1,
+                                          ).withOpacity(0.5),
+                                          blurRadius: 30,
+                                          spreadRadius: 5,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.mic_rounded,
+                                      color: Colors.white,
+                                      size: 50,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 40),
+                              // Detected text display
+                              Container(
+                                constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.of(context).size.width - 60,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 16,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.2),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    LiveTranslatedText(
+                                      _lastWords.isEmpty
+                                          ? 'Listening...'
+                                          : '"$_lastWords"',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontSize: _lastWords.isEmpty ? 20 : 26,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                    if (_lastWords.isNotEmpty) ...[
+                                      const SizedBox(height: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _voiceConfidence > 0.7
+                                              ? const Color(
+                                                  0xFF10B981,
+                                                ).withOpacity(0.2)
+                                              : Colors.orange.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: LiveTranslatedText(
+                                          'Confidence: ${(_voiceConfidence * 100).toStringAsFixed(0)}%',
+                                          style: GoogleFonts.poppins(
+                                            color: _voiceConfidence > 0.7
+                                                ? const Color(0xFF10B981)
+                                                : Colors.orange,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 50),
+                              // Stop button
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.red.withOpacity(0.3),
+                                      blurRadius: 15,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton.icon(
+                                  onPressed: _stopListening,
+                                  icon: const Icon(
+                                    Icons.stop_rounded,
+                                    size: 20,
+                                  ),
+                                  label: LiveTranslatedText(
+                                    'STOP LISTENING',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.redAccent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 28,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Tip text
+                              LiveTranslatedText(
+                                'Speak your order clearly, e.g., "2 kg rice 100"',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
-      ),
-    ),
         if (_showFirstSaleCoach)
           FirstSaleCoachOverlay(
             steps: [
@@ -6522,19 +6741,13 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   // â”€â”€ Total card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildTotalCard() {
-    // Live GST breakdown calculation
-    double subtotalCalc = 0;
-    double totalGstCalc = 0;
-    for (var entry in entries) {
-      double qty = double.tryParse(entry['qty']?.text ?? '0') ?? 0;
-      double price = double.tryParse(entry['price']?.text ?? '0') ?? 0;
-      double gstP = double.tryParse(entry['gst']?.text ?? '0') ?? 0;
-      double sub = qty * price;
-      subtotalCalc += sub;
-      if (_withTax) totalGstCalc += sub * (gstP / 100);
-    }
-    final double cgst = double.parse((totalGstCalc / 2).toStringAsFixed(2));
-    final double sgst = double.parse((totalGstCalc / 2).toStringAsFixed(2));
+    // Use the canonical totals maintained by calculateTotal() — recomputing
+    // here previously ignored discounts and unnamed-row filtering, so the
+    // breakdown could disagree with the billed total.
+    final double subtotalCalc = totalSubtotal;
+    final double totalGstCalc = totalCgst + totalSgst;
+    final double cgst = totalCgst;
+    final double sgst = totalSgst;
     final int itemCount = entries
         .where((e) => e['item']?.text.trim().isNotEmpty ?? false)
         .length;
@@ -6977,73 +7190,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
   }
 
-  // 🟢 AUTO-SYNC: Process queued actions when connection restored
-  Future<void> _processSyncQueue() async {
-    // 🛡️ SECURITY FIX #1: Use SecureTokenStorage instead of plain prefs
-    final token = await SecureTokenStorage.getToken() ?? '';
-    final prefs =
-        await SharedPreferences.getInstance(); // 🔧 Added: Initialize prefs for offline queue
-
-    if (token.isEmpty) return;
-
-    final queueRaw = prefs.getString('offline_sync_queue') ?? '[]';
-    final List<dynamic> queue = json.decode(queueRaw);
-
-    final List<int> syncedIndices = [];
-
-    for (int i = 0; i < queue.length; i++) {
-      final item = queue[i];
-      if (item['synced'] == true) continue;
-
-      try {
-        if (item['action'] == 'save_customer') {
-          final response = await ApiClient.postJson(
-            ApiClient.customersPrefix,
-            item['data'],
-            headers: {'Authorization': 'Bearer $token'},
-          ).timeout(const Duration(seconds: 10));
-
-          if (response.statusCode == 200 || response.statusCode == 201) {
-            syncedIndices.add(i);
-            if (kDebugMode)
-              debugPrint('✅ Synced queued: Customer - ${item['data']['name']}');
-          }
-        } else if (item['action'] == 'save_sale') {
-          // CRITICAL FIX: Actually send sale data to backend
-          final response = await ApiClient.postJson(
-            salesCreateEndpoint,
-            item['data'],
-            headers: {'Authorization': 'Bearer $token'},
-          ).timeout(const Duration(seconds: 10));
-
-          if (response.statusCode == 200 || response.statusCode == 201) {
-            syncedIndices.add(i);
-            if (kDebugMode)
-              debugPrint(
-                '✅ Synced queued: Sale - ₹${item['data']['total_amount']}',
-              );
-          } else {
-            if (kDebugMode)
-              debugPrint('⚠️ Failed to sync sale: ${response.statusCode}');
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('âŒ Failed to sync queued item: $e');
-      }
-    }
-
-    // Remove synced items
-    for (final idx in syncedIndices.reversed) {
-      queue.removeAt(idx);
-    }
-
-    await prefs.setString('offline_sync_queue', json.encode(queue));
-    if (syncedIndices.isNotEmpty) {
-      if (kDebugMode)
-        debugPrint('🔄 Synced ${syncedIndices.length} queued actions');
-    }
-  }
-
   // â”€â”€ Form card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildFormCard() {
@@ -7104,32 +7250,34 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 KeyedSubtree(
                   key: _voiceCoachKey,
                   child: TweenAnimationBuilder<double>(
-                  duration: const Duration(milliseconds: 300),
-                  tween: Tween(begin: 1.0, end: 1.0),
-                  builder: (context, scale, child) {
-                    return Transform.scale(
-                      scale: scale,
-                      child: Material(
-                        color: const Color(0xFF4F46E5).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        child: InkWell(
+                    duration: const Duration(milliseconds: 300),
+                    tween: Tween(begin: 1.0, end: 1.0),
+                    builder: (context, scale, child) {
+                      return Transform.scale(
+                        scale: scale,
+                        child: Material(
+                          color: const Color(
+                            0xFF4F46E5,
+                          ).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
-                          onTap: () async {
-                            _openVoiceBillingAssistant();
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Icon(
-                              Icons.mic,
-                              color: Color(0xFF4F46E5),
-                              size: 20,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () async {
+                              _openVoiceBillingAssistant();
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.mic,
+                                color: Color(0xFF4F46E5),
+                                size: 20,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -7467,7 +7615,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              fontSize: _posHighContrast ? 13 : 10,
+                              fontSize: _posHighContrast ? 11 : 9,
                               color: Colors.black,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -7476,7 +7624,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                           LiveTranslatedText(
                             '₹${totalAmount.toStringAsFixed(2)}',
                             style: GoogleFonts.spaceMono(
-                              fontSize: _posHighContrast ? 28 : 18,
+                              fontSize: _posHighContrast ? 24 : 16,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                             ),
@@ -7494,7 +7642,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              fontSize: _posHighContrast ? 13 : 10,
+                              fontSize: _posHighContrast ? 11 : 9,
                               color: const Color(0xFF059669),
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -7503,7 +7651,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                           LiveTranslatedText(
                             '₹${_paidAmount.toStringAsFixed(2)}',
                             style: GoogleFonts.spaceMono(
-                              fontSize: _posHighContrast ? 26 : 18,
+                              fontSize: _posHighContrast ? 22 : 16,
                               fontWeight: FontWeight.bold,
                               color: const Color(0xFF059669),
                             ),
@@ -7521,7 +7669,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              fontSize: _posHighContrast ? 13 : 10,
+                              fontSize: _posHighContrast ? 11 : 9,
                               color: Colors.redAccent,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -7532,7 +7680,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             builder: (context, child) => LiveTranslatedText(
                               '₹${remainingDue.toStringAsFixed(2)}',
                               style: GoogleFonts.spaceMono(
-                                fontSize: _posHighContrast ? 26 : 18,
+                                fontSize: _posHighContrast ? 22 : 16,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.redAccent.withOpacity(
                                   _paidAmount > 0 && !_paymentConfirmed
@@ -7694,7 +7842,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       _paidAmount = 0;
                       _pendingDetectedPaymentAmount = null;
                       _paymentConfirmed = false;
-      _cashierManualOverride = false;
+                      _cashierManualOverride = false;
                       message = '';
                       calculateTotal();
                     });
@@ -7734,11 +7882,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       totalAmount: totalAmount,
     );
     final color = switch (lane) {
-      PosPaymentLane.paid || PosPaymentLane.cashReady =>
-        const Color(0xFF059669),
+      PosPaymentLane.paid ||
+      PosPaymentLane.cashReady => const Color(0xFF059669),
       PosPaymentLane.waiting => const Color(0xFF4F46E5),
-      PosPaymentLane.partial || PosPaymentLane.cashierOverride =>
-        const Color(0xFFB45309),
+      PosPaymentLane.partial ||
+      PosPaymentLane.cashierOverride => const Color(0xFFB45309),
       PosPaymentLane.credit => const Color(0xFF6B7280),
     };
     return Container(
@@ -7754,7 +7902,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         PosCheckoutStatus.label(lane),
         textAlign: TextAlign.center,
         style: GoogleFonts.poppins(
-          fontSize: _posHighContrast ? 18 : 14,
+          fontSize: _posHighContrast ? 16 : 13,
           fontWeight: FontWeight.w800,
           color: color,
         ),
@@ -8125,7 +8273,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         _paymentConfirmed = true;
                         _cashierManualOverride = true;
                         _paidAmount = totalAmount;
-                        message = 'Cashier override recorded (not UPI verified)';
+                        message =
+                            'Cashier override recorded (not UPI verified)';
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -8144,7 +8293,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                          color: const Color(
+                            0xFFF59E0B,
+                          ).withValues(alpha: 0.25),
                         ),
                       ),
                       child: LiveTranslatedText(
@@ -8335,7 +8486,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       onTap: () => setState(() {
         _isOnlinePayment = isOnline;
         _paymentConfirmed = false;
-      _cashierManualOverride = false;
+        _cashierManualOverride = false;
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -8387,7 +8538,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       onTap: () => setState(() {
         _isOnlinePayment = isOnline;
         _paymentConfirmed = false;
-      _cashierManualOverride = false;
+        _cashierManualOverride = false;
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -9551,21 +9702,32 @@ class _AppBarIconBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip ?? '',
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-          child: Icon(
-            icon,
-            size: 16,
-            color: Colors.white.withValues(alpha: 0.8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 48,
+            height: 56,
+            child: Center(
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: Colors.white.withValues(alpha: 0.8),
+                ),
+              ),
+            ),
           ),
         ),
       ),

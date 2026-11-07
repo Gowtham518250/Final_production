@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 class ProfitMarginDisplay extends StatelessWidget {
   final double saleAmount;
   final double costAmount;
-  
+
   const ProfitMarginDisplay({
     required this.saleAmount,
     required this.costAmount,
@@ -15,15 +15,14 @@ class ProfitMarginDisplay extends StatelessWidget {
   });
 
   double get profitAmount => saleAmount - costAmount;
-  double get profitMarginPercent => costAmount > 0 
-    ? ((saleAmount - costAmount) / costAmount * 100)
-    : 0;
+  double get profitMarginPercent =>
+      costAmount > 0 ? ((saleAmount - costAmount) / costAmount * 100) : 0;
 
   @override
   Widget build(BuildContext context) {
     final isPositive = profitAmount >= 0;
     final marginColor = isPositive ? Colors.green : Colors.red;
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -79,7 +78,7 @@ class ProfitMarginDisplay extends StatelessWidget {
 class InvoiceTemplateSelector extends StatefulWidget {
   final Function(Map<String, dynamic>) onTemplateSelected;
   final List<Map<String, dynamic>> templates;
-  
+
   const InvoiceTemplateSelector({
     required this.onTemplateSelected,
     this.templates = const [],
@@ -87,7 +86,8 @@ class InvoiceTemplateSelector extends StatefulWidget {
   });
 
   @override
-  State<InvoiceTemplateSelector> createState() => _InvoiceTemplateSelectorState();
+  State<InvoiceTemplateSelector> createState() =>
+      _InvoiceTemplateSelectorState();
 }
 
 class _InvoiceTemplateSelectorState extends State<InvoiceTemplateSelector> {
@@ -107,7 +107,11 @@ class _InvoiceTemplateSelectorState extends State<InvoiceTemplateSelector> {
         children: [
           Row(
             children: [
-              Icon(Icons.description_outlined, color: Colors.blue[700], size: 16),
+              Icon(
+                Icons.description_outlined,
+                color: Colors.blue[700],
+                size: 16,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Use Template',
@@ -123,10 +127,7 @@ class _InvoiceTemplateSelectorState extends State<InvoiceTemplateSelector> {
           if (widget.templates.isEmpty)
             Text(
               '📝 No saved templates yet',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
             )
           else
             DropdownButton<String>(
@@ -161,7 +162,7 @@ class LoadMoreButton extends StatefulWidget {
   final Future<void> Function() onLoadMore;
   final bool isLoading;
   final bool hasMore;
-  
+
   const LoadMoreButton({
     required this.onLoadMore,
     required this.isLoading,
@@ -177,19 +178,19 @@ class _LoadMoreButtonState extends State<LoadMoreButton> {
   @override
   Widget build(BuildContext context) {
     if (!widget.hasMore) return const SizedBox.shrink();
-    
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Center(
         child: ElevatedButton.icon(
           onPressed: widget.isLoading ? null : widget.onLoadMore,
           icon: widget.isLoading
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.refresh),
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh),
           label: Text(widget.isLoading ? 'Loading...' : 'Load More'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.grey[300],
@@ -208,7 +209,7 @@ class SearchFilterBar extends StatefulWidget {
   final Function(String)? onFilterChange;
   final List<String> filterOptions;
   final String hint;
-  
+
   const SearchFilterBar({
     required this.onSearch,
     this.onFilterChange,
@@ -258,10 +259,7 @@ class _SearchFilterBarState extends State<SearchFilterBar> {
               value: _selectedFilter,
               hint: const Icon(Icons.filter_list),
               items: widget.filterOptions.map((option) {
-                return DropdownMenuItem(
-                  value: option,
-                  child: Text(option),
-                );
+                return DropdownMenuItem(value: option, child: Text(option));
               }).toList(),
               onChanged: (value) {
                 setState(() => _selectedFilter = value);
@@ -279,7 +277,7 @@ class SkeletonLoader extends StatefulWidget {
   final double width;
   final double height;
   final BorderRadius borderRadius;
-  
+
   const SkeletonLoader({
     this.width = double.infinity,
     this.height = 16,
@@ -291,7 +289,7 @@ class SkeletonLoader extends StatefulWidget {
   State<SkeletonLoader> createState() => _SkeletonLoaderState();
 }
 
-class _SkeletonLoaderState extends State<SkeletonLoader> 
+class _SkeletonLoaderState extends State<SkeletonLoader>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
 
@@ -313,8 +311,7 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
   @override
   Widget build(BuildContext context) {
     return ScaleTransition(
-      scale: Tween(begin: 0.95, end: 1.05)
-          .animate(_animationController),
+      scale: Tween(begin: 0.95, end: 1.05).animate(_animationController),
       child: Container(
         width: widget.width,
         height: widget.height,
@@ -344,11 +341,8 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
 /// ### 🔟 DARK MODE TOGGLE BUTTON
 class DarkModeToggle extends StatefulWidget {
   final Function(bool isDarkMode) onToggle;
-  
-  const DarkModeToggle({
-    required this.onToggle,
-    super.key,
-  });
+
+  const DarkModeToggle({required this.onToggle, super.key});
 
   @override
   State<DarkModeToggle> createState() => _DarkModeToggleState();
@@ -360,7 +354,7 @@ class _DarkModeToggleState extends State<DarkModeToggle> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Tooltip(
       message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
       child: IconButton(
@@ -374,9 +368,7 @@ class _DarkModeToggleState extends State<DarkModeToggle> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                _isDarkMode 
-                  ? '🌙 Dark Mode enabled'
-                  : '☀️ Light Mode enabled',
+                _isDarkMode ? '🌙 Dark Mode enabled' : '☀️ Light Mode enabled',
               ),
               duration: const Duration(seconds: 1),
             ),
@@ -398,17 +390,20 @@ class UIEnhancementShowcase extends StatelessWidget {
       child: Column(
         children: [
           // Profit Margin
-          const Text('Profit Margin Display:', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const ProfitMarginDisplay(
-            saleAmount: 1000,
-            costAmount: 600,
+          const Text(
+            'Profit Margin Display:',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          
+          const SizedBox(height: 8),
+          const ProfitMarginDisplay(saleAmount: 1000, costAmount: 600),
+
           const SizedBox(height: 24),
-          
+
           // Templates
-          const Text('Invoice Templates:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Invoice Templates:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           InvoiceTemplateSelector(
             templates: [
@@ -419,30 +414,39 @@ class UIEnhancementShowcase extends StatelessWidget {
               print('Selected: $template');
             },
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Search
-          const Text('Search & Filter:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Search & Filter:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           SearchFilterBar(
             onSearch: (query) => print('Search: $query'),
             filterOptions: ['Recent', 'Oldest', 'Amount'],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Skeleton Loaders
-          const Text('Loading State:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Loading State:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           const SkeletonLoader(height: 20),
           const SizedBox(height: 8),
           const SkeletonLoader(height: 40),
-          
+
           const SizedBox(height: 24),
-          
+
           // Load More
-          const Text('Pagination:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Pagination:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           LoadMoreButton(
             hasMore: true,

@@ -7,9 +7,7 @@ void main() {
     var opened = false;
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: GrowMyShopEntryCard(onOpen: () => opened = true),
-        ),
+        home: Scaffold(body: GrowMyShopEntryCard(onOpen: () => opened = true)),
       ),
     );
     await tester.pump();
@@ -23,10 +21,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: GrowthWizardRail(
-            step: 1,
-            onStepTap: (value) => step = value,
-          ),
+          body: GrowthWizardRail(step: 1, onStepTap: (value) => step = value),
         ),
       ),
     );

@@ -139,9 +139,7 @@ class InvoiceDedupHelper {
     return paid.clamp(0.0, total).toDouble();
   }
 
-  static Map<String, dynamic> _mergeGroup(
-    List<Map<String, dynamic>> group,
-  ) {
+  static Map<String, dynamic> _mergeGroup(List<Map<String, dynamic>> group) {
     final ordered = List<Map<String, dynamic>>.from(group)
       ..sort((a, b) => _rowTimestamp(a).compareTo(_rowTimestamp(b)));
 
@@ -174,8 +172,7 @@ class InvoiceDedupHelper {
       // one-to-one, so two intentional identical lines in one bill are kept.
       final sameProductById =
           leftId.isNotEmpty && rightId.isNotEmpty && leftId == rightId;
-      final sameProductByName =
-          leftName.isNotEmpty && leftName == rightName;
+      final sameProductByName = leftName.isNotEmpty && leftName == rightName;
       if (!sameProductById && !sameProductByName) return false;
       final leftQty = _number(left['quantity'] ?? left['qty'], 1);
       final rightQty = _number(right['quantity'] ?? right['qty'], 1);
@@ -266,8 +263,8 @@ class InvoiceDedupHelper {
       final raw = lineItems is List && lineItems.isNotEmpty
           ? lineItems
           : items is List
-              ? items
-              : lineItems;
+          ? items
+          : lineItems;
 
       if (raw is List && raw.isNotEmpty) {
         final incoming = raw
@@ -299,14 +296,15 @@ class InvoiceDedupHelper {
 
       // Legacy invoice feeds can expose one product per top-level row. Keep
       // every flattened row, including records with incomplete financial data.
-      final name = (row['product_name'] ??
-              row['product'] ??
-              row['item'] ??
-              row['name'] ??
-              row['description'] ??
-              '')
-          .toString()
-          .trim();
+      final name =
+          (row['product_name'] ??
+                  row['product'] ??
+                  row['item'] ??
+                  row['name'] ??
+                  row['description'] ??
+                  '')
+              .toString()
+              .trim();
       if (name.isEmpty && row['product_id'] == null) return;
       final quantity = _number(row['quantity'] ?? row['qty'], 1);
       final unitPrice = _number(row['unit_price'] ?? row['price']);
@@ -394,8 +392,9 @@ class InvoiceDedupHelper {
 
       merged['total_amount'] = total;
       merged['paid_amount'] = double.parse(paid.toStringAsFixed(2));
-      merged['pending_amount'] =
-          (total - paid).clamp(0.0, double.infinity).toDouble();
+      merged['pending_amount'] = (total - paid)
+          .clamp(0.0, double.infinity)
+          .toDouble();
 
       if (anyPaymentState || paid > 0) {
         merged['payment_status'] = status;
@@ -459,17 +458,28 @@ class InvoiceDedupHelper {
     for (final invoice in invoiceRows) {
       invoiceIds.addAll(
         _fieldValues(invoice, const [
-          'id', 'invoice_id', 'invoiceId', 'backend_id', 'server_id',
+          'id',
+          'invoice_id',
+          'invoiceId',
+          'backend_id',
+          'server_id',
         ]),
       );
       invoiceNumbers.addAll(
         _fieldValues(invoice, const [
-          'invoice_number', 'invoice_no', 'bill_number', 'bill_no', 'number',
+          'invoice_number',
+          'invoice_no',
+          'bill_number',
+          'bill_no',
+          'number',
         ]),
       );
       invoiceSaleReferences.addAll(
         _fieldValues(invoice, const [
-          'sale_id', 'offline_id', 'local_sale_id', 'source_sale_id',
+          'sale_id',
+          'offline_id',
+          'local_sale_id',
+          'source_sale_id',
           'original_sale_id',
         ]),
       );
@@ -478,13 +488,22 @@ class InvoiceDedupHelper {
     final saleMirrors = <Map<String, dynamic>>[];
     for (final sale in saleRows) {
       final foreignKeys = _fieldValues(sale, const [
-        'invoice_id', 'invoiceId', 'backend_invoice_id',
+        'invoice_id',
+        'invoiceId',
+        'backend_invoice_id',
       ]);
       final billNumbers = _fieldValues(sale, const [
-        'invoice_number', 'invoice_no', 'bill_number', 'bill_no',
+        'invoice_number',
+        'invoice_no',
+        'bill_number',
+        'bill_no',
       ]);
       final saleReferences = _fieldValues(sale, const [
-        'sale_id', 'offline_id', 'local_sale_id', 'source_sale_id', 'id',
+        'sale_id',
+        'offline_id',
+        'local_sale_id',
+        'source_sale_id',
+        'id',
       ]);
 
       if (foreignKeys.any(invoiceIds.contains) ||
@@ -494,10 +513,7 @@ class InvoiceDedupHelper {
       }
     }
 
-    return canonicalizeInvoices(<dynamic>[
-      ...invoiceRows,
-      ...saleMirrors,
-    ]);
+    return canonicalizeInvoices(<dynamic>[...invoiceRows, ...saleMirrors]);
   }
 
   static List<Map<String, dynamic>> canonicalizeInvoices(
@@ -509,7 +525,9 @@ class InvoiceDedupHelper {
         .toList();
 
     if (rows.length < 2) {
-      return rows.map((row) => _mergeGroup(<Map<String, dynamic>>[row])).toList();
+      return rows
+          .map((row) => _mergeGroup(<Map<String, dynamic>>[row]))
+          .toList();
     }
 
     final parents = List<int>.generate(rows.length, (index) => index);
@@ -547,8 +565,6 @@ class InvoiceDedupHelper {
       groups.putIfAbsent(root(i), () => <Map<String, dynamic>>[]).add(rows[i]);
     }
 
-    return groups.values
-        .map((group) => _mergeGroup(group))
-        .toList();
+    return groups.values.map((group) => _mergeGroup(group)).toList();
   }
 }

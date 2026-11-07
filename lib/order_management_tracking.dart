@@ -9,7 +9,14 @@ import 'dart:convert';
 // MODELS
 // ─────────────────────────────────────────────
 
-enum OrderStatus { processing, shipped, outForDelivery, delivered, cancelled, returned }
+enum OrderStatus {
+  processing,
+  shipped,
+  outForDelivery,
+  delivered,
+  cancelled,
+  returned,
+}
 
 enum OrderFilter { all, active, delivered, cancelled }
 
@@ -27,18 +34,18 @@ class OrderItem {
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) => OrderItem(
-        name: json['name'] ?? '',
-        price: (json['price'] ?? 0).toDouble(),
-        quantity: json['quantity'] ?? 1,
-        imageUrl: json['imageUrl'],
-      );
+    name: json['name'] ?? '',
+    price: (json['price'] ?? 0).toDouble(),
+    quantity: json['quantity'] ?? 1,
+    imageUrl: json['imageUrl'],
+  );
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'price': price,
-        'quantity': quantity,
-        'imageUrl': imageUrl,
-      };
+    'name': name,
+    'price': price,
+    'quantity': quantity,
+    'imageUrl': imageUrl,
+  };
 }
 
 class TrackingEvent {
@@ -55,18 +62,18 @@ class TrackingEvent {
   });
 
   factory TrackingEvent.fromJson(Map<String, dynamic> json) => TrackingEvent(
-        title: json['title'] ?? '',
-        description: json['description'] ?? '',
-        timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
-        location: json['location'] ?? '',
-      );
+    title: json['title'] ?? '',
+    description: json['description'] ?? '',
+    timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
+    location: json['location'] ?? '',
+  );
 
   Map<String, dynamic> toJson() => {
-        'title': title,
-        'description': description,
-        'timestamp': timestamp.toIso8601String(),
-        'location': location,
-      };
+    'title': title,
+    'description': description,
+    'timestamp': timestamp.toIso8601String(),
+    'location': location,
+  };
 }
 
 class Order {
@@ -105,48 +112,51 @@ class Order {
   });
 
   factory Order.fromJson(Map<String, dynamic> json) => Order(
-        id: json['id'] ?? '',
-        orderDate: DateTime.tryParse(json['orderDate'] ?? '') ?? DateTime.now(),
-        status: OrderStatus.values.firstWhere(
-          (e) => e.name == json['status'],
-          orElse: () => OrderStatus.processing,
-        ),
-        items: (json['items'] as List<dynamic>? ?? [])
-            .map((e) => OrderItem.fromJson(e))
-            .toList(),
-        totalAmount: (json['totalAmount'] ?? 0).toDouble(),
-        deliveryAddress: json['deliveryAddress'] ?? '',
-        trackingId: json['trackingId'] ?? '',
-        estimatedDelivery:
-            DateTime.tryParse(json['estimatedDelivery'] ?? '') ?? DateTime.now().add(const Duration(days: 3)),
-        actualDelivery: json['actualDelivery'] != null ? DateTime.tryParse(json['actualDelivery']) : null,
-        paymentMethod: json['paymentMethod'] ?? 'UPI',
-        deliverySlot: json['deliverySlot'] ?? 'Standard Delivery',
-        trackingEvents: (json['trackingEvents'] as List<dynamic>? ?? [])
-            .map((e) => TrackingEvent.fromJson(e))
-            .toList(),
-        deliveryPartner: json['deliveryPartner'],
-        deliveryPersonName: json['deliveryPersonName'],
-        deliveryPersonPhone: json['deliveryPersonPhone'],
-      );
+    id: json['id'] ?? '',
+    orderDate: DateTime.tryParse(json['orderDate'] ?? '') ?? DateTime.now(),
+    status: OrderStatus.values.firstWhere(
+      (e) => e.name == json['status'],
+      orElse: () => OrderStatus.processing,
+    ),
+    items: (json['items'] as List<dynamic>? ?? [])
+        .map((e) => OrderItem.fromJson(e))
+        .toList(),
+    totalAmount: (json['totalAmount'] ?? 0).toDouble(),
+    deliveryAddress: json['deliveryAddress'] ?? '',
+    trackingId: json['trackingId'] ?? '',
+    estimatedDelivery:
+        DateTime.tryParse(json['estimatedDelivery'] ?? '') ??
+        DateTime.now().add(const Duration(days: 3)),
+    actualDelivery: json['actualDelivery'] != null
+        ? DateTime.tryParse(json['actualDelivery'])
+        : null,
+    paymentMethod: json['paymentMethod'] ?? 'UPI',
+    deliverySlot: json['deliverySlot'] ?? 'Standard Delivery',
+    trackingEvents: (json['trackingEvents'] as List<dynamic>? ?? [])
+        .map((e) => TrackingEvent.fromJson(e))
+        .toList(),
+    deliveryPartner: json['deliveryPartner'],
+    deliveryPersonName: json['deliveryPersonName'],
+    deliveryPersonPhone: json['deliveryPersonPhone'],
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'orderDate': orderDate.toIso8601String(),
-        'status': status.name,
-        'items': items.map((e) => e.toJson()).toList(),
-        'totalAmount': totalAmount,
-        'deliveryAddress': deliveryAddress,
-        'trackingId': trackingId,
-        'estimatedDelivery': estimatedDelivery.toIso8601String(),
-        'actualDelivery': actualDelivery?.toIso8601String(),
-        'paymentMethod': paymentMethod,
-        'deliverySlot': deliverySlot,
-        'trackingEvents': trackingEvents.map((e) => e.toJson()).toList(),
-        'deliveryPartner': deliveryPartner,
-        'deliveryPersonName': deliveryPersonName,
-        'deliveryPersonPhone': deliveryPersonPhone,
-      };
+    'id': id,
+    'orderDate': orderDate.toIso8601String(),
+    'status': status.name,
+    'items': items.map((e) => e.toJson()).toList(),
+    'totalAmount': totalAmount,
+    'deliveryAddress': deliveryAddress,
+    'trackingId': trackingId,
+    'estimatedDelivery': estimatedDelivery.toIso8601String(),
+    'actualDelivery': actualDelivery?.toIso8601String(),
+    'paymentMethod': paymentMethod,
+    'deliverySlot': deliverySlot,
+    'trackingEvents': trackingEvents.map((e) => e.toJson()).toList(),
+    'deliveryPartner': deliveryPartner,
+    'deliveryPersonName': deliveryPersonName,
+    'deliveryPersonPhone': deliveryPersonPhone,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -158,7 +168,8 @@ class OrderManagementTracking extends StatefulWidget {
   const OrderManagementTracking({super.key});
 
   @override
-  State<OrderManagementTracking> createState() => _OrderManagementTrackingState();
+  State<OrderManagementTracking> createState() =>
+      _OrderManagementTrackingState();
 }
 
 class _OrderManagementTrackingState extends State<OrderManagementTracking>
@@ -237,7 +248,9 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
             TrackingEvent(
               title: 'Order Confirmed',
               description: 'Seller has confirmed your order',
-              timestamp: DateTime.now().subtract(const Duration(days: 2, hours: 2)),
+              timestamp: DateTime.now().subtract(
+                const Duration(days: 2, hours: 2),
+              ),
               location: 'Mumbai Warehouse',
             ),
             TrackingEvent(
@@ -354,13 +367,21 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
         return _orders;
       case OrderFilter.active:
         return _orders
-            .where((o) =>
-                o.status == OrderStatus.processing ||
-                o.status == OrderStatus.shipped ||
-                o.status == OrderStatus.outForDelivery)
+            .where(
+              (o) =>
+                  o.status == OrderStatus.processing ||
+                  o.status == OrderStatus.shipped ||
+                  o.status == OrderStatus.outForDelivery,
+            )
             .toList();
       case OrderFilter.delivered:
-        return _orders.where((o) => o.status == OrderStatus.delivered || o.status == OrderStatus.returned).toList();
+        return _orders
+            .where(
+              (o) =>
+                  o.status == OrderStatus.delivered ||
+                  o.status == OrderStatus.returned,
+            )
+            .toList();
       case OrderFilter.cancelled:
         return _orders.where((o) => o.status == OrderStatus.cancelled).toList();
     }
@@ -371,7 +392,10 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        title: LiveTranslatedText('My Orders', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18)),
+        title: LiveTranslatedText(
+          'My Orders',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
@@ -384,7 +408,10 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
             unselectedLabelColor: Colors.grey[600],
             indicatorColor: const Color(0xFF6366F1),
             indicatorWeight: 3,
-            labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+            labelStyle: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
             unselectedLabelStyle: GoogleFonts.poppins(fontSize: 13),
             tabs: const [
               Tab(text: 'All'),
@@ -396,11 +423,15 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+            )
           : RefreshIndicator(
               color: const Color(0xFF6366F1),
               onRefresh: _loadOrders,
-              child: _filteredOrders.isEmpty ? _buildEmptyState() : _buildOrdersList(),
+              child: _filteredOrders.isEmpty
+                  ? _buildEmptyState()
+                  : _buildOrdersList(),
             ),
     );
   }
@@ -412,11 +443,25 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
         Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined, size: 72, color: Colors.grey[300]),
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 72,
+              color: Colors.grey[300],
+            ),
             const SizedBox(height: 16),
-            LiveTranslatedText('No orders found', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey[600])),
+            LiveTranslatedText(
+              'No orders found',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[600],
+              ),
+            ),
             const SizedBox(height: 8),
-            LiveTranslatedText('Pull to refresh or start shopping!', style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[400])),
+            LiveTranslatedText(
+              'Pull to refresh or start shopping!',
+              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[400]),
+            ),
           ],
         ),
       ],
@@ -438,7 +483,11 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: InkWell(
@@ -456,10 +505,19 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      LiveTranslatedText(order.id, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14)),
+                      LiveTranslatedText(
+                        order.id,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
                       LiveTranslatedText(
                         _formatDate(order.orderDate),
-                        style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12),
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -476,7 +534,11 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                   padding: const EdgeInsets.only(top: 4),
                   child: LiveTranslatedText(
                     '+ ${order.items.length - 2} more items',
-                    style: GoogleFonts.poppins(color: const Color(0xFF6366F1), fontSize: 12, fontWeight: FontWeight.w500),
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFF6366F1),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               const SizedBox(height: 12),
@@ -489,18 +551,29 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                     children: [
                       LiveTranslatedText(
                         '₹${order.totalAmount.toInt()}',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 18, color: Colors.black87),
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          color: Colors.black87,
+                        ),
                       ),
                       LiveTranslatedText(
                         '${order.items.length} item${order.items.length > 1 ? 's' : ''} · ${order.paymentMethod}',
-                        style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12),
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
                   // Delivery info
-                  if (order.status == OrderStatus.shipped || order.status == OrderStatus.outForDelivery)
+                  if (order.status == OrderStatus.shipped ||
+                      order.status == OrderStatus.outForDelivery)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFEEF2FF),
                         borderRadius: BorderRadius.circular(8),
@@ -508,13 +581,21 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.local_shipping, size: 14, color: Color(0xFF6366F1)),
+                          const Icon(
+                            Icons.local_shipping,
+                            size: 14,
+                            color: Color(0xFF6366F1),
+                          ),
                           const SizedBox(width: 4),
                           LiveTranslatedText(
                             order.status == OrderStatus.outForDelivery
                                 ? 'Out for delivery'
                                 : 'By ${_formatDateShort(order.estimatedDelivery)}',
-                            style: GoogleFonts.poppins(color: const Color(0xFF6366F1), fontSize: 11, fontWeight: FontWeight.w600),
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF6366F1),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -522,18 +603,27 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                   if (order.status == OrderStatus.delivered)
                     Row(
                       children: [
-                        const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                        const Icon(
+                          Icons.check_circle,
+                          size: 14,
+                          color: Colors.green,
+                        ),
                         const SizedBox(width: 4),
                         LiveTranslatedText(
                           'Delivered ${_formatDateShort(order.actualDelivery ?? order.estimatedDelivery)}',
-                          style: GoogleFonts.poppins(color: Colors.green[700], fontSize: 11, fontWeight: FontWeight.w600),
+                          style: GoogleFonts.poppins(
+                            color: Colors.green[700],
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
                 ],
               ),
               // Delivery person card (out for delivery)
-              if (order.status == OrderStatus.outForDelivery && order.deliveryPersonName != null) ...[
+              if (order.status == OrderStatus.outForDelivery &&
+                  order.deliveryPersonName != null) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -547,16 +637,31 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                       CircleAvatar(
                         radius: 18,
                         backgroundColor: Colors.green[100],
-                        child: Icon(Icons.delivery_dining, color: Colors.green[700], size: 20),
+                        child: Icon(
+                          Icons.delivery_dining,
+                          color: Colors.green[700],
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            LiveTranslatedText(order.deliveryPersonName!, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
-                            LiveTranslatedText('Delivery Partner · ${order.deliveryPartner ?? ''}',
-                                style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 11)),
+                            LiveTranslatedText(
+                              order.deliveryPersonName!,
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                            LiveTranslatedText(
+                              'Delivery Partner · ${order.deliveryPartner ?? ''}',
+                              style: GoogleFonts.poppins(
+                                color: Colors.grey[600],
+                                fontSize: 11,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -565,11 +670,21 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
                           onPressed: () {
                             HapticFeedback.lightImpact();
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: LiveTranslatedText('Calling ${order.deliveryPersonPhone}...')),
+                              SnackBar(
+                                content: LiveTranslatedText(
+                                  'Calling ${order.deliveryPersonPhone}...',
+                                ),
+                              ),
                             );
                           },
-                          icon: const Icon(Icons.call, color: Colors.green, size: 20),
-                          style: IconButton.styleFrom(backgroundColor: Colors.green[100]),
+                          icon: const Icon(
+                            Icons.call,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.green[100],
+                          ),
                         ),
                     ],
                   ),
@@ -594,14 +709,34 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
               color: const Color(0xFFF5F6FA),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Icon(Icons.inventory_2_outlined, size: 16, color: Color(0xFF6366F1)),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              size: 16,
+              color: Color(0xFF6366F1),
+            ),
           ),
           const SizedBox(width: 10),
-          Expanded(child: LiveTranslatedText(item.name, style: GoogleFonts.poppins(fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: LiveTranslatedText(
+              item.name,
+              style: GoogleFonts.poppins(fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           const SizedBox(width: 8),
-          LiveTranslatedText('×${item.quantity}', style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+          LiveTranslatedText(
+            '×${item.quantity}',
+            style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12),
+          ),
           const SizedBox(width: 8),
-          LiveTranslatedText('₹${item.price.toInt()}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+          LiveTranslatedText(
+            '₹${item.price.toInt()}',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );
@@ -618,11 +753,19 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(config['icon'] as IconData, size: 12, color: config['color'] as Color),
+          Icon(
+            config['icon'] as IconData,
+            size: 12,
+            color: config['color'] as Color,
+          ),
           const SizedBox(width: 4),
           LiveTranslatedText(
             config['label'] as String,
-            style: GoogleFonts.poppins(color: config['color'] as Color, fontSize: 11, fontWeight: FontWeight.w700),
+            style: GoogleFonts.poppins(
+              color: config['color'] as Color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -632,23 +775,68 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
   Map<String, dynamic> _statusConfig(OrderStatus status) {
     switch (status) {
       case OrderStatus.processing:
-        return {'label': 'Processing', 'color': Colors.orange[800]!, 'bg': Colors.orange[50]!, 'icon': Icons.hourglass_top};
+        return {
+          'label': 'Processing',
+          'color': Colors.orange[800]!,
+          'bg': Colors.orange[50]!,
+          'icon': Icons.hourglass_top,
+        };
       case OrderStatus.shipped:
-        return {'label': 'Shipped', 'color': Colors.blue[800]!, 'bg': Colors.blue[50]!, 'icon': Icons.local_shipping};
+        return {
+          'label': 'Shipped',
+          'color': Colors.blue[800]!,
+          'bg': Colors.blue[50]!,
+          'icon': Icons.local_shipping,
+        };
       case OrderStatus.outForDelivery:
-        return {'label': 'Out for Delivery', 'color': Colors.purple[800]!, 'bg': Colors.purple[50]!, 'icon': Icons.delivery_dining};
+        return {
+          'label': 'Out for Delivery',
+          'color': Colors.purple[800]!,
+          'bg': Colors.purple[50]!,
+          'icon': Icons.delivery_dining,
+        };
       case OrderStatus.delivered:
-        return {'label': 'Delivered', 'color': Colors.green[800]!, 'bg': Colors.green[50]!, 'icon': Icons.check_circle};
+        return {
+          'label': 'Delivered',
+          'color': Colors.green[800]!,
+          'bg': Colors.green[50]!,
+          'icon': Icons.check_circle,
+        };
       case OrderStatus.cancelled:
-        return {'label': 'Cancelled', 'color': Colors.red[800]!, 'bg': Colors.red[50]!, 'icon': Icons.cancel};
+        return {
+          'label': 'Cancelled',
+          'color': Colors.red[800]!,
+          'bg': Colors.red[50]!,
+          'icon': Icons.cancel,
+        };
       case OrderStatus.returned:
-        return {'label': 'Returned', 'color': Colors.purple[800]!, 'bg': Colors.purple[50]!, 'icon': Icons.assignment_return};
+        return {
+          'label': 'Returned',
+          'color': Colors.purple[800]!,
+          'bg': Colors.purple[50]!,
+          'icon': Icons.assignment_return,
+        };
     }
   }
 
-  String _formatDate(DateTime date) => '${date.day} ${_month(date.month)} ${date.year}';
+  String _formatDate(DateTime date) =>
+      '${date.day} ${_month(date.month)} ${date.year}';
   String _formatDateShort(DateTime date) => '${date.day} ${_month(date.month)}';
-  String _month(int m) => const ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+  String _month(int m) => const [
+    '',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][m];
 
   void _showOrderDetails(Order order) {
     showModalBottomSheet(
@@ -657,10 +845,22 @@ class _OrderManagementTrackingState extends State<OrderManagementTracking>
       backgroundColor: Colors.transparent,
       builder: (context) => OrderDetailSheet(
         order: order,
-        onTrackOrder: () { Navigator.pop(context); _showTrackingSheet(order); },
-        onReturnOrder: () { Navigator.pop(context); _showReturnSheet(order); },
-        onCancelOrder: () { Navigator.pop(context); _showCancelSheet(order); },
-        onContactSupport: () { Navigator.pop(context); _showSupportSheet(order); },
+        onTrackOrder: () {
+          Navigator.pop(context);
+          _showTrackingSheet(order);
+        },
+        onReturnOrder: () {
+          Navigator.pop(context);
+          _showReturnSheet(order);
+        },
+        onCancelOrder: () {
+          Navigator.pop(context);
+          _showCancelSheet(order);
+        },
+        onContactSupport: () {
+          Navigator.pop(context);
+          _showSupportSheet(order);
+        },
       ),
     );
   }
@@ -745,7 +945,10 @@ class OrderDetailSheet extends StatelessWidget {
                   child: Container(
                     width: 40,
                     height: 4,
-                    decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
                 Padding(
@@ -756,14 +959,26 @@ class OrderDetailSheet extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          LiveTranslatedText(order.id, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
+                          LiveTranslatedText(
+                            order.id,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           LiveTranslatedText(
                             'Ordered ${_formatDate(order.orderDate)}',
-                            style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12),
+                            style: GoogleFonts.poppins(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
                     ],
                   ),
                 ),
@@ -779,7 +994,9 @@ class OrderDetailSheet extends StatelessWidget {
                   _buildSection(
                     title: 'Order Items (${order.items.length})',
                     child: Column(
-                      children: order.items.map((item) => _buildItemRow(item)).toList(),
+                      children: order.items
+                          .map((item) => _buildItemRow(item))
+                          .toList(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -790,7 +1007,11 @@ class OrderDetailSheet extends StatelessWidget {
                         _buildPriceRow('Item Total', order.totalAmount),
                         _buildPriceRow('Delivery Fee', 0, valueText: 'FREE'),
                         const Divider(height: 20),
-                        _buildPriceRow('Order Total', order.totalAmount, isBold: true),
+                        _buildPriceRow(
+                          'Order Total',
+                          order.totalAmount,
+                          isBold: true,
+                        ),
                       ],
                     ),
                   ),
@@ -805,11 +1026,21 @@ class OrderDetailSheet extends StatelessWidget {
                             color: const Color(0xFFEEF2FF),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.location_on, color: Color(0xFF6366F1), size: 20),
+                          child: const Icon(
+                            Icons.location_on,
+                            color: Color(0xFF6366F1),
+                            size: 20,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: LiveTranslatedText(order.deliveryAddress, style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87)),
+                          child: LiveTranslatedText(
+                            order.deliveryAddress,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.black87,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -819,16 +1050,34 @@ class OrderDetailSheet extends StatelessWidget {
                     title: 'Payment & Delivery',
                     child: Column(
                       children: [
-                        _buildInfoRow(Icons.payment, 'Payment Method', order.paymentMethod),
+                        _buildInfoRow(
+                          Icons.payment,
+                          'Payment Method',
+                          order.paymentMethod,
+                        ),
                         const SizedBox(height: 10),
-                        _buildInfoRow(Icons.schedule, 'Delivery Slot', order.deliverySlot),
+                        _buildInfoRow(
+                          Icons.schedule,
+                          'Delivery Slot',
+                          order.deliverySlot,
+                        ),
                         if (order.deliveryPartner != null) ...[
                           const SizedBox(height: 10),
-                          _buildInfoRow(Icons.local_shipping, 'Delivery Partner', order.deliveryPartner!),
+                          _buildInfoRow(
+                            Icons.local_shipping,
+                            'Delivery Partner',
+                            order.deliveryPartner!,
+                          ),
                         ],
                         if (order.trackingId.isNotEmpty) ...[
                           const SizedBox(height: 10),
-                          _buildInfoRow(Icons.qr_code, 'Tracking ID', order.trackingId, copyable: true, context: context),
+                          _buildInfoRow(
+                            Icons.qr_code,
+                            'Tracking ID',
+                            order.trackingId,
+                            copyable: true,
+                            context: context,
+                          ),
                         ],
                       ],
                     ),
@@ -843,23 +1092,35 @@ class OrderDetailSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             decoration: BoxDecoration(
               color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10, offset: const Offset(0, -3))],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, -3),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (order.status == OrderStatus.shipped || order.status == OrderStatus.outForDelivery)
+                if (order.status == OrderStatus.shipped ||
+                    order.status == OrderStatus.outForDelivery)
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: onTrackOrder,
                       icon: const Icon(Icons.location_on),
-                      label: LiveTranslatedText('Track Order', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                      label: LiveTranslatedText(
+                        'Track Order',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF6366F1),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -869,12 +1130,17 @@ class OrderDetailSheet extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: onReturnOrder,
                       icon: const Icon(Icons.assignment_return),
-                      label: LiveTranslatedText('Return / Exchange', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                      label: LiveTranslatedText(
+                        'Return / Exchange',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange[600],
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -886,10 +1152,17 @@ class OrderDetailSheet extends StatelessWidget {
                       child: OutlinedButton.icon(
                         onPressed: onContactSupport,
                         icon: const Icon(Icons.support_agent, size: 18),
-                        label: LiveTranslatedText('Support', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                        label: LiveTranslatedText(
+                          'Support',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
@@ -899,12 +1172,20 @@ class OrderDetailSheet extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: onCancelOrder,
                           icon: const Icon(Icons.cancel_outlined, size: 18),
-                          label: LiveTranslatedText('Cancel', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.red)),
+                          label: LiveTranslatedText(
+                            'Cancel',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.red,
                             side: const BorderSide(color: Colors.red),
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
@@ -930,7 +1211,13 @@ class OrderDetailSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LiveTranslatedText(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+          LiveTranslatedText(
+            title,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
+          ),
           const SizedBox(height: 12),
           child,
         ],
@@ -946,26 +1233,58 @@ class OrderDetailSheet extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(color: const Color(0xFFF5F6FA), borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF6366F1)),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F6FA),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              size: 18,
+              color: Color(0xFF6366F1),
+            ),
           ),
           const SizedBox(width: 12),
-          Expanded(child: LiveTranslatedText(item.name, style: GoogleFonts.poppins(fontSize: 14))),
-          LiveTranslatedText('×${item.quantity}', style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 13)),
+          Expanded(
+            child: LiveTranslatedText(
+              item.name,
+              style: GoogleFonts.poppins(fontSize: 14),
+            ),
+          ),
+          LiveTranslatedText(
+            '×${item.quantity}',
+            style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 13),
+          ),
           const SizedBox(width: 12),
-          LiveTranslatedText('₹${item.price.toInt()}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+          LiveTranslatedText(
+            '₹${item.price.toInt()}',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildPriceRow(String label, double amount, {bool isBold = false, String? valueText}) {
+  Widget _buildPriceRow(
+    String label,
+    double amount, {
+    bool isBold = false,
+    String? valueText,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontWeight: isBold ? FontWeight.w700 : FontWeight.normal, fontSize: 14)),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(
+              fontWeight: isBold ? FontWeight.w700 : FontWeight.normal,
+              fontSize: 14,
+            ),
+          ),
           LiveTranslatedText(
             valueText ?? '₹${amount.toInt()}',
             style: GoogleFonts.poppins(
@@ -979,7 +1298,13 @@ class OrderDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value, {bool copyable = false, BuildContext? context}) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String label,
+    String value, {
+    bool copyable = false,
+    BuildContext? context,
+  }) {
     return Row(
       children: [
         Icon(icon, size: 18, color: Colors.grey[500]),
@@ -988,8 +1313,20 @@ class OrderDetailSheet extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LiveTranslatedText(label, style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 11)),
-              LiveTranslatedText(value, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
+              LiveTranslatedText(
+                label,
+                style: GoogleFonts.poppins(
+                  color: Colors.grey[500],
+                  fontSize: 11,
+                ),
+              ),
+              LiveTranslatedText(
+                value,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),
@@ -998,7 +1335,11 @@ class OrderDetailSheet extends StatelessWidget {
             icon: const Icon(Icons.copy, size: 16),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: value));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Tracking ID copied!')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: LiveTranslatedText('Tracking ID copied!'),
+                ),
+              );
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -1008,7 +1349,21 @@ class OrderDetailSheet extends StatelessWidget {
   }
 
   String _formatDate(DateTime d) => '${d.day} ${_month(d.month)} ${d.year}';
-  String _month(int m) => const ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+  String _month(int m) => const [
+    '',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][m];
 }
 
 // ─────────────────────────────────────────────
@@ -1050,16 +1405,34 @@ class OrderTrackingSheet extends StatelessWidget {
                         child: Container(
                           width: 40,
                           height: 4,
-                          decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      LiveTranslatedText('Track Order', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
-                      LiveTranslatedText(order.id, style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+                      LiveTranslatedText(
+                        'Track Order',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      LiveTranslatedText(
+                        order.id,
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
           ),
@@ -1081,24 +1454,59 @@ class OrderTrackingSheet extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.local_shipping, color: Colors.white, size: 32),
+                        const Icon(
+                          Icons.local_shipping,
+                          color: Colors.white,
+                          size: 32,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              LiveTranslatedText('Tracking ID', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
-                              LiveTranslatedText(order.trackingId, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                              LiveTranslatedText(
+                                'Tracking ID',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              LiveTranslatedText(
+                                order.trackingId,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
                               if (order.deliveryPartner != null)
-                                LiveTranslatedText('via ${order.deliveryPartner}', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
+                                LiveTranslatedText(
+                                  'via ${order.deliveryPartner}',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.copy, color: Colors.white70, size: 18),
+                          icon: const Icon(
+                            Icons.copy,
+                            color: Colors.white70,
+                            size: 18,
+                          ),
                           onPressed: () {
-                            Clipboard.setData(ClipboardData(text: order.trackingId));
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Tracking ID copied!')));
+                            Clipboard.setData(
+                              ClipboardData(text: order.trackingId),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: LiveTranslatedText(
+                                  'Tracking ID copied!',
+                                ),
+                              ),
+                            );
                           },
                         ),
                       ],
@@ -1108,24 +1516,67 @@ class OrderTrackingSheet extends StatelessWidget {
                   // Progress steps
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LiveTranslatedText('Delivery Progress', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+                        LiveTranslatedText(
+                          'Delivery Progress',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
                         const SizedBox(height: 16),
-                        _buildProgressStep(context, 'Order Placed', Icons.shopping_bag_outlined,
-                            true, isFirst: true),
-                        _buildProgressStep(context, 'Processing', Icons.inventory_outlined,
-                            order.status != OrderStatus.processing),
-                        _buildProgressStep(context, 'Shipped', Icons.local_shipping_outlined,
-                            [OrderStatus.shipped, OrderStatus.outForDelivery, OrderStatus.delivered, OrderStatus.returned].contains(order.status)),
-                        _buildProgressStep(context, 'Out for Delivery', Icons.delivery_dining_outlined,
-                            [OrderStatus.outForDelivery, OrderStatus.delivered, OrderStatus.returned].contains(order.status)),
-                        _buildProgressStep(context, 'Delivered', Icons.home_outlined,
-                            [OrderStatus.delivered, OrderStatus.returned].contains(order.status),
-                            isLast: true,
-                            estimatedDate: order.actualDelivery ?? order.estimatedDelivery),
+                        _buildProgressStep(
+                          context,
+                          'Order Placed',
+                          Icons.shopping_bag_outlined,
+                          true,
+                          isFirst: true,
+                        ),
+                        _buildProgressStep(
+                          context,
+                          'Processing',
+                          Icons.inventory_outlined,
+                          order.status != OrderStatus.processing,
+                        ),
+                        _buildProgressStep(
+                          context,
+                          'Shipped',
+                          Icons.local_shipping_outlined,
+                          [
+                            OrderStatus.shipped,
+                            OrderStatus.outForDelivery,
+                            OrderStatus.delivered,
+                            OrderStatus.returned,
+                          ].contains(order.status),
+                        ),
+                        _buildProgressStep(
+                          context,
+                          'Out for Delivery',
+                          Icons.delivery_dining_outlined,
+                          [
+                            OrderStatus.outForDelivery,
+                            OrderStatus.delivered,
+                            OrderStatus.returned,
+                          ].contains(order.status),
+                        ),
+                        _buildProgressStep(
+                          context,
+                          'Delivered',
+                          Icons.home_outlined,
+                          [
+                            OrderStatus.delivered,
+                            OrderStatus.returned,
+                          ].contains(order.status),
+                          isLast: true,
+                          estimatedDate:
+                              order.actualDelivery ?? order.estimatedDelivery,
+                        ),
                       ],
                     ),
                   ),
@@ -1134,13 +1585,27 @@ class OrderTrackingSheet extends StatelessWidget {
                   if (events.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          LiveTranslatedText('Tracking History', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+                          LiveTranslatedText(
+                            'Tracking History',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
                           const SizedBox(height: 16),
-                          ...events.asMap().entries.map((entry) => _buildTrackingEvent(entry.value, entry.key == 0)),
+                          ...events.asMap().entries.map(
+                            (entry) => _buildTrackingEvent(
+                              entry.value,
+                              entry.key == 0,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1149,22 +1614,47 @@ class OrderTrackingSheet extends StatelessWidget {
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       child: Row(
                         children: [
                           CircleAvatar(
                             radius: 24,
                             backgroundColor: Colors.green[100],
-                            child: Icon(Icons.delivery_dining, color: Colors.green[700], size: 24),
+                            child: Icon(
+                              Icons.delivery_dining,
+                              color: Colors.green[700],
+                              size: 24,
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                LiveTranslatedText('Delivery Partner', style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 11)),
-                                LiveTranslatedText(order.deliveryPersonName!, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
-                                LiveTranslatedText(order.deliveryPartner ?? '', style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 12)),
+                                LiveTranslatedText(
+                                  'Delivery Partner',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey[500],
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                LiveTranslatedText(
+                                  order.deliveryPersonName!,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                LiveTranslatedText(
+                                  order.deliveryPartner ?? '',
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.grey[600],
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1173,7 +1663,11 @@ class OrderTrackingSheet extends StatelessWidget {
                               onPressed: () {
                                 HapticFeedback.lightImpact();
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: LiveTranslatedText('Calling ${order.deliveryPersonPhone}...')),
+                                  SnackBar(
+                                    content: LiveTranslatedText(
+                                      'Calling ${order.deliveryPersonPhone}...',
+                                    ),
+                                  ),
                                 );
                               },
                               icon: const Icon(Icons.call, size: 16),
@@ -1181,7 +1675,9 @@ class OrderTrackingSheet extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                         ],
@@ -1198,8 +1694,15 @@ class OrderTrackingSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildProgressStep(BuildContext context, String label, IconData icon, bool isCompleted,
-      {bool isFirst = false, bool isLast = false, DateTime? estimatedDate}) {
+  Widget _buildProgressStep(
+    BuildContext context,
+    String label,
+    IconData icon,
+    bool isCompleted, {
+    bool isFirst = false,
+    bool isLast = false,
+    DateTime? estimatedDate,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1212,7 +1715,11 @@ class OrderTrackingSheet extends StatelessWidget {
                 color: isCompleted ? const Color(0xFF6366F1) : Colors.grey[200],
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 18, color: isCompleted ? Colors.white : Colors.grey[400]),
+              child: Icon(
+                icon,
+                size: 18,
+                color: isCompleted ? Colors.white : Colors.grey[400],
+              ),
             ),
             if (!isLast)
               Container(
@@ -1239,7 +1746,10 @@ class OrderTrackingSheet extends StatelessWidget {
               if (isLast && estimatedDate != null)
                 LiveTranslatedText(
                   _formatDate(estimatedDate),
-                  style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 11),
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey[500],
+                    fontSize: 11,
+                  ),
                 ),
             ],
           ),
@@ -1280,18 +1790,37 @@ class OrderTrackingSheet extends StatelessWidget {
                     color: isLatest ? const Color(0xFF6366F1) : Colors.black87,
                   ),
                 ),
-                LiveTranslatedText(event.description, style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 12)),
+                LiveTranslatedText(
+                  event.description,
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
                 if (event.location.isNotEmpty)
                   Row(
                     children: [
-                      Icon(Icons.location_on, size: 11, color: Colors.grey[400]),
+                      Icon(
+                        Icons.location_on,
+                        size: 11,
+                        color: Colors.grey[400],
+                      ),
                       const SizedBox(width: 2),
-                      LiveTranslatedText(event.location, style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 11)),
+                      LiveTranslatedText(
+                        event.location,
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[400],
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 LiveTranslatedText(
                   _formatDateTime(event.timestamp),
-                  style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 11),
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey[400],
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -1302,14 +1831,30 @@ class OrderTrackingSheet extends StatelessWidget {
   }
 
   String _formatDate(DateTime d) => '${d.day} ${_month(d.month)} ${d.year}';
-  String _formatDateTime(DateTime d) => '${d.day} ${_month(d.month)} ${d.year}, ${_time(d)}';
+  String _formatDateTime(DateTime d) =>
+      '${d.day} ${_month(d.month)} ${d.year}, ${_time(d)}';
   String _time(DateTime d) {
     final h = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
     final m = d.minute.toString().padLeft(2, '0');
     final period = d.hour >= 12 ? 'PM' : 'AM';
     return '$h:$m $period';
   }
-  String _month(int m) => const ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m];
+
+  String _month(int m) => const [
+    '',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][m];
 }
 
 // ─────────────────────────────────────────────
@@ -1358,8 +1903,19 @@ class _ReturnRequestSheetState extends State<ReturnRequestSheet> {
             padding: const EdgeInsets.fromLTRB(20, 14, 8, 4),
             child: Row(
               children: [
-                Expanded(child: LiveTranslatedText('Return / Exchange', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700))),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                Expanded(
+                  child: LiveTranslatedText(
+                    'Return / Exchange',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
           ),
@@ -1370,51 +1926,108 @@ class _ReturnRequestSheetState extends State<ReturnRequestSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Type selector
-                  LiveTranslatedText('Request Type', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  LiveTranslatedText(
+                    'Request Type',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: _typeButton('Return', 'return', Icons.assignment_return)),
+                      Expanded(
+                        child: _typeButton(
+                          'Return',
+                          'return',
+                          Icons.assignment_return,
+                        ),
+                      ),
                       const SizedBox(width: 10),
-                      Expanded(child: _typeButton('Exchange', 'exchange', Icons.swap_horiz)),
+                      Expanded(
+                        child: _typeButton(
+                          'Exchange',
+                          'exchange',
+                          Icons.swap_horiz,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),
                   // Order items
-                  LiveTranslatedText('Items to Return', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  LiveTranslatedText(
+                    'Items to Return',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  ...widget.order.items.map((item) => Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF5F6FA),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.inventory_2_outlined, color: Color(0xFF6366F1), size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(child: LiveTranslatedText(item.name, style: GoogleFonts.poppins(fontSize: 13))),
-                            LiveTranslatedText('₹${item.price.toInt()}', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      )),
+                  ...widget.order.items.map(
+                    (item) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F6FA),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.inventory_2_outlined,
+                            color: Color(0xFF6366F1),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: LiveTranslatedText(
+                              item.name,
+                              style: GoogleFonts.poppins(fontSize: 13),
+                            ),
+                          ),
+                          LiveTranslatedText(
+                            '₹${item.price.toInt()}',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   // Reason
-                  LiveTranslatedText('Reason for Return', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  LiveTranslatedText(
+                    'Reason for Return',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  ..._reasons.map((reason) => RadioListTile<String>(
-                        value: reason,
-                        groupValue: _selectedReason,
-                        onChanged: (v) => setState(() => _selectedReason = v),
-                        title: LiveTranslatedText(reason, style: GoogleFonts.poppins(fontSize: 13)),
-                        dense: true,
-                        activeColor: const Color(0xFF6366F1),
-                        contentPadding: EdgeInsets.zero,
-                      )),
+                  ..._reasons.map(
+                    (reason) => RadioListTile<String>(
+                      value: reason,
+                      groupValue: _selectedReason,
+                      onChanged: (v) => setState(() => _selectedReason = v),
+                      title: LiveTranslatedText(
+                        reason,
+                        style: GoogleFonts.poppins(fontSize: 13),
+                      ),
+                      dense: true,
+                      activeColor: const Color(0xFF6366F1),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   // Notes
-                  LiveTranslatedText('Additional Notes (optional)', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  LiveTranslatedText(
+                    'Additional Notes (optional)',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _notesController,
@@ -1422,7 +2035,9 @@ class _ReturnRequestSheetState extends State<ReturnRequestSheet> {
                     decoration: InputDecoration(
                       hint: LiveTranslatedText('Describe the issue...'),
                       hintStyle: GoogleFonts.poppins(color: Colors.grey[400]),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       filled: true,
                       fillColor: const Color(0xFFF5F6FA),
                     ),
@@ -1437,7 +2052,9 @@ class _ReturnRequestSheetState extends State<ReturnRequestSheet> {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: LiveTranslatedText('${_type == 'return' ? 'Return' : 'Exchange'} request submitted!'),
+                                  content: LiveTranslatedText(
+                                    '${_type == 'return' ? 'Return' : 'Exchange'} request submitted!',
+                                  ),
                                   backgroundColor: Colors.green,
                                 ),
                               );
@@ -1446,7 +2063,9 @@ class _ReturnRequestSheetState extends State<ReturnRequestSheet> {
                         backgroundColor: const Color(0xFF6366F1),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: LiveTranslatedText(
                         'Submit ${_type == 'return' ? 'Return' : 'Exchange'} Request',
@@ -1472,13 +2091,25 @@ class _ReturnRequestSheetState extends State<ReturnRequestSheet> {
         decoration: BoxDecoration(
           color: selected ? const Color(0xFFEEF2FF) : const Color(0xFFF5F6FA),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? const Color(0xFF6366F1) : Colors.transparent, width: 1.5),
+          border: Border.all(
+            color: selected ? const Color(0xFF6366F1) : Colors.transparent,
+            width: 1.5,
+          ),
         ),
         child: Column(
           children: [
-            Icon(icon, color: selected ? const Color(0xFF6366F1) : Colors.grey[400]),
+            Icon(
+              icon,
+              color: selected ? const Color(0xFF6366F1) : Colors.grey[400],
+            ),
             const SizedBox(height: 4),
-            LiveTranslatedText(label, style: GoogleFonts.poppins(fontWeight: selected ? FontWeight.w600 : FontWeight.normal, color: selected ? const Color(0xFF6366F1) : Colors.grey[600])),
+            LiveTranslatedText(
+              label,
+              style: GoogleFonts.poppins(
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                color: selected ? const Color(0xFF6366F1) : Colors.grey[600],
+              ),
+            ),
           ],
         ),
       ),
@@ -1524,16 +2155,34 @@ class _CancelOrderSheetState extends State<CancelOrderSheet> {
         children: [
           Row(
             children: [
-              Expanded(child: LiveTranslatedText('Cancel Order', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700))),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context), padding: EdgeInsets.zero),
+              Expanded(
+                child: LiveTranslatedText(
+                  'Cancel Order',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+                padding: EdgeInsets.zero,
+              ),
             ],
           ),
           const SizedBox(height: 4),
-          LiveTranslatedText(widget.order.id, style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 13)),
+          LiveTranslatedText(
+            widget.order.id,
+            style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 13),
+          ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: Colors.red[50],
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Row(
               children: [
                 Icon(Icons.info_outline, color: Colors.red[700], size: 18),
@@ -1541,24 +2190,38 @@ class _CancelOrderSheetState extends State<CancelOrderSheet> {
                 Expanded(
                   child: LiveTranslatedText(
                     'Cancellation may not be possible if the order has been shipped.',
-                    style: GoogleFonts.poppins(color: Colors.red[700], fontSize: 12),
+                    style: GoogleFonts.poppins(
+                      color: Colors.red[700],
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          LiveTranslatedText('Reason for Cancellation', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+          LiveTranslatedText(
+            'Reason for Cancellation',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
           const SizedBox(height: 8),
-          ..._reasons.map((reason) => RadioListTile<String>(
-                value: reason,
-                groupValue: _selectedReason,
-                onChanged: (v) => setState(() => _selectedReason = v),
-                title: LiveTranslatedText(reason, style: GoogleFonts.poppins(fontSize: 13)),
-                dense: true,
-                activeColor: Colors.red,
-                contentPadding: EdgeInsets.zero,
-              )),
+          ..._reasons.map(
+            (reason) => RadioListTile<String>(
+              value: reason,
+              groupValue: _selectedReason,
+              onChanged: (v) => setState(() => _selectedReason = v),
+              title: LiveTranslatedText(
+                reason,
+                style: GoogleFonts.poppins(fontSize: 13),
+              ),
+              dense: true,
+              activeColor: Colors.red,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -1569,7 +2232,9 @@ class _CancelOrderSheetState extends State<CancelOrderSheet> {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: LiveTranslatedText('Order cancellation request submitted.'),
+                          content: LiveTranslatedText(
+                            'Order cancellation request submitted.',
+                          ),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -1578,9 +2243,14 @@ class _CancelOrderSheetState extends State<CancelOrderSheet> {
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: LiveTranslatedText('Confirm Cancellation', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              child: LiveTranslatedText(
+                'Confirm Cancellation',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ],
@@ -1616,12 +2286,27 @@ class CustomerSupportSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      LiveTranslatedText('Customer Support', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700)),
-                      LiveTranslatedText('Order: ${order.id}', style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+                      LiveTranslatedText(
+                        'Customer Support',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      LiveTranslatedText(
+                        'Order: ${order.id}',
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
           ),
@@ -1640,7 +2325,11 @@ class CustomerSupportSheet extends StatelessWidget {
                   badgeColor: Colors.green,
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Live chat coming soon!')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: LiveTranslatedText('Live chat coming soon!'),
+                      ),
+                    );
                   },
                 ),
                 const Divider(height: 24),
@@ -1652,7 +2341,11 @@ class CustomerSupportSheet extends StatelessWidget {
                   subtitle: '+91 1800-123-4567 · Available 9AM–9PM',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Calling support...')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: LiveTranslatedText('Calling support...'),
+                      ),
+                    );
                   },
                 ),
                 const Divider(height: 24),
@@ -1664,7 +2357,11 @@ class CustomerSupportSheet extends StatelessWidget {
                   subtitle: 'support@retailmind.com',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Opening email...')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: LiveTranslatedText('Opening email...'),
+                      ),
+                    );
                   },
                 ),
                 const Divider(height: 24),
@@ -1676,7 +2373,11 @@ class CustomerSupportSheet extends StatelessWidget {
                   subtitle: 'Browse common questions and guides',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('FAQ coming soon!')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: LiveTranslatedText('FAQ coming soon!'),
+                      ),
+                    );
                   },
                 ),
               ],
@@ -1719,21 +2420,43 @@ class CustomerSupportSheet extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      LiveTranslatedText(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                      LiveTranslatedText(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
                       if (badge != null) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: badgeColor ?? Colors.green,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: LiveTranslatedText(badge, style: GoogleFonts.poppins(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                          child: LiveTranslatedText(
+                            badge,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ],
                     ],
                   ),
-                  LiveTranslatedText(subtitle, style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12)),
+                  LiveTranslatedText(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),

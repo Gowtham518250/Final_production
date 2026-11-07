@@ -225,20 +225,30 @@ class SessionManagementService {
         await SecureTokenStorage.saveRefreshToken(refreshToken);
         final storedRefreshToken = await SecureTokenStorage.getRefreshToken();
         if (storedRefreshToken != refreshToken) {
-          throw StateError('Refresh token could not be persisted and verified.');
+          throw StateError(
+            'Refresh token could not be persisted and verified.',
+          );
         }
       }
 
       await prefs.setString(_deviceIdKey, deviceId);
-      await prefs.setString(_refreshTokenExpiryKey, expiryDate.toIso8601String());
-      await prefs.setInt(_sessionTimeKey, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setString(
+        _refreshTokenExpiryKey,
+        expiryDate.toIso8601String(),
+      );
+      await prefs.setInt(
+        _sessionTimeKey,
+        DateTime.now().millisecondsSinceEpoch,
+      );
       await prefs.setInt(_userIdKey, userId);
       await prefs.setString(_userNameKey, userName);
       await prefs.setString(_userEmailKey, userEmail);
       startSessionExpiryMonitoring();
 
       if (kDebugMode) {
-        debugPrint('✅ Login credentials persisted and verified for user ID $userId');
+        debugPrint(
+          '✅ Login credentials persisted and verified for user ID $userId',
+        );
       }
     });
   }
@@ -260,9 +270,8 @@ class SessionManagementService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final storedUserId = prefs.get(_userIdKey) ?? prefs.get('userId');
-      final resolvedUserId = userId ??
-          int.tryParse(storedUserId?.toString() ?? '') ??
-          0;
+      final resolvedUserId =
+          userId ?? int.tryParse(storedUserId?.toString() ?? '') ?? 0;
       if (resolvedUserId <= 0) return;
       await prefs.remove(_identityVerificationKey(resolvedUserId));
       await prefs.remove(_identityVerificationRoleKey(resolvedUserId));

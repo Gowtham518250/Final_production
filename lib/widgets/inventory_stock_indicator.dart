@@ -57,7 +57,7 @@ class InventoryStockIndicator extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        
+
         // Progress bar
         Container(
           height: 6,
@@ -85,8 +85,8 @@ class InventoryStockIndicator extends StatelessWidget {
       isOutOfStock
           ? Icons.remove_circle_rounded
           : isLowStock
-              ? Icons.warning_amber_rounded
-              : Icons.inventory_2_rounded,
+          ? Icons.warning_amber_rounded
+          : Icons.inventory_2_rounded,
       size: 16,
       color: _getStockColor(isOutOfStock, isLowStock),
     );
@@ -130,7 +130,9 @@ class StockWarningDialog extends StatelessWidget {
         children: [
           Icon(
             hasOutOfStock ? Icons.error_rounded : Icons.warning_amber_rounded,
-            color: hasOutOfStock ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
+            color: hasOutOfStock
+                ? const Color(0xFFEF4444)
+                : const Color(0xFFF59E0B),
           ),
           const SizedBox(width: AppSpacing.sm),
           LiveTranslatedText(
@@ -173,7 +175,11 @@ class StockWarningDialog extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_rounded, size: 16, color: const Color(0xFFEF4444)),
+                    Icon(
+                      Icons.info_rounded,
+                      size: 16,
+                      color: const Color(0xFFEF4444),
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: LiveTranslatedText(
@@ -264,7 +270,8 @@ class LowStockThresholdSettings extends StatefulWidget {
   });
 
   @override
-  State<LowStockThresholdSettings> createState() => _LowStockThresholdSettingsState();
+  State<LowStockThresholdSettings> createState() =>
+      _LowStockThresholdSettingsState();
 }
 
 class _LowStockThresholdSettingsState extends State<LowStockThresholdSettings> {
@@ -311,7 +318,7 @@ class _LowStockThresholdSettingsState extends State<LowStockThresholdSettings> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          
+
           // Threshold selector
           Row(
             children: [
@@ -331,9 +338,7 @@ class _LowStockThresholdSettingsState extends State<LowStockThresholdSettings> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFE2E8F0),
-                  ),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: Center(
                   child: LiveTranslatedText(
@@ -410,7 +415,7 @@ class ProductAlternativesSuggestion extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          
+
           // Alternatives list
           ...alternatives.take(3).map((alternative) {
             return Padding(
@@ -425,13 +430,14 @@ class ProductAlternativesSuggestion extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFE2E8F0),
-                    ),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle_outline, color: const Color(0xFF10B981)),
+                      Icon(
+                        Icons.check_circle_outline,
+                        color: const Color(0xFF10B981),
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Column(
@@ -462,7 +468,9 @@ class ProductAlternativesSuggestion extends StatelessWidget {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: LiveTranslatedText(
@@ -486,9 +494,9 @@ class ProductAlternativesSuggestion extends StatelessWidget {
               ),
             );
           }).toList(),
-          
+
           const SizedBox(height: AppSpacing.sm),
-          
+
           // View more alternatives button
           if (alternatives.length > 3)
             GestureDetector(
@@ -508,7 +516,11 @@ class ProductAlternativesSuggestion extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(Icons.arrow_forward, size: 16, color: const Color(0xFF6366F1)),
+                  Icon(
+                    Icons.arrow_forward,
+                    size: 16,
+                    color: const Color(0xFF6366F1),
+                  ),
                 ],
               ),
             ),
@@ -553,7 +565,11 @@ class CartStockLevelIndicator extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: const Color(0xFFF59E0B), size: 20),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: const Color(0xFFF59E0B),
+                size: 20,
+              ),
               const SizedBox(width: AppSpacing.sm),
               LiveTranslatedText(
                 'Stock Alert',
@@ -650,15 +666,15 @@ class QuickStockCheck extends StatelessWidget {
           color: isOutOfStock
               ? const Color(0xFFEF4444).withValues(alpha: 0.1)
               : isLowStock
-                  ? const Color(0xFFF59E0B).withValues(alpha: 0.1)
-                  : const Color(0xFF10B981).withValues(alpha: 0.1),
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.1)
+              : const Color(0xFF10B981).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isOutOfStock
                 ? const Color(0xFFEF4444)
                 : isLowStock
-                    ? const Color(0xFFF59E0B)
-                    : const Color(0xFF10B981),
+                ? const Color(0xFFF59E0B)
+                : const Color(0xFF10B981),
             width: 1,
           ),
         ),
@@ -666,13 +682,17 @@ class QuickStockCheck extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isOutOfStock ? Icons.block : isLowStock ? Icons.trending_down : Icons.inventory_2,
+              isOutOfStock
+                  ? Icons.block
+                  : isLowStock
+                  ? Icons.trending_down
+                  : Icons.inventory_2,
               size: 14,
               color: isOutOfStock
                   ? const Color(0xFFEF4444)
                   : isLowStock
-                      ? const Color(0xFFF59E0B)
-                      : const Color(0xFF10B981),
+                  ? const Color(0xFFF59E0B)
+                  : const Color(0xFF10B981),
             ),
             const SizedBox(width: 4),
             LiveTranslatedText(
@@ -683,8 +703,8 @@ class QuickStockCheck extends StatelessWidget {
                 color: isOutOfStock
                     ? const Color(0xFFEF4444)
                     : isLowStock
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF10B981),
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xFF10B981),
               ),
             ),
           ],

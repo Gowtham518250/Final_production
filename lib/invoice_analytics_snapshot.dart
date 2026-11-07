@@ -57,18 +57,25 @@ class InvoiceAnalyticsSnapshot {
             row['paid'] ??
             row['received_amount'],
       ).clamp(0.0, total).toDouble();
-      final documentStatus =
-          (row['status'] ?? '').toString().split('.').last.toUpperCase();
-      final isNonReceivable =
-          const {'DRAFT', 'CANCELLED', 'VOID', 'DELETED'}.contains(documentStatus);
+      final documentStatus = (row['status'] ?? '')
+          .toString()
+          .split('.')
+          .last
+          .toUpperCase();
+      final isNonReceivable = const {
+        'DRAFT',
+        'CANCELLED',
+        'VOID',
+        'DELETED',
+      }.contains(documentStatus);
       final pending = isNonReceivable
           ? 0.0
           : (total - paid).clamp(0.0, double.infinity).toDouble();
       final status = isNonReceivable
           ? documentStatus
           : (total > 0 && paid >= total - 0.01
-              ? 'PAID'
-              : (paid > 0 ? 'PARTIAL' : 'UNPAID'));
+                ? 'PAID'
+                : (paid > 0 ? 'PARTIAL' : 'UNPAID'));
 
       final invoice = <String, dynamic>{
         ...row,
@@ -100,12 +107,13 @@ class InvoiceAnalyticsSnapshot {
         }
       }
 
-      final phone = (invoice['customer_phone'] ??
-              invoice['phone'] ??
-              invoice['mobile'] ??
-              '')
-          .toString()
-          .trim();
+      final phone =
+          (invoice['customer_phone'] ??
+                  invoice['phone'] ??
+                  invoice['mobile'] ??
+                  '')
+              .toString()
+              .trim();
       if (pending > 0.01 && isValidCustomerPhone(phone)) {
         outstandingCreditInvoices.add(invoice);
       }

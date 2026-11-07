@@ -63,7 +63,9 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
 
   void _listenForCapacityChanges() {
     if (_isListeningForCapacity) return;
-    LiveTranslationService.instance.capacityChanges.addListener(_capacityListener);
+    LiveTranslationService.instance.capacityChanges.addListener(
+      _capacityListener,
+    );
     _isListeningForCapacity = true;
 
     // Close the small race where capacity became available just before this
@@ -73,7 +75,9 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
 
   void _stopListeningForCapacityChanges() {
     if (!_isListeningForCapacity) return;
-    LiveTranslationService.instance.capacityChanges.removeListener(_capacityListener);
+    LiveTranslationService.instance.capacityChanges.removeListener(
+      _capacityListener,
+    );
     _isListeningForCapacity = false;
   }
 
@@ -110,6 +114,7 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     _stopListeningForCapacityChanges();
     _queueTranslation(targetCode);
   }
+
   String? _requestKey;
   int _requestVersion = 0;
 
@@ -119,15 +124,17 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
 
   // Reuse matchers across dynamic labels instead of constructing regex objects
   // repeatedly while hundreds of text widgets initialize on low-memory phones.
-  static final RegExp _urlPattern =
-      RegExp(r'^https?://', caseSensitive: false);
+  static final RegExp _urlPattern = RegExp(r'^https?://', caseSensitive: false);
   static final RegExp _phonePattern = RegExp(r'^\+?[0-9][0-9 ()-]{6,}$');
-  static final RegExp _machineIdentifierPattern =
-      RegExp(r'^[#A-Z0-9][A-Z0-9_./:#-]{4,}$');
-  static final RegExp _machineIdentifierCharacterPattern =
-      RegExp(r'[0-9_./:#-]');
-  static final RegExp _shortUppercaseTokenPattern =
-      RegExp(r'^[A-Z0-9 _./:#-]{2,}$');
+  static final RegExp _machineIdentifierPattern = RegExp(
+    r'^[#A-Z0-9][A-Z0-9_./:#-]{4,}$',
+  );
+  static final RegExp _machineIdentifierCharacterPattern = RegExp(
+    r'[0-9_./:#-]',
+  );
+  static final RegExp _shortUppercaseTokenPattern = RegExp(
+    r'^[A-Z0-9 _./:#-]{2,}$',
+  );
 
   static Map<String, String> _getEnglishTextToKey() {
     final cached = _englishTextToKey;
@@ -161,7 +168,7 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     if (sharedPageCopy != null) return sharedPageCopy;
 
     final featureGateCopy =
-      AppLocalizations.featureGateTranslations[normalized]?[targetCode];
+        AppLocalizations.featureGateTranslations[normalized]?[targetCode];
     if (featureGateCopy != null) return featureGateCopy;
 
     final shopProfileCopy =
@@ -169,14 +176,15 @@ class _LiveTranslatedTextState extends State<LiveTranslatedText> {
     if (shopProfileCopy != null) return shopProfileCopy;
 
     final attendanceStatusCopy =
-      AppLocalizations.attendanceStatusTranslations[normalized]?[targetCode];
+        AppLocalizations.attendanceStatusTranslations[normalized]?[targetCode];
     if (attendanceStatusCopy != null) return attendanceStatusCopy;
 
-    final adFormatCopy = AppLocalizations.adFormatTranslations[normalized]?[targetCode];
+    final adFormatCopy =
+        AppLocalizations.adFormatTranslations[normalized]?[targetCode];
     if (adFormatCopy != null) return adFormatCopy;
 
-    final attendanceAndGrowthCopy =
-        AppLocalizations.attendanceAndGrowthTranslations[targetCode]?[normalized];
+    final attendanceAndGrowthCopy = AppLocalizations
+        .attendanceAndGrowthTranslations[targetCode]?[normalized];
     if (attendanceAndGrowthCopy != null) return attendanceAndGrowthCopy;
 
     final screenText =

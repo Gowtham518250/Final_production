@@ -71,13 +71,11 @@ class _AnimatedFadeInState extends State<AnimatedFadeIn>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _animation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     Future.delayed(widget.delay, () {
       if (mounted) {
@@ -94,10 +92,7 @@ class _AnimatedFadeInState extends State<AnimatedFadeIn>
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _animation,
-      child: widget.child,
-    );
+    return FadeTransition(opacity: _animation, child: widget.child);
   }
 }
 
@@ -128,16 +123,11 @@ class _AnimatedSlideUpState extends State<AnimatedSlideUp>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _animation = Tween<Offset>(
       begin: Offset(0, widget.offset / 100),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     Future.delayed(widget.delay, () {
       if (mounted) {
@@ -154,10 +144,7 @@ class _AnimatedSlideUpState extends State<AnimatedSlideUp>
 
   @override
   Widget build(BuildContext context) {
-    return SlideTransition(
-      position: _animation,
-      child: widget.child,
-    );
+    return SlideTransition(position: _animation, child: widget.child);
   }
 }
 
@@ -193,11 +180,7 @@ class PulseAnimation extends StatefulWidget {
   final Widget child;
   final bool animate;
 
-  const PulseAnimation({
-    super.key,
-    required this.child,
-    this.animate = true,
-  });
+  const PulseAnimation({super.key, required this.child, this.animate = true});
 
   @override
   State<PulseAnimation> createState() => _PulseAnimationState();
@@ -215,9 +198,10 @@ class _PulseAnimationState extends State<PulseAnimation>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _animation = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 1.0,
+      end: 1.05,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     if (widget.animate) {
       _controller.repeat(reverse: true);
@@ -245,10 +229,7 @@ class _PulseAnimationState extends State<PulseAnimation>
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _animation,
-      child: widget.child,
-    );
+    return ScaleTransition(scale: _animation, child: widget.child);
   }
 }
 

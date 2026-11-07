@@ -228,14 +228,26 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
                         spacing: 7,
                         runSpacing: 7,
                         children: [
-                          _metric('Confirmed', confirmedEntries.length,
-                              const Color(0xFF16836B)),
-                          _metric('Pending', pendingEntries,
-                              const Color(0xFFB54708)),
-                          _metric('Auto-accepted', automaticEntries,
-                              const Color(0xFF3156A6)),
-                          _metric('Conflicts', conflictEntries,
-                              const Color(0xFFB42318)),
+                          _metric(
+                            'Confirmed',
+                            confirmedEntries.length,
+                            const Color(0xFF16836B),
+                          ),
+                          _metric(
+                            'Pending',
+                            pendingEntries,
+                            const Color(0xFFB54708),
+                          ),
+                          _metric(
+                            'Auto-accepted',
+                            automaticEntries,
+                            const Color(0xFF3156A6),
+                          ),
+                          _metric(
+                            'Conflicts',
+                            conflictEntries,
+                            const Color(0xFFB42318),
+                          ),
                         ],
                       ),
                     ],
@@ -310,24 +322,24 @@ class _OnlinePaymentHistoryPageState extends State<OnlinePaymentHistoryPage> {
     final Color statusColor = conflict
         ? const Color(0xFFB42318)
         : confirmed
-            ? const Color(0xFF16836B)
-            : automatic
-                ? const Color(0xFF3156A6)
-                : const Color(0xFFB54708);
+        ? const Color(0xFF16836B)
+        : automatic
+        ? const Color(0xFF3156A6)
+        : const Color(0xFFB54708);
     final String statusText = conflict
         ? 'Review conflict'
         : confirmed
-            ? 'Merchant-confirmed'
-            : automatic
-                ? 'Auto-accepted'
-                : 'Pending review';
+        ? 'Merchant-confirmed'
+        : automatic
+        ? 'Auto-accepted'
+        : 'Pending review';
     final IconData statusIcon = conflict
         ? Icons.warning_amber_rounded
         : confirmed
-            ? Icons.verified_outlined
-            : automatic
-                ? Icons.auto_awesome_outlined
-                : Icons.pending_outlined;
+        ? Icons.verified_outlined
+        : automatic
+        ? Icons.auto_awesome_outlined
+        : Icons.pending_outlined;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 9),

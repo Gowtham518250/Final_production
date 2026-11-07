@@ -50,35 +50,38 @@ void main() {
   });
 
   group('late event tracking', () {
-    test('notification replayed hours later is marked late without backdating event', () async {
-      final service = PaymentDetectionService();
-      service.debugResetTransientDetectionState();
-      final events = <PaymentEvent>[];
-      final subscription = service.onPaymentDetected.listen(events.add);
+    test(
+      'notification replayed hours later is marked late without backdating event',
+      () async {
+        final service = PaymentDetectionService();
+        service.debugResetTransientDetectionState();
+        final events = <PaymentEvent>[];
+        final subscription = service.onPaymentDetected.listen(events.add);
 
-      service.debugHandleNotification(
-        ServiceNotificationEvent(
-          packageName: 'com.phonepe.app',
-          title: 'PhonePe',
-          content: 'UPI credit ₹11 received from Anita',
-          eventKey: keyPostedAgo(const Duration(hours: 6), 'late1'),
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+        service.debugHandleNotification(
+          ServiceNotificationEvent(
+            packageName: 'com.phonepe.app',
+            title: 'PhonePe',
+            content: 'UPI credit ₹11 received from Anita',
+            eventKey: keyPostedAgo(const Duration(hours: 6), 'late1'),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 200));
 
-      expect(events, hasLength(1));
-      final lateAt = service.originalTimeIfLate(events.single.id);
-      expect(lateAt, isNotNull);
-      expect(
-        DateTime.now().difference(lateAt!).inHours,
-        greaterThanOrEqualTo(5),
-      );
-      expect(
-        DateTime.now().difference(events.single.timestamp).inMinutes,
-        lessThan(1),
-      );
-      await subscription.cancel();
-    });
+        expect(events, hasLength(1));
+        final lateAt = service.originalTimeIfLate(events.single.id);
+        expect(lateAt, isNotNull);
+        expect(
+          DateTime.now().difference(lateAt!).inHours,
+          greaterThanOrEqualTo(5),
+        );
+        expect(
+          DateTime.now().difference(events.single.timestamp).inMinutes,
+          lessThan(1),
+        );
+        await subscription.cancel();
+      },
+    );
 
     test('live notification is not marked late', () async {
       final service = PaymentDetectionService();

@@ -34,11 +34,7 @@ class ModernEmptyState extends StatelessWidget {
                 color: const Color(0xFF6366F1).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                size: 48,
-                color: const Color(0xFF6366F1),
-              ),
+              child: Icon(icon, size: 48, color: const Color(0xFF6366F1)),
             ),
             const SizedBox(height: 24),
             LiveTranslatedText(
@@ -68,8 +64,13 @@ class ModernEmptyState extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6366F1),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ],
@@ -153,11 +154,7 @@ class EmptySearchState extends StatelessWidget {
   final String searchTerm;
   final VoidCallback? onClear;
 
-  const EmptySearchState({
-    super.key,
-    required this.searchTerm,
-    this.onClear,
-  });
+  const EmptySearchState({super.key, required this.searchTerm, this.onClear});
 
   @override
   Widget build(BuildContext context) {

@@ -83,48 +83,59 @@ class HealthScoreBreakdown {
     final result = <HealthScorePenalty>[];
 
     if (unsyncedBillsPenalty > 0) {
-      result.add(HealthScorePenalty(
-        category: PenaltyCategory.unsyncedBills,
-        points: unsyncedBillsPenalty,
-        label: 'Unsynced Bills',
-        description: 'Bills not yet uploaded to the server risk data loss.',
-      ));
+      result.add(
+        HealthScorePenalty(
+          category: PenaltyCategory.unsyncedBills,
+          points: unsyncedBillsPenalty,
+          label: 'Unsynced Bills',
+          description: 'Bills not yet uploaded to the server risk data loss.',
+        ),
+      );
     }
 
     if (lowStockPenalty > 0) {
-      result.add(HealthScorePenalty(
-        category: PenaltyCategory.lowStock,
-        points: lowStockPenalty,
-        label: 'Low Stock Items',
-        description: 'One or more items have fallen below reorder levels.',
-      ));
+      result.add(
+        HealthScorePenalty(
+          category: PenaltyCategory.lowStock,
+          points: lowStockPenalty,
+          label: 'Low Stock Items',
+          description: 'One or more items have fallen below reorder levels.',
+        ),
+      );
     }
 
     if (duesPenalty > 0) {
-      result.add(HealthScorePenalty(
-        category: PenaltyCategory.pendingDues,
-        points: duesPenalty,
-        label: 'Pending Dues',
-        description: 'Outstanding customer receivables affect cash-flow health.',
-      ));
+      result.add(
+        HealthScorePenalty(
+          category: PenaltyCategory.pendingDues,
+          points: duesPenalty,
+          label: 'Pending Dues',
+          description:
+              'Outstanding customer receivables affect cash-flow health.',
+        ),
+      );
     }
 
     if (dayNotClosedPenalty > 0) {
-      result.add(HealthScorePenalty(
-        category: PenaltyCategory.dayNotClosed,
-        points: dayNotClosedPenalty,
-        label: 'Day Not Closed',
-        description: 'It is past 9 PM — close the day to lock accounts.',
-      ));
+      result.add(
+        HealthScorePenalty(
+          category: PenaltyCategory.dayNotClosed,
+          points: dayNotClosedPenalty,
+          label: 'Day Not Closed',
+          description: 'It is past 9 PM — close the day to lock accounts.',
+        ),
+      );
     }
 
     if (salesTrendDelta < 0) {
-      result.add(HealthScorePenalty(
-        category: PenaltyCategory.salesTrend,
-        points: salesTrendDelta.abs(),
-        label: 'Weak Sales Trend',
-        description: 'Today\'s sales are less than 50 % of yesterday\'s.',
-      ));
+      result.add(
+        HealthScorePenalty(
+          category: PenaltyCategory.salesTrend,
+          points: salesTrendDelta.abs(),
+          label: 'Weak Sales Trend',
+          description: 'Today\'s sales are less than 50 % of yesterday\'s.',
+        ),
+      );
     }
 
     return result;
@@ -333,10 +344,14 @@ class DailyHealthScoreService {
     if (todaySalesAmount > 0) {
       if (yesterdaySalesAmount > 0) {
         final ratio = todaySalesAmount / yesterdaySalesAmount;
-        if (ratio >= 1.0) salesPoints = 40;
-        else if (ratio >= 0.8) salesPoints = 30;
-        else if (ratio >= 0.5) salesPoints = 20;
-        else salesPoints = 10;
+        if (ratio >= 1.0)
+          salesPoints = 40;
+        else if (ratio >= 0.8)
+          salesPoints = 30;
+        else if (ratio >= 0.5)
+          salesPoints = 20;
+        else
+          salesPoints = 10;
       } else {
         salesPoints = 40; // Beating 0 yesterday
       }
@@ -348,10 +363,14 @@ class DailyHealthScoreService {
 
     // 2. INVENTORY HEALTH (30 points)
     int inventoryPoints = 0;
-    if (lowStockItems == 0) inventoryPoints = 30;
-    else if (lowStockItems <= 5) inventoryPoints = 20;
-    else if (lowStockItems <= 15) inventoryPoints = 10;
-    else inventoryPoints = 0;
+    if (lowStockItems == 0)
+      inventoryPoints = 30;
+    else if (lowStockItems <= 5)
+      inventoryPoints = 20;
+    else if (lowStockItems <= 15)
+      inventoryPoints = 10;
+    else
+      inventoryPoints = 0;
 
     // 3. PENDING DUES (15 points)
     int financePoints = duesPending ? 0 : 15;
@@ -432,10 +451,14 @@ abstract class HealthScoreAnalyzer {
     if (todaySalesAmount > 0) {
       if (yesterdaySalesAmount > 0) {
         final ratio = todaySalesAmount / yesterdaySalesAmount;
-        if (ratio >= 1.0) salesPoints = 40;
-        else if (ratio >= 0.8) salesPoints = 30;
-        else if (ratio >= 0.5) salesPoints = 20;
-        else salesPoints = 10;
+        if (ratio >= 1.0)
+          salesPoints = 40;
+        else if (ratio >= 0.8)
+          salesPoints = 30;
+        else if (ratio >= 0.5)
+          salesPoints = 20;
+        else
+          salesPoints = 10;
       } else {
         salesPoints = 40;
       }
@@ -447,10 +470,14 @@ abstract class HealthScoreAnalyzer {
 
     // 2. INVENTORY HEALTH (30 points max)
     int inventoryPoints = 0;
-    if (lowStockItems == 0) inventoryPoints = 30;
-    else if (lowStockItems <= 5) inventoryPoints = 20;
-    else if (lowStockItems <= 15) inventoryPoints = 10;
-    else inventoryPoints = 0;
+    if (lowStockItems == 0)
+      inventoryPoints = 30;
+    else if (lowStockItems <= 5)
+      inventoryPoints = 20;
+    else if (lowStockItems <= 15)
+      inventoryPoints = 10;
+    else
+      inventoryPoints = 0;
 
     // 3. PENDING DUES (15 points max)
     int financePoints = duesPending ? 0 : 15;
@@ -468,7 +495,8 @@ abstract class HealthScoreAnalyzer {
       opsPoints += 5;
     }
 
-    int score = (salesPoints + inventoryPoints + financePoints + opsPoints).clamp(0, 100);
+    int score = (salesPoints + inventoryPoints + financePoints + opsPoints)
+        .clamp(0, 100);
 
     // Map 'missing points' back to the legacy penalty fields so the UI still displays them nicely
     return HealthScoreBreakdown(
@@ -532,8 +560,7 @@ abstract class HealthScoreAnalyzer {
 
   /// Returns true when the given score sits in the "healthy" range
   /// (Good or Excellent), false otherwise.
-  static bool isHealthy(int score) =>
-      score >= HealthScoreThresholds.good;
+  static bool isHealthy(int score) => score >= HealthScoreThresholds.good;
 
   /// Returns true when the store requires immediate attention
   /// (Poor or Critical).
@@ -544,9 +571,9 @@ abstract class HealthScoreAnalyzer {
   /// Flutter Color.fromARGB or similar.
   static String getScoreColourHex(int score) {
     if (score >= HealthScoreThresholds.excellent) return '#4CAF50'; // green
-    if (score >= HealthScoreThresholds.good) return '#FFEB3B';      // yellow
-    if (score >= HealthScoreThresholds.fair) return '#FF9800';      // orange
-    if (score >= HealthScoreThresholds.poor) return '#F44336';      // red
+    if (score >= HealthScoreThresholds.good) return '#FFEB3B'; // yellow
+    if (score >= HealthScoreThresholds.fair) return '#FF9800'; // orange
+    if (score >= HealthScoreThresholds.poor) return '#F44336'; // red
     return '#B71C1C'; // deep red — critical
   }
 
@@ -583,8 +610,7 @@ class HealthScoreHistory {
   /// Maximum number of days to retain in the history.
   final int maxEntries;
 
-  HealthScoreHistory({this.maxEntries = 30})
-      : _entries = [];
+  HealthScoreHistory({this.maxEntries = 30}) : _entries = [];
 
   /// An unmodifiable view of the history, oldest-first.
   List<DailyScoreEntry> get entries => List.unmodifiable(_entries);
@@ -601,11 +627,13 @@ class HealthScoreHistory {
     if (_entries.length >= maxEntries) {
       _entries.removeAt(0);
     }
-    _entries.add(DailyScoreEntry(
-      date: DateTime.now(),
-      score: score,
-      status: DailyHealthScoreService.getHealthStatus(score),
-    ));
+    _entries.add(
+      DailyScoreEntry(
+        date: DateTime.now(),
+        score: score,
+        status: DailyHealthScoreService.getHealthStatus(score),
+      ),
+    );
   }
 
   /// Arithmetic mean of all recorded scores, or null if empty.
@@ -707,8 +735,7 @@ class HealthScoreDelta {
   }
 
   /// Sign-prefixed string, e.g. "+7" or "-3" or "0".
-  String get deltaString =>
-      delta > 0 ? '+$delta' : '$delta';
+  String get deltaString => delta > 0 ? '+$delta' : '$delta';
 
   @override
   String toString() =>
@@ -752,11 +779,13 @@ abstract class HealthScoreFormatter {
       ..writeln('  Pending dues penalty            -${b.duesPenalty}')
       ..writeln('  Day not closed penalty          -${b.dayNotClosedPenalty}')
       ..writeln(
-          '  Sales trend delta       ${b.salesTrendDelta >= 0 ? '+' : ''}${b.salesTrendDelta}')
+        '  Sales trend delta       ${b.salesTrendDelta >= 0 ? '+' : ''}${b.salesTrendDelta}',
+      )
       ..writeln('  ─────────────────────────────────────────')
       ..writeln('  Final score                      ${b.finalScore}')
       ..writeln(
-          '  Status                           ${DailyHealthScoreService.getHealthStatus(b.finalScore)} ${DailyHealthScoreService.getHealthEmoji(b.finalScore)}')
+        '  Status                           ${DailyHealthScoreService.getHealthStatus(b.finalScore)} ${DailyHealthScoreService.getHealthEmoji(b.finalScore)}',
+      )
       ..write('────────────────────────────────────────────');
     return buf.toString();
   }
@@ -802,57 +831,72 @@ abstract class HealthScoreRecommendationEngine {
     final recs = <Recommendation>[];
 
     if (breakdown.unsyncedBillsPenalty > 0) {
-      recs.add(const Recommendation(
-        category: PenaltyCategory.unsyncedBills,
-        priority: 1,
-        title: 'Sync pending bills now',
-        body: 'Unsynced bills risk permanent data loss if the device is '
-            'lost or reset. Open the Bills screen and tap "Sync All" '
-            'to upload them to the server.',
-      ));
+      recs.add(
+        const Recommendation(
+          category: PenaltyCategory.unsyncedBills,
+          priority: 1,
+          title: 'Sync pending bills now',
+          body:
+              'Unsynced bills risk permanent data loss if the device is '
+              'lost or reset. Open the Bills screen and tap "Sync All" '
+              'to upload them to the server.',
+        ),
+      );
     }
 
     if (breakdown.duesPenalty > 0) {
-      recs.add(const Recommendation(
-        category: PenaltyCategory.pendingDues,
-        priority: 1,
-        title: 'Follow up on outstanding dues',
-        body: 'One or more customers have unpaid balances. Review the '
-            'Dues report and send payment reminders to recover cash.',
-      ));
+      recs.add(
+        const Recommendation(
+          category: PenaltyCategory.pendingDues,
+          priority: 1,
+          title: 'Follow up on outstanding dues',
+          body:
+              'One or more customers have unpaid balances. Review the '
+              'Dues report and send payment reminders to recover cash.',
+        ),
+      );
     }
 
     if (breakdown.dayNotClosedPenalty > 0) {
-      recs.add(const Recommendation(
-        category: PenaltyCategory.dayNotClosed,
-        priority: 1,
-        title: 'Close the business day',
-        body: 'It is past 9 PM and the day is still open. Closing the '
-            'day locks all transactions, generates the end-of-day '
-            'summary, and prevents accidental back-dated entries.',
-      ));
+      recs.add(
+        const Recommendation(
+          category: PenaltyCategory.dayNotClosed,
+          priority: 1,
+          title: 'Close the business day',
+          body:
+              'It is past 9 PM and the day is still open. Closing the '
+              'day locks all transactions, generates the end-of-day '
+              'summary, and prevents accidental back-dated entries.',
+        ),
+      );
     }
 
     if (breakdown.lowStockPenalty > 0) {
-      recs.add(const Recommendation(
-        category: PenaltyCategory.lowStock,
-        priority: 2,
-        title: 'Reorder low-stock items',
-        body: 'Several products have fallen below their reorder threshold. '
-            'Place purchase orders today to avoid stockouts that could '
-            'hurt tomorrow\'s sales.',
-      ));
+      recs.add(
+        const Recommendation(
+          category: PenaltyCategory.lowStock,
+          priority: 2,
+          title: 'Reorder low-stock items',
+          body:
+              'Several products have fallen below their reorder threshold. '
+              'Place purchase orders today to avoid stockouts that could '
+              'hurt tomorrow\'s sales.',
+        ),
+      );
     }
 
     if (breakdown.salesTrendDelta < 0) {
-      recs.add(const Recommendation(
-        category: PenaltyCategory.salesTrend,
-        priority: 2,
-        title: 'Investigate today\'s sales drop',
-        body: 'Today\'s revenue is less than 50 % of yesterday\'s. Review '
-            'the Sales report to identify any missing bills, voids, or '
-            'product categories that underperformed.',
-      ));
+      recs.add(
+        const Recommendation(
+          category: PenaltyCategory.salesTrend,
+          priority: 2,
+          title: 'Investigate today\'s sales drop',
+          body:
+              'Today\'s revenue is less than 50 % of yesterday\'s. Review '
+              'the Sales report to identify any missing bills, voids, or '
+              'product categories that underperformed.',
+        ),
+      );
     }
 
     // Sort high-priority items first, then by category for stability.
@@ -1068,10 +1112,10 @@ void _runTests() {
     _TestCase(
       name: 'Bills + low-stock + dues → cascading penalties',
       dayClosed: true,
-      unsyncedBills: 2,      // 2*5 = 10 → within range → -10
-      lowStockItems: 3,      // 3*3 = 9 → within range → -9
-      duesPending: true,     // -10
-      expectedScore: 71,     // 100 - 10 - 9 - 10 = 71
+      unsyncedBills: 2, // 2*5 = 10 → within range → -10
+      lowStockItems: 3, // 3*3 = 9 → within range → -9
+      duesPending: true, // -10
+      expectedScore: 71, // 100 - 10 - 9 - 10 = 71
       expectedStatus: 'Fair',
     ),
 
@@ -1079,12 +1123,12 @@ void _runTests() {
     _TestCase(
       name: 'All penalties at max → score clamped to 0 minimum',
       dayClosed: true,
-      unsyncedBills: 10,     // -20 (capped)
-      lowStockItems: 10,     // -20 (capped)
-      duesPending: true,     // -10
+      unsyncedBills: 10, // -20 (capped)
+      lowStockItems: 10, // -20 (capped)
+      duesPending: true, // -10
       todaySalesAmount: 100,
       yesterdaySalesAmount: 1000, // ratio 0.1 → -5
-      expectedScore: 45,     // 100 - 20 - 20 - 10 - 5 = 45
+      expectedScore: 45, // 100 - 20 - 20 - 10 - 5 = 45
       expectedStatus: 'Poor',
     ),
 
@@ -1121,8 +1165,8 @@ void _runTests() {
     _TestCase(
       name: 'Score 55 → Poor',
       dayClosed: true,
-      unsyncedBills: 4,     // -20
-      lowStockItems: 5,     // -15
+      unsyncedBills: 4, // -20
+      lowStockItems: 5, // -15
       duesPending: false,
       todaySalesAmount: 300,
       yesterdaySalesAmount: 1000, // ratio 0.3 → -5
@@ -1132,9 +1176,9 @@ void _runTests() {
     _TestCase(
       name: 'Score 35 → Critical',
       dayClosed: true,
-      unsyncedBills: 5,     // -20
-      lowStockItems: 7,     // -20
-      duesPending: true,    // -10
+      unsyncedBills: 5, // -20
+      lowStockItems: 7, // -20
+      duesPending: true, // -10
       todaySalesAmount: 100,
       yesterdaySalesAmount: 1000, // ratio 0.1 → -5
       expectedScore: 45,
@@ -1253,5 +1297,7 @@ void main() {
   print('Lowest  : ${history.lowestScore}');
   print('Δ Today : ${history.latestDelta}');
   print('Badge   : ${HealthScoreFormatter.asBadge(history.latestScore!)}');
-  print('Colour  : ${HealthScoreAnalyzer.getScoreColourHex(history.latestScore!)}');
+  print(
+    'Colour  : ${HealthScoreAnalyzer.getScoreColourHex(history.latestScore!)}',
+  );
 }

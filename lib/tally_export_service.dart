@@ -8,11 +8,15 @@ class TallyExportService {
   /// Generates a highly structured, Government & Tally-compliant JSON file
   /// required by CAs (Chartered Accountants) for filing monthly GST returns.
   /// Includes proper breakdown of CGST, SGST, IGST, and taxable value.
-  static Future<Map<String, dynamic>> exportGstReturns(String shopName, String shopGst) async {
+  static Future<Map<String, dynamic>> exportGstReturns(
+    String shopName,
+    String shopGst,
+  ) async {
     try {
       final List<dynamic> allSales = await LocalStorageService.loadSales();
 
-      if (allSales.isEmpty) return {'success': false, 'message': 'No sales to export.'};
+      if (allSales.isEmpty)
+        return {'success': false, 'message': 'No sales to export.'};
 
       final List<Map<String, dynamic>> gstInvoices = [];
 
@@ -21,11 +25,13 @@ class TallyExportService {
       double totalSgst = 0;
 
       for (var sale in allSales) {
-        String invoiceNum = sale['sale_id'] ?? sale['id']?.toString() ?? 'INV-UNKNOWN';
+        String invoiceNum =
+            sale['sale_id'] ?? sale['id']?.toString() ?? 'INV-UNKNOWN';
         String date = sale['sale_date'] ?? DateTime.now().toIso8601String();
         String paymentStatus = sale['payment_status'] ?? 'UNKNOWN';
 
-        double invoiceTotal = double.tryParse(sale['total']?.toString() ?? '0') ?? 0;
+        double invoiceTotal =
+            double.tryParse(sale['total']?.toString() ?? '0') ?? 0;
         double subtotal = 0;
         double cgst = 0;
         double sgst = 0;
@@ -36,8 +42,9 @@ class TallyExportService {
         for (var item in items) {
           double qty = double.tryParse(item['qty']?.toString() ?? '0') ?? 0;
           double price = double.tryParse(item['price']?.toString() ?? '0') ?? 0;
-          double gstPercent = double.tryParse(item['gst_percent']?.toString() ?? '0') ?? 0;
-          
+          double gstPercent =
+              double.tryParse(item['gst_percent']?.toString() ?? '0') ?? 0;
+
           double itemSubtotal = qty * price;
           double itemGstAmt = itemSubtotal * (gstPercent / 100);
           double itemCgst = itemGstAmt / 2;
@@ -77,12 +84,15 @@ class TallyExportService {
           'IGST': 0.0,
           'InvoiceTotal': invoiceTotal,
           'PaymentStatus': paymentStatus,
-          'LineItems': structuredItems
+          'LineItems': structuredItems,
         });
       }
 
       final Map<String, dynamic> tallyCompliantJson = {
-        'FilingMonth': DateTime.now().month.toString().padLeft(2, '0') + '-' + DateTime.now().year.toString(),
+        'FilingMonth':
+            DateTime.now().month.toString().padLeft(2, '0') +
+            '-' +
+            DateTime.now().year.toString(),
         'ShopName': shopName,
         'ShopGSTIN': shopGst.isEmpty ? 'UNREGISTERED' : shopGst,
         'AggregateSummary': {
@@ -91,26 +101,31 @@ class TallyExportService {
           'TotalCGST': totalCgst,
           'TotalSGST': totalSgst,
           'TotalIGST': 0.0,
-          'GrossReceipts': totalTaxable + totalCgst + totalSgst
+          'GrossReceipts': totalTaxable + totalCgst + totalSgst,
         },
-        'B2C_Invoices': gstInvoices
+        'B2C_Invoices': gstInvoices,
       };
 
       // Create file in temporary directory
       final Directory tempDir = await getTemporaryDirectory();
-      final String rawExportPath = '${tempDir.path}/GST_Export_${DateTime.now().millisecondsSinceEpoch}.json';
+      final String rawExportPath =
+          '${tempDir.path}/GST_Export_${DateTime.now().millisecondsSinceEpoch}.json';
       final File exportFile = File(rawExportPath);
-      
+
       const JsonEncoder encoder = JsonEncoder.withIndent('  ');
       await exportFile.writeAsString(encoder.convert(tallyCompliantJson));
 
       // Share the exported file immediately
-      final shareResult = await Share.shareXFiles([XFile(exportFile.path, mimeType: 'application/json')],
+      final shareResult = await Share.shareXFiles(
+        [XFile(exportFile.path, mimeType: 'application/json')],
         subject: 'Monthly GST Output for $shopName',
         text: 'Attached is the JSON export for Tally/CA integration.',
       );
 
-      return {'success': true, 'message': 'Exported successfully. Ready for your CA.'};
+      return {
+        'success': true,
+        'message': 'Exported successfully. Ready for your CA.',
+      };
     } catch (e) {
       print('GST Export Error: $e');
       return {'success': false, 'message': 'Failed to export: $e'};
@@ -119,14 +134,16 @@ class TallyExportService {
 
   /// Imports sales/vouchers from Tally XML format
   /// Parses Tally ENVELOPE > BODY > IMPORTDATA > REQUESTDATA > TALLYMESSAGE structure
-  static Future<List<Map<String, dynamic>>> importFromTallyXML(String xmlContent) async {
+  static Future<List<Map<String, dynamic>>> importFromTallyXML(
+    String xmlContent,
+  ) async {
     try {
       final vouchers = <Map<String, dynamic>>[];
       final voucherRegex = RegExp(
         r'<VOUCHER>.*?<DATE>(.*?)</DATE>.*?<AMOUNT>(.*?)</AMOUNT>.*?</VOUCHER>',
         dotAll: true,
       );
-      
+
       for (final m in voucherRegex.allMatches(xmlContent)) {
         vouchers.add({
           'date': m.group(1),

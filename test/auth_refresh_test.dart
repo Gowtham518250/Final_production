@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:retail_mind/api_client.dart';
 import 'package:retail_mind/features/ai_query/models/ai_query_response.dart';
+import 'package:retail_mind/features/ai_query/services/ai_query_service.dart';
 import 'package:retail_mind/session_management.dart';
 import 'package:retail_mind/secure_token_storage.dart';
 
@@ -177,17 +178,15 @@ void main() {
       expect(token, isNull);
     });
     test('reads legacy integer user IDs without a String cast error', () async {
-      SharedPreferences.setMockInitialValues({
-        'user_id': 42,
-      });
+      SharedPreferences.setMockInitialValues({'user_id': 42});
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.get('user_id'), equals(42));
       // Exercise the same ID normalization contract used by secure storage.
-      final normalized =
-          int.tryParse((prefs.get('user_id') ?? prefs.get('userId'))?.toString() ?? '');
+      final normalized = int.tryParse(
+        (prefs.get('user_id') ?? prefs.get('userId'))?.toString() ?? '',
+      );
       expect(normalized, equals(42));
     });
-
 
     test('saves and retrieves a refresh token securely', () async {
       await SecureTokenStorage.saveUserId(42);
@@ -224,32 +223,37 @@ void main() {
       await SecureTokenStorage.saveToken(freshToken);
       expect(await SecureTokenStorage.getToken(), equals(freshToken));
     });
-
   });
 
   // ─── 3. SessionManagementService.saveTokens ────────────────────────────────
 
   group('SessionManagementService — saveTokens', () {
-    test('initializeSession keeps newly saved access token retrievable', () async {
-      // Generate once and assert against the exact tokens passed to the
-      // session initializer. Generating the expected JWTs after an async
-      // operation can cross a one-second boundary and produce different
-      // iat/exp claims even when token persistence is correct.
-      final accessToken = _fakeAccessToken();
-      final refreshToken = _fakeRefreshToken();
+    test(
+      'initializeSession keeps newly saved access token retrievable',
+      () async {
+        // Generate once and assert against the exact tokens passed to the
+        // session initializer. Generating the expected JWTs after an async
+        // operation can cross a one-second boundary and produce different
+        // iat/exp claims even when token persistence is correct.
+        final accessToken = _fakeAccessToken();
+        final refreshToken = _fakeRefreshToken();
 
-      await SessionManagementService.initializeSession(
-        userId: 42,
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-        deviceId: 'test-device',
-        userName: 'Test User',
-        userEmail: 'test@example.com',
-        role: 'OWNER',
-      );
-      expect(await SecureTokenStorage.getToken(), equals(accessToken));
-      expect(await SecureTokenStorage.getRefreshToken(), equals(refreshToken));
-    });
+        await SessionManagementService.initializeSession(
+          userId: 42,
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+          deviceId: 'test-device',
+          userName: 'Test User',
+          userEmail: 'test@example.com',
+          role: 'OWNER',
+        );
+        expect(await SecureTokenStorage.getToken(), equals(accessToken));
+        expect(
+          await SecureTokenStorage.getRefreshToken(),
+          equals(refreshToken),
+        );
+      },
+    );
 
     test('stores user metadata and tokens without throwing', () async {
       await SessionManagementService.saveTokens(
@@ -334,6 +338,7 @@ void main() {
     late int refreshStatusCode;
     late int refreshRequestCount;
     late int protectedRequestCount;
+    late bool protectedRequestsRejected;
     late String? refreshAuthorization;
     late Map<String, dynamic>? refreshBody;
     late List<String?> protectedAuthorization;
@@ -373,6 +378,12 @@ void main() {
           HttpHeaders.authorizationHeader,
         );
         protectedAuthorization.add(authorization);
+        if (protectedRequestsRejected) {
+          await _writeJson(request.response, HttpStatus.unauthorized, {
+            'detail': 'access token rejected by this endpoint',
+          });
+          return;
+        }
         if (authorization == 'Bearer $newAccessToken') {
           await _writeJson(request.response, HttpStatus.ok, {
             'answer': 'expected answer',
@@ -393,6 +404,7 @@ void main() {
       refreshStatusCode = HttpStatus.ok;
       refreshRequestCount = 0;
       protectedRequestCount = 0;
+      protectedRequestsRejected = false;
       refreshAuthorization = null;
       refreshBody = null;
       protectedAuthorization = <String?>[];
@@ -432,10 +444,7 @@ void main() {
 
         expect(refreshRequestCount, 1);
         expect(results, everyElement(isNotNull));
-        expect(
-          results.every((result) => result?['success'] == true),
-          isTrue,
-        );
+        expect(results.every((result) => result?['success'] == true), isTrue);
         expect(await SecureTokenStorage.getToken(), newAccessToken);
         expect(await SecureTokenStorage.getRefreshToken(), newRefreshToken);
       },
@@ -550,6 +559,47 @@ void main() {
         expect(refreshRequestCount, 1);
         expect(await SecureTokenStorage.getToken(), isNull);
         expect(await SecureTokenStorage.getRefreshToken(), isNull);
+      },
+    );
+
+    test(
+      'does not report session expiry when Ask Retail Mind returns 401 after a successful refresh',
+      () async {
+        protectedRequestsRejected = true;
+
+        final result = await HttpOverrides.runWithHttpOverrides(
+          () => AiQueryService.askQuery('sales today'),
+          _RealHttpOverrides(),
+        );
+
+        expect(result.isSuccess, isFalse);
+        expect(result.errorMessage, contains('login is still saved'));
+        expect(result.errorMessage, isNot(contains('session has expired')));
+        expect(refreshRequestCount, 1);
+        expect(protectedRequestCount, 2);
+        expect(await SecureTokenStorage.getToken(), newAccessToken);
+        expect(await SecureTokenStorage.getRefreshToken(), newRefreshToken);
+      },
+    );
+
+    test(
+      'keeps Ask Retail Mind session recoverable when refresh fails temporarily',
+      () async {
+        refreshStatusCode = HttpStatus.serviceUnavailable;
+        protectedRequestsRejected = true;
+
+        final result = await HttpOverrides.runWithHttpOverrides(
+          () => AiQueryService.askQuery('sales today'),
+          _RealHttpOverrides(),
+        );
+
+        expect(result.isSuccess, isFalse);
+        expect(result.errorMessage, contains('login is still saved'));
+        expect(result.errorMessage, isNot(contains('session has expired')));
+        expect(refreshRequestCount, 1);
+        expect(protectedRequestCount, 1);
+        expect(await SecureTokenStorage.getToken(), expiredAccessToken);
+        expect(await SecureTokenStorage.getRefreshToken(), refreshToken);
       },
     );
   });

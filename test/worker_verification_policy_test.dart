@@ -17,27 +17,30 @@ void main() {
 
     test('worker on leave remains part of the current roster', () {
       expect(
-        WorkerVerificationPolicy.isActiveWorker(
-          const <String, dynamic>{'status': 'on_leave'},
-        ),
+        WorkerVerificationPolicy.isActiveWorker(const <String, dynamic>{
+          'status': 'on_leave',
+        }),
         isTrue,
       );
     });
 
-    test('inactive or removed workers do not require the staff verification gate', () {
-      expect(
-        WorkerVerificationPolicy.isActiveWorker(
-          const <String, dynamic>{'status': 'INACTIVE'},
-        ),
-        isFalse,
-      );
-      expect(
-        WorkerVerificationPolicy.isActiveWorker(
-          const <String, dynamic>{'status': 'DELETED'},
-        ),
-        isFalse,
-      );
-    });
+    test(
+      'inactive or removed workers do not require the staff verification gate',
+      () {
+        expect(
+          WorkerVerificationPolicy.isActiveWorker(const <String, dynamic>{
+            'status': 'INACTIVE',
+          }),
+          isFalse,
+        );
+        expect(
+          WorkerVerificationPolicy.isActiveWorker(const <String, dynamic>{
+            'status': 'DELETED',
+          }),
+          isFalse,
+        );
+      },
+    );
 
     test('only a live empty roster confirms there are no active workers', () {
       const liveEmpty = WorkerRosterSnapshot(

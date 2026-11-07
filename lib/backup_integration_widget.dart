@@ -1,6 +1,7 @@
 import 'live_translated_text.dart';
+
 /// BACKUP SERVICE INTEGRATION WIDGET
-/// 
+///
 /// Drop this into dashboard_page.dart to add backup/restore UI
 /// Integrates BackupService with dashboard maintenance section
 
@@ -13,7 +14,8 @@ class BackupManagementSection extends StatefulWidget {
   const BackupManagementSection({Key? key}) : super(key: key);
 
   @override
-  State<BackupManagementSection> createState() => _BackupManagementSectionState();
+  State<BackupManagementSection> createState() =>
+      _BackupManagementSectionState();
 }
 
 class _BackupManagementSectionState extends State<BackupManagementSection> {
@@ -32,33 +34,35 @@ class _BackupManagementSectionState extends State<BackupManagementSection> {
     final prefs = await SharedPreferences.getInstance();
     final lastBackup = prefs.getString('last_backup_time');
     final autoBackupPref = prefs.getBool('auto_backup_enabled') ?? false;
-    
+
     setState(() {
-      _lastBackupTime = lastBackup != null ? DateTime.tryParse(lastBackup) : null;
+      _lastBackupTime = lastBackup != null
+          ? DateTime.tryParse(lastBackup)
+          : null;
       _autoBackupEnabled = autoBackupPref;
-      _backupStatus = _lastBackupTime != null 
-        ? 'Last backup: ${_lastBackupTime.toString().split(".").first}'
-        : 'No backup yet';
+      _backupStatus = _lastBackupTime != null
+          ? 'Last backup: ${_lastBackupTime.toString().split(".").first}'
+          : 'No backup yet';
     });
   }
 
   Future<void> _createBackupNow() async {
     if (_isCreatingBackup) return;
-    
+
     setState(() => _isCreatingBackup = true);
-    
+
     try {
       final result = await BackupService.createBackup();
       if (result['success'] == true) {
         final now = DateTime.now();
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('last_backup_time', now.toIso8601String());
-        
+
         setState(() {
           _lastBackupTime = now;
           _backupStatus = '✅ Backup created (${result['size']} KB)';
         });
-        
+
         // Show success snackbar
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -95,15 +99,12 @@ class _BackupManagementSectionState extends State<BackupManagementSection> {
                 const SizedBox(width: 8),
                 const LiveTranslatedText(
                   'Data Backup',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            
+
             // Status display
             LiveTranslatedText(
               _backupStatus,
@@ -115,27 +116,29 @@ class _BackupManagementSectionState extends State<BackupManagementSection> {
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             const SizedBox(height: 12),
-            
+
             // Backup button
             ElevatedButton.icon(
               onPressed: _isCreatingBackup ? null : _createBackupNow,
               icon: _isCreatingBackup
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save),
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
               label: LiveTranslatedText(
                 _isCreatingBackup ? 'Creating backup...' : 'Create Backup Now',
               ),
             ),
             const SizedBox(height: 12),
-            
+
             // Auto-backup toggle
             SwitchListTile(
               title: const LiveTranslatedText('Auto-backup daily (2 AM)'),
-              subtitle: const LiveTranslatedText('Automatic backup every 24 hours'),
+              subtitle: const LiveTranslatedText(
+                'Automatic backup every 24 hours',
+              ),
               value: _autoBackupEnabled,
               onChanged: (value) async {
                 setState(() => _autoBackupEnabled = value);
@@ -157,10 +160,10 @@ class _BackupManagementSectionState extends State<BackupManagementSection> {
 ///   return ListView(
 ///     children: [
 ///       // ... other dashboard sections ...
-///       
+///
 ///       // Add backup section to maintenance area
 ///       const BackupManagementSection(),
-///       
+///
 ///       // ... rest of dashboard ...
 ///     ],
 ///   );

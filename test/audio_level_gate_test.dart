@@ -11,18 +11,18 @@ AudioLevelGate _gateWith(List<double> values) {
 
 void main() {
   test('silent recording is rejected', () {
-    final verdict = _gateWith(List<double>.filled(40, -60)).evaluate(
-      elapsedMs: 4000,
-    );
+    final verdict = _gateWith(
+      List<double>.filled(40, -60),
+    ).evaluate(elapsedMs: 4000);
 
     expect(verdict.hasSignal, isFalse);
     expect(verdict.reason, AudioLevelReason.lowSignal);
   });
 
   test('sustained speech level is accepted without quiet gaps', () {
-    final verdict = _gateWith(List<double>.filled(40, -25)).evaluate(
-      elapsedMs: 4000,
-    );
+    final verdict = _gateWith(
+      List<double>.filled(40, -25),
+    ).evaluate(elapsedMs: 4000);
 
     expect(verdict.hasSignal, isTrue);
     expect(verdict.activeMs, greaterThanOrEqualTo(250));

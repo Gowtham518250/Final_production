@@ -10,11 +10,14 @@ void main() {
       );
     });
 
-    test('Khata invoice deadline updates are protected from queue pressure', () {
-      expect(
-        SyncQueueManager.debugIsCriticalAction('update_khata_deadline'),
-        isTrue,
-      );
-    });
+    test(
+      'Khata invoice deadline updates are protected from queue pressure',
+      () {
+        expect(
+          SyncQueueManager.debugIsCriticalAction('update_khata_deadline'),
+          isTrue,
+        );
+      },
+    );
   });
 }

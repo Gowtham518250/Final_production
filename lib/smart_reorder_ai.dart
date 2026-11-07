@@ -10,18 +10,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SmartReorderAIService {
   static const String _salesHistoryKey = 'daily_sales_history_v2';
-  static const String _recordedOperationsKey = 'smart_reorder_recorded_sale_lines_v1';
+  static const String _recordedOperationsKey =
+      'smart_reorder_recorded_sale_lines_v1';
   static const int _velocityWindowDays = 7;
   static const int _defaultLeadTimeDays = 7;
   static const double _safetyStockFactor = 1.2;
 
   static Future<int?> _currentShopId(SharedPreferences prefs) async {
-    final role = (prefs.getString('role') ??
-            prefs.getString('user_role') ??
-            prefs.getString('user_type') ??
-            '')
-        .trim()
-        .toLowerCase();
+    final role =
+        (prefs.getString('role') ??
+                prefs.getString('user_role') ??
+                prefs.getString('user_type') ??
+                '')
+            .trim()
+            .toLowerCase();
     if (role == 'customer') return null;
 
     int? intId;
@@ -110,9 +112,7 @@ class SmartReorderAIService {
 
   /// Mean daily quantity over the last seven calendar days, including zero-sale
   /// days in the denominator so infrequent sales don't exaggerate demand.
-  static Future<double> calculateVelocity({
-    required int productId,
-  }) async {
+  static Future<double> calculateVelocity({required int productId}) async {
     if (productId <= 0) return 0;
 
     try {
@@ -163,8 +163,12 @@ class SmartReorderAIService {
     final alerts = <Map<String, dynamic>>[];
 
     for (final product in inventory) {
-      final productId = int.tryParse(
-            (product['id'] ?? product['product_id'] ?? product['backend_id'] ?? '')
+      final productId =
+          int.tryParse(
+            (product['id'] ??
+                    product['product_id'] ??
+                    product['backend_id'] ??
+                    '')
                 .toString(),
           ) ??
           0;
@@ -179,11 +183,16 @@ class SmartReorderAIService {
       final velocity = await calculateVelocity(productId: productId);
       if (velocity <= 0) continue;
 
-      final stockoutDays = currentStock <= 0 ? 0 : (currentStock / velocity).ceil();
+      final stockoutDays = currentStock <= 0
+          ? 0
+          : (currentStock / velocity).ceil();
       if (stockoutDays > stockoutThresholdDays) continue;
 
       final targetStock = (velocity * leadTimeDays * _safetyStockFactor).ceil();
-      final suggestedQuantity = (targetStock - currentStock.ceil()).clamp(0, 1000000);
+      final suggestedQuantity = (targetStock - currentStock.ceil()).clamp(
+        0,
+        1000000,
+      );
 
       alerts.add({
         'product_id': productId,
@@ -197,8 +206,11 @@ class SmartReorderAIService {
       });
     }
 
-    alerts.sort((a, b) =>
-        (a['days_until_stockout'] as int).compareTo(b['days_until_stockout'] as int));
+    alerts.sort(
+      (a, b) => (a['days_until_stockout'] as int).compareTo(
+        b['days_until_stockout'] as int,
+      ),
+    );
     return alerts;
   }
 

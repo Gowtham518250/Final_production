@@ -28,14 +28,14 @@ class VoiceTiming {
 }
 
 const Map<VoiceStyle, VoiceTiming> styleTimings = {
-  VoiceStyle.formal:   VoiceTiming(pitch: 1.0,  rate: 0.50),
+  VoiceStyle.formal: VoiceTiming(pitch: 1.0, rate: 0.50),
   VoiceStyle.friendly: VoiceTiming(pitch: 1.05, rate: 0.48),
-  VoiceStyle.fastShop: VoiceTiming(pitch: 1.0,  rate: 0.70),
-  VoiceStyle.alert:    VoiceTiming(pitch: 1.15, rate: 0.58),
-  VoiceStyle.normal:   VoiceTiming(pitch: 1.0,  rate: 0.50),
+  VoiceStyle.fastShop: VoiceTiming(pitch: 1.0, rate: 0.70),
+  VoiceStyle.alert: VoiceTiming(pitch: 1.15, rate: 0.58),
+  VoiceStyle.normal: VoiceTiming(pitch: 1.0, rate: 0.50),
 };
 
-const VoiceTiming warningTiming  = VoiceTiming(pitch: 1.10, rate: 0.55);
+const VoiceTiming warningTiming = VoiceTiming(pitch: 1.10, rate: 0.55);
 const VoiceTiming criticalTiming = VoiceTiming(pitch: 0.95, rate: 0.52);
 
 // -----------------------------------------------------------------------------
@@ -61,8 +61,8 @@ class HumanizerResult {
 // -----------------------------------------------------------------------------
 
 class Humanizer {
-  final Map<String, double> _lastAmounts    = {};
-  final Map<String, int>    _repeatCounters = {};
+  final Map<String, double> _lastAmounts = {};
+  final Map<String, int> _repeatCounters = {};
 
   static const Map<String, List<String>> _fillerPrefixes = {
     'en': ['Success. ', 'Confirmed. ', 'Transaction confirmed. '],
@@ -78,12 +78,12 @@ class Humanizer {
   };
 
   HumanizerResult process({
-    required String     rawText,
+    required String rawText,
     required VoiceStyle style,
-    required String     langKey,
-    bool                isPartial  = false,
-    bool                isCritical = false,
-    double?             amount,
+    required String langKey,
+    bool isPartial = false,
+    bool isCritical = false,
+    double? amount,
   }) {
     String text = rawText;
 
@@ -102,14 +102,14 @@ class Humanizer {
     final timing = isCritical
         ? criticalTiming
         : isPartial
-            ? warningTiming
-            : styleTimings[style] ?? styleTimings[VoiceStyle.formal]!;
+        ? warningTiming
+        : styleTimings[style] ?? styleTimings[VoiceStyle.formal]!;
 
     return HumanizerResult(
-      text:   finalText,
+      text: finalText,
       chunks: chunks,
-      pitch:  timing.pitch,
-      rate:   timing.rate,
+      pitch: timing.pitch,
+      rate: timing.rate,
     );
   }
 
@@ -125,7 +125,11 @@ class Humanizer {
   }
 
   String _handleRepetition(
-    String text, String langKey, double amount, VoiceStyle style) {
+    String text,
+    String langKey,
+    double amount,
+    VoiceStyle style,
+  ) {
     final last = _lastAmounts[langKey];
     if (last == amount) {
       _repeatCounters[langKey] = (_repeatCounters[langKey] ?? 0) + 1;
@@ -135,7 +139,7 @@ class Humanizer {
         text = _ultraShorten(text, langKey, amount);
       }
     } else {
-      _lastAmounts[langKey]    = amount;
+      _lastAmounts[langKey] = amount;
       _repeatCounters[langKey] = 0;
     }
     return text;
@@ -144,28 +148,47 @@ class Humanizer {
   String _ultraShorten(String text, String langKey, double amount) {
     final amt = amount.toInt().toString();
     switch (langKey) {
-      case 'hi': case 'mr': return '${_applyScript(amt, langKey)} फिर';
-      case 'ta':             return '${_applyScript(amt, langKey)} मीண्डुम';
-      case 'te':             return '${_applyScript(amt, langKey)} మళ్ళీ';
-      case 'kn':             return '${_applyScript(amt, langKey)} ಮತ್ತೆ';
-      case 'ml':             return '${_applyScript(amt, langKey)} വീണ്ടും';
-      case 'bn':             return '${_applyScript(amt, langKey)} आबار';
-      case 'pa':             return '$amt ਫਿਰ';
-      case 'gu':             return '${_applyScript(amt, langKey)} ફરી';
-      default:               return '$amt again';
+      case 'hi':
+      case 'mr':
+        return '${_applyScript(amt, langKey)} फिर';
+      case 'ta':
+        return '${_applyScript(amt, langKey)} मीண्डुम';
+      case 'te':
+        return '${_applyScript(amt, langKey)} మళ్ళీ';
+      case 'kn':
+        return '${_applyScript(amt, langKey)} ಮತ್ತೆ';
+      case 'ml':
+        return '${_applyScript(amt, langKey)} വീണ്ടും';
+      case 'bn':
+        return '${_applyScript(amt, langKey)} आबار';
+      case 'pa':
+        return '$amt ਫਿਰ';
+      case 'gu':
+        return '${_applyScript(amt, langKey)} ફરી';
+      default:
+        return '$amt again';
     }
   }
 
   String _applyScript(String n, String langKey) {
     switch (langKey) {
-      case 'hi': case 'mr': return nHi(n);
-      case 'ta':             return nTa(n);
-      case 'te':             return nTe(n);
-      case 'kn':             return nKn(n);
-      case 'ml':             return nMl(n);
-      case 'bn':             return nBn(n);
-      case 'gu':             return nGu(n);
-      default:               return n;
+      case 'hi':
+      case 'mr':
+        return nHi(n);
+      case 'ta':
+        return nTa(n);
+      case 'te':
+        return nTe(n);
+      case 'kn':
+        return nKn(n);
+      case 'ml':
+        return nMl(n);
+      case 'bn':
+        return nBn(n);
+      case 'gu':
+        return nGu(n);
+      default:
+        return n;
     }
   }
 
@@ -190,7 +213,8 @@ class Humanizer {
       r'\s+(?=माध्यमे )',
     );
 
-    final parts = text.split(splitPattern)
+    final parts = text
+        .split(splitPattern)
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList();

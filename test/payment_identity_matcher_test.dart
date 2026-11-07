@@ -118,23 +118,29 @@ void main() {
       expect(d.reason, 'weak_modality_pair');
     });
 
-    test('one-sided UTR plus shared account enriches inside the sound-box window', () {
-      final d = PaymentIdentityMatcher.compare(
-        sms('s', reference: '412345678901', sec: 5, account: '4222'),
-        sig('n', account: '4222'),
-      );
-      expect(d.verdict, IdentityVerdict.candidateEcho);
-      expect(d.reason, 'utr_enrichment');
-    });
+    test(
+      'one-sided UTR plus shared account enriches inside the sound-box window',
+      () {
+        final d = PaymentIdentityMatcher.compare(
+          sms('s', reference: '412345678901', sec: 5, account: '4222'),
+          sig('n', account: '4222'),
+        );
+        expect(d.verdict, IdentityVerdict.candidateEcho);
+        expect(d.reason, 'utr_enrichment');
+      },
+    );
 
-    test('one-sided UTR plus shared account stays distinct after the window', () {
-      final d = PaymentIdentityMatcher.compare(
-        sms('s', reference: '412345678901', sec: 90, account: '4222'),
-        sig('n', account: '4222'),
-      );
-      expect(d.verdict, IdentityVerdict.distinct);
-      expect(d.reason, 'one_sided_reference_not_fuzzy_matched');
-    });
+    test(
+      'one-sided UTR plus shared account stays distinct after the window',
+      () {
+        final d = PaymentIdentityMatcher.compare(
+          sms('s', reference: '412345678901', sec: 90, account: '4222'),
+          sig('n', account: '4222'),
+        );
+        expect(d.verdict, IdentityVerdict.distinct);
+        expect(d.reason, 'one_sided_reference_not_fuzzy_matched');
+      },
+    );
 
     test('weak pair matches within 60 seconds', () {
       final d = PaymentIdentityMatcher.compare(sms('s', sec: 59), sig('n'));
@@ -212,31 +218,28 @@ void main() {
       expect(d.verdict, IdentityVerdict.distinct);
     });
 
-    test(
-      'same notification slot update within source-time window is one alert',
-      () {
-        final d = PaymentIdentityMatcher.compare(
-          sig(
-            'first',
-            source: 'post-a',
-            notificationStream: 'package|tag|id',
-            notificationAt: _t0,
-            notificationPayer: 'रवि कुमार',
-          ),
-          sig(
-            'update',
-            source: 'post-b',
-            notificationStream: 'package|tag|id',
-            notificationAt: _t0.add(const Duration(seconds: 20)),
-            notificationPayer: 'रवि कुमार',
-            sec: 60,
-          ),
-        );
+    test('same notification slot update is a possible match, not proof', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+          notificationPayer: 'रवि कुमार',
+        ),
+        sig(
+          'update',
+          source: 'post-b',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 20)),
+          notificationPayer: 'रवि कुमार',
+          sec: 60,
+        ),
+      );
 
-        expect(d.verdict, IdentityVerdict.sameTransfer);
-        expect(d.reason, 'same_notification_update');
-      },
-    );
+      expect(d.verdict, IdentityVerdict.candidateEcho);
+      expect(d.reason, 'same_notification_update');
+    });
 
     test('notification repost conflicts stay distinct', () {
       final first = sig(
@@ -309,7 +312,7 @@ void main() {
     });
 
     test(
-      'same notification slot and amount without payer/account is one payment',
+      'same notification slot and amount without identity is a possible match',
       () {
         final d = PaymentIdentityMatcher.compare(
           sig(
@@ -327,23 +330,26 @@ void main() {
           ),
         );
 
-        expect(d.verdict, IdentityVerdict.sameTransfer);
+        expect(d.verdict, IdentityVerdict.candidateEcho);
         expect(d.reason, 'same_notification_stream_amount');
       },
     );
 
-    test('same-channel exact replay: proof inside window, distinct after', () {
-      final inside = PaymentIdentityMatcher.compare(
-        sig('b', sec: 2, text: 'paid'),
-        sig('a', text: 'paid'),
-      );
-      expect(inside.verdict, IdentityVerdict.sameTransfer);
-      final outside = PaymentIdentityMatcher.compare(
-        sig('b', sec: 30, text: 'paid'),
-        sig('a', text: 'paid'),
-      );
-      expect(outside.verdict, IdentityVerdict.distinct);
-    });
+    test(
+      'same-channel exact replay is only a possible match without identity',
+      () {
+        final inside = PaymentIdentityMatcher.compare(
+          sig('b', sec: 2, text: 'paid'),
+          sig('a', text: 'paid'),
+        );
+        expect(inside.verdict, IdentityVerdict.candidateEcho);
+        final outside = PaymentIdentityMatcher.compare(
+          sig('b', sec: 30, text: 'paid'),
+          sig('a', text: 'paid'),
+        );
+        expect(outside.verdict, IdentityVerdict.distinct);
+      },
+    );
 
     test('truecaller mirror: 8s window and trusted counterpart only', () {
       SignalIdentity tc(int sec) => sig(
@@ -426,14 +432,15 @@ void main() {
   });
 
   group('resolve (uniqueness and claims)', () {
-    test('notification then SMS within 20s becomes one payment', () {
+    test('notification and SMS with the same payer merge when unambiguous', () {
       final r = PaymentIdentityMatcher.resolve(
-        sms('s', sec: 20, reference: '412345678901'),
-        [sig('n')],
+        sms('s', sec: 20, payer: 'Ravi Kumar'),
+        [sig('n', payer: 'Ravi Kumar')],
       );
       expect(r.isEcho, true);
       expect(r.matchedId, 'n');
       expect(r.claimChannel, 'sms|banksms');
+      expect(r.reason, 'same_payer');
     });
 
     test('a second SMS cannot reuse a payment already paired with SMS', () {
@@ -445,6 +452,7 @@ void main() {
         },
       );
       expect(r.isEcho, false);
+      expect(r.possibleMatch, false);
     });
 
     test('one SMS matching two earlier notifications keeps both separate', () {
@@ -453,6 +461,37 @@ void main() {
         sig('n2', channel: 'notification|googlepay', sec: 5),
       ]);
       expect(r.isEcho, false);
+      expect(r.ambiguous, true);
+    });
+
+    test('shared account evidence is still only a possible match', () {
+      final r = PaymentIdentityMatcher.resolve(
+        sms('s', sec: 15, reference: '412345678901', account: '4222'),
+        [
+          sig('weak', sec: 2),
+          sig(
+            'account-match',
+            channel: 'notification|googlepay',
+            sec: 5,
+            account: '4222',
+          ),
+        ],
+      );
+      expect(r.isEcho, false);
+      expect(r.possibleMatch, true);
+      expect(r.ambiguous, true);
+    });
+
+    test('multiple evidence-backed matches remain ambiguous', () {
+      final r = PaymentIdentityMatcher.resolve(
+        sms('s', sec: 15, account: '4222'),
+        [
+          sig('n1', account: '4222'),
+          sig('n2', channel: 'notification|googlepay', sec: 5, account: '4222'),
+        ],
+      );
+      expect(r.isEcho, false);
+      expect(r.possibleMatch, true);
       expect(r.ambiguous, true);
     });
 
@@ -474,9 +513,11 @@ void main() {
       expect(r.reason, 'same_reference');
     });
 
-    test('describe() is a loggable single line without payment content', () {
+    test('weak matches stay separate and describe() is loggable', () {
       final r = PaymentIdentityMatcher.resolve(sms('s', sec: 20), [sig('n')]);
-      expect(r.describe('s'), 'merged s into n reason=weak_modality_pair');
+      expect(r.isEcho, false);
+      expect(r.possibleMatch, true);
+      expect(r.describe('s'), 'kept s separate reason=no_match');
     });
   });
   group('weak modality source scope', () {

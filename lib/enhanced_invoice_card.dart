@@ -45,9 +45,10 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
   }
 
   @override
@@ -133,11 +134,7 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
                       color: statusColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      _getStatusIcon(),
-                      color: statusColor,
-                      size: 24,
-                    ),
+                    child: Icon(_getStatusIcon(), color: statusColor, size: 24),
                   ),
                   const SizedBox(width: 12),
                   // Invoice details
@@ -236,14 +233,16 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
                         'Due: ${widget.dueDate}',
                         style: GoogleFonts.poppins(
                           fontSize: 12,
-                          color:
-                              isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                          color: isDarkMode
+                              ? Colors.grey[400]
+                              : Colors.grey[600],
                         ),
                       ),
                     ],
                   ),
                   // Action buttons
-                  if (_isExpanded || (widget.onDownload != null || widget.onShare != null))
+                  if (_isExpanded ||
+                      (widget.onDownload != null || widget.onShare != null))
                     Row(
                       children: [
                         if (widget.onDownload != null)
@@ -305,52 +304,54 @@ class _EnhancedInvoiceCardState extends State<EnhancedInvoiceCard>
                             ),
                           ),
                           const SizedBox(height: 12),
-                          ...widget.items.map((item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      LiveTranslatedText(
-                                        item.name,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: isDarkMode
-                                              ? Colors.white
-                                              : Colors.black87,
+                          ...widget.items.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        LiveTranslatedText(
+                                          item.name,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDarkMode
+                                                ? Colors.white
+                                                : Colors.black87,
+                                          ),
                                         ),
-                                      ),
-                                      LiveTranslatedText(
-                                        'Qty: ${item.quantity}',
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 11,
-                                          color: isDarkMode
-                                              ? Colors.grey[400]
-                                              : Colors.grey[600],
+                                        LiveTranslatedText(
+                                          'Qty: ${item.quantity}',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: isDarkMode
+                                                ? Colors.grey[400]
+                                                : Colors.grey[600],
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                LiveTranslatedText(
-                                  '₹${item.amount}',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDarkMode
-                                        ? Colors.white
-                                        : Colors.black87,
+                                  LiveTranslatedText(
+                                    '₹${item.amount}',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDarkMode
+                                          ? Colors.white
+                                          : Colors.black87,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          )),
+                          ),
                         ],
                       ),
                     ),
@@ -462,7 +463,9 @@ class _EnhancedInvoiceFormState extends State<EnhancedInvoiceForm> {
                     if (_formKey.currentState!.validate()) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: LiveTranslatedText('Invoice created successfully!'),
+                          content: LiveTranslatedText(
+                            'Invoice created successfully!',
+                          ),
                         ),
                       );
                     }
@@ -525,8 +528,7 @@ class _EnhancedInvoiceFormState extends State<EnhancedInvoiceForm> {
             flex: 2,
             child: TextFormField(
               decoration: _buildInputDecoration('Item'),
-              validator: (value) =>
-                  value?.isEmpty ?? true ? 'Required' : null,
+              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
             ),
           ),
           const SizedBox(width: 8),
@@ -534,8 +536,7 @@ class _EnhancedInvoiceFormState extends State<EnhancedInvoiceForm> {
             child: TextFormField(
               decoration: _buildInputDecoration('Qty'),
               keyboardType: TextInputType.number,
-              validator: (value) =>
-                  value?.isEmpty ?? true ? 'Required' : null,
+              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
             ),
           ),
           const SizedBox(width: 8),
@@ -543,8 +544,7 @@ class _EnhancedInvoiceFormState extends State<EnhancedInvoiceForm> {
             child: TextFormField(
               decoration: _buildInputDecoration('₹'),
               keyboardType: TextInputType.number,
-              validator: (value) =>
-                  value?.isEmpty ?? true ? 'Required' : null,
+              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
             ),
           ),
           if (_lineItems.length > 1)
@@ -562,13 +562,8 @@ class _EnhancedInvoiceFormState extends State<EnhancedInvoiceForm> {
   InputDecoration _buildInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 10,
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     );
   }
 }

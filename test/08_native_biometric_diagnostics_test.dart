@@ -6,6 +6,7 @@ void main() {
     () {
       expect(true, isTrue);
     },
-    skip: 'Run as a manual device test: enrolled fingerprint, no enrollment, PIN-only, release APK, and clear-app-data scenarios.',
+    skip:
+        'Run as a manual device test: enrolled fingerprint, no enrollment, PIN-only, release APK, and clear-app-data scenarios.',
   );
 }

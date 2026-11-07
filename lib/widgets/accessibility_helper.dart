@@ -7,10 +7,10 @@ import 'package:flutter/services.dart';
 class AccessibilityHelper {
   // Minimum touch target size (WCAG 2.1 AA standard: 44x44px)
   static const double minTouchTargetSize = 44.0;
-  
+
   // Minimum font size for readability (WCAG AA: 16px for body text)
   static const double minFontSize = 16.0;
-  
+
   // Minimum contrast ratio (WCAG AA: 4.5:1 for normal text, 3:1 for large text)
   static const double minContrastRatio = 4.5;
 
@@ -98,17 +98,14 @@ class AccessibilityHelper {
     bool isSelectable = false,
   }) {
     final interactive = onTap != null || isSelectable;
-    
+
     return Semantics(
       label: semanticLabel,
       button: interactive && !isSelectable,
       child: GestureDetector(
         onTap: onTap,
         child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: child,
-          ),
+          child: Padding(padding: const EdgeInsets.all(16), child: child),
         ),
       ),
     );
@@ -170,10 +167,7 @@ class AccessibilityHelper {
             label: 'Error: $errorText',
             child: LiveTranslatedText(
               errorText!,
-              style: TextStyle(
-                fontSize: minFontSize,
-                color: Colors.red,
-              ),
+              style: TextStyle(fontSize: minFontSize, color: Colors.red),
             ),
           ),
       ],
@@ -242,10 +236,10 @@ class AccessibilityHelper {
       label: semanticLabel,
       value: value.toString(),
       hint: hint,
-      increasedValue: divisions != null 
+      increasedValue: divisions != null
           ? '${(value + (max - min) / divisions).clamp(min, max)}'
           : '${max}',
-      decreasedValue: divisions != null 
+      decreasedValue: divisions != null
           ? '${(value - (max - min) / divisions).clamp(min, max)}'
           : '${min}',
       excludeSemantics: true,
@@ -378,10 +372,7 @@ class AccessibleButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: backgroundColor,
             foregroundColor: textColor ?? Colors.white,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -396,21 +387,25 @@ class AccessibleButton extends StatelessWidget {
                   ),
                 )
               : icon != null
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 20),
-                        const SizedBox(width: 8),
-                        LiveTranslatedText(
-                          label,
-                          style: const TextStyle(fontSize: AccessibilityHelper.minFontSize),
-                        ),
-                      ],
-                    )
-                  : LiveTranslatedText(
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 20),
+                    const SizedBox(width: 8),
+                    LiveTranslatedText(
                       label,
-                      style: const TextStyle(fontSize: AccessibilityHelper.minFontSize),
+                      style: const TextStyle(
+                        fontSize: AccessibilityHelper.minFontSize,
+                      ),
                     ),
+                  ],
+                )
+              : LiveTranslatedText(
+                  label,
+                  style: const TextStyle(
+                    fontSize: AccessibilityHelper.minFontSize,
+                  ),
+                ),
         ),
       ),
     );

@@ -9,27 +9,28 @@ import 'package:device_info_plus/device_info_plus.dart';
 /// Ensures smooth operation on low-end devices (2GB RAM)
 class DeviceCapabilityService {
   static DeviceCapabilityService? _instance;
-  
+
   DeviceCapabilities? _capabilities;
-  bool _isLowEndDevice = true; // Conservative until hardware detection completes.
+  bool _isLowEndDevice =
+      true; // Conservative until hardware detection completes.
   bool _isHighEndDevice = false;
-  
+
   DeviceCapabilityService._();
-  
+
   static DeviceCapabilityService get instance {
     _instance ??= DeviceCapabilityService._();
     return _instance!;
   }
-  
+
   /// Initialize device capability detection
   Future<void> initialize() async {
     try {
       if (kDebugMode) debugPrint('🔍 Detecting device capabilities...');
-      
+
       _capabilities = await _detectCapabilities();
       _isLowEndDevice = _determineLowEndDevice();
       _isHighEndDevice = _determineHighEndDevice();
-      
+
       if (kDebugMode) {
         debugPrint('📱 Device capabilities detected:');
         debugPrint('   Total RAM: ${_capabilities?.totalRAM} GB');
@@ -39,22 +40,21 @@ class DeviceCapabilityService {
         debugPrint('   High-end device: $_isHighEndDevice');
         debugPrint('   Performance mode: ${_getPerformanceMode()}');
       }
-      
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Error detecting device capabilities: $e');
       // Default to conservative settings if detection fails
       _isLowEndDevice = true;
     }
   }
-  
+
   /// Detect device capabilities
   Future<DeviceCapabilities> _detectCapabilities() async {
     final capabilities = DeviceCapabilities();
-    
+
     try {
       // Get device info
       final deviceInfo = DeviceInfoPlugin();
-      
+
       if (Platform.isAndroid) {
         final androidInfo = await deviceInfo.androidInfo;
         capabilities.totalRAM = await _getAndroidTotalRAM();
@@ -68,7 +68,7 @@ class DeviceCapabilityService {
         capabilities.cpuCores = _estimateIOSCores(machine);
         capabilities.deviceModel = iosInfo.model;
       }
-      
+
       // Use Android's live MemAvailable counter where available. Other
       // platforms use a clearly-labelled estimate instead of presenting a
       // percentage of total RAM as a live measurement.
@@ -81,7 +81,6 @@ class DeviceCapabilityService {
       // the placeholder explicitly so callers cannot mistake it for telemetry.
       capabilities.cpuUsage = await _getCpuUsage();
       capabilities.cpuUsageIsEstimated = true;
-      
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Error getting device info: $e');
       // Set conservative defaults
@@ -89,40 +88,41 @@ class DeviceCapabilityService {
       capabilities.availableRAM = 1.0;
       capabilities.cpuCores = 2;
     }
-    
+
     return capabilities;
   }
-  
+
   /// Determine if this is a low-end device
   bool _determineLowEndDevice() {
     if (_capabilities == null) return true; // Conservative default
-    
+
     // Low-end criteria:
     // - Less than 3GB RAM
     // - Less than 4 CPU cores
     // - Android version less than 8 (API 26)
     return (_capabilities!.totalRAM < 3.0) ||
-           (_capabilities!.cpuCores < 4) ||
-           (_capabilities!.androidSdkVersion != null && _capabilities!.androidSdkVersion! < 26);
+        (_capabilities!.cpuCores < 4) ||
+        (_capabilities!.androidSdkVersion != null &&
+            _capabilities!.androidSdkVersion! < 26);
   }
-  
+
   /// Determine if this is a high-end device
   bool _determineHighEndDevice() {
     if (_capabilities == null) return false;
-    
+
     // High-end criteria:
     // - 6GB+ RAM
     // - 8+ CPU cores
     return (_capabilities!.totalRAM >= 6.0) && (_capabilities!.cpuCores >= 8);
   }
-  
+
   /// Get current performance mode
   PerformanceMode _getPerformanceMode() {
     if (_isHighEndDevice) return PerformanceMode.high;
     if (_isLowEndDevice) return PerformanceMode.low;
     return PerformanceMode.balanced;
   }
-  
+
   /// Get total RAM on Android by reading /proc/meminfo
   /// (device_info_plus does not expose total device memory directly)
   Future<double> _getAndroidTotalRAM() async {
@@ -199,12 +199,15 @@ class DeviceCapabilityService {
   double _estimateIOSRAM(String machine) {
     // Simplified estimation based on common iOS devices
     if (machine.contains('iPhone8') || machine.contains('iPhone9')) return 2.0;
-    if (machine.contains('iPhone10') || machine.contains('iPhone11')) return 3.0;
-    if (machine.contains('iPhone12') || machine.contains('iPhone13')) return 4.0;
-    if (machine.contains('iPhone14') || machine.contains('iPhone15')) return 6.0;
+    if (machine.contains('iPhone10') || machine.contains('iPhone11'))
+      return 3.0;
+    if (machine.contains('iPhone12') || machine.contains('iPhone13'))
+      return 4.0;
+    if (machine.contains('iPhone14') || machine.contains('iPhone15'))
+      return 6.0;
     return 3.0; // Default
   }
-  
+
   /// Estimate iOS CPU cores
   int _estimateIOSCores(String machine) {
     if (machine.contains('iPhone8') || machine.contains('iPhone9')) return 2;
@@ -213,7 +216,7 @@ class DeviceCapabilityService {
     if (machine.contains('iPhone14') || machine.contains('iPhone15')) return 8;
     return 4; // Default
   }
-  
+
   /// Get CPU usage (simplified)
   Future<double> _getCpuUsage() async {
     try {
@@ -223,23 +226,23 @@ class DeviceCapabilityService {
       return 0.5;
     }
   }
-  
+
   /// Get device capabilities
   DeviceCapabilities? get capabilities => _capabilities;
-  
+
   /// Check if device is low-end
   bool get isLowEndDevice => _isLowEndDevice;
-  
+
   /// Check if device is high-end
   bool get isHighEndDevice => _isHighEndDevice;
-  
+
   /// Get current performance mode
   PerformanceMode get performanceMode => _getPerformanceMode();
-  
+
   /// Check if feature should be enabled based on device capabilities
   bool shouldEnableFeature(FeatureRequirement requirement) {
     if (_capabilities == null) return false; // Conservative
-    
+
     switch (requirement) {
       case FeatureRequirement.highPerformance:
         return !_isLowEndDevice;
@@ -257,7 +260,7 @@ class DeviceCapabilityService {
         return _capabilities!.totalRAM >= 2.0;
     }
   }
-  
+
   /// Get recommended service configuration for this device
   ServiceConfiguration getRecommendedServiceConfig() {
     if (_isLowEndDevice) {
@@ -323,26 +326,27 @@ class DeviceCapabilities {
   int? androidSdkVersion;
   String? deviceModel;
   double cpuUsage = 0.0;
+
   /// The current cross-platform implementation uses a placeholder, not a sample.
   bool cpuUsageIsEstimated = true;
 }
 
 /// Performance mode
 enum PerformanceMode {
-  low,      // 2GB RAM devices
+  low, // 2GB RAM devices
   balanced, // 3-4GB RAM devices
-  high,     // 6GB+ RAM devices
+  high, // 6GB+ RAM devices
 }
 
 /// Feature requirements
 enum FeatureRequirement {
-  highPerformance,    // Requires 4GB+ RAM
-  mediumPerformance,  // Requires 2GB+ RAM
-  lowPerformance,     // Works on all devices
-  biometric,         // Requires 2GB+ RAM
-  voiceRecognition,  // Requires 3GB+ RAM
+  highPerformance, // Requires 4GB+ RAM
+  mediumPerformance, // Requires 2GB+ RAM
+  lowPerformance, // Works on all devices
+  biometric, // Requires 2GB+ RAM
+  voiceRecognition, // Requires 3GB+ RAM
   advancedAnalytics, // Requires 4GB+ RAM
-  backgroundSync,    // Requires 2GB+ RAM
+  backgroundSync, // Requires 2GB+ RAM
 }
 
 /// Service configuration
@@ -360,7 +364,7 @@ class ServiceConfiguration {
   bool enableEnhancedQueue;
   bool enableCrashRecovery;
   int maxCacheSize; // MB
-  
+
   ServiceConfiguration({
     required this.enableBackgroundSync,
     required this.syncInterval,

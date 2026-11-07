@@ -20,22 +20,22 @@ class WorkerPayment {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'workerId': workerId,
-        'amount': amount,
-        'note': note,
-        'type': type,
-        'date': date.toIso8601String(),
-      };
+    'id': id,
+    'workerId': workerId,
+    'amount': amount,
+    'note': note,
+    'type': type,
+    'date': date.toIso8601String(),
+  };
 
   factory WorkerPayment.fromJson(Map<String, dynamic> j) => WorkerPayment(
-        id: j['id'] as String,
-        workerId: j['workerId'] as int,
-        amount: (j['amount'] as num).toDouble(),
-        note: j['note'] as String? ?? '',
-        type: j['type'] as String? ?? 'Other',
-        date: DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime.now(),
-      );
+    id: j['id'] as String,
+    workerId: j['workerId'] as int,
+    amount: (j['amount'] as num).toDouble(),
+    note: j['note'] as String? ?? '',
+    type: j['type'] as String? ?? 'Other',
+    date: DateTime.tryParse(j['date'] as String? ?? '') ?? DateTime.now(),
+  );
 }
 
 /// PaymentHistoryStorage - local-only payment log, mirrors the pattern used
@@ -61,18 +61,25 @@ class PaymentHistoryStorage {
   }
 
   static Future<List<WorkerPayment>> fetchForWorker(
-      int shopkeeperId, int workerId) async {
+    int shopkeeperId,
+    int workerId,
+  ) async {
     final all = await fetchAll(shopkeeperId);
     return all.where((p) => p.workerId == workerId).toList();
   }
 
-  static Future<void> addPayment(int shopkeeperId, WorkerPayment payment) async {
+  static Future<void> addPayment(
+    int shopkeeperId,
+    WorkerPayment payment,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final all = await fetchAll(shopkeeperId);
       all.add(payment);
       await prefs.setString(
-          _key(shopkeeperId), jsonEncode(all.map((p) => p.toJson()).toList()));
+        _key(shopkeeperId),
+        jsonEncode(all.map((p) => p.toJson()).toList()),
+      );
     } catch (e) {
       print('❌ Error saving payment: $e');
     }
@@ -84,7 +91,9 @@ class PaymentHistoryStorage {
       final all = await fetchAll(shopkeeperId);
       all.removeWhere((p) => p.id == paymentId);
       await prefs.setString(
-          _key(shopkeeperId), jsonEncode(all.map((p) => p.toJson()).toList()));
+        _key(shopkeeperId),
+        jsonEncode(all.map((p) => p.toJson()).toList()),
+      );
     } catch (e) {
       print('❌ Error deleting payment: $e');
     }
@@ -92,7 +101,9 @@ class PaymentHistoryStorage {
 
   /// Total paid to a worker in the current calendar month.
   static Future<double> monthTotalForWorker(
-      int shopkeeperId, int workerId) async {
+    int shopkeeperId,
+    int workerId,
+  ) async {
     final now = DateTime.now();
     final payments = await fetchForWorker(shopkeeperId, workerId);
     return payments

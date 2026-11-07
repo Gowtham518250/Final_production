@@ -154,8 +154,7 @@ class SecureTokenStorage {
 
   // -------------------------------------------------------- seal / unseal --
 
-  static Uint8List _aad(String slot) =>
-      Uint8List.fromList(utf8.encode(slot));
+  static Uint8List _aad(String slot) => Uint8List.fromList(utf8.encode(slot));
 
   static Future<String> _seal(
     String slot,
@@ -238,8 +237,8 @@ class SecureTokenStorage {
     if (slot != null) await _storage.delete(key: slot);
   }
 
-  static bool _isRecordSlot(String slot) => _recordBases
-      .any((base) => slot == base || slot.startsWith('${base}_'));
+  static bool _isRecordSlot(String slot) =>
+      _recordBases.any((base) => slot == base || slot.startsWith('${base}_'));
 
   static Future<void> _purgeAllRecords() async {
     final all = await _storage.readAll();

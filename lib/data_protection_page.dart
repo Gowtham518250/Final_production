@@ -13,7 +13,7 @@ class DataProtectionPage extends StatefulWidget {
 
 class _DataProtectionPageState extends State<DataProtectionPage> {
   static const Color _primary = Color(0xFF6366F1);
-  
+
   bool _checking = false;
   Map<String, dynamic> _integrityStatus = {};
   Map<String, dynamic> _backupStatus = {};
@@ -28,10 +28,10 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
 
   Future<void> _loadStatus() async {
     setState(() => _checking = true);
-    
+
     final integrity = await DataProtectionService.verifyDataIntegrity();
     final backup = await DataProtectionService.exportBackup();
-    
+
     setState(() {
       _integrityStatus = integrity;
       _backupStatus = backup;
@@ -53,15 +53,15 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
     } catch (error) {
       message = 'Sync failed: $error';
     }
-    
+
     if (!mounted) return;
     setState(() => _syncing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: LiveTranslatedText(message),
         backgroundColor: succeeded ? Colors.green : Colors.orange,
-        ),
-      );
+      ),
+    );
     if (succeeded) await _loadStatus();
   }
 
@@ -76,16 +76,16 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
     } catch (error) {
       message = '❌ Backup failed: $error';
     }
-    
+
     if (!mounted) return;
     setState(() => _backing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: LiveTranslatedText(message),
         backgroundColor: succeeded ? Colors.green : Colors.red,
         duration: const Duration(seconds: 6),
-        ),
-      );
+      ),
+    );
   }
 
   @override
@@ -243,11 +243,11 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
             const SizedBox(height: 12),
             ...items.map(
               (item) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: LiveTranslatedText(
-                '• $item',
-                style: GoogleFonts.poppins(fontSize: 12),
-              ),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: LiveTranslatedText(
+                  '• $item',
+                  style: GoogleFonts.poppins(fontSize: 12),
+                ),
               ),
             ),
           ],
@@ -278,11 +278,11 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
             const SizedBox(height: 8),
             ...issues.map(
               (issue) => LiveTranslatedText(
-              '⚠️ $issue',
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                color: Colors.orange[800],
-              ),
+                '⚠️ $issue',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.orange[800],
+                ),
               ),
             ),
           ],

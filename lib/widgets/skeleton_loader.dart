@@ -53,7 +53,8 @@ class Skeleton extends StatefulWidget {
   State<Skeleton> createState() => _SkeletonState();
 }
 
-class _SkeletonState extends State<Skeleton> with SingleTickerProviderStateMixin {
+class _SkeletonState extends State<Skeleton>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -91,11 +92,7 @@ class _SkeletonState extends State<Skeleton> with SingleTickerProviderStateMixin
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [
-                baseColor,
-                highlightColor,
-                baseColor,
-              ],
+              colors: [baseColor, highlightColor, baseColor],
               stops: const [0.0, 0.5, 1.0],
               transform: GradientRotation(_animation.value * 0.1),
             ),
@@ -161,7 +158,11 @@ class SkeletonListItem extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ModernSkeletonLoader(width: 50, height: 50, borderRadius: BorderRadius.circular(8)),
+          ModernSkeletonLoader(
+            width: 50,
+            height: 50,
+            borderRadius: BorderRadius.circular(8),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -208,15 +209,20 @@ class SkeletonChart extends StatelessWidget {
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(7, (index) => Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: index == 0 ? 0 : 4),
-                  child: ModernSkeletonLoader(
-                    height: 50 + (index * 15),
-                    borderRadius: BorderRadius.circular(4),
+              children: List.generate(
+                7,
+                (index) => Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: index == 0 ? 0 : 4,
+                    ),
+                    child: ModernSkeletonLoader(
+                      height: 50 + (index * 15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
                 ),
-              )),
+              ),
             ),
           ),
         ],

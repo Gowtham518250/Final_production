@@ -23,7 +23,18 @@
 
 // ─── Stage 1: Script ranges ───────────────────────────────────────────────────
 
-enum _Script { latin, devanagari, tamil, telugu, kannada, malayalam, bengali, gujarati, gurmukhi, unknown }
+enum _Script {
+  latin,
+  devanagari,
+  tamil,
+  telugu,
+  kannada,
+  malayalam,
+  bengali,
+  gujarati,
+  gurmukhi,
+  unknown,
+}
 
 class PhoneticNormalizer {
   // ── Stage 5 lookup tables: STT mishearing corrections per locale ────────────
@@ -33,7 +44,11 @@ class PhoneticNormalizer {
     'en-IN': {
       // Numbers
       'to': 'two', 'too': 'two', 'won': 'one', 'for': 'four', 'ate': 'eight',
-      'sex': 'six', 'won\'t': 'one', 'to the': '2', 'tree': 'three', 'free': 'three', 
+      'sex': 'six',
+      'won\'t': 'one',
+      'to the': '2',
+      'tree': 'three',
+      'free': 'three',
       'fife': 'five', 'v': 'five', 'nien': 'nine', 'tenn': 'ten',
       // Units
       'k g': 'kg', 'k.g': 'kg', 'kay gee': 'kg', 'kilogram': 'kg',
@@ -58,7 +73,9 @@ class PhoneticNormalizer {
       'mustered': 'mustard', 'musterd': 'mustard',
       'turmeric': 'turmeric', 'termeric': 'turmeric', 'haldi': 'turmeric',
       'cumin': 'cumin', 'jira': 'cumin', 'zeera': 'cumin',
-      'corriander': 'coriander', 'coriender': 'coriander', 'dhania': 'coriander',
+      'corriander': 'coriander',
+      'coriender': 'coriander',
+      'dhania': 'coriander',
       'chilly': 'chilli', 'chili': 'chilli', 'mirchi': 'chilli',
     },
 
@@ -71,7 +88,7 @@ class PhoneticNormalizer {
       'चार': 'चार', 'चारह': 'चार',
       'पाँच': 'पाँच', 'पांच': 'पाँच', 'पाच': 'पाँच',
       'छह': 'छह', 'छे': 'छह',
-      'सात': 'सात', 'साथ': 'सात',  // साथ = "with" but STT confuses with सात
+      'सात': 'सात', 'साथ': 'सात', // साथ = "with" but STT confuses with सात
       'आठ': 'आठ', 'आट': 'आठ',
       'नौ': 'नौ', 'नव': 'नौ',
       'दस': 'दस', 'दश': 'दस',
@@ -164,7 +181,7 @@ class PhoneticNormalizer {
       'బంగాళాదుంప': 'బంగాళాదుంప', 'ఆలూ': 'బంగాళాదుంప',
       'ఉల్లిపాయ': 'ఉల్లిపాయ', 'ఉల్లి': 'ఉల్లిపాయ',
       'టమాటో': 'టమాటో', 'టమాటా': 'టమాటో',
-      
+
       // Auto-translate English STT fallbacks to Telugu
       'milk': 'పాలు',
       'sugar': 'చక్కెర',
@@ -460,9 +477,12 @@ class PhoneticNormalizer {
     // Stage 2: Trailing virama / anusvara cleanup
     // Many STT engines add trailing ् (virama) to final consonants unnecessarily
     result = result
-      .replaceAll(RegExp(r'्\s'), ' ')   // virama before space
-      .replaceAll(RegExp(r'ं\s'), ' ')   // anusvara before space — keep within words
-      ;
+        .replaceAll(RegExp(r'्\s'), ' ') // virama before space
+        .replaceAll(
+          RegExp(r'ं\s'),
+          ' ',
+        ) // anusvara before space — keep within words
+        ;
 
     // Stage 1: Collapse multiple spaces
     result = result.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -474,46 +494,46 @@ class PhoneticNormalizer {
   /// to their canonical NFC equivalents that the numberWords map uses.
   static String _normalizeDevanagari(String s) {
     return s
-      // Alternate paaँch forms
-      .replaceAll('\u092a\u093e\u0901\u091a', 'पाँच')
-      .replaceAll('\u092a\u093e\u0902\u091a', 'पाँच')
-      // Alternate aadh forms (half)
-      .replaceAll('\u0906\u0927\u093e', 'आधा')
-      // Normalize dandas to comma so parser splits correctly
-      .replaceAll('।', ',')
-      .replaceAll('॥', ',')
-      // Fullwidth digits to ASCII
-      .replaceAllMapped(RegExp(r'[०-९]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0966).toString();
-      })
-      // Tamil digits
-      .replaceAllMapped(RegExp(r'[௦-௯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0BE6).toString();
-      })
-      // Telugu digits
-      .replaceAllMapped(RegExp(r'[౦-౯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0C66).toString();
-      })
-      // Kannada digits
-      .replaceAllMapped(RegExp(r'[೦-೯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0CE6).toString();
-      })
-      // Malayalam digits
-      .replaceAllMapped(RegExp(r'[൦-൯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0D66).toString();
-      })
-      // Bengali digits
-      .replaceAllMapped(RegExp(r'[০-৯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x09E6).toString();
-      })
-      // Gujarati digits
-      .replaceAllMapped(RegExp(r'[૦-૯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0AE6).toString();
-      })
-      // Gurmukhi digits
-      .replaceAllMapped(RegExp(r'[੦-੯]'), (m) {
-        return (m.group(0)!.codeUnitAt(0) - 0x0A66).toString();
-      });
+        // Alternate paaँch forms
+        .replaceAll('\u092a\u093e\u0901\u091a', 'पाँच')
+        .replaceAll('\u092a\u093e\u0902\u091a', 'पाँच')
+        // Alternate aadh forms (half)
+        .replaceAll('\u0906\u0927\u093e', 'आधा')
+        // Normalize dandas to comma so parser splits correctly
+        .replaceAll('।', ',')
+        .replaceAll('॥', ',')
+        // Fullwidth digits to ASCII
+        .replaceAllMapped(RegExp(r'[०-९]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0966).toString();
+        })
+        // Tamil digits
+        .replaceAllMapped(RegExp(r'[௦-௯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0BE6).toString();
+        })
+        // Telugu digits
+        .replaceAllMapped(RegExp(r'[౦-౯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0C66).toString();
+        })
+        // Kannada digits
+        .replaceAllMapped(RegExp(r'[೦-೯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0CE6).toString();
+        })
+        // Malayalam digits
+        .replaceAllMapped(RegExp(r'[൦-൯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0D66).toString();
+        })
+        // Bengali digits
+        .replaceAllMapped(RegExp(r'[০-৯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x09E6).toString();
+        })
+        // Gujarati digits
+        .replaceAllMapped(RegExp(r'[૦-૯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0AE6).toString();
+        })
+        // Gurmukhi digits
+        .replaceAllMapped(RegExp(r'[੦-੯]'), (m) {
+          return (m.group(0)!.codeUnitAt(0) - 0x0A66).toString();
+        });
   }
 
   /// Returns the canonical English product name for cross-language input,
