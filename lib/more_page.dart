@@ -1,6 +1,7 @@
 import 'live_translated_text.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'tutorial_service.dart';
 
 /// A mobile-first hub for less frequently used Retail Mind modules.
 class MorePage extends StatelessWidget {
@@ -24,6 +25,7 @@ class MorePage extends StatelessWidget {
     _MoreAction(title: 'Reports & analytics', subtitle: 'Business performance', icon: Icons.analytics_rounded, color: Color(0xFFDB2777), route: '/analytics'),
     _MoreAction(title: 'Transactions', subtitle: 'Recent activity', icon: Icons.receipt_long_rounded, color: Color(0xFF475569), route: '/recent-transactions'),
     _MoreAction(title: 'Help & support', subtitle: 'Chat with the AI assistant', icon: Icons.support_agent_rounded, color: Color(0xFFEA580C), route: '/chatbot-help'),
+    _MoreAction(title: 'Replay first-sale guide', subtitle: 'Pointing hand on New Bill again', icon: Icons.touch_app_rounded, color: Color(0xFF4F46E5), replayFirstSaleCoach: true),
   ];
 
   @override
@@ -82,7 +84,10 @@ class MorePage extends StatelessWidget {
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, crossAxisSpacing: 11, mainAxisSpacing: 11, childAspectRatio: constraints.maxWidth >= 760 ? 1.7 : 1.35),
                   itemBuilder: (context, index) {
                     final action = _actions[index];
-                    return _MoreActionCard(action: action, onTap: () => Navigator.pushNamed(context, action.route));
+                    return _MoreActionCard(
+                      action: action,
+                      onTap: () => _onActionTap(context, action),
+                    );
                   },
                 ),
                 const SizedBox(height: 18),
@@ -120,9 +125,29 @@ class _MoreAction {
   final String subtitle;
   final IconData icon;
   final Color color;
-  final String route;
+  final String? route;
+  final bool replayFirstSaleCoach;
 
-  const _MoreAction({required this.title, required this.subtitle, required this.icon, required this.color, required this.route});
+  const _MoreAction({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    this.route,
+    this.replayFirstSaleCoach = false,
+  });
+}
+
+Future<void> _onActionTap(BuildContext context, _MoreAction action) async {
+  if (action.replayFirstSaleCoach) {
+    await TutorialService.resetFirstSaleCoach();
+    if (!context.mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
+    return;
+  }
+  final route = action.route;
+  if (route == null || route.isEmpty) return;
+  Navigator.pushNamed(context, route);
 }
 
 class _MoreActionCard extends StatelessWidget {

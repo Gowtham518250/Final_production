@@ -167,5 +167,102 @@ void main() {
         same(onlyOpenInvoice.single),
       );
     });
+
+    test('rupees convert to integer paise', () {
+      expect(rupeesToPaise(100), 10000);
+      expect(rupeesToPaise(99.50), 9950);
+      expect(rupeesToPaise(double.nan), 0);
+    });
+
+    test('does not auto-settle two open invoices that share the same due', () {
+      final open = <Map<String, dynamic>>[
+        {
+          'invoice_number': 'BILL-401',
+          'total_amount': 100.0,
+          'paid_amount': 0.0,
+        },
+        {
+          'invoice_number': 'BILL-402',
+          'total_amount': 100.0,
+          'paid_amount': 0.0,
+        },
+      ];
+
+      expect(
+        selectUnambiguousAutoSettleTarget(
+          sales: const [],
+          invoices: open,
+          reference: null,
+          amount: 100,
+        ),
+        isNull,
+      );
+      expect(
+        selectUnambiguousAutoSettleTarget(
+          sales: const [],
+          invoices: open,
+          reference: 'BILL-401',
+          amount: 100,
+        )?.invoiceNumber,
+        'BILL-401',
+      );
+    });
+
+    test('rejects a rupee-gap match that the old ±1 rule would have paid', () {
+      expect(
+        paymentFitsOpenBalance({
+          'invoice_number': 'BILL-403',
+          'total_amount': 100.0,
+          'paid_amount': 0.0,
+        }, 99),
+        isTrue,
+      );
+      expect(
+        selectUnambiguousAutoSettleTarget(
+          sales: const [],
+          invoices: [
+            {
+              'invoice_number': 'BILL-403',
+              'total_amount': 100.0,
+              'paid_amount': 0.0,
+            },
+          ],
+          reference: 'BILL-403',
+          amount: 99,
+        )?.invoiceNumber,
+        'BILL-403',
+      );
+
+      final partial = applyInvoicePaymentOnce(
+        {
+          'invoice_number': 'BILL-403',
+          'total_amount': 100.0,
+          'paid_amount': 0.0,
+        },
+        amount: 99,
+        idempotencyKey: 'detected_BILL-403_utr',
+      );
+      expect(partial?['payment_status'], 'PARTIAL');
+      expect(partial?['paid_amount'], 99);
+      expect(partial?['pending_amount'], 1);
+    });
+
+    test('does not auto-settle an overpayment onto a smaller due balance', () {
+      expect(
+        selectUnambiguousAutoSettleTarget(
+          sales: const [],
+          invoices: [
+            {
+              'invoice_number': 'BILL-404',
+              'total_amount': 100.0,
+              'paid_amount': 40.0,
+            },
+          ],
+          reference: 'BILL-404',
+          amount: 61,
+        ),
+        isNull,
+      );
+    });
   });
 }

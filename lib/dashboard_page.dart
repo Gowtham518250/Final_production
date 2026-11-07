@@ -52,6 +52,7 @@ import 'language_provider.dart';
 import 'guided_voice_service.dart';
 import 'app_theme_controller.dart';
 import 'tutorial_service.dart';
+import 'first_sale_coach.dart';
 import 'security_service.dart';
 import 'providers/payment_state.dart' hide PaymentDecision;
 import 'providers/invoice_state.dart';
@@ -207,6 +208,9 @@ class _DashboardPageState extends State<DashboardPage>
   late final Animation<double> _slideAnimation;
   bool isDarkMode = false;
   bool _isSidebarOpen = false;
+  final GlobalKey _newBillCoachKey = GlobalKey();
+  final GlobalKey _voiceBillCoachKey = GlobalKey();
+  bool _showFirstSaleCoach = false;
   bool _isShopSetup = true;
   String _userName = '';
 
@@ -1141,17 +1145,7 @@ class _DashboardPageState extends State<DashboardPage>
       for (final raw in rawInvoices) {
         if (raw is! Map) continue;
         final row = Map<String, dynamic>.from(raw);
-        final total = money(
-          row['total_amount'] ??
-              row['total'] ??
-              row['invoice_total'] ??
-              row['grand_total'],
-        );
-        final paid = money(
-          row['paid_amount'] ?? row['amount_paid'] ?? row['paid'],
-        );
-        final due = (total - paid).clamp(0.0, double.infinity);
-        if (total <= 0 || due < 0.01 || amount > due + 0.01) continue;
+        if (!paymentFitsOpenBalance(row, amount)) continue;
         candidates.add(row);
       }
 
@@ -1775,6 +1769,7 @@ class _DashboardPageState extends State<DashboardPage>
     if (!mounted) return;
 
     await runSafely('onboarding check', _showOnboardingIfNeeded);
+    await runSafely('first sale coach', _maybeStartFirstSaleCoach);
     if (!mounted) return;
 
     // Connect realtime, then perform optional refreshes serially to cap startup
@@ -2101,6 +2096,28 @@ class _DashboardPageState extends State<DashboardPage>
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) _showOnboardingDialog();
     });
+  }
+
+  Future<void> _maybeStartFirstSaleCoach() async {
+    final show = await TutorialService.shouldShowFirstSaleCoach();
+    if (!mounted || !show) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _showFirstSaleCoach = true);
+    });
+  }
+
+  Future<void> _openSalesEntryFromCoach({bool openVoice = false}) async {
+    if (_showFirstSaleCoach) {
+      setState(() => _showFirstSaleCoach = false);
+    }
+    await Navigator.pushNamed(
+      context,
+      '/sales-entry',
+      arguments: openVoice ? {'openVoice': true} : null,
+    );
+    if (!mounted) return;
+    await _loadSales();
+    await _maybeStartFirstSaleCoach();
   }
 
   void _showOnboardingDialog() {
@@ -2711,21 +2728,6 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Future<void> _copyOnlineStoreShopId() async {
-    final shopId = _onlineStoreShopId;
-    if (shopId == null || shopId <= 0) return;
-
-    try {
-      await Clipboard.setData(ClipboardData(text: shopId.toString()));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: LiveTranslatedText('Shop ID copied.')),
-      );
-    } catch (error) {
-      if (kDebugMode) debugPrint('Unable to copy online shop ID: $error');
-    }
-  }
-
   Widget _buildGrowMyShopCard() {
     return GrowMyShopEntryCard(
       onOpen: () => Navigator.pushNamed(context, '/growth-agent'),
@@ -2766,29 +2768,15 @@ class _DashboardPageState extends State<DashboardPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Row(
-                  children: [
-                    ShopLogoMark(
-                      imageBytes: logoBytes,
-                      size: 44,
-                      fallbackColor: const Color(0xFF16A34A),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: LiveTranslatedText(
-                        'Online Store is Live',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF1F2937),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: LiveTranslatedText(
+                  'Online Store is Live',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : const Color(0xFF1F2937),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2811,47 +2799,95 @@ class _DashboardPageState extends State<DashboardPage>
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      color: Color(0xFF16A34A),
-                      size: 21,
+                    Column(
+                      children: [
+                        LiveTranslatedText(
+                          'SHOP LOGO',
+                          style: GoogleFonts.poppins(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.7,
+                            color: isDark
+                                ? const Color(0xFF86EFAC)
+                                : const Color(0xFF15803D),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        ShopLogoMark(
+                          imageBytes: logoBytes,
+                          size: 48,
+                          fallbackColor: const Color(0xFF16A34A),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: LiveTranslatedText(
-                        'Your shop is live at',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF166534),
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: LiveTranslatedText(
-                        'LIVE',
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? const Color(0xFF86EFAC)
-                              : const Color(0xFF15803D),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                color: Color(0xFF16A34A),
+                                size: 21,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: LiveTranslatedText(
+                                  'Your shop is live at',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF166534),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF16A34A,
+                                  ).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: LiveTranslatedText(
+                                  'LIVE',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark
+                                        ? const Color(0xFF86EFAC)
+                                        : const Color(0xFF15803D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          LiveTranslatedText(
+                            shopName.trim().isEmpty ? 'My Shop' : shopName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF14532D),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 LiveTranslatedText(
                   'Share this link with customers so they can visit your online store.',
                   style: GoogleFonts.poppins(
@@ -2860,54 +2896,6 @@ class _DashboardPageState extends State<DashboardPage>
                     color: isDark ? Colors.white70 : const Color(0xFF4B5563),
                   ),
                 ),
-                if (_onlineStoreShopId != null && _onlineStoreShopId! > 0) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.only(
-                      left: 11,
-                      right: 4,
-                      top: 3,
-                      bottom: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.black.withValues(alpha: 0.18)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF16A34A).withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.tag_rounded,
-                          size: 18,
-                          color: Color(0xFF16A34A),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Shop ID: $_onlineStoreShopId',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? const Color(0xFF86EFAC)
-                                  : const Color(0xFF166534),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Copy shop ID',
-                          onPressed: _copyOnlineStoreShopId,
-                          icon: const Icon(Icons.copy_rounded, size: 18),
-                          color: const Color(0xFF16A34A),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.only(
@@ -16403,7 +16391,9 @@ class _DashboardPageState extends State<DashboardPage>
         ? const Color(0xFF121A2B)
         : Colors.white;
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       backgroundColor: surfaceColor,
       bottomNavigationBar: DashboardActionDock(
         backgroundColor: navigationSurface,
@@ -16414,20 +16404,15 @@ class _DashboardPageState extends State<DashboardPage>
             label: 'New Bill',
             color: const Color(0xFF4F46E5),
             primary: true,
-            onTap: () => Navigator.pushNamed(
-              context,
-              '/sales-entry',
-            ).then((_) => _loadSales()),
+            targetKey: _newBillCoachKey,
+            onTap: () => _openSalesEntryFromCoach(),
           ),
           DashboardActionItem(
             icon: Icons.mic_rounded,
             label: 'Voice bill',
             color: const Color(0xFF0F766E),
-            onTap: () => Navigator.pushNamed(
-              context,
-              '/sales-entry',
-              arguments: {'openVoice': true},
-            ).then((_) => _loadSales()),
+            targetKey: _voiceBillCoachKey,
+            onTap: () => _openSalesEntryFromCoach(openVoice: true),
           ),
           DashboardActionItem(
             icon: Icons.menu_book_rounded,
@@ -16827,7 +16812,27 @@ class _DashboardPageState extends State<DashboardPage>
           ),
         ), // closes AppBackground
       ), // closes ErrorBoundary
-    ); // closes Scaffold
+    ),
+        if (_showFirstSaleCoach)
+          FirstSaleCoachOverlay(
+            steps: [
+              FirstSaleCoachStep(
+                targetKey: _newBillCoachKey,
+                title: 'Start a bill',
+                body: 'Tap New Bill. Add items, then save the sale.',
+              ),
+              FirstSaleCoachStep(
+                targetKey: _voiceBillCoachKey,
+                title: 'Or use your voice',
+                body: 'Tap Voice bill and say the product name.',
+              ),
+            ],
+            onFinished: () {
+              if (mounted) setState(() => _showFirstSaleCoach = false);
+            },
+          ),
+      ],
+    );
   }
 
   void _showVoiceCustomizer(BuildContext context, StateSetter setDlgState) {

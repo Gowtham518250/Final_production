@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:retail_mind/local_storage_service.dart';
 
+// Hive access is implemented by LocalStorageService. There is no
+// SecureHiveStorage class; this file covers account-scoped box isolation.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory hiveDirectory;

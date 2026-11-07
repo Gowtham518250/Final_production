@@ -56,6 +56,8 @@ import 'inventory_management_service.dart';
 import 'sale_service.dart';
 import 'sale_payment_policy.dart';
 import 'pos_checkout_status.dart';
+import 'first_sale_coach.dart';
+import 'tutorial_service.dart';
 import 'analytics_engine.dart';
 import 'format_helper.dart';
 import 'local_storage_service.dart';
@@ -89,6 +91,10 @@ class SalesEntryPage extends StatefulWidget {
 class _SalesEntryPageState extends State<SalesEntryPage>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
+  final GlobalKey _productCoachKey = GlobalKey();
+  final GlobalKey _voiceCoachKey = GlobalKey();
+  final GlobalKey _saveCoachKey = GlobalKey();
+  bool _showFirstSaleCoach = false;
   List<Map<String, TextEditingController>> entries = [];
   bool isLoading = false;
   String message = '';
@@ -459,8 +465,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
   }
 
-  void _openVoiceBillingAssistant() {
-    Navigator.of(context).push<void>(
+  Future<void> _openVoiceBillingAssistant() async {
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => RetailMindFeatureGate(
           featureCode: 'voice_billing',
@@ -493,6 +499,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         ),
       ),
     );
+    if (mounted) unawaited(_maybeStartFirstSaleCoach());
   }
 
   void _openVoiceBillingMenu() {
@@ -3335,6 +3342,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       unawaited(_loadPosContrastPref());
       if (widget.openVoiceOnStart) {
         _openVoiceBillingAssistant();
+      } else {
+        unawaited(_maybeStartFirstSaleCoach());
       }
     });
 
@@ -3357,6 +3366,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
     _loadPaymentConfig();
     _checkPaymentPermissions();
+  }
+
+  Future<void> _maybeStartFirstSaleCoach() async {
+    final show = await TutorialService.shouldShowFirstSaleCoach();
+    if (!mounted || !show) return;
+    setState(() => _showFirstSaleCoach = true);
   }
 
   Future<void> _loadPosContrastPref() async {
@@ -5922,13 +5937,16 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         ),
       ],
     );
-    final saveSalesButton = _buildBottomButton(
-      label: 'Save Sales',
-      icon: Icons.save_rounded,
-      color: const Color(0xFF10B981),
-      isEnabled: totalAmount > 0 && !isLoading && billReady,
-      isLoading: isLoading,
-      onTap: (isLoading || !billReady) ? null : submitAllSales,
+    final saveSalesButton = KeyedSubtree(
+      key: _saveCoachKey,
+      child: _buildBottomButton(
+        label: 'Save Sales',
+        icon: Icons.save_rounded,
+        color: const Color(0xFF10B981),
+        isEnabled: totalAmount > 0 && !isLoading && billReady,
+        isLoading: isLoading,
+        onTap: (isLoading || !billReady) ? null : submitAllSales,
+      ),
     );
     final generateBillButton = _buildBottomButton(
       label: 'Generate Bill',
@@ -5949,7 +5967,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       onTap: isLoading ? null : borrowSale,
     );
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       extendBodyBehindAppBar: false,
       backgroundColor: const Color(0xFFF8F9FC),
       appBar: _buildAppBar(),
@@ -6319,10 +6339,36 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           ],
         ),
       ),
+    ),
+        if (_showFirstSaleCoach)
+          FirstSaleCoachOverlay(
+            steps: [
+              FirstSaleCoachStep(
+                targetKey: _productCoachKey,
+                title: 'Add a product',
+                body: 'Type the name, or scan the barcode.',
+              ),
+              FirstSaleCoachStep(
+                targetKey: _voiceCoachKey,
+                title: 'Say it instead',
+                body: 'Tap the mic and say the product name.',
+              ),
+              FirstSaleCoachStep(
+                targetKey: _saveCoachKey,
+                title: 'Save the bill',
+                body: 'When items are added, tap Save Sales.',
+              ),
+            ],
+            onFinished: () {
+              unawaited(TutorialService.completeFirstSaleCoach());
+              if (mounted) setState(() => _showFirstSaleCoach = false);
+            },
+          ),
+      ],
     );
   }
 
-  // â”€â”€ AppBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ AppBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   void _toggleSaleGuidance() {
     final voice = GuidedVoiceService.instance;
@@ -7055,7 +7101,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   ),
                 ),
                 // Voice billing icon
-                TweenAnimationBuilder<double>(
+                KeyedSubtree(
+                  key: _voiceCoachKey,
+                  child: TweenAnimationBuilder<double>(
                   duration: const Duration(milliseconds: 300),
                   tween: Tween(begin: 1.0, end: 1.0),
                   builder: (context, scale, child) {
@@ -7081,6 +7129,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       ),
                     );
                   },
+                ),
                 ),
               ],
             ),
@@ -7219,19 +7268,23 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Divider(color: const Color(0xFFE5E7EB)),
               ),
-              itemBuilder: (context, index) => _ProductEntryCard(
-                // KEY is critical: without it Flutter reuses widgets in wrong
-                // positions when the list rebuilds, causing typed text to
-                // appear in the wrong field.
-                key: ValueKey('entry_${index}_${entries[index].hashCode}'),
-                index: index,
-                entry: entries[index],
-                showDelete: entries.length > 1,
-                onDelete: () => removeEntry(index),
-                onChanged: _isVoiceProcessing ? () {} : calculateTotal,
-                onScan: _scanProductCode,
-                isHighlighted: _lastAddedRowIndex == index,
-              ),
+              itemBuilder: (context, index) {
+                final card = _ProductEntryCard(
+                  // KEY is critical: without it Flutter reuses widgets in wrong
+                  // positions when the list rebuilds, causing typed text to
+                  // appear in the wrong field.
+                  key: ValueKey('entry_${index}_${entries[index].hashCode}'),
+                  index: index,
+                  entry: entries[index],
+                  showDelete: entries.length > 1,
+                  onDelete: () => removeEntry(index),
+                  onChanged: _isVoiceProcessing ? () {} : calculateTotal,
+                  onScan: _scanProductCode,
+                  isHighlighted: _lastAddedRowIndex == index,
+                );
+                if (index != 0) return card;
+                return KeyedSubtree(key: _productCoachKey, child: card);
+              },
             ),
 
             if (_recentHistory.isNotEmpty) ...[

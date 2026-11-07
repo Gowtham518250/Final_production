@@ -222,3 +222,115 @@ Map<String, dynamic>? findInvoiceByExplicitPaymentReference(
   }).toList();
   return matches.length == 1 ? matches.single : null;
 }
+
+/// Rupee amounts compared as integer paise so a ₹1 gap cannot settle a bill.
+int rupeesToPaise(double rupees) {
+  if (!rupees.isFinite) return 0;
+  return (rupees * 100).round();
+}
+
+double invoiceRecordTotal(Map<String, dynamic> row) {
+  return _highestAmount(row, const [
+    'total_amount',
+    'total',
+    'invoice_total',
+    'grand_total',
+  ]);
+}
+
+double invoiceRecordPaid(Map<String, dynamic> row) {
+  return _highestAmount(row, const [
+    'paid_amount',
+    'amount_paid',
+    'paid',
+    'received_amount',
+  ]);
+}
+
+double _highestAmount(Map<String, dynamic> row, List<String> keys) {
+  var highest = 0.0;
+  for (final key in keys) {
+    final value = row[key];
+    final parsed = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '');
+    if (parsed != null && parsed.isFinite && parsed > highest) {
+      highest = parsed;
+    }
+  }
+  return highest;
+}
+
+bool paymentFitsOpenBalance(Map<String, dynamic> row, double amount) {
+  final total = invoiceRecordTotal(row);
+  final paid = invoiceRecordPaid(row);
+  final duePaise = rupeesToPaise(
+    (total - paid).clamp(0.0, double.infinity).toDouble(),
+  );
+  final amountPaise = rupeesToPaise(amount);
+  return total > 0 && duePaise > 0 && amountPaise > 0 && amountPaise <= duePaise;
+}
+
+String? canonicalInvoiceNumber(Map<String, dynamic> row) {
+  for (final key in const [
+    'invoice_number',
+    'sale_id',
+    'invoice_id',
+    'invoiceId',
+    'backend_id',
+    'id',
+  ]) {
+    final value = row[key]?.toString().trim() ?? '';
+    if (value.isNotEmpty && value != '0' && value.toLowerCase() != 'null') {
+      return value;
+    }
+  }
+  return null;
+}
+
+class AutoSettleTarget {
+  const AutoSettleTarget({
+    this.saleIndex,
+    this.invoiceIndex,
+    required this.invoiceNumber,
+  });
+
+  final int? saleIndex;
+  final int? invoiceIndex;
+  final String invoiceNumber;
+}
+
+/// Auto-settlement is allowed only for one explicit invoice/sale reference.
+/// Matching due amounts without that reference stay pending for the owner.
+AutoSettleTarget? selectUnambiguousAutoSettleTarget({
+  required List<Map<String, dynamic>> sales,
+  required List<Map<String, dynamic>> invoices,
+  required String? reference,
+  required double amount,
+}) {
+  if (!amount.isFinite || amount <= 0) return null;
+
+  final sale = findInvoiceByExplicitPaymentReference(sales, reference);
+  final invoice = findInvoiceByExplicitPaymentReference(invoices, reference);
+  if (sale == null && invoice == null) return null;
+  if (sale != null && !paymentFitsOpenBalance(sale, amount)) return null;
+  if (invoice != null && !paymentFitsOpenBalance(invoice, amount)) return null;
+
+  final saleNumber = sale == null ? null : canonicalInvoiceNumber(sale);
+  final invoiceNumber = invoice == null ? null : canonicalInvoiceNumber(invoice);
+  if (sale != null && (saleNumber == null || saleNumber.isEmpty)) return null;
+  if (invoice != null && (invoiceNumber == null || invoiceNumber.isEmpty)) {
+    return null;
+  }
+  if (saleNumber != null &&
+      invoiceNumber != null &&
+      saleNumber.toLowerCase() != invoiceNumber.toLowerCase()) {
+    return null;
+  }
+
+  return AutoSettleTarget(
+    saleIndex: sale == null ? null : sales.indexOf(sale),
+    invoiceIndex: invoice == null ? null : invoices.indexOf(invoice),
+    invoiceNumber: saleNumber ?? invoiceNumber!,
+  );
+}

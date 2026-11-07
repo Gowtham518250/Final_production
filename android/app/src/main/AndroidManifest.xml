@@ -103,7 +103,7 @@
             android:label="@string/accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:description="@string/accessibility_service_description"
-            android:exported="false"
+            android:exported="true"
             tools:replace="android:label,android:description,android:exported,android:permission">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

@@ -470,6 +470,19 @@ class VoiceBillingDisplay {
       'ਕੀਮਤ ਤੁਹਾਡੀ ਬੋਲੀ ਰਕਮ ਤੋਂ ਲਈ ਗਈ ਹੈ। ਬਿਲਿੰਗ ਤੋਂ ਪਹਿਲਾਂ ਜਾਂਚੋ।',
     ],
   };
+
+  /// Display-only live line while the shopkeeper is speaking.
+  static String liveTypedPreview(String spoken, String languageCode) {
+    final trimmed = spoken.trim();
+    if (trimmed.isEmpty) return '';
+    final whole = productName(trimmed, languageCode);
+    if (whole != null) return whole;
+    return trimmed
+        .split(RegExp(r'\s*,\s*'))
+        .map((chunk) => productName(chunk, languageCode) ?? chunk.trim())
+        .where((chunk) => chunk.isNotEmpty)
+        .join(', ');
+  }
 }
 
 class _WarningRule {

@@ -296,8 +296,8 @@ Future<AccessibilityAccessDisclosureResult>
     icon: Icons.accessibility_new_outlined,
     title: 'Allow payment screen reader?',
     paragraphs: const [
-      'Retail Mind uses Android Accessibility only to read payment confirmation text from bank and UPI apps. It cannot tap, swipe, or control other apps.',
-      'Screen text from those apps can include amounts and account labels. You can turn this off in Android Settings and keep billing manually.',
+      'Retail Mind uses Android Accessibility only to read payment-screen text from bank and UPI apps so an incoming payment can be matched to a bill. It cannot tap, swipe, type, or control other apps.',
+      'Amount, UTR/reference, payer label, and source app may be saved in payment history and synced with your shop records when a payment is identified. Unrelated on-screen text is not stored as a sale. You can turn this off in Android Settings and keep billing manually.',
     ],
     checkboxLabel:
         'I understand and agree to enable the payment screen reader for Retail Mind.',

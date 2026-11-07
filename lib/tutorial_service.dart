@@ -5,6 +5,20 @@ class TutorialService {
   static const String _onboardingKey = 'onboarding_completed';
   static const String _tutorialVersionKey = 'tutorial_version';
   static const String currentVersion = '2.0';
+  static const String firstSaleCoachId = 'first_sale_hand_v1';
+
+  static Future<bool> shouldShowFirstSaleCoach() async {
+    return !(await isTutorialCompleted(firstSaleCoachId));
+  }
+
+  static Future<void> completeFirstSaleCoach() {
+    return completeTutorial(firstSaleCoachId);
+  }
+
+  static Future<void> resetFirstSaleCoach() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_completedKey$firstSaleCoachId');
+  }
 
   /// Check if first-time user (onboarding not completed)
   static Future<bool> isFirstTimeUser() async {

@@ -9,6 +9,7 @@ class DashboardActionItem {
     required this.onTap,
     this.badgeCount = 0,
     this.primary = false,
+    this.targetKey,
   });
 
   final IconData icon;
@@ -17,6 +18,7 @@ class DashboardActionItem {
   final VoidCallback onTap;
   final int badgeCount;
   final bool primary;
+  final Key? targetKey;
 }
 
 class DashboardActionDock extends StatelessWidget {
@@ -70,7 +72,8 @@ class DashboardActionDock extends StatelessWidget {
                       for (var index = 0; index < items.length; index++) ...[
                         if (index > 0) const SizedBox(width: spacing),
                         SizedBox(
-                          key: ValueKey('dashboard-action-$index'),
+                          key: items[index].targetKey ??
+                              ValueKey('dashboard-action-$index'),
                           width: itemWidth,
                           child: _DashboardActionButton(item: items[index]),
                         ),

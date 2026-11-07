@@ -2,6 +2,8 @@ import 'live_translated_text.dart';
 import 'localization.dart';
 import 'indic_number_repair.dart';
 import 'voice_billing_display.dart';
+import 'voice_billing_localization.dart';
+import 'spoken_language_typewriter.dart';
 import 'app_motion.dart';
 import 'widgets/offline_first_text.dart';
 import 'guided_dictation_overlay.dart';
@@ -1149,7 +1151,25 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   };
   String _voiceBillingLabel(String source) =>
       _voiceBillingLabels[_selectedDisplayLocale.languageCode]?[source] ??
-      source;
+      VoiceBillingLocalization.label(
+        source,
+        _selectedDisplayLocale.languageCode,
+      );
+
+  String get _spokenPlaceholderText {
+    if (_isProcessing) {
+      return _voiceBillingLabel('Understanding your order');
+    }
+    if (_isListening) {
+      return _voiceBillingLabel('Words appear here as you speak');
+    }
+    return _hint;
+  }
+
+  String get _liveSpokenPreview => VoiceBillingDisplay.liveTypedPreview(
+        _transcriptCtrl.text,
+        _selectedLang.code,
+      );
 
   Future<void> _initializeCatalog() async {
     try {
@@ -3172,34 +3192,69 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               ],
             ),
             const SizedBox(height: 6),
-            TextField(
-              controller: _transcriptCtrl,
-              style: GoogleFonts.inter(
-                color: const Color(0xFF111827),
-                fontSize: 13,
-                height: 1.35,
-                fontWeight: FontWeight.w600,
-              ),
-              decoration: InputDecoration(
-                hintText: _hint,
-                hintStyle: GoogleFonts.inter(
-                  color: const Color(0xFF94A3B8),
-                  fontStyle: FontStyle.italic,
-                  fontSize: 12,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Stack(
+              alignment: Alignment.topLeft,
+              children: [
+                if (_transcriptCtrl.text.trim().isEmpty)
+                  SpokenLanguageTypewriter(
+                    text: _spokenPlaceholderText,
+                    loop: !_isListening && !_isProcessing,
+                    msPerGlyph: _isListening || _isProcessing ? 28 : 46,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF94A3B8),
+                      fontStyle: FontStyle.italic,
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                TextField(
+                  controller: _transcriptCtrl,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF111827),
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: '',
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  maxLines: null,
+                  onChanged: (val) {
+                    _transcript = val;
+                    setState(() {});
+                  },
+                  onSubmitted: (val) {
+                    _doProcess(val);
+                  },
                 ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              maxLines: null,
-              onChanged: (val) {
-                _transcript = val;
-                setState(() {});
-              },
-              onSubmitted: (val) {
-                _doProcess(val);
-              },
+              ],
             ),
+            ),
+            if (_isListening ||
+                _isProcessing ||
+                _liveSpokenPreview.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SpokenLanguageTypewriter(
+                text: _liveSpokenPreview.isNotEmpty
+                    ? '${_voiceBillingLabel('Translating into your language')}: $_liveSpokenPreview'
+                    : _voiceBillingLabel('Translating into your language'),
+                loop: _liveSpokenPreview.isEmpty && _isListening,
+                msPerGlyph: 30,
+                maxLines: 2,
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF4F46E5),
+                  fontSize: 11.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
             if (_transcriptCtrl.text.trim().isNotEmpty)
               LanguageDetectionVisualizer(
                 transcript: _transcriptCtrl.text,

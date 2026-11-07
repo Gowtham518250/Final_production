@@ -108,6 +108,7 @@ import 'payment_identity_matcher.dart';
 import 'soundbox_announcement_coordinator.dart';
 import 'cross_isolate_payment_announcement_deduplicator.dart';
 import 'sms_background_receiver.dart';
+import 'invoice_payment_status.dart';
 import 'local_storage_service.dart';
 import 'sync_service.dart';
 import 'session_management.dart';
@@ -6625,166 +6626,94 @@ class PaymentDetectionService {
         return null;
       }
       final amount = event.amount;
-      final payer = event.payerName?.toLowerCase() ?? '';
-      final saleId = event.saleId?.toString() ?? '';
+      final saleId = event.saleId?.toString().trim() ?? '';
+      if (saleId.isEmpty || saleId.toLowerCase() == 'null') {
+        return null;
+      }
 
-      // ✅ FIX: Add concurrency lock to prevent race condition
-      // Two burst payments cannot both settle the same invoice
-      if (saleId.isNotEmpty && _settlingInvoiceIds.contains(saleId)) {
+      if (_settlingInvoiceIds.contains(saleId)) {
         PdsLogger.w(
           'AUTOSETTL',
           'Already settling $saleId, skipping concurrent attempt',
         );
         return null;
       }
-      if (saleId.isNotEmpty) _settlingInvoiceIds.add(saleId);
+      _settlingInvoiceIds.add(saleId);
 
       try {
-        final sales = await LocalStorageService.loadSales();
-        for (var i = 0; i < sales.length; i++) {
-          final sale = Map<String, dynamic>.from(sales[i] as Map);
-          final status = _derivePaymentStatus(sale);
-          if (!['UNPAID', 'PARTIAL'].contains(status)) continue;
+        final rawSales = await LocalStorageService.loadSales();
+        final rawInvoices = await LocalStorageService.loadLocalInvoices();
+        final sales = rawSales
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+        final invoices = rawInvoices
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+        final target = selectUnambiguousAutoSettleTarget(
+          sales: sales,
+          invoices: invoices,
+          reference: saleId,
+          amount: amount,
+        );
+        if (target == null) return null;
 
-          final total = _toAmount(sale['total'] ?? sale['total_amount']);
-          final paid = _toAmount(
-            sale['paid_amount'] ?? sale['amount_paid'] ?? 0,
+        final fingerprint = event.normalizedReferenceId != null
+            ? event.fingerprint
+            : (event.sourceEventFingerprint ?? event.fingerprint);
+        final idempotencyKey = 'detected_${target.invoiceNumber}_$fingerprint';
+
+        Map<String, dynamic>? updatedSale;
+        Map<String, dynamic>? updatedInvoice;
+        if (target.saleIndex != null) {
+          updatedSale = applyInvoicePaymentOnce(
+            sales[target.saleIndex!],
+            amount: amount,
+            idempotencyKey: idempotencyKey,
           );
-          final due = (total - paid).clamp(0.0, double.infinity);
-          if ((due - amount).abs() > 1.0) continue;
+          if (updatedSale == null) return null;
+          sales[target.saleIndex!] = updatedSale;
+        }
+        if (target.invoiceIndex != null) {
+          updatedInvoice = applyInvoicePaymentOnce(
+            invoices[target.invoiceIndex!],
+            amount: amount,
+            idempotencyKey: idempotencyKey,
+          );
+          if (updatedInvoice == null) return null;
+          invoices[target.invoiceIndex!] = updatedInvoice;
+        }
 
-          if (saleId.isNotEmpty) {
-            final candidateId = _extractRecordId(sale);
-            if (candidateId != saleId) continue;
-          }
-
-          if (payer.isNotEmpty) {
-            final customerName =
-                sale['customer_name']?.toString().toLowerCase() ?? '';
-            if (customerName.isNotEmpty &&
-                !customerName.contains(payer) &&
-                !payer.contains(customerName)) {
-              continue;
-            }
-          }
-
-          sale['payment_status'] = 'PAID';
-          sale['paid_amount'] = total;
-          sales[i] = sale;
+        final applied = updatedInvoice ?? updatedSale;
+        if (applied == null) return null;
+        if (updatedSale != null) {
           await LocalStorageService.saveSales(sales);
-
-          final invoiceNum =
-              sale['invoice_number']?.toString() ??
-              sale['sale_id']?.toString() ??
-              sale['invoiceId']?.toString() ??
-              '';
-          if (invoiceNum.isNotEmpty) {
-            unawaited(
-              SyncService.updateSalePayment(
-                invoiceNum,
-                'PAID',
-                total,
-                idempotencyKey: event.fingerprint,
-                referenceId: event.referenceId,
-                payerName: event.payerName,
-              ),
-            );
-            return invoiceNum;
-          }
-          return null;
         }
-
-        final invoices = await LocalStorageService.loadLocalInvoices();
-        for (var i = 0; i < invoices.length; i++) {
-          final invoice = Map<String, dynamic>.from(invoices[i] as Map);
-          final status = _derivePaymentStatus(invoice);
-          if (!['UNPAID', 'PARTIAL'].contains(status)) continue;
-
-          final total = _toAmount(
-            invoice['total_amount'] ?? invoice['amount'] ?? 0,
-          );
-          final paid = _toAmount(invoice['paid_amount'] ?? 0);
-          final due = (total - paid).clamp(0.0, double.infinity);
-          if ((due - amount).abs() > 1.0) continue;
-
-          if (saleId.isNotEmpty) {
-            final candidateId = _extractRecordId(invoice);
-            if (candidateId != saleId) continue;
-          }
-
-          invoice['status'] = 'PAID';
-          invoice['payment_status'] = 'PAID';
-          invoice['paid_amount'] = total;
-          invoices[i] = invoice;
+        if (updatedInvoice != null) {
           await LocalStorageService.saveLocalInvoices(invoices);
-
-          final invoiceNum =
-              invoice['invoice_number']?.toString() ??
-              invoice['sale_id']?.toString() ??
-              invoice['invoiceId']?.toString() ??
-              invoice['id']?.toString() ??
-              '';
-          if (invoiceNum.isNotEmpty) {
-            unawaited(
-              SyncService.updateSalePayment(
-                invoiceNum,
-                'PAID',
-                total,
-                idempotencyKey: event.fingerprint,
-                referenceId: event.referenceId,
-                payerName: event.payerName,
-              ),
-            );
-            return invoiceNum;
-          }
-          return null;
         }
+
+        final newStatus = applied['payment_status']?.toString() ?? 'PARTIAL';
+        final newPaid = invoiceRecordPaid(applied);
+        unawaited(
+          SyncService.updateSalePayment(
+            target.invoiceNumber,
+            newStatus,
+            newPaid,
+            idempotencyKey: idempotencyKey,
+            referenceId: event.referenceId,
+            payerName: event.payerName,
+          ),
+        );
+        return target.invoiceNumber;
       } finally {
-        // ✅ FIX: Always remove lock, even if exception occurred
-        if (saleId.isNotEmpty) _settlingInvoiceIds.remove(saleId);
+        _settlingInvoiceIds.remove(saleId);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Auto-settle invoice failed: $e');
     }
     return null;
-  }
-
-  double _toAmount(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is num) return value.toDouble();
-    final cleaned = value.toString().replaceAll(RegExp(r'[^0-9.]'), '');
-    return double.tryParse(cleaned) ?? 0.0;
-  }
-
-  String _extractRecordId(Map<String, dynamic> record) {
-    return record['sale_id']?.toString() ??
-        record['invoice_number']?.toString() ??
-        record['saleId']?.toString() ??
-        record['invoiceId']?.toString() ??
-        record['id']?.toString() ??
-        '';
-  }
-
-  String _derivePaymentStatus(Map<String, dynamic> record) {
-    final explicit =
-        (record['payment_status'] ??
-                record['status'] ??
-                record['paymentStatus'])
-            ?.toString()
-            .toUpperCase() ??
-        '';
-    if (explicit.isNotEmpty) return explicit;
-
-    final total = _toAmount(
-      record['total'] ?? record['total_amount'] ?? record['grand_total'] ?? 0,
-    );
-    final paid = _toAmount(record['paid_amount'] ?? record['amount_paid'] ?? 0);
-    if (total <= 0) {
-      return paid > 0 ? 'PAID' : 'UNPAID';
-    }
-    if (paid >= total - 0.01) return 'PAID';
-    if (paid > 0) return 'PARTIAL';
-    return 'UNPAID';
   }
 
   void _scheduleLikelyReannounce(String id, double amount, String fingerprint) {
