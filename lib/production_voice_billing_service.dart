@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'product_catalog_service.dart';
 import 'roman_indian_voice_normalizer.dart';
 import 'voice_nlp_engine.dart';
+import 'voice_billing_safety_policy.dart';
 
 /// Production voice-billing line produced after speech normalization,
 /// multilingual parsing, catalog resolution, and price/unit enrichment.
@@ -516,11 +517,17 @@ class ProductionVoiceBillingService {
             existing.name.trim().toLowerCase() == line.name.trim().toLowerCase();
         final sameUnit =
             existing.unit.trim().toLowerCase() == line.unit.trim().toLowerCase();
-        final bothPriced = existing.price > 0 && line.price > 0;
-        final samePrice = bothPriced
-            ? (existing.price - line.price).abs() < 0.01
-            : true;
-        return sameName && sameUnit && samePrice;
+        return sameName &&
+            VoiceBillingSafetyPolicy.canMerge(
+              currentName: existing.name,
+              currentUnit: existing.unit,
+              currentPrice: existing.price,
+              currentPriceSource: existing.priceSource,
+              incomingName: line.name,
+              incomingUnit: line.unit,
+              incomingPrice: line.price,
+              incomingPriceSource: line.priceSource,
+            );
       });
 
       if (idx < 0) {
