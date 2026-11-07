@@ -2028,9 +2028,13 @@ class PriorityVoiceQueue {
   /// A UPI app notification and the matching bank SMS share no UTR at voice
   /// time, so fingerprint dedup alone cannot pair them. Claims are keyed by
   /// amount+direction and expire quickly; each claim keeps the account/payer
-  /// it was spoken with so two genuinely different payments to different
-  /// accounts are NOT swallowed.
-  static const Duration _weakClaimWindow = Duration(minutes: 8);
+  /// it was spoken with so two genuinely different payments are NOT swallowed.
+  /// STRICT RULES to avoid swallowing real payments:
+  ///   - Only matches cross-channel pairs (notification vs SMS vs Truecaller)
+  ///   - Requires at least one of: same account OR same payer
+  ///   - Different UTRs always allow both payments
+  ///   - 10-second window only (late echoes only)
+  static const Duration _weakClaimWindow = Duration(seconds: 10);
   final Map<String, List<_WeakVoiceClaim>> _weakClaims = {};
 
   static String? _normVoiceField(String? value) {
@@ -2084,6 +2088,16 @@ class PriorityVoiceQueue {
       if (reference != null &&
           claimReference != null &&
           reference != claimReference) {
+        continue;
+      }
+      // STRICT: Require at least one matching identity field (account OR payer OR reference)
+      // to consider this a likely echo. Two ₹500 payments with NO shared identity
+      // must both speak even if cross-channel.
+      final accountMatches = (account != null && claimAccount != null && account == claimAccount);
+      final payerMatches = (payer != null && claimPayer != null &&
+          (payer == claimPayer || payer.contains(claimPayer) || claimPayer.contains(payer)));
+      final referenceMatches = (reference != null && claimReference != null && reference == claimReference);
+      if (!accountMatches && !payerMatches && !referenceMatches) {
         continue;
       }
       // Conflicting account or payer => these are two different payments.
@@ -2495,7 +2509,9 @@ class PriorityVoiceQueue {
     final fingerprint = baseFingerprint;
     // Weak-claim dedup for UTR-less payments: catches app-notification →
     // bank-SMS echoes even when neither side shares a reference, account or
-    // payer. Conflicting account/payer still allows the second payment.
+    // payer. STRICT: only matches cross-channel with at least one shared identity
+    // (account/payer/reference) within 10 seconds. Two payments with no shared
+    // identity will both speak.
     final weakDuplicate = _isWeakDuplicate(e);
     final repeatedFingerprint = _isAlreadySpoken(fingerprint);
     final postedAt = e.sourceTimestamp;
