@@ -54,6 +54,7 @@ import 'production_voice_billing_service.dart';
 import 'stt_accuracy_config.dart';
 import 'speech_locale_policy.dart';
 import 'voice_billing_price_policy.dart';
+import 'voice_billing_safety_policy.dart';
 
 // ─── Language Config ──────────────────────────────────────────────────────────
 
@@ -287,6 +288,8 @@ class ParsedItem {
     'catalog_matched': catalogMatched,
     'price_source': priceSource,
     'price_missing': price <= 0,
+    'needs_confirmation': quantityPriceAmbiguous,
+    'quantity_price_ambiguous': quantityPriceAmbiguous,
     if (barcode != null && barcode!.isNotEmpty) 'barcode': barcode,
     if (productId != null && productId!.isNotEmpty) 'product_id': productId,
     if (gst != null) 'gst': gst,
@@ -901,6 +904,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   bool _hasInitializedStt = false;
   bool _catalogReady = false;
   bool _finalResultHandled = false;
+  bool _usedCloudSTTForCurrentBill = false;
+  bool _usedDeviceSTTForCurrentBill = false;
+  final List<double> _sttConfidenceSamples = <double>[];
+  String? _pendingSttWarning;
   Future<void>? _catalogLoadFuture;
   List<String> _parseWarnings = [];
   String _interpretedText = '';
@@ -1350,8 +1357,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       final detail = responseBody is Map
           ? (responseBody['detail'] ?? responseBody['message'])?.toString()
           : null;
-      throw StateError(
-        detail?.trim().isNotEmpty == true
+      throw VoiceBillingApiException(
+        statusCode: statusCode,
+        message: detail?.trim().isNotEmpty == true
             ? detail!.trim()
             : 'Groq voice billing returned HTTP $statusCode.',
       );
@@ -1385,10 +1393,25 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         );
         final confidence =
             double.tryParse((raw['confidence'] ?? '0').toString()) ?? 0;
+        final quantityPriceAmbiguous =
+            VoiceBillingSafetyPolicy.requiresManualReview(raw);
+        if (quantityPriceAmbiguous) {
+          final serverReviewText = (raw['confirmation_question'] ??
+                  raw['review_reason'] ??
+                  raw['unit_warning'] ??
+                  '')
+              .toString()
+              .trim();
+          final reviewWarning = serverReviewText.isNotEmpty
+              ? serverReviewText
+              : 'Please verify the quantity, unit and price for "$name" before billing.';
+          if (!warnings.contains(reviewWarning)) warnings.add(reviewWarning);
+        }
         if (name.isEmpty ||
             quantity == null ||
             !quantity.isFinite ||
             quantity <= 0 ||
+            !VoiceBillingSafetyPolicy.hasValidConfidence(confidence) ||
             confidence < 0.72) {
           if (name.isNotEmpty &&
               !warnings.contains('Please repeat or manually select "$name"; I could not safely verify it.')) {
@@ -1462,6 +1485,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                     .toString(),
               ),
               priceWarning: warning,
+              quantityPriceAmbiguous: quantityPriceAmbiguous,
               isConfirmed: false,
             ),
           );
@@ -1563,6 +1587,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             barcode: barcode.isEmpty ? null : barcode,
             gst: gst,
             priceWarning: priceWarning.isEmpty ? null : priceWarning,
+            quantityPriceAmbiguous: quantityPriceAmbiguous,
             // Require the shopkeeper to select this proposed line after
             // reviewing its real catalogue name, unit and price.
             isConfirmed: false,
@@ -1839,23 +1864,15 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
           final raw = result.recognizedWords.trim();
           final confidence = result.confidence;
-          if (result.finalResult &&
-              raw.isNotEmpty &&
-              confidence > 0 &&
-              confidence < 0.8) {
-            _finalResultHandled = true;
-            setState(() {
-              _transcript = '';
-              _transcriptCtrl.clear();
-              _lastFinalTranscript = '';
-            });
-            _showSnack(
-              _voiceBillingLabel(
-                'No items were identified. Try again or enter the items manually.',
-              ),
-              isError: true,
-            );
-            return;
+          if (result.finalResult && raw.isNotEmpty && !_finalResultHandled) {
+            _usedDeviceSTTForCurrentBill = true;
+            if (confidence.isFinite && confidence > 0 && confidence <= 1) {
+              _sttConfidenceSamples.add(confidence);
+              if (confidence < 0.8) {
+                _pendingSttWarning =
+                    'Speech recognition was uncertain. Check the displayed transcript, item names and quantities before confirming.';
+              }
+            }
           }
           final normalizedForParser = raw.isEmpty
               ? ''
@@ -1950,6 +1967,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         return;
       }
 
+      _usedCloudSTTForCurrentBill = true;
+      _pendingSttWarning = null;
       setState(() {
         _usingCloudAudioFallback = true;
         _isListening = true;
@@ -2406,25 +2425,38 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         warnings = correctedResult.warnings;
         interpretedText = correctedResult.interpretedText;
       } catch (error) {
-        // HTTP/API failures and malformed responses are not treated as a valid
-        // local AI parse: that fallback can mistake untranslated words for items.
-        if (error is StateError ||
-            error is FormatException ||
-            error.toString().toLowerCase().contains('not configured')) {
+        final errorText = error.toString().toLowerCase();
+        final isConfigurationError = errorText.contains('not configured') ||
+            errorText.contains('groq_api_key') ||
+            errorText.contains('groq api key');
+        final retryableApiFailure = error is VoiceBillingApiException &&
+            error.isTransient;
+        final transportFailure = error is SocketException ||
+            error is TimeoutException ||
+            error is http.ClientException;
+        final malformedResponse = error is FormatException;
+        final mayUseLocalFallback = !isConfigurationError &&
+            (retryableApiFailure ||
+                transportFailure ||
+                malformedResponse ||
+                (error is! StateError && error is! VoiceBillingApiException));
+
+        if (!mayUseLocalFallback) {
           items = <ParsedItem>[];
-          final detail = error.toString().toLowerCase();
           warnings = <String>[
-            detail.contains('groq_api_key') || detail.contains('not configured')
-                ? 'Groq voice billing is not configured on the backend. Set GROQ_API_KEY in Render → Environment, then retry. No items were added.'
-                : 'Groq could not verify this voice request. No items were auto-added; retry or enter the sale manually.',
+            if (isConfigurationError)
+              'Groq voice billing is not configured on the backend. Set GROQ_API_KEY in Render → Environment, then retry. No items were added.'
+            else
+              'Cloud voice billing could not verify this request. No items were added; retry or enter the sale manually.',
           ];
           if (kDebugMode) {
-            debugPrint('🎙️ [VoiceBilling] Groq API rejected this request; refusing local auto-add: $error');
+            debugPrint('🎙️ [VoiceBilling] cloud parser failure; no unsafe draft accepted: $error');
           }
         } else {
-          // Actual offline/network failures may use the conservative local parser.
+          // Transient API/provider outages and transport failures may still
+          // produce a local draft. Every line remains unchecked for cashier review.
           if (kDebugMode) {
-            debugPrint('🎙️ [VoiceBilling] Network failure; trying local fallback: $error');
+            debugPrint('🎙️ [VoiceBilling] cloud service unavailable; trying local draft: $error');
           }
           final fallback = await ProductionVoiceBillingService.parse(
             transcript: clean,
@@ -2438,7 +2470,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                   line.quantity.isFinite &&
                   line.quantity > 0 &&
                   line.price.isFinite &&
-                  line.price >= 0)
+                  line.price >= 0 &&
+                  VoiceBillingSafetyPolicy.hasValidConfidence(line.confidence))
               .map((line) {
                 final knownProduct = line.catalogMatched
                     ? _findKnownProduct(line.name)
@@ -2466,11 +2499,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               .toList();
           warnings = <String>[
             ...fallback.warnings,
-            'Groq is unreachable. Review every item name and price before billing; unlisted items will be added as custom lines without stock deduction.',
+            'Cloud voice billing is temporarily unavailable. This is a local draft only; verify every item name, quantity and price before confirming.',
           ];
         }
       }
 
+      final speechWarning = _pendingSttWarning;
+      if (speechWarning != null &&
+          speechWarning.isNotEmpty &&
+          !warnings.contains(speechWarning)) {
+        warnings = <String>[...warnings, speechWarning];
+      }
+      _pendingSttWarning = null;
       if (repairNotes.isNotEmpty) {
         warnings = <String>[
           ...warnings,
@@ -2536,11 +2576,16 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
     for (final item in incomingItems) {
       final idx = merged.indexWhere(
-        (current) =>
-            current.name.trim().toLowerCase() == item.name.trim().toLowerCase() &&
-            current.unit.trim().toLowerCase() == item.unit.trim().toLowerCase() &&
-            ((current.price <= 0 || item.price <= 0) ||
-                (current.price - item.price).abs() < 0.01),
+        (current) => VoiceBillingSafetyPolicy.canMerge(
+          currentName: current.name,
+          currentUnit: current.unit,
+          currentPrice: current.price,
+          currentPriceSource: current.priceSource,
+          incomingName: item.name,
+          incomingUnit: item.unit,
+          incomingPrice: item.price,
+          incomingPriceSource: item.priceSource,
+        ),
       );
 
       if (idx < 0) {
@@ -2563,7 +2608,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         productId: current.productId ?? item.productId,
         gst: current.gst ?? item.gst,
         priceWarning: current.priceWarning ?? item.priceWarning,
-        isConfirmed: current.isConfirmed || item.isConfirmed,
+        quantityPriceAmbiguous:
+            current.quantityPriceAmbiguous || item.quantityPriceAmbiguous,
+        // A merged row requires review if either contributing row was unconfirmed.
+        isConfirmed: current.isConfirmed && item.isConfirmed,
       );
     }
 
@@ -2836,11 +2884,25 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       );
     }
 
+    final averageSttConfidence = _sttConfidenceSamples.isEmpty
+        ? null
+        : _sttConfidenceSamples.reduce((a, b) => a + b) /
+            _sttConfidenceSamples.length;
+    final recognitionSource = _usedCloudSTTForCurrentBill &&
+            _usedDeviceSTTForCurrentBill
+        ? 'mixed'
+        : _usedCloudSTTForCurrentBill
+            ? 'cloud'
+            : _usedDeviceSTTForCurrentBill
+                ? 'device'
+                : 'manual';
+
     VoiceFeedbackLearningService.recordAccuracyMetrics(
       languageCode: _selectedLang.code,
-      usedCloudSTT: false,
-      sttConfidence: avgConfidence,
+      usedCloudSTT: _usedCloudSTTForCurrentBill,
+      sttConfidence: averageSttConfidence,
       nlpConfidence: avgConfidence,
+      recognitionSource: recognitionSource,
       itemsCorrect: confirmed.length,
       itemsTotal: ParsedItems.length,
     );
@@ -2859,6 +2921,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         _interpretedText = '';
         _transcript = '';
         _transcriptCtrl.clear();
+        _sttConfidenceSamples.clear();
+        _usedCloudSTTForCurrentBill = false;
+        _usedDeviceSTTForCurrentBill = false;
+        _pendingSttWarning = null;
         _clearEditControllers();
       });
     }
