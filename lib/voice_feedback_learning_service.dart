@@ -91,9 +91,8 @@ class VoiceFeedbackLearningService {
   static Future<void> recordAccuracyMetrics({
     required String languageCode,
     required bool usedCloudSTT,
-    required double? sttConfidence,
+    required double sttConfidence,
     required double nlpConfidence,
-    required String recognitionSource,
     required int itemsCorrect,
     required int itemsTotal,
   }) async {
@@ -105,18 +104,7 @@ class VoiceFeedbackLearningService {
         'timestamp': DateTime.now().toIso8601String(),
         'language': languageCode,
         'used_cloud_stt': usedCloudSTT,
-        'metrics_schema_version': 2,
-        'stt_confidence': sttConfidence != null &&
-                sttConfidence.isFinite &&
-                sttConfidence >= 0 &&
-                sttConfidence <= 1
-            ? sttConfidence
-            : null,
-        'stt_confidence_available': sttConfidence != null &&
-            sttConfidence.isFinite &&
-            sttConfidence >= 0 &&
-            sttConfidence <= 1,
-        'recognition_source': recognitionSource,
+        'stt_confidence': sttConfidence,
         'nlp_confidence': nlpConfidence,
         'items_correct': itemsCorrect,
         'items_total': itemsTotal,
@@ -158,29 +146,15 @@ class VoiceFeedbackLearningService {
       }
       
       double totalSTTConfidence = 0.0;
-      int sttConfidenceCount = 0;
       double totalNLPConfidence = 0.0;
       double totalAccuracy = 0.0;
       int cloudUsage = 0;
       
       for (final entry in languageMetrics) {
         final data = json.decode(entry);
-        final sttValue = data['stt_confidence'];
-        if (data['metrics_schema_version'] == 2 &&
-            data['stt_confidence_available'] == true &&
-            sttValue is num &&
-            sttValue.toDouble().isFinite) {
-          totalSTTConfidence += sttValue.toDouble();
-          sttConfidenceCount++;
-        }
-        final nlpValue = data['nlp_confidence'];
-        final accuracyValue = data['accuracy'];
-        if (nlpValue is num && nlpValue.toDouble().isFinite) {
-          totalNLPConfidence += nlpValue.toDouble();
-        }
-        if (accuracyValue is num && accuracyValue.toDouble().isFinite) {
-          totalAccuracy += accuracyValue.toDouble();
-        }
+        totalSTTConfidence += (data['stt_confidence'] as num).toDouble();
+        totalNLPConfidence += (data['nlp_confidence'] as num).toDouble();
+        totalAccuracy += (data['accuracy'] as num).toDouble();
         if (data['used_cloud_stt'] == true) cloudUsage++;
       }
       
@@ -188,11 +162,7 @@ class VoiceFeedbackLearningService {
       
       return {
         'total_records': count,
-        // Legacy records reused NLP confidence as STT confidence. Exclude
-        // them rather than presenting the old fabricated metric as real.
-        'avg_stt_confidence': sttConfidenceCount > 0
-            ? totalSTTConfidence / sttConfidenceCount
-            : null,
+        'avg_stt_confidence': totalSTTConfidence / count,
         'avg_nlp_confidence': totalNLPConfidence / count,
         'avg_accuracy': totalAccuracy / count,
         'cloud_usage': cloudUsage / count,

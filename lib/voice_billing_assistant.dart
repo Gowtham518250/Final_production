@@ -1864,8 +1864,12 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
           final raw = result.recognizedWords.trim();
           final confidence = result.confidence;
-          if (result.finalResult && raw.isNotEmpty && !_finalResultHandled) {
+          if (raw.isNotEmpty) {
+            // Mark device recognition even when the cashier manually stops
+            // before the platform emits a final result.
             _usedDeviceSTTForCurrentBill = true;
+          }
+          if (result.finalResult && raw.isNotEmpty && !_finalResultHandled) {
             if (confidence.isFinite && confidence > 0 && confidence <= 1) {
               _sttConfidenceSamples.add(confidence);
               if (confidence < 0.8) {
@@ -2554,6 +2558,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         setState(() => _isProcessing = false);
       }
     } catch (e, stackTrace) {
+      _pendingSttWarning = null;
       if (mounted) {
         setState(() {
           _isProcessing = false;
