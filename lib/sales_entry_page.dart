@@ -3217,7 +3217,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 if (acceptedAmount <= 0) return;
                 setState(() {
                   _paidAmount += acceptedAmount;
-                  if (_paidAmount >= currentTotal - 0.5) {
+                  if (SalePaymentPolicy.isFullyPaid(_paidAmount, currentTotal)) {
                     _paidAmount = currentTotal;
                     _paymentConfirmed = true;
                   }
@@ -3227,9 +3227,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 unawaited(syncRecordedBillPayment(acceptedAmount));
 
                 // Voice Announcement for the received cash portion
-                final double remaining = (currentTotal - _paidAmount) < 0.1
-                    ? 0.0
-                    : (currentTotal - _paidAmount);
+                final double remaining = SalePaymentPolicy.remainingDue(
+                  _paidAmount,
+                  currentTotal,
+                );
                 if (remaining > 0) {
                   PaymentAnnouncementService().announceReceipt(
                     amount: acceptedAmount,
@@ -3795,7 +3796,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       final remainingDue = math.max(0.0, currentTotal - _paidAmount).toDouble();
       final estimatedReceipt = math.min(event.amount, remainingDue).toDouble();
       final possibleRepeat = _possibleRepeatConfirmationIds.remove(event.id);
-      if (remainingDue <= 0.5) {
+      if (SalePaymentPolicy.isFullyPaid(_paidAmount, currentTotal)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -7485,7 +7486,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 ),
               ),
 
-            if (_paidAmount > 0 && _paidAmount < totalAmount - 0.5)
+            if (SalePaymentPolicy.isPartialPaid(_paidAmount, totalAmount))
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(10),
@@ -7514,7 +7515,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   ],
                 ),
               ),
-            if (totalAmount > _paidAmount + 0.5)
+            if (!SalePaymentPolicy.isFullyPaid(_paidAmount, totalAmount))
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: InkWell(
@@ -7985,7 +7986,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                     ),
                   ),
                   const SizedBox(height: 8),
-                  if (_paidAmount > 0 && _paidAmount < totalAmount - 0.5)
+                  if (SalePaymentPolicy.isPartialPaid(_paidAmount, totalAmount))
                     GestureDetector(
                       onTap: _showPartialCashDialog,
                       child: Container(

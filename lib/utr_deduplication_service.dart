@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'scoped_shared_preferences.dart';
 
 /// FIX-C: Redis fallback for UTR deduplication
 /// Checks UTR conflicts using Redis first, falls back to local SharedPreferences
@@ -44,18 +45,30 @@ class UtrDeduplicationService {
       }
     }
 
-    // FALLBACK: local SharedPreferences dedup
-    final prefs = await SharedPreferences.getInstance();
-    final confirmed = prefs.getStringList('confirmed_utrs_local') ?? [];
+    final confirmed = await _loadLocalUtrs();
     return confirmed.contains(utr); // true = conflict detected
+  }
+
+  static const _utrKey = 'confirmed_utrs_local';
+
+  static Future<List<String>> _loadLocalUtrs() async {
+    final scoped = await ScopedSharedPreferences.getStringList(_utrKey) ?? [];
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getStringList(_utrKey) ?? [];
+    if (legacy.isEmpty) return scoped;
+    final merged = <String>{...scoped, ...legacy}.toList();
+    if (merged.length > _localUtrCacheMax) {
+      merged.removeRange(0, merged.length - _localUtrCacheMax);
+    }
+    await ScopedSharedPreferences.setStringList(_utrKey, merged);
+    await prefs.remove(_utrKey);
+    return merged;
   }
 
   /// Register a UTR as confirmed
   /// Updates both local cache and Redis (async)
   static Future<void> registerUtr(String utr) async {
-    // Register locally regardless of Redis outcome (fail-safe)
-    final prefs = await SharedPreferences.getInstance();
-    final confirmed = prefs.getStringList('confirmed_utrs_local') ?? [];
+    final confirmed = await _loadLocalUtrs();
 
     if (!confirmed.contains(utr)) {
       confirmed.add(utr);
@@ -65,7 +78,7 @@ class UtrDeduplicationService {
         confirmed.removeAt(0);
       }
 
-      await prefs.setStringList('confirmed_utrs_local', confirmed);
+      await ScopedSharedPreferences.setStringList(_utrKey, confirmed);
     }
 
     // Also try to register in Redis (fire and forget, non-blocking)
@@ -90,13 +103,13 @@ class UtrDeduplicationService {
 
   /// Clear old UTR cache (optional cleanup)
   static Future<void> clearOldUtrs() async {
+    await ScopedSharedPreferences.remove(_utrKey);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('confirmed_utrs_local');
+    await prefs.remove(_utrKey);
   }
 
   /// Get all registered UTRs (for debugging/audit)
   static Future<List<String>> getAllRegisteredUtrs() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList('confirmed_utrs_local') ?? [];
+    return _loadLocalUtrs();
   }
 }

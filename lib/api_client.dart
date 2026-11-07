@@ -4,11 +4,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show kDebugMode, debugPrint, visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:synchronized/synchronized.dart';
 import 'rate_limiter.dart';
 import 'error_log_helper.dart';
 import 'dart:io';
 import 'secure_token_storage.dart';
+import 'agent_debug_log.dart';
 import 'timeout_config.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'comprehensive_logger.dart';
@@ -487,6 +489,81 @@ class ApiClient {
       pendingCompleter.complete(false);
     }
     _refreshCompleter = null;
+  }
+
+  static int? _accessTokenExpDeltaSec(String? token) {
+    if (token == null || token.isEmpty) return null;
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      var payload = parts[1];
+      final pad = payload.length % 4;
+      if (pad > 0) payload += '=' * (4 - pad);
+      final decoded = json.decode(utf8.decode(base64Url.decode(payload)));
+      if (decoded is! Map) return null;
+      final exp = int.tryParse('${decoded['exp']}');
+      if (exp == null) return null;
+      return exp - DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Refresh a near-expired or already-expired access JWT before a request that
+  /// cannot replay its body (multipart file streams are single-use).
+  static Future<bool> _ensureFreshAccessToken() async {
+    try {
+      final token = await SecureTokenStorage.getToken();
+      if (token == null || token.isEmpty) return false;
+      final delta = _accessTokenExpDeltaSec(token);
+      if (delta == null || delta > 60) return true;
+      // #region agent log
+      AgentDebugLog.log(
+        location: 'api_client.dart:_ensureFreshAccessToken',
+        message: 'Proactive access token refresh',
+        hypothesisId: 'H1',
+        data: {'expDeltaSec': delta},
+      );
+      // #endregion
+      final refreshed = await SessionManagementService.autoLogin();
+      return refreshed != null && refreshed['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<List<http.MultipartFile> Function()?> _replayableMultipartFiles(
+    List<http.MultipartFile>? files,
+  ) async {
+    if (files == null || files.isEmpty) {
+      return () => files ?? const <http.MultipartFile>[];
+    }
+    const maxReplayBytes = 8 * 1024 * 1024;
+    if (files.any((file) => file.length > maxReplayBytes)) return null;
+    final snapshots = <({
+      String field,
+      List<int> bytes,
+      String? filename,
+      MediaType? contentType,
+    })>[];
+    for (final file in files) {
+      snapshots.add((
+        field: file.field,
+        bytes: await file.finalize().toBytes(),
+        filename: file.filename,
+        contentType: file.contentType,
+      ));
+    }
+    return () => snapshots
+        .map(
+          (part) => http.MultipartFile.fromBytes(
+            part.field,
+            part.bytes,
+            filename: part.filename,
+            contentType: part.contentType,
+          ),
+        )
+        .toList();
   }
 
   static Duration _timeoutWithRefresh(String path) {
@@ -1096,6 +1173,20 @@ class ApiClient {
         debugPrint('[AUTH] Access token expired: true');
         debugPrint('[AUTH] 401 from $endpoint; attempting refresh');
       }
+      // #region agent log
+      AgentDebugLog.log(
+        location: 'api_client.dart:_withTokenRefresh:401',
+        message: 'HTTP 401 before refresh',
+        hypothesisId: 'H1',
+        data: {
+          'endpoint': endpoint,
+          'hasAccess': accessTokenBeforeRequest?.isNotEmpty == true,
+          'expDeltaSec': AgentDebugLog.accessExpDeltaSec(
+            accessTokenBeforeRequest,
+          ),
+        },
+      );
+      // #endregion
 
       bool success = false;
       var ownsRefresh = false;
@@ -1238,6 +1329,18 @@ class ApiClient {
               '[AUTH] Original request retry status: ${retriedResponse.statusCode}',
             );
           }
+          // #region agent log
+          AgentDebugLog.log(
+            location: 'api_client.dart:_withTokenRefresh:retry',
+            message: 'Retry after refresh',
+            hypothesisId: 'H4',
+            data: {
+              'endpoint': endpoint,
+              'refreshSuccess': true,
+              'retryStatus': retriedResponse.statusCode,
+            },
+          );
+          // #endregion
           return retriedResponse;
         } catch (e) {
           if (kDebugMode)
@@ -1259,6 +1362,23 @@ class ApiClient {
         final authRejected = SessionManagementService.shouldTreatRefreshAsRejected(
           response.statusCode,
         );
+        // #region agent log
+        AgentDebugLog.log(
+          location: 'api_client.dart:_withTokenRefresh:fail',
+          message: 'Refresh failed; returning original 401',
+          hypothesisId: 'H4',
+          data: {
+            'endpoint': endpoint,
+            'ownsRefresh': ownsRefresh,
+            'hasLocalSession': hasLocalSession,
+            'authRejectedFromOriginalStatus': authRejected,
+            'originalStatus': response.statusCode,
+            'hasRefresh':
+                (await SecureTokenStorage.getRefreshToken())?.isNotEmpty ==
+                true,
+          },
+        );
+        // #endregion
         if (!hasLocalSession && ownsRefresh && authRejected && !_sessionExpiryNotified) {
           _sessionExpiryNotified = true;
           if (kDebugMode)
@@ -1414,16 +1534,65 @@ class ApiClient {
         '🔵 Multipart Fields: ${_redactSensitiveData(sanitizedFields)}',
       );
 
+    final replayableFiles = await _replayableMultipartFiles(files);
+
+    Future<http.StreamedResponse> send(String base) {
+      final outgoingFiles =
+          replayableFiles != null ? replayableFiles() : files;
+      return _makeMultipartRequest(
+        base,
+        path,
+        sanitizedFields,
+        headers,
+        outgoingFiles,
+      ).timeout(timeout);
+    }
+
+    Future<http.StreamedResponse> sendWithRefresh(String base) async {
+      await _ensureFreshAccessToken();
+      var resp = await send(base);
+      if (resp.statusCode == 401 &&
+          !_shouldSkipRefresh(path) &&
+          replayableFiles != null) {
+        try {
+          await resp.stream.drain<void>();
+        } catch (_) {}
+        // #region agent log
+        AgentDebugLog.log(
+          location: 'api_client.dart:postMultipart:401',
+          message: 'Multipart 401; refreshing and retrying',
+          hypothesisId: 'H2',
+          data: {'path': path, 'status': resp.statusCode},
+        );
+        // #endregion
+        await SessionManagementService.autoLogin();
+        resp = await send(base);
+      }
+      // #region agent log
+      if (resp.statusCode == 401 || resp.statusCode == 403) {
+        AgentDebugLog.log(
+          location: 'api_client.dart:postMultipart',
+          message: 'Multipart auth error after refresh attempt',
+          hypothesisId: 'H2',
+          data: {
+            'path': path,
+            'status': resp.statusCode,
+            'hasAccess':
+                (await SecureTokenStorage.getToken())?.isNotEmpty == true,
+            'expDeltaSec': AgentDebugLog.accessExpDeltaSec(
+              await SecureTokenStorage.getToken(),
+            ),
+          },
+        );
+      }
+      // #endregion
+      return resp;
+    }
+
     // Try last successful base first
     if (_lastSuccessfulBase != null && hasRecentConnection()) {
       try {
-        final resp = await _makeMultipartRequest(
-          _lastSuccessfulBase!,
-          path,
-          sanitizedFields,
-          headers,
-          files,
-        ).timeout(timeout);
+        final resp = await sendWithRefresh(_lastSuccessfulBase!);
 
         // 🔒 RESPONSE VALIDATION: Validate response before returning
         if (resp.statusCode < 200 || resp.statusCode >= 600) {
@@ -1442,13 +1611,7 @@ class ApiClient {
     // Try all bases
     for (final base in _bases) {
       try {
-        final resp = await _makeMultipartRequest(
-          base,
-          path,
-          sanitizedFields,
-          headers,
-          files,
-        ).timeout(timeout);
+        final resp = await sendWithRefresh(base);
 
         // 🔒 RESPONSE VALIDATION: Validate response before returning
         if (resp.statusCode < 200 || resp.statusCode >= 600) {

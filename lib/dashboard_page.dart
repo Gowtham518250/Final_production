@@ -6,7 +6,6 @@ import 'package:retail_mind/premium_ui.dart';
 import 'sale_service.dart';
 import 'sales_restore_service.dart';
 import 'shop_logo_format.dart';
-import 'agent_debug_log.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -77,6 +76,7 @@ import 'app_bottom_nav.dart';
 import 'payment_announcement_service.dart';
 import 'online_store_service.dart';
 import 'online_order_service.dart';
+import 'online_store_qr_page.dart';
 import 'low_stock_alerts_service.dart';
 import 'cache_consistency_service.dart';
 import 'inventory_stock_helper.dart';
@@ -118,6 +118,7 @@ import 'loyalty_program_page.dart';
 import 'smart_notifications_service.dart';
 import 'widgets/dashboard/operations_reports_section.dart';
 import 'widgets/dashboard/shop_modules_section.dart';
+import 'widgets/shop_logo_mark.dart';
 import 'widgets/dashboard/compact_quick_actions.dart';
 import 'widgets/dashboard/printer_monetization_banner.dart';
 import 'widgets/dashboard/recent_bill_data.dart';
@@ -799,6 +800,115 @@ class _DashboardPageState extends State<DashboardPage>
     if (_queuedPaymentConfirmationIds.length > 500) {
       _queuedPaymentConfirmationIds.remove(_queuedPaymentConfirmationIds.first);
     }
+    unawaited(_enqueueConfirmationIfDue(event));
+  }
+
+  static const String _askedConfirmationPrefsKey =
+      'payment_confirmation_asked_v1';
+  static const Duration _askedKeyRetention = Duration(days: 7);
+  static const Duration _notificationStreamCooldown = Duration(seconds: 30);
+  Map<String, DateTime>? _askedConfirmations;
+
+  Future<Map<String, DateTime>> _loadAskedConfirmations() async {
+    final cached = _askedConfirmations;
+    if (cached != null) return cached;
+
+    final result = <String, DateTime>{};
+    try {
+      final raw = await ScopedSharedPreferences.getString(
+        _askedConfirmationPrefsKey,
+      );
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          decoded.forEach((key, value) {
+            final at = DateTime.tryParse(value.toString());
+            if (at != null) result[key.toString()] = at;
+          });
+        }
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Could not load payment prompt history: $error');
+      }
+    }
+    _askedConfirmations = result;
+    return result;
+  }
+
+  Future<bool> _claimConfirmationPrompt(PaymentEvent event) async {
+    final asked = await _loadAskedConfirmations();
+    final now = DateTime.now();
+    asked.removeWhere((_, at) => now.difference(at) > _askedKeyRetention);
+
+    final keys = <String, Duration>{};
+    final reference = event.normalizedReferenceId;
+    if (reference != null) {
+      final fingerprint = sha256.convert(utf8.encode(reference)).toString();
+      keys['ref:$fingerprint'] = _askedKeyRetention;
+    }
+    final sourceFingerprint = event.sourceEventFingerprint;
+    if (sourceFingerprint != null) {
+      keys['src:$sourceFingerprint'] = _askedKeyRetention;
+    }
+    final notificationStream = event.sourceNotificationStream;
+    final notificationPayer = event.notificationPayerIdentity ?? '';
+    final accountSuffix = (event.accountSuffix ?? '').trim();
+    if (notificationStream != null &&
+        (notificationPayer.isNotEmpty || accountSuffix.isNotEmpty)) {
+      final streamEvidence = [
+        notificationStream,
+        event.amount.toStringAsFixed(2),
+        event.app.name,
+        event.direction.name,
+        notificationPayer,
+        accountSuffix,
+      ].join('|');
+      final fingerprint = sha256
+          .convert(utf8.encode(streamEvidence))
+          .toString();
+      keys['stream:$fingerprint'] = _notificationStreamCooldown;
+    }
+
+    if (keys.isNotEmpty) {
+      for (final entry in keys.entries) {
+        final previous = asked[entry.key];
+        if (previous != null && now.difference(previous) < entry.value) {
+          return false;
+        }
+      }
+      for (final key in keys.keys) {
+        asked[key] = now;
+      }
+      if (asked.length > 500) {
+        final oldest = asked.entries.toList()
+          ..sort((a, b) => a.value.compareTo(b.value));
+        for (final entry in oldest.take(asked.length - 500)) {
+          asked.remove(entry.key);
+        }
+      }
+      try {
+        await ScopedSharedPreferences.setString(
+          _askedConfirmationPrefsKey,
+          jsonEncode(
+            asked.map((key, at) => MapEntry(key, at.toIso8601String())),
+          ),
+        );
+      } catch (error) {
+        if (kDebugMode) {
+          debugPrint('Could not persist payment prompt history: $error');
+        }
+      }
+    }
+    return true;
+  }
+
+  Future<void> _enqueueConfirmationIfDue(PaymentEvent event) async {
+    final due = await _claimConfirmationPrompt(event);
+    if (!due || !mounted) {
+      _queuedPaymentConfirmationIds.remove(event.id);
+      return;
+    }
     _pendingPaymentConfirmations.add(event);
     if (!_paymentConfirmationDialogShowing) {
       unawaited(_showNextPaymentConfirmation());
@@ -817,7 +927,7 @@ class _DashboardPageState extends State<DashboardPage>
     try {
       final shouldRecord = await showDialog<bool>(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible: true,
         builder: (dialogContext) => AlertDialog(
           title: const LiveTranslatedText('Payment detected'),
           content: Column(
@@ -869,6 +979,10 @@ class _DashboardPageState extends State<DashboardPage>
           ),
           actions: [
             TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const LiveTranslatedText('Review later'),
+            ),
+            TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
               child: const LiveTranslatedText('Not received'),
             ),
@@ -907,7 +1021,7 @@ class _DashboardPageState extends State<DashboardPage>
             ),
           );
         }
-      } else {
+      } else if (shouldRecord == false) {
         PaymentDetectionService().rejectDetectedPayment(event);
         try {
           await OnlinePaymentHistoryService.rejectPendingPayment(event);
@@ -936,7 +1050,7 @@ class _DashboardPageState extends State<DashboardPage>
     } finally {
       _paymentConfirmationDialogShowing = false;
       // Do not retain a stale queue-lock for an event after its review dialog
-      // closes. The six-hour alert policy and persistent transaction status,
+      // closes. The reminder interval and persistent transaction status,
       // not this UI set, decide whether a later reminder is due.
       _queuedPaymentConfirmationIds.remove(event.id);
       if (mounted && _pendingPaymentConfirmations.isNotEmpty) {
@@ -2585,6 +2699,24 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  void _openOnlineStoreQrPage() {
+    final shopId = _onlineStoreShopId;
+    if (shopId == null || shopId <= 0) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OnlineStoreQrPage(
+          shopId: shopId,
+          shopName: shopName,
+          logoBytes: logoBytes,
+          onPrint: _printOnlineStoreQr,
+          onCopyLink: _copyOnlineStoreUrl,
+        ),
+      ),
+    );
+  }
+
   Future<void> _copyOnlineStoreShopId() async {
     final shopId = _onlineStoreShopId;
     if (shopId == null || shopId <= 0) return;
@@ -2750,12 +2882,12 @@ class _DashboardPageState extends State<DashboardPage>
               Expanded(
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.storefront_rounded,
-                      color: Color(0xFF16A34A),
-                      size: 22,
+                    ShopLogoMark(
+                      imageBytes: logoBytes,
+                      size: 44,
+                      fallbackColor: const Color(0xFF16A34A),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: LiveTranslatedText(
                         'Online Store is Live',
@@ -2922,9 +3054,7 @@ class _DashboardPageState extends State<DashboardPage>
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: LiveTranslatedText(
-                              AppEndpoints.customerShopUrl(
-                                _onlineStoreShopId!,
-                              ),
+                              AppEndpoints.customerShopUrl(_onlineStoreShopId!),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.poppins(
@@ -2950,97 +3080,35 @@ class _DashboardPageState extends State<DashboardPage>
                     ],
                   ),
                 ),
-                if (_onlineStoreShopId != null &&
-                    _onlineStoreShopId! > 0) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.black.withValues(alpha: 0.18)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF16A34A).withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: QrImageView(
-                            data: AppEndpoints.customerShopUrl(
-                              _onlineStoreShopId!,
-                            ),
-                            size: 96,
-                            version: QrVersions.auto,
-                            gapless: false,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              LiveTranslatedText(
-                                'Print your store QR',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF166534),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              LiveTranslatedText(
-                                'Customers can scan it to open this shop.',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  height: 1.4,
-                                  color: isDark
-                                      ? Colors.white70
-                                      : const Color(0xFF4B5563),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              OutlinedButton.icon(
-                                onPressed: _printOnlineStoreQr,
-                                icon: const Icon(
-                                  Icons.print_rounded,
-                                  size: 17,
-                                ),
-                                label: const LiveTranslatedText('Print QR'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFF15803D),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _openOnlineStoreUrl,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 17),
-                    label: LiveTranslatedText(
-                      'Open store',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                Row(
+                  children: [
+                    if (_onlineStoreShopId != null && _onlineStoreShopId! > 0)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openOnlineStoreQrPage,
+                          icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                          label: const LiveTranslatedText('Generate QR'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF15803D),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                    if (_onlineStoreShopId != null && _onlineStoreShopId! > 0)
+                      const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: _openOnlineStoreUrl,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                      label: LiveTranslatedText(
+                        'Open store',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -3097,17 +3165,10 @@ class _DashboardPageState extends State<DashboardPage>
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.storefront_rounded,
-                    color: Color(0xFF4F46E5),
-                    size: 26,
-                  ),
+                ShopLogoMark(
+                  imageBytes: logoBytes,
+                  size: 50,
+                  fallbackColor: const Color(0xFF4F46E5),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -3658,20 +3719,6 @@ class _DashboardPageState extends State<DashboardPage>
       if (changed) {
         await LocalStorageService.saveSales(currentLocal);
       }
-
-      // #region agent log
-      AgentDebugLog.log(
-        location: 'dashboard_page.dart:_fetchInvoicesFromBackend',
-        message: 'BACKEND FETCH MERGE',
-        hypothesisId: 'H4',
-        data: {
-          'apiItemCount': allItems.length,
-          'groupedBills': grouped.length,
-          'addedNewBills': addedNewBills,
-          'repairedExistingBills': repairedExistingBills,
-        },
-      );
-      // #endregion
 
       return changed || removedCancelledOrderRecords > 0;
     } catch (e) {
@@ -5150,18 +5197,6 @@ class _DashboardPageState extends State<DashboardPage>
       if (reconciledHistory.isEmpty && !historyComplete && mounted) {
         setState(() => _salesHistoryHydrating = true);
       }
-      // #region agent log
-      AgentDebugLog.log(
-        location: 'dashboard_page.dart:_loadSales',
-        message: 'DASHBOARD LOAD SALES',
-        hypothesisId: 'H4',
-        data: {
-          'localCacheCount': reconciledHistory.length,
-          'willFetchBackendInBackground': true,
-        },
-      );
-      // #endregion
-
       List<Map<String, dynamic>> localSalesFlattened = [];
       try {
         localSalesFlattened = await _flattenLocalSales(reconciledHistory);

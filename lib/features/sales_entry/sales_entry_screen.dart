@@ -13,6 +13,7 @@ import '../../language_provider.dart';
 import '../../localization.dart';
 import '../../speech_locale_policy.dart';
 import '../../voice_billing_localization.dart';
+import '../../app_motion.dart';
 import 'controllers/sales_entry_provider.dart';
 import 'widgets/compact_total_card.dart';
 import 'widgets/premium_product_entry.dart';
@@ -462,22 +463,18 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                           ],
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => context.read<SalesEntryProvider>().isVoiceProcessing || _finalizingVoice ? null : _isListening ? _stopListening(context) : _startListening(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(color: Colors.black12, blurRadius: 10),
-                            ],
-                          ),
-                          child: Icon(
-                            _isListening ? Icons.mic : Icons.mic_none,
-                            color: _isListening ? const Color(0xFFEF4444) : const Color(0xFF4F46E5),
-                            size: 32,
-                          ),
+                      Selector<SalesEntryProvider, bool>(
+                        selector: (_, state) => state.isVoiceProcessing,
+                        builder: (context, isProcessing, _) =>
+                            AnimatedMicButton(
+                          listening: _isListening,
+                          processing: isProcessing || _finalizingVoice,
+                          size: 56,
+                          onTap: isProcessing || _finalizingVoice
+                              ? null
+                              : _isListening
+                              ? () => _stopListening(context)
+                              : () => _startListening(context),
                         ),
                       )
                     ],
@@ -595,8 +592,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                             LiveTranslatedText('Grand Total', style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFF64748B))),
                             Selector<SalesEntryProvider, double>(
                               selector: (_, state) => state.totalAmount,
-                              builder: (context, total, _) => LiveTranslatedText(
-                                '₹${total.toStringAsFixed(2)}',
+                              builder: (context, total, _) =>
+                                  AnimatedAmountText(
+                                value: total,
                                 style: GoogleFonts.spaceMono(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w800,
@@ -649,8 +647,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          isLoading: false,
+                          isLoading: provider.isSaving,
                           onPressed: () async {
+                            if (provider.isSaving) return;
                             HapticFeedback.mediumImpact();
                             // Save Sale: Persists invoice + updates dashboard instantly
                             // Show loading indicator

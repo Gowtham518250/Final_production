@@ -16,7 +16,6 @@ import 'sale_service.dart';
 import 'error_log_helper.dart';
 import 'sales_dedup_helper.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'agent_debug_log.dart';
 import 'attendance_offline_service.dart';
 import 'attendance_shift_policy.dart';
 import 'services/order_history_service.dart';
@@ -1315,19 +1314,6 @@ class SyncService {
               'source': 'cloud_restore',
             });
           }
-
-          // #region agent log
-          AgentDebugLog.log(
-            location: 'sync_service.dart:downloadUserData',
-            message: 'CLOUD MERGE RESULT',
-            hypothesisId: 'H4',
-            data: {
-              'apiItemCount': allApiItems.length,
-              'groupedBills': grouped.length,
-              'newItemsMerged': newItems.length,
-            },
-          );
-          // #endregion
 
           if (newItems.isNotEmpty) {
             final List<Map<String, dynamic>> merged = [

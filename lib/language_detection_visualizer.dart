@@ -19,6 +19,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'voice_billing_display.dart';
+import 'voice_billing_localization.dart';
+import 'voice_nlp_engine.dart';
+
 // ─── Script detection ─────────────────────────────────────────────────────────
 
 enum DetectedScript {
@@ -155,6 +159,7 @@ class _LanguageDetectionVisualizerState
     extends State<LanguageDetectionVisualizer> with TickerProviderStateMixin {
   late AnimationController _fadeCtrl;
   late AnimationController _slideCtrl;
+  late AnimationController _listenCtrl;
   late Animation<double>   _fadeAnim;
   late Animation<Offset>   _slideAnim;
 
@@ -180,6 +185,7 @@ class _LanguageDetectionVisualizerState
     super.initState();
     _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
     _slideCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _listenCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
     _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(begin: const Offset(0, -0.3), end: Offset.zero)
         .animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
@@ -187,6 +193,7 @@ class _LanguageDetectionVisualizerState
     _words = _buildDetectedWords(widget.transcript, widget.parsedItems);
     _fadeCtrl.forward();
     _slideCtrl.forward();
+    if (widget.isListening) _listenCtrl.repeat(reverse: true);
   }
 
   @override
@@ -205,8 +212,18 @@ class _LanguageDetectionVisualizerState
               .toString();
           return oldName != newName;
         }).contains(true);
-    if (old.transcript != widget.transcript || parsedNamesChanged) {
+    if (old.transcript != widget.transcript ||
+        parsedNamesChanged ||
+        old.selectedLocale != widget.selectedLocale) {
       _analyzeTranscript();
+    }
+    if (old.isListening != widget.isListening) {
+      if (widget.isListening) {
+        _listenCtrl.repeat(reverse: true);
+      } else {
+        _listenCtrl.stop();
+        _listenCtrl.value = 0;
+      }
     }
   }
 
@@ -214,8 +231,10 @@ class _LanguageDetectionVisualizerState
   void dispose() {
     _fadeCtrl.dispose();
     _slideCtrl.dispose();
+    _listenCtrl.dispose();
     super.dispose();
   }
+
 
   void _analyzeTranscript() {
     final script = ScriptDetector.detect(widget.transcript);
@@ -333,7 +352,10 @@ class _LanguageDetectionVisualizerState
             // ── Row 1: Language badges ────────────────────────────────────────
             Row(
               children: [
-                _buildLangBadge(langInfo, 'Selected'),
+                _buildLangBadge(
+                  langInfo,
+                  VoiceBillingLocalization.label('Selected', displayLocale),
+                ),
                 if (isMismatch && autoInfo != null) ...[
                   const SizedBox(width: 8),
                   const Icon(Icons.arrow_forward_ios,
@@ -341,7 +363,11 @@ class _LanguageDetectionVisualizerState
                   const SizedBox(width: 8),
                   SlideTransition(
                     position: _slideAnim,
-                    child: _buildLangBadge(autoInfo, 'Detected', pulse: true),
+                    child: _buildLangBadge(
+                      autoInfo,
+                      VoiceBillingLocalization.label('Detected', displayLocale),
+                      pulse: true,
+                    ),
                   ),
                 ],
                 const Spacer(),
@@ -380,9 +406,15 @@ class _LanguageDetectionVisualizerState
 
             const SizedBox(height: 12),
 
+            if (widget.isListening) ...[
+              const SizedBox(height: 12),
+              _ListeningWaveform(animation: _listenCtrl),
+            ],
+
             // ── Row 2: Word-by-word confidence display ───────────────────────
             if (_words.isNotEmpty) ...[
-              Text('RECOGNIZED WORDS',
+              Text(
+                VoiceBillingLocalization.label('RECOGNIZED WORDS', displayLocale),
                 style: GoogleFonts.rajdhani(
                   color: const Color(0xFF42A5F5),
                   fontSize: 10,
@@ -393,7 +425,13 @@ class _LanguageDetectionVisualizerState
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: _words.map(_buildWordChip).toList(),
+                children: [
+                  for (var i = 0; i < _words.length; i++)
+                    _AnimatedDetectChip(
+                      delay: Duration(milliseconds: 55 * i),
+                      child: _buildWordChip(_words[i], displayLocale),
+                    ),
+                ],
               ),
             ],
 
@@ -402,7 +440,8 @@ class _LanguageDetectionVisualizerState
               const SizedBox(height: 12),
               const Divider(color: Color(0xFF1E3A5F), height: 1),
               const SizedBox(height: 10),
-              Text('PRODUCT NAMES',
+              Text(
+                VoiceBillingLocalization.label('PRODUCT NAMES', displayLocale),
                 style: GoogleFonts.rajdhani(
                   color: const Color(0xFF42A5F5),
                   fontSize: 10,
@@ -410,10 +449,13 @@ class _LanguageDetectionVisualizerState
                   letterSpacing: 1.5,
                 )),
               const SizedBox(height: 8),
-              ...widget.parsedItems.map((item) => _buildProductRow(
-                item,
-                displayLocale,
-                langInfo.color,
+              ...widget.parsedItems.asMap().entries.map((entry) => _AnimatedDetectChip(
+                delay: Duration(milliseconds: 90 * entry.key),
+                child: _buildProductRow(
+                  entry.value,
+                  displayLocale,
+                  langInfo.color,
+                ),
               )),
             ],
           ],
@@ -463,8 +505,9 @@ class _LanguageDetectionVisualizerState
     );
   }
 
-  Widget _buildWordChip(DetectedWord word) {
+  Widget _buildWordChip(DetectedWord word, String locale) {
     final isProduct = word.role == 'product';
+    final shown = _localizedWord(word, locale);
     return Tooltip(
       message: [
         'Role: ${word.role}',
@@ -482,14 +525,14 @@ class _LanguageDetectionVisualizerState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(word.native,
+            Text(shown,
               style: GoogleFonts.notoSans(
                 fontSize: 13,
                 color: word.color,
                 fontWeight: isProduct ? FontWeight.w700 : FontWeight.w400,
               )),
-            if (word.canonical != null && word.canonical != word.native)
-              Text(word.canonical!,
+            if (isProduct && shown != word.native)
+              Text(word.native,
                 style: GoogleFonts.rajdhani(
                   fontSize: 9,
                   color: word.color.withOpacity(0.7),
@@ -501,22 +544,40 @@ class _LanguageDetectionVisualizerState
     );
   }
 
+  String _localizedWord(DetectedWord word, String locale) {
+    if (word.role == 'unit') {
+      return VoiceBillingDisplay.unit(word.native, locale);
+    }
+    if (word.role == 'price') {
+      final lower = word.native.toLowerCase().replaceAll('.', '');
+      if (const {'rs', 'rupees', 'rupee'}.contains(lower) ||
+          word.native.contains('₹')) {
+        return VoiceBillingLocalization.label('Price', locale);
+      }
+    }
+    if (word.role == 'product') {
+      return VoiceBillingDisplay.productName(
+            word.canonical ?? word.native,
+            locale,
+          ) ??
+          word.native;
+    }
+    return word.native;
+  }
+
   Widget _buildProductRow(
       Map<String, dynamic> item, String locale, Color accentColor) {
     final name  = (item['product_name'] ?? item['name'] ?? '').toString();
     final price = item['price'] ?? item['unit_price'] ?? 0;
     final qty   = item['quantity'] ?? item['qty'] ?? 1;
-    final unit  = item['unit'] ?? 'pc';
+    final unit  = _displayUnit(item, locale);
     final conf  = (item['confidence'] as num?)?.toDouble() ?? 0.7;
-
-    // Native script name (from our cross-script map, if available)
-    final nativeName = _getNativeProductName(name, locale);
+    final nativeName = VoiceBillingDisplay.productName(name, locale);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          // Confidence indicator dot
           Container(
             width: 8, height: 8,
             decoration: BoxDecoration(
@@ -533,32 +594,26 @@ class _LanguageDetectionVisualizerState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Native script name (large)
-                if (nativeName != null && nativeName != name)
-                  Text(nativeName,
-                    style: GoogleFonts.notoSans(
-                      fontSize: 15,
-                      color: accentColor,
-                      fontWeight: FontWeight.w700,
-                    )),
-                // English canonical name
-                Text(name,
-                  style: GoogleFonts.rajdhani(
-                    fontSize: nativeName != null && nativeName != name ? 11 : 14,
-                    color: nativeName != null && nativeName != name
-                        ? const Color(0xFF546E7A)
-                        : Colors.white,
-                    fontWeight: FontWeight.w600,
+                Text(nativeName ?? name,
+                  style: GoogleFonts.notoSans(
+                    fontSize: 15,
+                    color: accentColor,
+                    fontWeight: FontWeight.w700,
                   )),
+                if (nativeName != null && nativeName != name)
+                  Text(name,
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 11,
+                      color: const Color(0xFF546E7A),
+                      fontWeight: FontWeight.w600,
+                    )),
               ],
             ),
           ),
-          // Qty × unit
           Text('$qty $unit',
             style: GoogleFonts.rajdhani(
               fontSize: 12, color: const Color(0xFF7986CB))),
           const SizedBox(width: 8),
-          // Price
           Text('₹${price.toString()}',
             style: GoogleFonts.rajdhani(
               fontSize: 14,
@@ -570,65 +625,21 @@ class _LanguageDetectionVisualizerState
     );
   }
 
-  /// Returns the native-script name for a canonical English product name,
-  /// based on the current display locale. Pure lookup table — no API.
-  String? _getNativeProductName(String canonical, String locale) {
-    const nativeNames = <String, Map<String, String>>{
-      'sugar':   {'hi-IN': 'चीनी', 'ta-IN': 'சர்க்கரை', 'te-IN': 'పంచదార',
-                  'kn-IN': 'ಸಕ್ಕರೆ', 'ml-IN': 'പഞ്ചസാര', 'mr-IN': 'साखर',
-                  'bn-IN': 'চিনি', 'gu-IN': 'ખાંડ', 'pa-IN': 'ਖੰਡ'},
-      'rice':    {'hi-IN': 'चावल', 'ta-IN': 'அரிசி', 'te-IN': 'బియ్యం',
-                  'kn-IN': 'ಅಕ್ಕಿ', 'ml-IN': 'അരി', 'mr-IN': 'तांदूळ',
-                  'bn-IN': 'চাল', 'gu-IN': 'ચોખા', 'pa-IN': 'ਚਾਵਲ'},
-      'salt':    {'hi-IN': 'नमक', 'ta-IN': 'உப்பு', 'te-IN': 'ఉప్పు',
-                  'kn-IN': 'ಉಪ್ಪು', 'ml-IN': 'ഉപ്പ്', 'mr-IN': 'मीठ',
-                  'bn-IN': 'লবণ', 'gu-IN': 'મીઠું', 'pa-IN': 'ਲੂਣ'},
-      'oil':     {'hi-IN': 'तेल', 'ta-IN': 'எண்ணெய்', 'te-IN': 'నూనె',
-                  'kn-IN': 'ಎಣ್ಣೆ', 'ml-IN': 'എണ്ണ', 'mr-IN': 'तेल',
-                  'bn-IN': 'তেল', 'gu-IN': 'તેલ', 'pa-IN': 'ਤੇਲ'},
-      'dal':     {'hi-IN': 'दाल', 'ta-IN': 'பருப்பு', 'te-IN': 'పప్పు',
-                  'kn-IN': 'ಬೇಳೆ', 'ml-IN': 'പരിപ്പ്', 'mr-IN': 'डाळ',
-                  'bn-IN': 'ডাল', 'gu-IN': 'દાળ', 'pa-IN': 'ਦਾਲ'},
-      'atta':    {'hi-IN': 'आटा', 'ta-IN': 'மாவு', 'te-IN': 'పిండి',
-                  'kn-IN': 'ಹಿಟ್ಟು', 'ml-IN': 'മാവ്', 'mr-IN': 'पीठ',
-                  'bn-IN': 'আটা', 'gu-IN': 'લોટ', 'pa-IN': 'ਆਟਾ'},
-      'onion':   {'hi-IN': 'प्याज', 'ta-IN': 'வெங்காயம்', 'te-IN': 'ఉల్లిపాయ',
-                  'kn-IN': 'ಈರುಳ್ಳಿ', 'ml-IN': 'ഉള്ളി', 'mr-IN': 'कांदा',
-                  'bn-IN': 'পেঁয়াজ', 'gu-IN': 'ડુંગળી', 'pa-IN': 'ਪਿਆਜ਼'},
-      'tomato':  {'hi-IN': 'टमाटर', 'ta-IN': 'தக்காளி', 'te-IN': 'టమాటా',
-                  'kn-IN': 'ಟೊಮ್ಯಾಟೊ', 'ml-IN': 'തക്കാളി', 'mr-IN': 'टोमॅटो',
-                  'bn-IN': 'টমেটো', 'gu-IN': 'ટામેટા', 'pa-IN': 'ਟਮਾਟਰ'},
-      'potato':  {'hi-IN': 'आलू', 'ta-IN': 'உருளைக்கிழங்கு', 'te-IN': 'బంగాళాదుంప',
-                  'kn-IN': 'ಆಲೂಗಡ್ಡೆ', 'ml-IN': 'ഉരുളക്കിഴങ്ങ്', 'mr-IN': 'बटाटा',
-                  'bn-IN': 'আলু', 'gu-IN': 'બટાટા', 'pa-IN': 'ਆਲੂ'},
-      'ghee':    {'hi-IN': 'घी', 'ta-IN': 'நெய்', 'te-IN': 'నెయ్యి',
-                  'kn-IN': 'ತುಪ್ಪ', 'ml-IN': 'നെയ്യ്', 'mr-IN': 'तूप',
-                  'bn-IN': 'ঘি', 'gu-IN': 'ઘી', 'pa-IN': 'ਘਿਓ'},
-      'milk':    {'hi-IN': 'दूध', 'ta-IN': 'பால்', 'te-IN': 'పాలు',
-                  'kn-IN': 'ಹಾಲು', 'ml-IN': 'പാൽ', 'mr-IN': 'दूध',
-                  'bn-IN': 'দুধ', 'gu-IN': 'દૂધ', 'pa-IN': 'ਦੁੱਧ'},
-      'curd':    {'hi-IN': 'दही', 'ta-IN': 'தயிர்', 'te-IN': 'పెరుగు',
-                  'kn-IN': 'ಮೊಸರು', 'ml-IN': 'തൈര്', 'mr-IN': 'दही',
-                  'bn-IN': 'দই', 'gu-IN': 'દહીં', 'pa-IN': 'ਦਹੀਂ'},
-      'butter':  {'hi-IN': 'मक्खन', 'ta-IN': 'வெண்ணெய்', 'te-IN': 'వెన్న',
-                  'kn-IN': 'ಬೆಣ್ಣೆ', 'ml-IN': 'വെണ്ണ', 'mr-IN': 'लोणी',
-                  'bn-IN': 'মাখন', 'gu-IN': 'માખણ', 'pa-IN': 'ਮੱਖਣ'},
-      'turmeric':{'hi-IN': 'हल्दी', 'ta-IN': 'மஞ்சள்', 'te-IN': 'పసుపు',
-                  'kn-IN': 'ಅರಿಶಿನ', 'ml-IN': 'മഞ്ഞൾ', 'mr-IN': 'हळद',
-                  'bn-IN': 'হলুদ', 'gu-IN': 'હળદર', 'pa-IN': 'ਹਲਦੀ'},
-      'cumin':   {'hi-IN': 'जीरा', 'ta-IN': 'சீரகம்', 'te-IN': 'జీలకర్ర',
-                  'kn-IN': 'ಜೀರಿಗೆ', 'ml-IN': 'ജീരകം', 'mr-IN': 'जिरे',
-                  'bn-IN': 'জিরা', 'gu-IN': 'જીરૂ', 'pa-IN': 'ਜੀਰਾ'},
-      'chilli':  {'hi-IN': 'मिर्च', 'ta-IN': 'மிளகாய்', 'te-IN': 'మిరప',
-                  'kn-IN': 'ಮೆಣಸಿನಕಾಯಿ', 'ml-IN': 'മുളക്', 'mr-IN': 'मिरची',
-                  'bn-IN': 'মরিচ', 'gu-IN': 'મરચું', 'pa-IN': 'ਮਿਰਚ'},
-      'coriander':{'hi-IN':'धनिया', 'ta-IN': 'கொத்தமல்லி', 'te-IN': 'కొత్తిమీర',
-                  'kn-IN': 'ಕೊತ್ತಂಬರಿ', 'ml-IN': 'കൊത്തമ്പലരി', 'mr-IN': 'कोथिंबीर',
-                  'bn-IN': 'ধনে', 'gu-IN': 'ધાણા', 'pa-IN': 'ਧਨੀਆ'},
-    };
-
-    final key = canonical.toLowerCase().trim();
-    return nativeNames[key]?[locale];
+  String _displayUnit(Map<String, dynamic> item, String locale) {
+    var unit = (item['unit'] ?? '').toString().trim();
+    final name = (item['product_name'] ?? item['name'] ?? '').toString();
+    if (unit.isEmpty || unit.toLowerCase() == 'pc') {
+      final spokenKg = RegExp(
+        r'\b(\d+(?:\.\d+)?)\s*(kg|kilo|కిలో)\b',
+        caseSensitive: false,
+      ).hasMatch(widget.transcript);
+      if (spokenKg) {
+        unit = 'kg';
+      } else {
+        unit = UnitInferrer.infer(name);
+      }
+    }
+    return VoiceBillingDisplay.unit(unit, locale);
   }
 }
 
@@ -690,4 +701,71 @@ class _LangDisplay {
   final String name, flag;
   final Color color;
   const _LangDisplay(this.name, this.flag, this.color);
+}
+
+class _AnimatedDetectChip extends StatelessWidget {
+  const _AnimatedDetectChip({
+    required this.delay,
+    required this.child,
+  });
+
+  final Duration delay;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 280 + delay.inMilliseconds),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, animatedChild) {
+        return Opacity(
+          opacity: value.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 10),
+            child: Transform.scale(
+              scale: 0.92 + (0.08 * value),
+              child: animatedChild,
+            ),
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+class _ListeningWaveform extends StatelessWidget {
+  const _ListeningWaveform({required this.animation});
+
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(7, (index) {
+            final phase = (animation.value + (index / 7)) % 1.0;
+            final height = 6 + (math.sin(phase * math.pi) * (10 + index * 1.4));
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+              width: 4,
+              height: height,
+              decoration: BoxDecoration(
+                color: Color.lerp(
+                  const Color(0xFF6366F1),
+                  const Color(0xFF22D3EE),
+                  phase,
+                ),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
 }

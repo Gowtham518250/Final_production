@@ -97,6 +97,24 @@ class VoiceBillingDisplay {
     'curd': 'curd',
     'yogurt': 'curd',
     'curry': 'masala',
+    'dumpa': 'potato',
+    'aloo': 'potato',
+    'alu': 'potato',
+    'bangaladumpa': 'potato',
+  };
+
+  /// STT often returns Romanised Telugu/Hindi as a whole phrase.
+  static const Map<String, String> _phraseAliases = {
+    'bungalow dumpa': 'potato',
+    'bangala dumpa': 'potato',
+    'bangalore dumpa': 'potato',
+    'bungalow potato': 'potato',
+    'sunflower oil': 'oil',
+  };
+
+  static const Set<String> _skipTokens = {
+    'of', 'and', 'the', 'a', 'an', 'with', 'from',
+    'bungalow', 'bangala', 'bangalore',
   };
 
   /// Tokens that need no translation (quantities, sizes, units, joiners).
@@ -116,10 +134,16 @@ class VoiceBillingDisplay {
     final trimmed = canonical.trim();
     if (trimmed.isEmpty) return null;
 
-    final tokens = trimmed
-        .toLowerCase()
+    final folded = trimmed.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    final phraseKey = _phraseAliases[folded] ?? _aliases[folded];
+    if (phraseKey != null) {
+      final row = _products[phraseKey];
+      if (row != null) return row[column];
+    }
+
+    final tokens = folded
         .split(RegExp(r'[\s\-_/(),.]+'))
-        .where((t) => t.isNotEmpty)
+        .where((t) => t.isNotEmpty && !_skipTokens.contains(t))
         .toList();
     if (tokens.isEmpty) return null;
 
@@ -130,7 +154,7 @@ class VoiceBillingDisplay {
         out.add(token);
         continue;
       }
-      final key = _aliases[token] ?? token;
+      final key = _phraseAliases[token] ?? _aliases[token] ?? token;
       final row = _products[key] ?? _products[_stripPlural(key)];
       if (row != null) {
         out.add(row[column]);

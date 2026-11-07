@@ -31,7 +31,7 @@ void main() {
       );
     });
 
-    test('expired customer session returns to customer login, not owner login', () {
+    test('customer sessions use the separate website, not an app route', () {
       expect(
         resolveStartupRoute(
           booting: false,
@@ -41,37 +41,43 @@ void main() {
           identityVerified: false,
           staffMode: false,
         ),
-        '/customer-login',
+        '/login',
       );
     });
 
-    test('a persisted owner token alone does not bypass owner verification', () {
-      expect(
-        resolveStartupRoute(
-          booting: false,
-          authenticated: true,
-          role: 'OWNER',
-          shopDetailsRequired: false,
-          identityVerified: false,
-          staffMode: false,
-        ),
-        '/identity-verification',
-      );
-    });
+    test(
+      'a persisted owner token alone does not bypass owner verification',
+      () {
+        expect(
+          resolveStartupRoute(
+            booting: false,
+            authenticated: true,
+            role: 'OWNER',
+            shopDetailsRequired: false,
+            identityVerified: false,
+            staffMode: false,
+          ),
+          '/identity-verification',
+        );
+      },
+    );
 
-    test('a staff mode saved on disk does not bypass staff PIN after restart', () {
-      expect(
-        resolveStartupRoute(
-          booting: false,
-          authenticated: true,
-          role: 'OWNER',
-          shopDetailsRequired: false,
-          identityVerified: false,
-          staffMode: true,
-        ),
-        '/identity-verification',
-      );
-    });
+    test(
+      'a staff mode saved on disk does not bypass staff PIN after restart',
+      () {
+        expect(
+          resolveStartupRoute(
+            booting: false,
+            authenticated: true,
+            role: 'OWNER',
+            shopDetailsRequired: false,
+            identityVerified: false,
+            staffMode: true,
+          ),
+          '/identity-verification',
+        );
+      },
+    );
 
     test('verified owner can open dashboard in the same process', () {
       expect(
@@ -126,21 +132,24 @@ void main() {
       );
     });
 
-    test('verified staff can open restricted dashboard in the same process', () {
-      expect(
-        resolveStartupRoute(
-          booting: false,
-          authenticated: true,
-          role: 'OWNER',
-          shopDetailsRequired: false,
-          identityVerified: true,
-          staffMode: true,
-        ),
-        '/dashboard',
-      );
-    });
+    test(
+      'verified staff can open restricted dashboard in the same process',
+      () {
+        expect(
+          resolveStartupRoute(
+            booting: false,
+            authenticated: true,
+            role: 'OWNER',
+            shopDetailsRequired: false,
+            identityVerified: true,
+            staffMode: true,
+          ),
+          '/dashboard',
+        );
+      },
+    );
 
-    test('customer flow does not receive owner/staff identity gate', () {
+    test('authenticated customer sessions do not enter the owner app', () {
       expect(
         resolveStartupRoute(
           booting: false,
@@ -150,39 +159,45 @@ void main() {
           identityVerified: false,
           staffMode: false,
         ),
-        '/customer-marketplace',
+        '/login',
       );
     });
 
-    test('owner with a confirmed empty roster skips the worker verification gate', () {
-      expect(
-        resolveStartupRoute(
-          booting: false,
-          authenticated: true,
-          role: 'OWNER',
-          shopDetailsRequired: false,
-          identityVerified: false,
-          staffMode: false,
-          hasActiveWorkers: false,
-        ),
-        '/dashboard',
-      );
-    });
+    test(
+      'owner with a confirmed empty roster skips the worker verification gate',
+      () {
+        expect(
+          resolveStartupRoute(
+            booting: false,
+            authenticated: true,
+            role: 'OWNER',
+            shopDetailsRequired: false,
+            identityVerified: false,
+            staffMode: false,
+            hasActiveWorkers: false,
+          ),
+          '/dashboard',
+        );
+      },
+    );
 
-    test('owner with active workers must pass verification when not verified', () {
-      expect(
-        resolveStartupRoute(
-          booting: false,
-          authenticated: true,
-          role: 'OWNER',
-          shopDetailsRequired: false,
-          identityVerified: false,
-          staffMode: false,
-          hasActiveWorkers: true,
-        ),
-        '/identity-verification',
-      );
-    });
+    test(
+      'owner with active workers must pass verification when not verified',
+      () {
+        expect(
+          resolveStartupRoute(
+            booting: false,
+            authenticated: true,
+            role: 'OWNER',
+            shopDetailsRequired: false,
+            identityVerified: false,
+            staffMode: false,
+            hasActiveWorkers: true,
+          ),
+          '/identity-verification',
+        );
+      },
+    );
 
     test('unknown worker roster keeps the verification gate fail-closed', () {
       expect(
@@ -199,20 +214,23 @@ void main() {
       );
     });
 
-    test('worker account cannot bypass verification just because no active workers exist', () {
-      expect(
-        resolveStartupRoute(
-          booting: false,
-          authenticated: true,
-          role: 'WORKER',
-          shopDetailsRequired: false,
-          identityVerified: false,
-          staffMode: false,
-          hasActiveWorkers: false,
-        ),
-        '/identity-verification',
-      );
-    });
+    test(
+      'worker account cannot bypass verification just because no active workers exist',
+      () {
+        expect(
+          resolveStartupRoute(
+            booting: false,
+            authenticated: true,
+            role: 'WORKER',
+            shopDetailsRequired: false,
+            identityVerified: false,
+            staffMode: false,
+            hasActiveWorkers: false,
+          ),
+          '/identity-verification',
+        );
+      },
+    );
 
     test('unknown role fails closed to verification instead of dashboard', () {
       expect(

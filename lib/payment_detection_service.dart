@@ -887,13 +887,12 @@ class PdsConfig {
   static const Duration likelyReannounceAfter = Duration(seconds: 12);
 
   // Duplicate notifications are suppressed during the workday, but a still-
-  // unresolved payment must be eligible for a fresh review reminder the next
-  // morning. Persistent confirmed-payment history remains the financial guard.
+  // unresolved payment can be surfaced again for review the next day.
   static const Duration dedupUtrTtl = Duration(hours: 24);
-  // Native notification replay keys have a shorter window so the same still-
-  // pending candidate can be surfaced again after the overnight review cooldown.
-  // Confirmed reference identities remain protected by the 24-hour UTR cache.
+  // General native notification replay window. Pending review records use the
+  // longer, explicit reminder interval below.
   static const Duration dedupNativeNotificationTtl = Duration(hours: 6);
+  static const Duration pendingReviewReminderEvery = Duration(hours: 24);
 
   /// Notification/SMS candidates older than this at processing time were
   /// recovered after a service outage. The event timestamp stays current;
@@ -1143,9 +1142,9 @@ class PdsStateStore {
         try {
           var expiry = DateTime.parse(isoExpiry as String);
           if (isLegacy && fp.startsWith('notification-event:')) {
-            // v1 used a 24-hour native-notification TTL. Convert only native
-            // replay keys to the six-hour reminder window. UTR keys stay at
-            // 24 hours until persistent history identifies their review state.
+            // v1 used a 24-hour native-notification TTL. Convert legacy replay
+            // keys to the current general notification window. Pending review
+            // deadlines are rebuilt from durable payment history below.
             expiry = expiry.subtract(_legacyExpiryReduction);
           }
           if (expiry.isAfter(now)) {
@@ -3206,8 +3205,6 @@ class PaymentDetectionService {
       <String, Completer<bool>>{};
   final Map<String, String> _nativeHistorySourceIdentities =
       <String, String>{};
-  final Map<String, String> _nativeHistorySourceFingerprints =
-      <String, String>{};
   final Map<String, String> _nativeHistoryEventIds = <String, String>{};
   final Map<String, String> _nativeHistoryDedupFingerprints =
       <String, String>{};
@@ -4153,7 +4150,7 @@ class PaymentDetectionService {
           detectedAt = null;
         }
         final reminderAt = (detectedAt ?? now).add(
-          PdsConfig.dedupNativeNotificationTtl,
+          PdsConfig.pendingReviewReminderEvery,
         );
         if (reminderAt.isAfter(now)) {
           _dedupStore[fingerprint] = reminderAt;
@@ -4755,10 +4752,9 @@ class PaymentDetectionService {
         acknowledged = false;
       }
     } else {
-      // The dedup claim is provisional until history is durable. Release both
-      // isolate-local SharedPreferences and Android SQLite claims, plus only
-      // this event's in-memory dedup state, so a stream replay can retry it.
-      final sourceFingerprint = _nativeHistorySourceFingerprints[key];
+      // The payment was already announced before this history write. Keep its
+      // announcement claims so a replay can retry persistence without speaking
+      // the same payment again. Release history/UI dedup state below.
       final sourceIdentity = _nativeHistorySourceIdentities[key];
       final eventId = _nativeHistoryEventIds[key];
       final dedupFingerprint = _nativeHistoryDedupFingerprints[key];
@@ -4766,28 +4762,11 @@ class PaymentDetectionService {
       final transportFingerprint = _nativeHistoryTransportFingerprints[key];
       final payloadFingerprint = _nativeHistoryPayloadFingerprints[key];
 
-      try {
-        await CrossIsolatePaymentAnnouncementDeduplicator
-            .releaseSourceFingerprint(sourceFingerprint);
-      } catch (error, stackTrace) {
-        PdsLogger.e(
-          'L1',
-          'Could not release Flutter payment dedup claim',
-          error,
-          stackTrace,
-        );
-      }
-      try {
-        await NotificationListenerService
-            .releasePaymentAnnouncementIdentity(sourceIdentity);
-      } catch (error, stackTrace) {
-        PdsLogger.e(
-          'L1',
-          'Could not release Android payment dedup claim',
-          error,
-          stackTrace,
-        );
-      }
+      PdsLogger.i(
+        'L1',
+        'Payment history write failed; retaining announcement claim to avoid '
+            're-announcement on replay (source=${sourceIdentity ?? "unknown"})',
+      );
 
       if (eventId != null && eventId.isNotEmpty) {
         _recentEmittedPayments.removeWhere(
@@ -4824,7 +4803,6 @@ class PaymentDetectionService {
       _nativeHistoryReplayAttempts.remove(key);
     }
     _nativeHistorySourceIdentities.remove(key);
-    _nativeHistorySourceFingerprints.remove(key);
     _nativeHistoryEventIds.remove(key);
     _nativeHistoryDedupFingerprints.remove(key);
     _nativeHistoryReferences.remove(key);
@@ -6586,12 +6564,8 @@ class PaymentDetectionService {
       // confirms that this final event is represented in local payment history.
       _nativeNotificationHistoryPending.add(nativeEventKey);
       final sourceIdentity = finalEvent.sourceEventIdentity;
-      final sourceFingerprint = finalEvent.sourceEventFingerprint;
       if (sourceIdentity != null && sourceIdentity.isNotEmpty) {
         _nativeHistorySourceIdentities[nativeEventKey] = sourceIdentity;
-      }
-      if (sourceFingerprint != null && sourceFingerprint.isNotEmpty) {
-        _nativeHistorySourceFingerprints[nativeEventKey] = sourceFingerprint;
       }
       _nativeHistoryEventIds[nativeEventKey] = finalEvent.id;
       _nativeHistoryDedupFingerprints[nativeEventKey] = finalEvent.fingerprint;

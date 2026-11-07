@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
+import 'package:flutter/foundation.dart' show kDebugMode, kReleaseMode, debugPrint;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -86,6 +86,10 @@ class EmailSenderService {
         .replaceAll("'", '&#39;');
   }
 
+  static bool get _clientSmtpAllowed =>
+      !kReleaseMode ||
+      const bool.fromEnvironment('ALLOW_CLIENT_SMTP', defaultValue: false);
+
   static Future<bool> sendOTPEmail({
     required String recipientEmail,
     required String otp,
@@ -94,6 +98,12 @@ class EmailSenderService {
     String bodyText = 'You requested to reset your password. Use the OTP below:',
     String? confirmationUrl,
   }) async {
+    if (!_clientSmtpAllowed) {
+      if (kDebugMode) {
+        debugPrint('Client SMTP OTP is disabled in release builds.');
+      }
+      return false;
+    }
     final email =
         (await _secureStorage.read(key: _kSenderEmail)) ?? _fallbackSender();
     final password =
@@ -161,6 +171,7 @@ class EmailSenderService {
     required num currentStock,
     required num minStock,
   }) async {
+    if (!_clientSmtpAllowed) return false;
     final email =
         (await _secureStorage.read(key: _kSenderEmail)) ?? _fallbackSender();
     final password =
@@ -190,6 +201,12 @@ class EmailSenderService {
   static Future<Map<String, dynamic>> testEmailConfiguration({
     required String recipientEmail,
   }) async {
+    if (!_clientSmtpAllowed) {
+      return {
+        'success': false,
+        'message': 'Device SMTP is disabled. OTPs and alerts are sent by the Retail Mind backend.',
+      };
+    }
     await initialize();
     if (_senderEmail.isEmpty || _appPassword.isEmpty) {
       return {

@@ -493,7 +493,7 @@ void main() {
     );
 
     test(
-      'persistent cache gives pending references six hours and confirmed references 24 hours',
+      'persistent cache gives pending review reminders after 24 hours',
       () async {
         SharedPreferences.setMockInitialValues({});
         final service = PaymentDetectionService();
@@ -538,7 +538,7 @@ void main() {
 
         expect(
           pendingExpiry
-              .difference(pendingAt.add(const Duration(hours: 6)))
+              .difference(pendingAt.add(const Duration(hours: 24)))
               .inSeconds
               .abs(),
           lessThan(2),

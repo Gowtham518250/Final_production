@@ -2,6 +2,7 @@ import 'live_translated_text.dart';
 import 'localization.dart';
 import 'indic_number_repair.dart';
 import 'voice_billing_display.dart';
+import 'app_motion.dart';
 import 'widgets/offline_first_text.dart';
 import 'guided_dictation_overlay.dart';
 // =============================================================================
@@ -877,7 +878,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
   late AnimationController _pulseCtrl;
   late AnimationController _waveCtrl;
-  late Animation<double> _pulseAnim;
 
   late TextEditingController _transcriptCtrl;
 
@@ -1593,10 +1593,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
-
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.25).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
 
     _catalogLoadFuture = _initializeCatalog();
 
@@ -3222,45 +3218,10 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Center(
-        child: GestureDetector(
+        child: AnimatedMicButton(
+          listening: _isListening,
+          processing: _isProcessing,
           onTap: _isProcessing ? null : _toggleListening,
-          child: AnimatedBuilder(
-            animation: _pulseAnim,
-            builder: (_, __) {
-              final scale = _isListening ? _pulseAnim.value : 1.0;
-              return Transform.scale(
-                scale: scale,
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: _isListening
-                          ? const [Color(0xFF7C3AED), Color(0xFF4F46E5)]
-                          : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _isListening
-                            ? const Color(0xFF6366F1).withValues(alpha: 0.28)
-                            : const Color(0xFF6366F1).withValues(alpha: 0.16),
-                        blurRadius: _isListening ? 28 : 16,
-                        spreadRadius: _isListening ? 4 : 0,
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    _isProcessing
-                        ? Icons.hourglass_empty_rounded
-                        : (_isListening ? Icons.stop_rounded : Icons.mic_rounded),
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-              );
-            },
-          ),
         ),
       ),
     );
@@ -3512,7 +3473,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         : confMed ? const Color(0xFFFFC107)
         : const Color(0xFFFF3D00);
 
-    return Padding(
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 260 + (idx * 70)),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 14),
+          child: child,
+        ),
+      ),
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Container(
         decoration: BoxDecoration(
@@ -3709,6 +3681,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           ),
         ),
       ),
+    ),
     );
   }
 

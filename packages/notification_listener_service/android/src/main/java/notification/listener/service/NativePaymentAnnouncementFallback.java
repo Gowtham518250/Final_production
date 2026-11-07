@@ -52,6 +52,8 @@ final class NativePaymentAnnouncementFallback {
             new HashMap<String, SpeakRequest>();
     private static final Set<String> RETRIED =
             Collections.synchronizedSet(new HashSet<String>());
+    private static final Set<String> STARTED =
+            Collections.synchronizedSet(new HashSet<String>());
 
     private static TextToSpeech tts;
     private static boolean ttsInitializing;
@@ -351,6 +353,11 @@ final class NativePaymentAnnouncementFallback {
             @Override
             public void onStart(String utteranceId) {
                 // The event remains claimed until onDone or onError.
+                synchronized (LOCK) {
+                    if (IN_FLIGHT.containsKey(utteranceId)) {
+                        STARTED.add(utteranceId);
+                    }
+                }
             }
 
             @Override
@@ -360,6 +367,10 @@ final class NativePaymentAnnouncementFallback {
 
             @Override
             public void onError(String utteranceId) {
+                if (STARTED.contains(utteranceId)) {
+                    completeUtterance(utteranceId);
+                    return;
+                }
                 failUtterance(utteranceId, "tts_callback_error");
             }
         });
@@ -370,6 +381,7 @@ final class NativePaymentAnnouncementFallback {
         synchronized (LOCK) {
             request = IN_FLIGHT.remove(utteranceId);
         }
+        STARTED.remove(utteranceId);
         if (request == null) return;
 
         NotificationRelayReceiver.markNativeAnnouncementHandled(
@@ -381,6 +393,10 @@ final class NativePaymentAnnouncementFallback {
     }
 
     private static void failUtterance(String utteranceId, String reason) {
+        if (STARTED.contains(utteranceId)) {
+            completeUtterance(utteranceId);
+            return;
+        }
         SpeakRequest request;
         synchronized (LOCK) {
             request = IN_FLIGHT.remove(utteranceId);
@@ -590,11 +606,16 @@ final class NativePaymentAnnouncementFallback {
                 }
 
                 final String scheduledUtteranceId = utteranceId;
-                // A broken OEM TTS engine can fail to call either onDone or onError.
-                // The watchdog releases the claim after a bounded wait.
+                // QUEUE_ADD can leave speech waiting behind earlier utterances.
+                // Scale the watchdog with queue depth so queued requests do not
+                // release their dedup claim and get announced twice.
+                final int queueDepth;
+                synchronized (LOCK) {
+                    queueDepth = IN_FLIGHT.size();
+                }
                 MAIN.postDelayed(
                         () -> failUtterance(scheduledUtteranceId, "tts_completion_timeout"),
-                        45000L);
+                        45000L + 15000L * queueDepth);
 
                 int result = tts.speak(message, TextToSpeech.QUEUE_ADD, params);
                 if (result == TextToSpeech.ERROR) {

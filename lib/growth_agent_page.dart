@@ -49,6 +49,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   bool _loading = true;
   bool _busy = false;
+  int _wizardStep = 0;
   String _message = '';
   String _goal = 'nearby';
   String _language = 'en';
@@ -790,9 +791,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         ? null
         : int.tryParse(rawProductId.toString());
     final festivalName = _festivalName;
-    final creativeTemplate = _recommendedTemplate;
-    const creativeGoal = 'nearby';
-    const creativeFormat = 'feed';
+    final creativeTemplate = _template;
+    final creativeGoal = _goal;
+    final creativeFormat = _adFormat;
     final discountText = _discountPriceController.text.trim();
     double? discountPrice;
     if (discountText.isNotEmpty) {
@@ -1026,6 +1027,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           ? ''
           : _formatDate(offerValidUntil);
       _currentDraft = draft;
+      _wizardStep = 2;
       _headlineController.text = headline;
       _captionController.text = caption;
       await _persistCampaign(draft);
@@ -1543,6 +1545,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
 
     setState(() {
+      _wizardStep = 2;
       _currentDraft = draft;
       _shopController.text = draft['shop_name']?.toString() ?? 'My Shop';
       _shopDetails = draft['shop_details'] is Map
@@ -1603,6 +1606,392 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _openWizardStep(int step) {
+    if (step < 0 || step > 2 || (step == 2 && _currentDraft == null)) return;
+    setState(() => _wizardStep = step);
+  }
+
+  Widget _wizardProgress() {
+    const steps = ['Goal', 'Design', 'Review'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE7E2F7)),
+      ),
+      child: Row(
+        children: List.generate(steps.length, (index) {
+          final current = index == _wizardStep;
+          final complete = index < _wizardStep;
+          return Expanded(
+            child: InkWell(
+              onTap: index <= _wizardStep || _currentDraft != null
+                  ? () => _openWizardStep(index)
+                  : null,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 13,
+                    backgroundColor: current || complete
+                        ? _purple
+                        : const Color(0xFFF1F0F7),
+                    child: complete
+                        ? const Icon(Icons.check, color: Colors.white, size: 15)
+                        : Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              color: current ? Colors.white : _muted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: LiveTranslatedText(
+                      steps[index],
+                      style: TextStyle(
+                        color: current ? _purple : _muted,
+                        fontSize: 11,
+                        fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (index < steps.length - 1)
+                    Container(
+                      width: 7,
+                      height: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      color: complete ? _purple : const Color(0xFFE2E8F0),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildCampaignGoalStep() {
+    const goals = <({String id, String title, String detail, IconData icon})>[
+      (id: 'nearby', title: 'Shop spotlight', detail: 'Reach nearby shoppers', icon: Icons.storefront_rounded),
+      (id: 'new_product', title: 'New products', detail: 'Showcase an arrival', icon: Icons.inventory_2_rounded),
+      (id: 'clear_stock', title: 'Clear stock', detail: 'Promote available items', icon: Icons.sell_rounded),
+      (id: 'regular_customers', title: 'Bring customers back', detail: 'Invite a return visit', icon: Icons.favorite_rounded),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(
+          'What would you like to promote?',
+          'Choose a campaign goal. You can review every detail before sharing.',
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 540 ? 4 : 2;
+            final width =
+                (constraints.maxWidth - (columns - 1) * 10) / columns;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: goals.map((goal) {
+                final selected = _goal == goal.id;
+                return SizedBox(
+                  width: width,
+                  child: InkWell(
+                    onTap: () => setState(() => _goal = goal.id),
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      constraints: const BoxConstraints(minHeight: 112),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: selected ? const Color(0xFFF3EFFF) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selected ? _purple : const Color(0xFFE2E8F0),
+                          width: selected ? 1.6 : 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _purple.withValues(alpha: selected ? 0.08 : 0.02),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(goal.icon, color: _purple, size: 21),
+                              const Spacer(),
+                              if (selected)
+                                const Icon(Icons.check_circle, color: _purple, size: 18),
+                            ],
+                          ),
+                          const SizedBox(height: 9),
+                          LiveTranslatedText(
+                            goal.title,
+                            style: const TextStyle(
+                              color: _ink,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          LiveTranslatedText(
+                            goal.detail,
+                            style: const TextStyle(color: _muted, fontSize: 10),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F6FF),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5DEFF)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.lightbulb_outline, color: _purple),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  _products.isEmpty
+                      ? 'Add an in-stock product before building a promotion.'
+                      : '${_products.length} in-stock products are ready to feature.',
+                  style: const TextStyle(color: _ink, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => _openWizardStep(1),
+            icon: const Icon(Icons.arrow_forward_rounded),
+            label: const LiveTranslatedText('Choose products and design'),
+            style: FilledButton.styleFrom(
+              backgroundColor: _purple,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _templateSelectionCards() {
+    const items = <({String id, String title})>[
+      (id: 'bold', title: 'Shop spotlight'),
+      (id: 'festive', title: 'Festival offer'),
+      (id: 'fresh', title: 'Fresh & local'),
+      (id: 'minimal', title: 'Simple update'),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Design style',
+          style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 130,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final selected = _template == item.id;
+              return InkWell(
+                onTap: _busy
+                    ? null
+                    : () => setState(() => _template = item.id),
+                borderRadius: BorderRadius.circular(14),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 170),
+                  width: 118,
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: selected ? const Color(0xFFF3EFFF) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selected ? _purple : const Color(0xFFE2E8F0),
+                      width: selected ? 1.6 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: _templateColors(item.id),
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: selected
+                              ? const Align(
+                                  alignment: Alignment.topRight,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(5),
+                                    child: Icon(
+                                      Icons.check_circle,
+                                      color: Colors.white,
+                                      size: 17,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      LiveTranslatedText(
+                        item.title,
+                        style: const TextStyle(
+                          color: _ink,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _formatSelectionCards() {
+    const items = <({String id, String title, IconData icon})>[
+      (id: 'feed', title: 'Feed post', icon: Icons.view_agenda_rounded),
+      (id: 'square', title: 'Square', icon: Icons.crop_square_rounded),
+      (id: 'story', title: 'Story', icon: Icons.phone_iphone_rounded),
+    ];
+    return Row(
+      children: items.map((item) {
+        final selected = _adFormat == item.id;
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(right: item.id == 'story' ? 0 : 8),
+            child: InkWell(
+              onTap: _busy ? null : () => setState(() => _adFormat = item.id),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected ? const Color(0xFFF3EFFF) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selected ? _purple : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(item.icon, color: selected ? _purple : _muted),
+                    const SizedBox(height: 3),
+                    LiveTranslatedText(
+                      item.title,
+                      style: TextStyle(
+                        color: selected ? _purple : _ink,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _shareDestinationCards({required bool enabled}) {
+    const items = <({String title, String subtitle, IconData icon, Color color})>[
+      (title: 'WhatsApp', subtitle: 'Status or customer chat', icon: Icons.chat_rounded, color: Color(0xFF25A75A)),
+      (title: 'Instagram', subtitle: 'Feed or story', icon: Icons.camera_alt_rounded, color: Color(0xFFC13584)),
+      (title: 'Facebook', subtitle: 'Shop page or feed', icon: Icons.facebook_rounded, color: Color(0xFF1877F2)),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(
+          'Where would you like to share?',
+          enabled
+              ? 'Choose an app in the system share menu. Nothing is posted automatically.'
+              : 'Approve the campaign first. Sharing stays under your control.',
+        ),
+        const SizedBox(height: 8),
+        ...items.map(
+          (item) => Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 7),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(13),
+              side: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            child: ListTile(
+              dense: true,
+              leading: Icon(item.icon, color: item.color),
+              title: LiveTranslatedText(
+                item.title,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+              ),
+              subtitle: LiveTranslatedText(
+                item.subtitle,
+                style: const TextStyle(fontSize: 10),
+              ),
+              trailing: Icon(
+                enabled ? Icons.arrow_forward_ios_rounded : Icons.lock_outline,
+                size: 15,
+                color: enabled ? item.color : _muted,
+              ),
+              onTap: enabled ? _sharePoster : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final draftStatus = _currentDraft?['status']?.toString() ?? '';
@@ -1617,7 +2006,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
         title: const LiveTranslatedText(
-          'Grow My Shop',
+          'Promotion Studio',
           style: TextStyle(fontWeight: FontWeight.w800, color: _ink),
         ),
         backgroundColor: Colors.white,
@@ -1648,26 +2037,40 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                 children: [
                   _hero(),
                   const SizedBox(height: 18),
+                  _wizardProgress(),
+                  const SizedBox(height: 16),
                   if (_message.isNotEmpty) ...[
                     _notice(_message),
                     const SizedBox(height: 12),
                   ],
-                  _sectionTitle(
-                    '1. Your ad plan',
-                    'Your shop profile, in-stock items and upcoming festivals shape the design automatically.',
-                  ),
-                  const SizedBox(height: 10),
-                  _buildCampaignForm(),
-                  const SizedBox(height: 18),
-                  _sectionTitle(
-                    '2. Preview and review',
-                    'Check every detail. Sharing stays locked until you approve the campaign.',
-                  ),
-                  const SizedBox(height: 10),
-                  if (_currentDraft == null)
-                    _emptyPreview()
-                  else
-                    AnimatedSwitcher(
+                  if (_wizardStep == 0) ...[
+                    _buildCampaignGoalStep(),
+                    const SizedBox(height: 18),
+                  ],
+                  if (_wizardStep == 1) ...[
+                    _sectionTitle(
+                      'Build your campaign',
+                      'Choose a product, customize the design, and add only offers you can honor.',
+                    ),
+                    const SizedBox(height: 10),
+                    _buildCampaignForm(),
+                    OutlinedButton.icon(
+                      onPressed: () => _openWizardStep(0),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      label: const LiveTranslatedText('Back to campaign goal'),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                  if (_wizardStep == 2) ...[
+                    _sectionTitle(
+                      'Review your promotion',
+                      'Check the poster and details. Sharing unlocks only after approval.',
+                    ),
+                    const SizedBox(height: 10),
+                    if (_currentDraft == null)
+                      _emptyPreview()
+                    else
+                      AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
@@ -1678,6 +2081,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                           _posterPreview(),
                           const SizedBox(height: 12),
                           _editFields(),
+                          const SizedBox(height: 12),
+                          _shareDestinationCards(enabled: isApproved),
                           const SizedBox(height: 12),
                           if (needsApproval) ...[
                             Container(
@@ -1790,21 +2195,29 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                         ],
                       ),
                     ),
+                    OutlinedButton.icon(
+                      onPressed: () => _openWizardStep(1),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const LiveTranslatedText('Edit campaign design'),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
                   const SizedBox(height: 20),
-                  _automationSettingsCard(),
-                  const SizedBox(height: 24),
-                  _sectionTitle(
-                    '3. Campaign approvals and history',
-                    'Review pending drafts and see which campaign versions were approved.',
-                  ),
-                  const SizedBox(height: 10),
-                  _campaignHistory(),
-                  const SizedBox(height: 16),
-                  _notice(
-                    'Ad copy uses the available campaign service; poster artwork is composed on this device. '
-                    'Adobe Express is an optional manual editor. Sharing is manual, no paid ads or bulk messages '
-                    'are started, and offer codes are not automatically redeemed at checkout.',
-                  ),
+                  if (_wizardStep == 0) ...[
+                    _automationSettingsCard(),
+                    const SizedBox(height: 20),
+                    _sectionTitle(
+                      'Campaign drafts',
+                      'Open drafts for review or continue an approved promotion.',
+                    ),
+                    const SizedBox(height: 10),
+                    _campaignHistory(),
+                    const SizedBox(height: 16),
+                    _notice(
+                      'Poster artwork is composed on this device. Sharing is manual; no paid ads or bulk messages '
+                      'are started, and offer codes are not automatically redeemed at checkout.',
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1838,7 +2251,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               SizedBox(width: 10),
               Expanded(
                 child: const LiveTranslatedText(
-                  'Your next ad, planned for you',
+                  'Create a promotion in 3 steps',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -1850,7 +2263,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           ),
           SizedBox(height: 9),
           const LiveTranslatedText(
-            'Retail Mind builds a ready-to-review promotion from your shop details, live stock and seasonal moments.',
+            'Choose a goal, build a branded design from live shop details, then review and share it yourself.',
             style: TextStyle(color: Colors.white70, height: 1.45),
           ),
           if (_festivalName.isNotEmpty) ...[
@@ -1977,7 +2390,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             _productPickerCard(),
             const SizedBox(height: 10),
             _animatedCreativePlanCard(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            _templateSelectionCards(),
+            const SizedBox(height: 14),
+            const LiveTranslatedText(
+              'Share format',
+              style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            _formatSelectionCards(),
+            const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               value: _language,
               decoration: const InputDecoration(
@@ -2231,7 +2653,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Widget _animatedCreativePlanCard() {
-    final key = '$_recommendedTemplate:$_festivalName';
+    final key = '$_template:$_festivalName:$_adFormat';
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
       switchInCurve: Curves.easeOutCubic,
@@ -2253,7 +2675,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Widget _autoCreativePlanCard() {
-    final template = _recommendedTemplate;
+    final template = _template;
     final festivalName = _festivalName;
     return Container(
       padding: const EdgeInsets.all(13),
@@ -2310,8 +2732,19 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    _planChip(GrowthCreativePlanner.templateLabel(template)),
-                    _planChip('Feed format · chosen automatically'),
+                    _planChip(
+                      'Recommended: ${GrowthCreativePlanner.templateLabel(_recommendedTemplate)}',
+                    ),
+                    _planChip(
+                      'Selected: ${GrowthCreativePlanner.templateLabel(template)}',
+                    ),
+                    _planChip(
+                      _adFormat == 'story'
+                          ? 'Story format'
+                          : _adFormat == 'square'
+                          ? 'Square format'
+                          : 'Feed format',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),

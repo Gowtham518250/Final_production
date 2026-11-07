@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../api_client.dart';
+import '../../../agent_debug_log.dart';
+import '../../../secure_token_storage.dart';
 import '../../../bank_reconciliation.dart';
 import '../../../sync_queue_manager.dart';
 import '../../../sync_service.dart';
@@ -102,8 +104,19 @@ class AiQueryService {
       return 'Speech recognition is not enabled for this language on the server yet. '
           'Please choose another language or contact the app administrator.';
     }
-    if (statusCode == 401 || normalized.contains('invalid speech service credentials')) {
+    if (normalized.contains('invalid speech service credentials')) {
       return 'The multilingual speech service credentials need to be checked by the app administrator.';
+    }
+    if (statusCode == 401 ||
+        statusCode == 403 ||
+        normalized.contains('expired token') ||
+        normalized.contains('invalid or expired') ||
+        normalized.contains('could not validate credentials') ||
+        (normalized.contains('token') &&
+            (normalized.contains('expired') ||
+                normalized.contains('invalid') ||
+                normalized.contains('unauthorized')))) {
+      return 'Could not complete voice recognition. Please try again.';
     }
 
     if (message.isNotEmpty &&
@@ -156,10 +169,21 @@ class AiQueryService {
         final detail = decoded is Map
             ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])?.toString()
             : null;
+        // #region agent log
+        AgentDebugLog.log(
+          location: 'ai_query_service.dart:transcribeVoiceQuery',
+          message: 'transcribe non-success',
+          hypothesisId: 'H2',
+          data: {
+            'status': response.statusCode,
+            'detail': (detail ?? '').length > 160
+                ? detail!.substring(0, 160)
+                : (detail ?? ''),
+          },
+        );
+        // #endregion
         throw Exception(
-          (detail != null && detail.trim().isNotEmpty)
-              ? detail.trim()
-              : 'Speech recognition failed (HTTP ${response.statusCode}). Please try again.',
+          _friendlyVoiceServiceError(detail, response.statusCode),
         );
       }
 
@@ -439,6 +463,29 @@ class AiQueryService {
 
       stopwatch.stop();
       statusCode = response.statusCode;
+      // #region agent log
+      String? detailSnippet;
+      try {
+        final decoded = json.decode(response.body);
+        if (decoded is Map) {
+          final raw = (decoded['detail'] ?? decoded['message'] ?? decoded['error'])
+              ?.toString();
+          if (raw != null && raw.isNotEmpty) {
+            detailSnippet = raw.length > 160 ? raw.substring(0, 160) : raw;
+          }
+        }
+      } catch (_) {}
+      AgentDebugLog.log(
+        location: 'ai_query_service.dart:askQuery',
+        message: 'askquery HTTP result',
+        hypothesisId: 'H6',
+        data: {
+          'status': statusCode,
+          'languageCode': languageCode,
+          'detail': detailSnippet,
+        },
+      );
+      // #endregion
 
       // Step 3: Handle HTTP Status Codes
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -502,13 +549,15 @@ class AiQueryService {
         return AIQueryResponse.error(message, query: trimmedQuery);
       } else if (response.statusCode == 401) {
         // _withTokenRefresh in ApiClient already attempted a silent refresh + retry.
-        // If we still see a 401 here, the refresh token itself is also invalid/expired.
+        final sessionValid = await SecureTokenStorage.isSessionValid();
         if (kDebugMode)
           debugPrint(
-            '[AUTH] /askquery still 401 after refresh attempt — refresh token expired',
+            '[AUTH] /askquery still 401 after refresh attempt — sessionValid=$sessionValid',
           );
         return AIQueryResponse.error(
-          'Your session has expired. Please sign in again.',
+          sessionValid
+              ? 'Could not complete this question. Please try again.'
+              : 'Your session has expired. Please sign in again.',
           query: trimmedQuery,
         );
       } else if (response.statusCode == 403) {
@@ -679,13 +728,12 @@ class AiQueryService {
     }
 
     if (streamed.statusCode != 200 && streamed.statusCode != 201) {
-      String message = 'Voice query failed (HTTP ${streamed.statusCode}).';
-      if (decoded is Map && decoded['detail'] != null) {
-        message = decoded['detail'].toString();
-      } else if (decoded is Map && decoded['message'] != null) {
-        message = decoded['message'].toString();
-      }
-      throw Exception(message);
+      final detail = decoded is Map
+          ? (decoded['detail'] ?? decoded['message'])?.toString()
+          : null;
+      throw Exception(
+        _friendlyVoiceServiceError(detail, streamed.statusCode),
+      );
     }
 
     if (decoded is! Map<String, dynamic>) {

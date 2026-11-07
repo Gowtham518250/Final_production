@@ -51,6 +51,7 @@ import 'guided_voice_service.dart';
 import 'guided_dictation_overlay.dart';
 import 'user_guidance_selection_page.dart';
 import 'app_theme_controller.dart';
+import 'app_motion.dart';
 import 'providers/setup.dart';
 import 'session_management.dart';
 import 'scoped_shared_preferences.dart';
@@ -198,7 +199,10 @@ void main() async {
           defaultValue: '',
         );
 
-        if (webApiKey.isNotEmpty && projectId.isNotEmpty) {
+        if (webApiKey.isNotEmpty &&
+            projectId.isNotEmpty &&
+            appId.isNotEmpty &&
+            messagingSenderId.isNotEmpty) {
           await Firebase.initializeApp(
             options: FirebaseOptions(
               apiKey: webApiKey,
@@ -209,9 +213,7 @@ void main() async {
               storageBucket: storageBucket.isNotEmpty
                   ? storageBucket
                   : '$projectId.appspot.com',
-              messagingSenderId: messagingSenderId.isNotEmpty
-                  ? messagingSenderId
-                  : '123456789',
+              messagingSenderId: messagingSenderId,
               appId: appId,
             ),
           );
@@ -1751,6 +1753,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         seedColor: AppColors.primary,
                         brightness: Brightness.light,
                       ),
+                      pageTransitionsTheme: kSmoothPageTransitionsTheme,
                       scaffoldBackgroundColor: const Color(0xFFF7F9FC),
                       cardTheme: CardThemeData(
                         color: Colors.white,
@@ -1821,6 +1824,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         brightness: Brightness.dark,
                         surface: const Color(0xFF111827),
                       ),
+                      pageTransitionsTheme: kSmoothPageTransitionsTheme,
                       scaffoldBackgroundColor: const Color(0xFF0B1020),
                       cardTheme: CardThemeData(
                         color: const Color(0xFF121A2B),

@@ -325,9 +325,9 @@ void main() {
       );
 
       expect(find.text('Ask Retail Mind'), findsOneWidget);
-      expect(find.text('Ask AI'), findsOneWidget);
+      expect(find.text('AI Insights'), findsOneWidget);
 
-      await tester.tap(find.text('Ask AI'));
+      await tester.tap(find.text('AI Insights'));
       await tester.pump();
 
       expect(tapped, isTrue);

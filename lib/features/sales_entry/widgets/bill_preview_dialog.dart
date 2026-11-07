@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../../bill_generator_service.dart';
 import '../controllers/sales_entry_provider.dart';
+import '../../../sale_payment_policy.dart';
 
 class BillPreviewDialog extends StatelessWidget {
   final String invoiceNumber;
@@ -39,7 +40,13 @@ class BillPreviewDialog extends StatelessWidget {
       customerName: provider.customerNameController.text.trim(),
       items: items,
       totalAmount: provider.totalAmount,
-      paidAmount: creditSale ? 0.0 : provider.totalAmount,
+      paidAmount: SalePaymentPolicy.resolvePaidAmount(
+        totalAmount: provider.totalAmount,
+        enteredPaidAmount: provider.partialPaymentEnabled ? provider.paidAmount : 0,
+        isBorrow: creditSale,
+        isCashPayment: provider.selectedPaymentMethod != 'UPI',
+        paymentConfirmed: provider.selectedPaymentMethod != 'UPI' || provider.isOnlinePayment,
+      ),
       withTax: provider.withTax,
     );
   }

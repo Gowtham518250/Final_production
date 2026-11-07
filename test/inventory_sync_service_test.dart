@@ -7,6 +7,7 @@ void main() {
       expect(InventorySyncService.parsePositiveQuantity('1.750'), 1.75);
       expect(InventorySyncService.parsePositiveQuantity(0.875), 0.875);
       expect(InventorySyncService.parsePositiveQuantity(2), 2);
+      expect(InventorySyncService.parsePositiveQuantity(1.5), 1.5);
     });
 
     test('rejects invalid or over-precision quantities', () {

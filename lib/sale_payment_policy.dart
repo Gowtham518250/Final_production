@@ -6,6 +6,28 @@ import 'dart:math' as math;
 /// entered. Explicit partial receipts remain partial. Borrow invoices are
 /// recorded through the credit workflow and must not be treated as collected.
 class SalePaymentPolicy {
+  /// One paisa. Wide enough for float noise, not wide enough to forgive a short payment.
+  static const double paisa = 0.01;
+
+  static int toPaise(double value) => (value * 100).round();
+
+  static bool isFullyPaid(double paidAmount, double totalAmount) {
+    if (!paidAmount.isFinite || !totalAmount.isFinite) return false;
+    if (totalAmount <= 0) return paidAmount >= 0;
+    return toPaise(paidAmount) >= toPaise(totalAmount);
+  }
+
+  static bool isPartialPaid(double paidAmount, double totalAmount) {
+    if (!paidAmount.isFinite || !totalAmount.isFinite) return false;
+    return toPaise(paidAmount) > 0 && !isFullyPaid(paidAmount, totalAmount);
+  }
+
+  static double remainingDue(double paidAmount, double totalAmount) {
+    if (!paidAmount.isFinite || !totalAmount.isFinite) return 0;
+    final remainingPaise = toPaise(totalAmount) - toPaise(paidAmount);
+    return remainingPaise <= 0 ? 0.0 : remainingPaise / 100.0;
+  }
+
   static double? resolveDetectedReceiptAmount({
     required double detectedAmount,
     required double remainingDue,

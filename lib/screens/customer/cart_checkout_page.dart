@@ -50,9 +50,7 @@ class _CustomerCartPageState extends State<CustomerCartPage> {
     });
   }
 
-  double get _itemsSubtotal {
-    return _items.fold(0.0, (sum, item) => sum + (item['price'] as num) * (item['qty'] as num));
-  }
+  double get _itemsSubtotal => cartItemsSubtotal(_items);
 
   double get _totalAmount => _itemsSubtotal + widget.onlineSetupFee;
 
@@ -71,6 +69,7 @@ class _CustomerCartPageState extends State<CustomerCartPage> {
   }
 
   Future<void> _placeOrder() async {
+    if (_isPlacingOrder) return;
     setState(() => _isPlacingOrder = true);
 
     try {
@@ -344,4 +343,18 @@ class _CustomerCartPageState extends State<CustomerCartPage> {
       child: const Icon(Icons.shopping_bag, color: AppColors.primary),
     );
   }
+}
+
+double cartItemNumber(dynamic value) {
+  if (value is num && value.isFinite) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0.0;
+}
+
+double cartItemsSubtotal(Iterable<Map<String, dynamic>> items) {
+  return items.fold<double>(0.0, (sum, item) {
+    final price = cartItemNumber(item['price'] ?? item['unit_price']);
+    final qty = cartItemNumber(item['qty'] ?? item['quantity']);
+    if (price <= 0 || qty <= 0) return sum;
+    return sum + (price * qty);
+  });
 }

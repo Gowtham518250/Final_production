@@ -58,6 +58,33 @@ void main() {
     expect(code, matches(RegExp(r'^RM[0-9]{6}$')));
   });
 
+  test('creative planner selects the nearest upcoming festival', () {
+    final festival = GrowthCreativePlanner.nextFestival(
+      {
+        'festivals': [
+          {'name': 'Later event', 'days_until': 12},
+          {'festival_name': 'Diwali', 'days_until': 3},
+          {'name': 'Past event', 'days_until': -1},
+        ],
+      },
+    );
+
+    expect(festival?['name'], 'Diwali');
+    expect(festival?['_days_until'], 3);
+  });
+
+  test('creative planner uses festival or product context for the theme', () {
+    expect(
+      GrowthCreativePlanner.templateFor(festivalName: 'Diwali'),
+      'festive',
+    );
+    expect(
+      GrowthCreativePlanner.templateFor(productCategory: 'fresh produce'),
+      'fresh',
+    );
+    expect(GrowthCreativePlanner.templateFor(), 'bold');
+  });
+
   test('an owner-entered offer is included but never fabricated', () {
     final withoutOffer = GrowthAdCopy.caption(
       shopName: 'Corner Store',
@@ -77,5 +104,19 @@ void main() {
     expect(withoutOffer, isNot(contains('RM000001')));
     expect(withOffer, contains('Offer: 10% off on rice today'));
     expect(withOffer, contains('RM000001'));
+  });
+
+  test('festival is included in generated copy without inventing an offer', () {
+    final caption = GrowthAdCopy.caption(
+      shopName: 'Green Basket',
+      goal: 'nearby',
+      language: 'en',
+      festivalName: 'Diwali',
+      offerCode: 'RM000001',
+    );
+
+    expect(caption, contains('Celebrate Diwali'));
+    expect(caption, isNot(contains('Offer:')));
+    expect(caption, isNot(contains('RM000001')));
   });
 }

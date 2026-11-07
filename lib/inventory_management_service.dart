@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'notification_service.dart';
-import 'email_sender_service.dart';
 import 'local_storage_service.dart';
 import 'format_helper.dart';
 import 'inventory_stock_helper.dart';
@@ -37,18 +36,29 @@ class InventoryManagementService {
   static Future<Map<String, dynamic>> decreaseStockOnSale({
     required int productId,
     required String productName,
-    required int quantitySold,
+    required num quantitySold,
     required num minStockLevel,
+    String? saleId,
   }) async {
     try {
     if (kDebugMode) debugPrint('📦 Decreasing stock for $productName by $quantitySold units');
 
       // Canonical backend stock mutation. The old /products/{id}/decrease-stock
       // endpoint was a legacy route and could diverge from invoice sync.
-      final referenceId = 'SALE_${DateTime.now().microsecondsSinceEpoch}_$productId';
+      final parsedQuantity = InventorySyncService.parsePositiveQuantity(quantitySold);
+      if (parsedQuantity == null) {
+        return {
+          'success': false,
+          'error': 'INVALID_QUANTITY',
+          'message': 'Quantity must be a positive value with at most three decimal places.',
+        };
+      }
+      final referenceId = (saleId != null && saleId.trim().isNotEmpty)
+          ? '${saleId.trim()}_$productId'
+          : 'SALE_${productId}_$parsedQuantity';
       final result = await InventorySyncService.deductStock(
         productId: productId,
-        quantity: quantitySold,
+        quantity: parsedQuantity,
         referenceId: referenceId,
         reason: 'SALE',
       );
@@ -167,21 +177,6 @@ class InventoryManagementService {
     if (whatsappOnly) return;
 
     try {
-      final userEmail = prefs.getString('email');
-      
-      if (userEmail != null && userEmail.isNotEmpty) {
-    if (kDebugMode) debugPrint('📧 Sending low stock email to: $userEmail for $productName');
-        await EmailSenderService.sendStockAlertEmail(
-          recipientEmail: userEmail,
-          productName: productName,
-          currentStock: currentStock,
-          minStock: minStock,
-        );
-      } else {
-    if (kDebugMode) debugPrint('⚠️ No user email found in prefs, cannot send stock alert email');
-      }
-
-      // Also notify backend API if available
       final response = await ApiClient.postJson(
         '/alerts/trigger',
         {

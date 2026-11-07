@@ -3,8 +3,8 @@
 // =============================================================================
 // WHAT'S NEW vs V8:
 //
-//  VOICE-1  Priority queue: HIGH/CRITICAL interrupts current speech;
-//           LOW waits; NORMAL queues. Never drops announcements silently.
+//  VOICE-1  Priority queue: HIGH/CRITICAL can preempt routine speech;
+//           payment alerts never interrupt another payment alert.
 //  VOICE-2  isSpeaking stream: widget layer can react in real-time.
 //  VOICE-3  Amplitude/energy stream: feeds waveform visualisations without
 //           any extra recording overhead (derived from text length + style).
@@ -42,8 +42,8 @@ final _log = Logger(
 enum SpeechPriority {
   low,      // queued; never interrupts
   normal,   // queued behind current speech
-  high,     // interrupts low/normal; waits for critical
-  critical, // always interrupts immediately
+  high,     // may preempt low/normal; waits for high/critical
+  critical, // may preempt low/normal; queues behind high/critical
 }
 
 // ─── Queue entry ──────────────────────────────────────────────────────────────
@@ -219,12 +219,14 @@ class VoiceEngine {
       priority:  priority,
     );
 
-    if (priority == SpeechPriority.critical ||
-        priority == SpeechPriority.high) {
-      // Interrupt anything currently running
-      _interruptAndPrepend(job);
+    final running = _currentJob;
+    if ((priority == SpeechPriority.critical ||
+            priority == SpeechPriority.high) &&
+        running != null &&
+        running.priority.index < SpeechPriority.high.index) {
+      _interruptAndQueueByPriority(job);
     } else {
-      _queue.add(job);
+      _insertByPriority(job);
     }
 
     _scheduleNext();
@@ -325,11 +327,23 @@ class VoiceEngine {
 
   // ── Private: queue scheduler ──────────────────────────────────────────────
 
-  void _interruptAndPrepend(_SpeechJob job) {
-    // Stop current speech immediately, push job to front
+  _SpeechJob? _currentJob;
+
+  void _interruptAndQueueByPriority(_SpeechJob job) {
+    // Higher-priority alerts may preempt routine speech, but must not cut off
+    // another high-priority announcement already in progress.
     _tts.stop().catchError((_) {});
     _audioPlayer.stop().catchError((_) {});
-    _queue.insert(0, job);
+    _insertByPriority(job);
+  }
+
+  void _insertByPriority(_SpeechJob job) {
+    var index = _queue.length;
+    while (index > 0 &&
+        _queue[index - 1].priority.index < job.priority.index) {
+      index--;
+    }
+    _queue.insert(index, job);
   }
 
   void _scheduleNext() {
@@ -340,16 +354,17 @@ class VoiceEngine {
 
   Future<void> _runNext() async {
     while (_queue.isNotEmpty) {
-      // Sort: critical > high > normal > low (stable sort — FIFO within same priority)
-      _queue.sort((a, b) => b.priority.index.compareTo(a.priority.index));
-
+      // Queue insertion is stable, preserving FIFO order for equal priorities.
       final job = _queue.removeAt(0);
+      _currentJob = job;
       try {
         await _executeJob(job);
         if (!job.completer.isCompleted) job.completer.complete();
       } catch (e, st) {
         _log.e('Speech job failed', error: e, stackTrace: st);
         if (!job.completer.isCompleted) job.completer.completeError(e, st);
+      } finally {
+        _currentJob = null;
       }
     }
     _running = false;
@@ -542,10 +557,15 @@ class VoiceEngine {
     for (int i = 0; i <= retries; i++) {
       final attemptClock = Stopwatch()..start();
       try {
+        final speakTimeout = Duration(
+          seconds: (text.length * 0.12 + 12).clamp(15, 60).toInt(),
+        );
         await _tts.speak(text).timeout(
-          const Duration(seconds: 8),
+          speakTimeout,
           onTimeout: () {
-            _log.w('TTS speak timed out after 8s: "$text"');
+            _log.w(
+              'TTS speak timed out after ${speakTimeout.inSeconds}s: "$text"',
+            );
             _setSpeaking(false);
             _stopAmpTimer();
             // Stop a possibly late native utterance before the payment is
@@ -555,7 +575,7 @@ class VoiceEngine {
                 _log.w('Could not stop timed-out TTS: $error');
               }),
             );
-            throw TimeoutException('TTS playback did not complete within 8 seconds.');
+            throw TimeoutException('TTS playback did not complete in time.');
           },
         );
         return;

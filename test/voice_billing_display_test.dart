@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/voice_billing_display.dart';
+import 'package:retail_mind/voice_nlp_engine.dart';
 
 const _langs = ['te', 'hi', 'ta', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa'];
 
@@ -32,7 +33,13 @@ void main() {
 
     test('an unknown English word is never half-translated (returns null)', () {
       expect(VoiceBillingDisplay.productName('Panchedar', 'te'), null);
-      expect(VoiceBillingDisplay.productName('Sunflower Oil', 'te'), null);
+    });
+
+    test('spoken potato phrases and oil map into the selected language', () {
+      expect(VoiceBillingDisplay.productName('Bungalow Dumpa', 'te'), 'బంగాళాదుంప');
+      expect(VoiceBillingDisplay.productName('dumpa', 'hi'), 'आलू');
+      expect(VoiceBillingDisplay.productName('Sunflower Oil', 'te'), 'నూనె');
+      expect(VoiceBillingDisplay.productName('Oil', 'te'), 'నూనె');
     });
 
     test('English and unsupported languages are not translated', () {
@@ -53,6 +60,12 @@ void main() {
   });
 
   group('units', () {
+    test('potato phrases infer kilograms', () {
+      expect(UnitInferrer.infer('Bungalow Dumpa'), 'kg');
+      expect(UnitInferrer.infer('potato'), 'kg');
+      expect(UnitInferrer.infer('Oil'), 'L');
+    });
+
     test('known units', () {
       expect(VoiceBillingDisplay.unit('kg', 'te'), 'కిలో');
       expect(VoiceBillingDisplay.unit('pc', 'te'), 'పీస్');

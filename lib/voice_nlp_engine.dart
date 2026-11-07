@@ -640,19 +640,21 @@ class PhoneticProductResolver {
 /// When no unit is spoken, infer a sensible default from the product name.
 class UnitInferrer {
   static const Map<String, String> _productToUnit = {
-    'Milk': 'L', 'Water': 'L', 'Oil': 'L',
-    'Flour': 'kg', 'Rice': 'kg', 'Dal': 'kg', 'Sugar': 'kg', 'Salt': 'kg',
-    'Turmeric': 'g', 'Coriander': 'g', 'Chilli': 'g',
-    'Egg': 'pc', 'Bread': 'pc', 'Biscuit': 'pc', 'Soap': 'pc',
-    'Butter': 'g', 'Ghee': 'g', 'Paneer': 'g',
-    'Banana': 'pc', 'Apple': 'pc', 'Coconut': 'pc',
-    'Tomato': 'kg', 'Onion': 'kg', 'Potato': 'kg',
-    'Tea': 'g', 'Coffee': 'g',
-    'Curd': 'g',
+    'milk': 'L', 'water': 'L', 'oil': 'L', 'sunflower oil': 'L',
+    'flour': 'kg', 'rice': 'kg', 'dal': 'kg', 'sugar': 'kg', 'salt': 'kg',
+    'turmeric': 'g', 'coriander': 'g', 'chilli': 'g',
+    'egg': 'pc', 'bread': 'pc', 'biscuit': 'pc', 'soap': 'pc',
+    'butter': 'g', 'ghee': 'g', 'paneer': 'g',
+    'banana': 'pc', 'apple': 'pc', 'coconut': 'pc',
+    'tomato': 'kg', 'onion': 'kg', 'potato': 'kg',
+    'bungalow dumpa': 'kg', 'dumpa': 'kg',
+    'tea': 'g', 'coffee': 'g',
+    'curd': 'g',
   };
 
   static String infer(String canonicalName, {String fallback = 'pc'}) {
-    return _productToUnit[canonicalName] ?? fallback;
+    final key = canonicalName.trim().toLowerCase();
+    return _productToUnit[key] ?? fallback;
   }
 }
 

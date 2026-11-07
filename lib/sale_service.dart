@@ -10,7 +10,6 @@ import 'sync_queue_manager.dart';
 import 'local_storage_service.dart';
 import 'retail_growth_kit.dart';
 import 'sync_service.dart';
-import 'agent_debug_log.dart';
 import 'crash_recovery_service.dart';
 import 'smart_reorder_ai.dart';
 import 'gst_calculator.dart';
@@ -223,19 +222,6 @@ class SaleService {
     }
 
     _pendingSales.add(saleId);
-
-    AgentDebugLog.log(
-      location: 'sale_service.dart:submitSale:entry',
-      message: 'SALE CREATION START',
-      hypothesisId: 'H1',
-      data: {
-        'saleId': saleId,
-        'grandTotal': grandTotal,
-        'paymentMethod': paymentMethod,
-        'itemCount': items.length,
-        'isBorrow': isBorrow,
-      },
-    );
 
     // Only clear the crash-recovery marker after both the queue write and local stock
     // update succeeded. Otherwise startup recovery still has the original sale payload.
@@ -458,21 +444,6 @@ class SaleService {
       unawaited(SyncService.processQueueSafe());
       await RetailGrowthKit.recordBillCompleted();
 
-      AgentDebugLog.log(
-        location: 'sale_service.dart:submitSale:final_result',
-        message: 'SALE SAVED TO DURABLE OUTBOX',
-        hypothesisId: 'H5',
-        data: {
-          'saleId': saleId,
-          'invoiceNumber': canonicalInvoiceNumber,
-          'success': true,
-          'syncStatus': 'pending',
-          'cloudConfirmed': false,
-          'localSaved': true,
-          'retryQueued': true,
-        },
-      );
-
       return {
         'success': true,
         'syncCount': 0,
@@ -491,12 +462,6 @@ class SaleService {
       if (kDebugMode)
         debugPrint('❌ TRANSACTION CRITICAL FAILURE [$context]: $e');
       if (kDebugMode) debugPrint(st.toString());
-      AgentDebugLog.log(
-        location: 'sale_service.dart:submitSale:critical_failure',
-        message: 'CRITICAL FAILURE',
-        hypothesisId: 'H5',
-        data: {'error': e.toString(), 'saleId': saleId},
-      );
       return {
         'success': false,
         'error': e.toString(),

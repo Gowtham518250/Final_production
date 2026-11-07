@@ -80,6 +80,16 @@ class ScopedSharedPreferences {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(await _scopedKey(key));
   }
+
+  static Future<bool> setStringList(String key, List<String> value) async {
+    final prefs = await SharedPreferences.getInstance();
+    return await prefs.setStringList(await _scopedKey(key), value);
+  }
+
+  static Future<List<String>?> getStringList(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(await _scopedKey(key));
+  }
   
   /// 🔒 Scoped Remove operation
   static Future<bool> remove(String key) async {

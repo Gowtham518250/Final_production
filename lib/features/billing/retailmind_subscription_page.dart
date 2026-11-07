@@ -160,7 +160,14 @@ class _RetailMindSubscriptionPageState extends State<RetailMindSubscriptionPage>
         final message = (result['message'] ?? result['detail'] ?? 'Cashfree did not return a valid subscription checkout session.').toString();
         throw Exception(message);
       }
-      final environment = (result['environment'] ?? 'sandbox').toString().toLowerCase() == 'production'
+      final rawEnvironment =
+          (result['environment'] ?? '').toString().trim().toLowerCase();
+      if (rawEnvironment != 'production' && rawEnvironment != 'sandbox') {
+        throw Exception(
+          'Cashfree checkout was not started because billing did not specify production or sandbox.',
+        );
+      }
+      final environment = rawEnvironment == 'production'
           ? CFEnvironment.PRODUCTION
           : CFEnvironment.SANDBOX;
       final session = CFSubscriptionSessionBuilder()

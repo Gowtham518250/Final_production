@@ -19,9 +19,9 @@ class ComprehensiveLogger {
   static const String CRITICAL = 'CRITICAL';
 
   // Configuration
-  static const String _defaultLogLevel = DEBUG;
+  static const String _defaultLogLevel = WARNING;
   static const String _defaultLogIngestUrl = '/api/logs/ingest';
-  static const bool _defaultEnableRemoteLogging = true;
+  static const bool _defaultEnableRemoteLogging = false;
   static const int _maxLocalLogs = 1000; // Prevent storage overflow
   static const int _batchSize = 10; // Send logs in batches
   static const Duration _batchInterval = Duration(
@@ -50,7 +50,7 @@ class ComprehensiveLogger {
   static bool get _configuredEnableRemoteLogging =>
       const String.fromEnvironment(
         'ENABLE_REMOTE_LOGGING',
-        defaultValue: 'true',
+        defaultValue: 'false',
       ) ==
       'true';
 
@@ -60,9 +60,13 @@ class ComprehensiveLogger {
 
     try {
       // Load configuration from environment variables
-      _logLevel = _configuredLogLevel;
+      _logLevel = kDebugMode && _configuredLogLevel == WARNING
+          ? DEBUG
+          : _configuredLogLevel;
       _logIngestUrl = _configuredLogIngestUrl;
-      _enableRemoteLogging = _configuredEnableRemoteLogging;
+      _enableRemoteLogging = kDebugMode
+          ? false
+          : _configuredEnableRemoteLogging;
 
       // Generate session ID
       _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -245,7 +249,10 @@ class ComprehensiveLogger {
       final payload = {
         'session_id': _sessionId,
         'user_id': _userId,
-        'app_version': '1.0.0',
+        'app_version': const String.fromEnvironment(
+          'APP_VERSION',
+          defaultValue: '1.0.1+2',
+        ),
         'platform': kIsWeb ? 'web' : 'native',
         'logs': batch,
         'timestamp': DateTime.now().toIso8601String(),

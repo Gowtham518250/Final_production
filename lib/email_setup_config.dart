@@ -141,12 +141,10 @@ Future<bool> testEmailCredentials() async {
     
     if (kDebugMode) print('✓ Credentials found: $email');
     
-    // Try sending a test email
-    final sent = await EmailSenderService.sendOTPEmail(
+    final test = await EmailSenderService.testEmailConfiguration(
       recipientEmail: email,
-      otp: '123456',
-      userName: 'Test User',
     );
+    final sent = test['success'] == true;
     
     if (sent) {
       if (kDebugMode) print('✅ Test email sent successfully!');

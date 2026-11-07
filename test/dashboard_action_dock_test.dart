@@ -3,10 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retail_mind/widgets/dashboard/dashboard_action_dock.dart';
 
 void main() {
-  testWidgets('shows all dashboard actions and navigates when tapped', (
+  testWidgets('fits all medium dashboard actions on one row when possible', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(320, 720));
+    await tester.binding.setSurfaceSize(const Size(2000, 360));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var tapped = '';
     final labels = [
@@ -55,13 +55,73 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      tester.getSize(find.byType(DashboardActionDock)).height,
+      lessThanOrEqualTo(64),
+    );
     for (final label in labels) {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('3'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('dashboard-action-0'))).height,
+      lessThan(50),
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('dashboard-action-0'))).width,
+      120,
+    );
     expect(tester.takeException(), isNull);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('dashboard-action-0'))).dx,
+      0,
+    );
+
+    final firstButtonY = tester
+        .getTopLeft(find.byKey(const ValueKey('dashboard-action-0')))
+        .dy;
+    for (var index = 1; index < labels.length; index++) {
+      expect(
+        tester.getTopLeft(find.byKey(ValueKey('dashboard-action-$index'))).dy,
+        firstButtonY,
+      );
+    }
 
     await tester.tap(find.text('Online Orders'));
     expect(tapped, 'Online Orders');
+  });
+
+  testWidgets('keeps one row scrollable on narrow screens', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var tapped = '';
+    const labels = ['New Bill', 'Online Orders', 'Gift Card', 'AI Analytics'];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: DashboardActionDock(
+            backgroundColor: Colors.white,
+            borderColor: Colors.grey,
+            items: [
+              for (final label in labels)
+                DashboardActionItem(
+                  icon: Icons.circle,
+                  label: label,
+                  color: Colors.indigo,
+                  onTap: () => tapped = label,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('AI Analytics'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AI Analytics'));
+    expect(tapped, 'AI Analytics');
   });
 }

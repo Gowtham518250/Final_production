@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/sales_item.dart';
@@ -10,12 +10,14 @@ import '../services/voice_nlp_service.dart';
 import '../../../inventory_sync_service.dart';
 import '../../../local_storage_service.dart';
 import '../../../sale_service.dart';
+import '../../../sale_payment_policy.dart';
 import '../../../api_client.dart';
 
 class SalesEntryProvider extends ChangeNotifier {
   List<SalesItem> entries = [];
   bool withTax = true;
   double paidAmount = 0.0;
+  bool partialPaymentEnabled = false;
   bool isOnlinePayment = false;
   String? paymentStatus;
   String selectedPaymentMethod = 'Cash';
@@ -503,6 +505,7 @@ class SalesEntryProvider extends ChangeNotifier {
   }
 
   Future<bool> submitSale({bool refreshDashboard = true}) async {
+    if (isSaving) return false;
     if (entries.isEmpty) return false;
     if (!_validateSaleDraftPrices()) return false;
     if (totalAmount <= 0) return false;
@@ -533,11 +536,18 @@ class SalesEntryProvider extends ChangeNotifier {
       }
 
       final billNumber = await ensureDraftBillNumber();
+      final recordedPaid = SalePaymentPolicy.resolvePaidAmount(
+        totalAmount: totalAmount,
+        enteredPaidAmount: partialPaymentEnabled ? paidAmount : 0,
+        isBorrow: false,
+        isCashPayment: selectedPaymentMethod != 'UPI',
+        paymentConfirmed: selectedPaymentMethod != 'UPI' || isOnlinePayment,
+      );
       final result = await SaleService.submitSale(
         saleId: DateTime.now().millisecondsSinceEpoch.toString(),
         items: itemsPayload,
         grandTotal: totalAmount,
-        paidAmount: totalAmount,
+        paidAmount: recordedPaid,
         customerName: customerNameController.text.trim(),
         customerPhone: customerPhoneController.text.trim(),
         withTax: withTax,
@@ -560,7 +570,7 @@ class SalesEntryProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('Error submitting sale: ');
+      if (kDebugMode) debugPrint('Error submitting sale: $e');
       return false;
     } finally {
       isSaving = false;
@@ -694,6 +704,8 @@ class SalesEntryProvider extends ChangeNotifier {
     entries.clear();
     customerNameController.clear();
     customerPhoneController.clear();
+    paidAmount = 0.0;
+    partialPaymentEnabled = false;
     _draftBillNumber = null;
     _initializeEmptyRow();
   }
@@ -755,6 +767,21 @@ class SalesEntryProvider extends ChangeNotifier {
   void setPaymentMethod(String method) {
     selectedPaymentMethod = method;
     isOnlinePayment = method == 'UPI';
+    notifyListeners();
+  }
+
+  void setPartialPaymentEnabled(bool value) {
+    partialPaymentEnabled = value;
+    if (!value) paidAmount = 0.0;
+    notifyListeners();
+  }
+
+  void setPaidAmount(double value) {
+    if (!value.isFinite || value < 0) {
+      paidAmount = 0.0;
+    } else {
+      paidAmount = _money(value.clamp(0.0, totalAmount).toDouble());
+    }
     notifyListeners();
   }
 

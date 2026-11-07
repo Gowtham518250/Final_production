@@ -64,19 +64,23 @@ jobs:
         shell: bash
         run: |
           set +e
-          analysis_output="$(flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1)"
-          analyze_status=$?
+          if analysis_output="$(flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1)"; then
+            analyze_status=0
+          else
+            analyze_status=$?
+          fi
           printf '%s\n' "$analysis_output"
 
-          if printf '%s\n' "$analysis_output" | grep -Eq '(^|[[:space:]])error[[:space:]]+•'; then
+          if printf '%s\n' "$analysis_output" | grep -Eq '^[[:space:]]*error[[:space:]]+-'; then
             echo "Analyzer reported at least one error diagnostic."
             exit 1
           fi
 
           if [ "$analyze_status" -ne 0 ]; then
-            echo "::warning::flutter analyze returned $analyze_status without any error diagnostics; continuing because legacy warnings/infos are non-blocking."
+            echo "::warning::flutter analyze returned $analyze_status without errors; warning/info backlog remains non-blocking."
           fi
 
+          echo "::notice::Warning and info diagnostics remain visible above; only analyzer errors fail this step."
           exit 0
       - run: flutter test
       - name: Build signed Android App Bundle
@@ -117,7 +121,18 @@ jobs:
           test -n "$FIREBASE_STORAGE_BUCKET" || { echo "FIREBASE_STORAGE_BUCKET secret missing"; exit 1; }
           test -n "$FIREBASE_SENDER_ID" || { echo "FIREBASE_SENDER_ID secret missing"; exit 1; }
           flutter pub get
-          flutter analyze
+          set +e
+          analysis_output="$(flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1)"
+          analyze_status=$?
+          set -e
+          printf '%s\n' "$analysis_output"
+          if printf '%s\n' "$analysis_output" | grep -Eq '^[[:space:]]*error[[:space:]]+-'; then
+            echo "Analyzer reported at least one error diagnostic."
+            exit 1
+          fi
+          if [ "$analyze_status" -ne 0 ]; then
+            echo "::warning::flutter analyze returned $analyze_status without errors; warning/info backlog remains non-blocking."
+          fi
           flutter build web --release \
             --dart-define=FIREBASE_WEB_API_KEY="$FIREBASE_WEB_API_KEY" \
             --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \

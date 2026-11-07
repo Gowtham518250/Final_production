@@ -12,6 +12,10 @@ void main() {
         VoiceBillingLocalization.label('Detected items', 'te-IN'),
         'గుర్తించిన వస్తువులు',
       );
+      expect(
+        VoiceBillingLocalization.label('PRODUCT NAMES', 'te'),
+        'వస్తువుల పేర్లు',
+      );
     });
 
     test('uses the selected Hindi and Tamil labels', () {

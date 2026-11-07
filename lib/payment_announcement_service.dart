@@ -269,7 +269,7 @@ class PaymentAnnouncementService {
   static const Duration _sameKeyWindow = Duration(seconds: 4);
   // A payment alert should start promptly. If the platform is stuck, the
   // result callback requests the existing audible OS-notification fallback.
-  static const Duration _maxQueueWait = Duration(seconds: 30);
+  static const Duration _maxQueueWait = Duration(seconds: 120);
   final Map<String, DateTime> _recentSpeechKeys = <String, DateTime>{};
   final Map<String, Future<bool>> _inFlightSpeech =
       <String, Future<bool>>{};
@@ -304,7 +304,7 @@ class PaymentAnnouncementService {
       message,
       _config.budgetDeviceTimeoutMultiplier,
     );
-    final timeout = calculatedTimeout.clamp(6, 12).toInt();
+    final timeout = calculatedTimeout.clamp(20, 60).toInt();
     final completer = Completer<bool>();
     final future = completer.future;
 

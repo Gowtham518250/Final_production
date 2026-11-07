@@ -103,6 +103,7 @@ void main() {
 
   setUp(() async {
     _mockSecureStorage.clear();
+    SecureTokenStorage.resetForTesting();
     _setupMockSecureStorage();
     SharedPreferences.setMockInitialValues({});
     ApiClient.resetRateLimitersForTesting();
@@ -163,6 +164,8 @@ void main() {
 
   group('SecureTokenStorage — save / read / clear lifecycle', () {
     test('saves and retrieves an access token securely', () async {
+      await SecureTokenStorage.saveUserId(42);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
       final token = _fakeAccessToken();
       await SecureTokenStorage.saveToken(token);
       final retrieved = await SecureTokenStorage.getToken();
@@ -187,6 +190,8 @@ void main() {
 
 
     test('saves and retrieves a refresh token securely', () async {
+      await SecureTokenStorage.saveUserId(42);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
       final refreshToken = _fakeRefreshToken();
       await SecureTokenStorage.saveRefreshToken(refreshToken);
       final retrieved = await SecureTokenStorage.getRefreshToken();
@@ -199,6 +204,8 @@ void main() {
     });
 
     test('clearAll removes stored tokens', () async {
+      await SecureTokenStorage.saveUserId(42);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
       await SecureTokenStorage.saveToken(_fakeAccessToken());
       await SecureTokenStorage.saveRefreshToken(_fakeRefreshToken());
       await SecureTokenStorage.clearAll();
@@ -207,10 +214,12 @@ void main() {
     });
     test('normal login cleanup preserves the encryption key', () async {
       await SecureTokenStorage.saveUserId(42);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
       final oldToken = _fakeAccessToken();
       await SecureTokenStorage.saveToken(oldToken);
       await SecureTokenStorage.clearAll();
       await SecureTokenStorage.saveUserId(42);
+      await SecureTokenStorage.saveRole(SessionRole.owner);
       final freshToken = _fakeAccessToken();
       await SecureTokenStorage.saveToken(freshToken);
       expect(await SecureTokenStorage.getToken(), equals(freshToken));
@@ -569,6 +578,8 @@ void main() {
           'session_time': 12345,
           'user_name': 'Test User',
         });
+        await SecureTokenStorage.saveUserId(42);
+        await SecureTokenStorage.saveRole(SessionRole.owner);
         await SecureTokenStorage.saveToken(_fakeAccessToken());
         await SecureTokenStorage.saveRefreshToken(_fakeRefreshToken());
 

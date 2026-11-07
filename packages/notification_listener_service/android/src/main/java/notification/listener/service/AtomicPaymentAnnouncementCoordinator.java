@@ -201,10 +201,12 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                     && accountHash.equals(old.accountHash);
                 boolean sameNotificationPayer = notEmpty(payerHash)
                     && payerHash.equals(old.payerHash);
+                boolean enrichment =
+                    (notEmpty(referenceHash) != notEmpty(old.referenceHash))
+                    || (notEmpty(payerHash) != notEmpty(old.payerHash))
+                    || (notEmpty(accountHash) != notEmpty(old.accountHash));
                 if (sameDirection
                     && !"unknown".equals(direction)
-                    && !notEmpty(referenceHash)
-                    && !notEmpty(old.referenceHash)
                     && isNotificationUpdate(sourceIdentity, old.sourceIdentity)
                     && currentPostTime > 0L
                     && previousPostTime > 0L
@@ -212,12 +214,15 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                         <= NOTIFICATION_UPDATE_MS
                     && !notificationAccountConflict
                     && !notificationPayerConflict
-                    && (sameNotificationAccount || sameNotificationPayer)) {
+                    && (sameNotificationAccount || sameNotificationPayer || enrichment)) {
                     // This gate suppresses speech only; Flutter retains the
                     // event for payment history and merchant review.
                     ContentValues refresh = new ContentValues();
                     refresh.put("seen_at", now);
                     refresh.put("source_identity", emptyToNull(sourceIdentity));
+                    if (notEmpty(referenceHash)) {
+                        refresh.put("reference_hash", referenceHash);
+                    }
                     refresh.put("payer_hash", emptyToNull(payerHash));
                     refresh.put("account_hash", emptyToNull(accountHash));
                     refresh.put("text_hash", emptyToNull(textHash));

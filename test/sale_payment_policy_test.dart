@@ -168,5 +168,18 @@ void main() {
         100,
       );
     });
+
+    test('does not treat a 49-paise shortfall as fully paid', () {
+      expect(SalePaymentPolicy.isFullyPaid(99.51, 100), isFalse);
+      expect(SalePaymentPolicy.isPartialPaid(99.51, 100), isTrue);
+      expect(SalePaymentPolicy.remainingDue(99.51, 100), 0.49);
+    });
+
+    test('treats a one-paisa remainder as unpaid and an exact match as paid', () {
+      expect(SalePaymentPolicy.isFullyPaid(99.99, 100), isFalse);
+      expect(SalePaymentPolicy.remainingDue(99.99, 100), 0.01);
+      expect(SalePaymentPolicy.isFullyPaid(100, 100), isTrue);
+      expect(SalePaymentPolicy.remainingDue(100, 100), 0);
+    });
   });
 }

@@ -8,6 +8,7 @@ import '../../widgets/accessibility_helper.dart';
 import '../../widgets/premium_animations.dart';
 import 'controllers/sales_entry_provider.dart';
 import 'widgets/bill_preview_dialog.dart';
+import '../../sale_payment_policy.dart';
 
 /// ⌨️ Enhanced Billing Page with Keyboard Shortcuts and Partial Payments
 class EnhancedBillingScreen extends StatefulWidget {
@@ -165,6 +166,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
 
   Future<void> _saveSale() async {
     final provider = context.read<SalesEntryProvider>();
+    if (provider.isSaving) return;
     final success = await provider.submitSale();
     
     if (success && mounted) {
@@ -349,10 +351,8 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
               ),
               const Spacer(),
               Switch(
-                value: false,
-                onChanged: (value) {
-                  // Toggle partial payment mode
-                },
+                value: provider.partialPaymentEnabled,
+                onChanged: provider.setPartialPaymentEnabled,
                 activeColor: const Color(0xFF6366F1),
               ),
             ],
@@ -392,10 +392,14 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
                               child: TextFormField(
+                                enabled: provider.partialPaymentEnabled,
                                 keyboardType: TextInputType.number,
+                                onChanged: (value) => provider.setPaidAmount(
+                                  double.tryParse(value.trim()) ?? 0,
+                                ),
                                 decoration: const InputDecoration(
                                   border: InputBorder.none,
-                                  hint: LiveTranslatedText('Enter amount'),
+                                  hintText: 'Enter amount',
                                   hintStyle: TextStyle(fontSize: 16),
                                 ),
                                 style: GoogleFonts.poppins(
@@ -427,7 +431,7 @@ class _EnhancedBillingScreenState extends State<EnhancedBillingScreen>
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     LiveTranslatedText(
-                      '₹${provider.totalAmount.toStringAsFixed(2)}',
+                      '₹${SalePaymentPolicy.remainingDue(provider.paidAmount, provider.totalAmount).toStringAsFixed(2)}',
                       style: GoogleFonts.poppins(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
 import 'local_storage_service.dart';
+import 'inventory_stock_helper.dart';
 import 'notification_service.dart';
 
 /// 
@@ -112,7 +113,7 @@ class InventorySyncService {
   /// PHASE 5 FIX: Prevent negative inventory
   static Future<Map<String, dynamic>> deductStock({
     required int productId,
-    required int quantity,
+    required num quantity,
     required String referenceId, // invoice_number or sale_id
     String reason = 'SALE',
   }) async {
@@ -120,9 +121,8 @@ class InventorySyncService {
     
     try {
       if (kDebugMode) debugPrint('🔒 Backend Stock Deduction: Product $productId, Qty: $quantity');
-      
-      // 🔒 PHASE 5 FIX: Prevent negative deductions
-      if (quantity <= 0) {
+      final parsedQuantity = parsePositiveQuantity(quantity);
+      if (parsedQuantity == null) {
         if (kDebugMode) debugPrint('❌ Invalid quantity: $quantity');
         return {
           'success': false,
@@ -148,7 +148,7 @@ class InventorySyncService {
         '/api/inventory-sync/deduct-stock',
         {
           'product_id': productId,
-          'quantity': quantity,
+          'quantity': parsedQuantity,
           'reason': reason,
           'reference_id': referenceId,
           'idempotency_key': idempotencyKey,
@@ -531,7 +531,7 @@ class InventorySyncService {
   /// Decrease stock in local cache immediately (Critical for offline sales)
   static bool _isUpdatingLocalStock = false;
 
-  static Future<void> decreaseLocalStock(int productId, int quantitySold) async {
+  static Future<void> decreaseLocalStock(int productId, num quantitySold) async {
     while (_isUpdatingLocalStock) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -542,8 +542,8 @@ class InventorySyncService {
       
       for (var p in products) {
         if ((p['id']?.toString() ?? p['product_id']?.toString()) == productId.toString()) {
-          int current = (p['current_stock'] as num?)?.toInt() ?? (p['stock'] as num?)?.toInt() ?? 0;
-          int newStock = current - quantitySold;
+          final current = InventoryStockHelper.readStock(p);
+          var newStock = current - quantitySold.toDouble();
           if (newStock < 0) newStock = 0;
           
           p['current_stock'] = newStock;
@@ -564,13 +564,13 @@ class InventorySyncService {
   }
   
   /// Get stock from local cache (fallback when offline)
-  static Future<int?> getLocalStock(int productId) async {
+  static Future<double?> getLocalStock(int productId) async {
     try {
       final products = await LocalStorageService.loadBackendProducts();
       
       for (var p in products) {
         if ((p['id']?.toString() ?? p['product_id']?.toString()) == productId.toString()) {
-          return p['current_stock'] as int? ?? p['stock'] as int?;
+          return InventoryStockHelper.readStock(p);
         }
       }
       
