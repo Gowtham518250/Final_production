@@ -88,10 +88,8 @@ class SoundboxAnnouncementCoordinator<TUi> {
   }
 
   /// True when [event] looks like another channel's echo of the currently
-  /// held payment: same amount and compatible direction, with no conflicting
-  /// account suffix or payer name. Only CROSS-channel pairs merge — a second
-  /// notification with the same amount is a repost or a genuinely different
-  /// payment and must flush the hold, not merge into it.
+  /// held payment: same amount and compatible direction, with at least one
+  /// shared identity (account/payer). STRICT: 10-second window, cross-channel only.
   bool _isEchoOfHeld(PaymentEvent event) {
     final held = _held;
     if (held == null) return false;
@@ -103,29 +101,28 @@ class SoundboxAnnouncementCoordinator<TUi> {
       return false;
     }
 
+    // STRICT: Require at least one shared identity (account or payer) to merge.
+    final primaryAccount = _norm(primary.accountSuffix);
+    final eventAccount = _norm(event.accountSuffix);
+    final primaryPayer = _norm(primary.payerName);
+    final eventPayer = _norm(event.payerName);
+    final accountMatches = (primaryAccount != null &&
+        eventAccount != null &&
+        primaryAccount == eventAccount);
+    final payerMatches = (primaryPayer != null &&
+        eventPayer != null &&
+        (primaryPayer == eventPayer ||
+            primaryPayer.contains(eventPayer) ||
+            eventPayer.contains(primaryPayer)));
+    if (!accountMatches && !payerMatches) {
+      return false;
+    }
+
     final primaryDir = primary.direction;
     final eventDir = event.direction;
     if (primaryDir != eventDir &&
         primaryDir != PaymentTransactionDirection.unknown &&
         eventDir != PaymentTransactionDirection.unknown) {
-      return false;
-    }
-
-    final primaryAccount = _norm(primary.accountSuffix);
-    final eventAccount = _norm(event.accountSuffix);
-    if (primaryAccount != null &&
-        eventAccount != null &&
-        primaryAccount != eventAccount) {
-      return false;
-    }
-
-    final primaryPayer = _norm(primary.payerName);
-    final eventPayer = _norm(event.payerName);
-    if (primaryPayer != null &&
-        eventPayer != null &&
-        primaryPayer != eventPayer &&
-        !primaryPayer.contains(eventPayer) &&
-        !eventPayer.contains(primaryPayer)) {
       return false;
     }
 
