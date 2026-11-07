@@ -39,10 +39,10 @@ class DashboardActionDock extends StatelessWidget {
       top: false,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const horizontalPadding = 8.0;
-          const spacing = 6.0;
+          const horizontalPadding = 12.0;
+          const spacing = 8.0;
           const minItemWidth = 76.0;
-          const maxItemWidth = 120.0;
+          const maxItemWidth = 136.0;
           final availableWidth = constraints.maxWidth;
           final contentWidth = availableWidth - horizontalPadding * 2;
           final fitWidth = items.isEmpty
@@ -53,10 +53,10 @@ class DashboardActionDock extends StatelessWidget {
               itemWidth * items.length + spacing * (items.length - 1);
 
           return Container(
-            height: 72,
+            height: 84,
             padding: const EdgeInsets.symmetric(
               horizontal: horizontalPadding,
-              vertical: 6,
+              vertical: 7,
             ),
             decoration: BoxDecoration(
               color: backgroundColor,
@@ -83,7 +83,7 @@ class DashboardActionDock extends StatelessWidget {
                             items[index].targetKey ??
                             ValueKey('dashboard-action-$index'),
                         width: itemWidth,
-                        height: 58,
+                        height: 70,
                         child: _DashboardActionButton(item: items[index]),
                       ),
                     ],
@@ -105,33 +105,22 @@ class _DashboardActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = item.primary ? Colors.white : item.color;
+    const foreground = Color(0xFF1F2937);
     return Tooltip(
       message: item.label,
       child: Material(
-        color: item.primary ? item.color : item.color.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(12),
+        color: item.primary ? item.color : Colors.white,
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: item.onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: item.primary
-                    ? item.color
-                    : item.color.withValues(alpha: 0.24),
+                color: item.primary ? item.color : const Color(0xFFE5E7EB),
               ),
-              boxShadow: item.primary
-                  ? [
-                      BoxShadow(
-                        color: item.color.withValues(alpha: 0.22),
-                        blurRadius: 7,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : null,
             ),
             child: Stack(
               clipBehavior: Clip.none,
@@ -140,24 +129,37 @@ class _DashboardActionButton extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        item.icon,
-                        color: foreground,
-                        size: item.primary ? 21 : 20,
+                      Container(
+                        width: 34,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: item.primary
+                              ? Colors.white.withValues(alpha: 0.16)
+                              : item.color.withValues(alpha: 0.11),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          item.icon,
+                          color: item.primary ? Colors.white : item.color,
+                          size: 21,
+                        ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 4),
                       LiveTranslatedText(
                         item.label,
                         textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: foreground,
-                          fontSize: 10,
+                          color: item.primary
+                              ? Colors.white
+                              : foreground.withValues(alpha: 0.92),
+                          fontSize: 11,
                           fontWeight: item.primary
                               ? FontWeight.w700
-                              : FontWeight.w600,
-                          height: 1.1,
+                              : FontWeight.w500,
+                          height: 1.05,
                         ),
                       ),
                     ],

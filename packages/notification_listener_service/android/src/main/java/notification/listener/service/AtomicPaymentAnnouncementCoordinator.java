@@ -31,6 +31,7 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
     private static final String TABLE = "announcement_observations";
     private static final long MAX_AGE_MS = 24L * 60L * 60L * 1000L;
     private static final long STRONG_CROSS_SOURCE_MS = 10L * 60L * 1000L;
+    private static final long NOTIFICATION_UPDATE_MS = 30L * 1000L;
     private static final int MAX_ROWS = 500;
 
     private static volatile AtomicPaymentAnnouncementCoordinator instance;
@@ -157,6 +158,46 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
                         return true;
                     }
                     continue;
+                }
+
+                // In-place notification update that ENRICHES the earlier post
+                // (reference/payer/account present on only one side). Same
+                // notification slot + amount + direction inside the update
+                // window and no conflicting evidence = the same payment.
+                // Both-reference cases were handled above.
+                final String stream = streamOf(sourceIdentity);
+                if (stream != null
+                        && stream.equals(streamOf(old.sourceIdentity))
+                        && sameDirection
+                        && !"unknown".equals(direction)
+                        && Math.abs(now - old.seenAt) <= NOTIFICATION_UPDATE_MS) {
+                    boolean oneSided =
+                            notEmpty(referenceHash) != notEmpty(old.referenceHash)
+                            || notEmpty(payerHash) != notEmpty(old.payerHash)
+                            || notEmpty(accountHash) != notEmpty(old.accountHash);
+                    boolean conflict =
+                            (notEmpty(payerHash) && notEmpty(old.payerHash)
+                                    && !payerHash.equals(old.payerHash))
+                            || (notEmpty(accountHash) && notEmpty(old.accountHash)
+                                    && !accountHash.equals(old.accountHash));
+                    if (oneSided && !conflict) {
+                        ContentValues refresh = new ContentValues();
+                        if (notEmpty(referenceHash) && !notEmpty(old.referenceHash)) {
+                            refresh.put("reference_hash", referenceHash);
+                        }
+                        if (notEmpty(payerHash) && !notEmpty(old.payerHash)) {
+                            refresh.put("payer_hash", payerHash);
+                        }
+                        if (notEmpty(accountHash) && !notEmpty(old.accountHash)) {
+                            refresh.put("account_hash", accountHash);
+                        }
+                        if (refresh.size() > 0) {
+                            db.update(TABLE, refresh, "id = ?",
+                                    new String[]{String.valueOf(old.id)});
+                        }
+                        db.setTransactionSuccessful();
+                        return true;
+                    }
                 }
 
                 if (old.channel.equals(channel)
@@ -357,5 +398,12 @@ public final class AtomicPaymentAnnouncementCoordinator extends SQLiteOpenHelper
         String accountHash;
         long seenAt;
         String claimedChannels;
+    }
+
+    /** Notification slot (package|tag|id) of a stable identity, or null. */
+    private static String streamOf(String identity) {
+        if (!notEmpty(identity) || identity.startsWith("sms|")) return null;
+        int cut = identity.lastIndexOf('|');
+        return cut > 0 ? identity.substring(0, cut) : null;
     }
 }

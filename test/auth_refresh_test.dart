@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retail_mind/api_client.dart';
 import 'package:retail_mind/features/ai_query/models/ai_query_response.dart';
 import 'package:retail_mind/features/ai_query/services/ai_query_service.dart';
+import 'package:retail_mind/scoped_shared_preferences.dart';
 import 'package:retail_mind/session_management.dart';
 import 'package:retail_mind/secure_token_storage.dart';
 
@@ -235,6 +236,13 @@ void main() {
         // session initializer. Generating the expected JWTs after an async
         // operation can cross a one-second boundary and produce different
         // iat/exp claims even when token persistence is correct.
+        await ScopedSharedPreferences.setCurrentUserId(42);
+        await ScopedSharedPreferences.setBool('is_staff_mode', true);
+        await ScopedSharedPreferences.setString('active_staff_name', 'Cashier');
+        await ScopedSharedPreferences.setString(
+          'active_staff_worker_id',
+          'worker-7',
+        );
         final accessToken = _fakeAccessToken();
         final refreshToken = _fakeRefreshToken();
 
@@ -251,6 +259,15 @@ void main() {
         expect(
           await SecureTokenStorage.getRefreshToken(),
           equals(refreshToken),
+        );
+        expect(await ScopedSharedPreferences.getBool('is_staff_mode'), isFalse);
+        expect(
+          await ScopedSharedPreferences.getString('active_staff_name'),
+          isNull,
+        );
+        expect(
+          await ScopedSharedPreferences.getString('active_staff_worker_id'),
+          isNull,
         );
       },
     );

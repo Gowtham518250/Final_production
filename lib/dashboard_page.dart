@@ -259,6 +259,7 @@ class _DashboardPageState extends State<DashboardPage>
   String _website = '';
   String _shopPhone = '';
   bool _isStaffMode = false;
+  bool _staffModeLoaded = false;
   RetentionSnapshot? _retentionSnapshot;
   bool _growthOnboardingQueued = false;
   bool _isMasterPinSet = false;
@@ -547,6 +548,7 @@ class _DashboardPageState extends State<DashboardPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_loadStaffModeForNavigation());
     // Initialize connectivity instance
     _connectivity = Connectivity();
     _animationController = AnimationController(
@@ -3803,6 +3805,22 @@ class _DashboardPageState extends State<DashboardPage>
     });
   }
 
+  Future<void> _loadStaffModeForNavigation() async {
+    try {
+      final isStaff =
+          await ScopedSharedPreferences.getBool('is_staff_mode') ?? false;
+      if (!mounted) return;
+      setState(() {
+        _isStaffMode = isStaff;
+        _staffModeLoaded = true;
+      });
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Dashboard navigation role load failed: $error');
+      }
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -5222,6 +5240,7 @@ class _DashboardPageState extends State<DashboardPage>
       if (mounted) {
         setState(() {
           _isStaffMode = isStaff;
+          _staffModeLoaded = true;
           _isShopSetup = sName.isNotEmpty && sName != 'AI Shop Pro';
           shopName = sName.isEmpty ? 'AI Shop Pro' : sName;
 
@@ -16357,9 +16376,7 @@ class _DashboardPageState extends State<DashboardPage>
     final surfaceColor = isDarkMode
         ? const Color(0xFF0B1020)
         : const Color(0xFFF7F9FC);
-    final navigationSurface = isDarkMode
-        ? const Color(0xFF121A2B)
-        : Colors.white;
+    const navigationSurface = Colors.white;
     final dashboardActions = [
       DashboardActionItem(
         icon: Icons.add_shopping_cart_rounded,
@@ -16382,42 +16399,44 @@ class _DashboardPageState extends State<DashboardPage>
         onTap: () => _openSalesEntryFromCoach(openVoice: true),
       ),
       DashboardActionItem(
-        icon: Icons.local_shipping_outlined,
-        label: 'Online orders',
-        color: const Color(0xFFD97706),
-        badgeCount: _onlinePendingOrders,
-        onTap: () => Navigator.pushNamed(context, '/online-orders'),
-      ),
-      DashboardActionItem(
-        icon: Icons.chat_bubble_outline_rounded,
-        label: 'AI Ask',
-        color: const Color(0xFF7C3AED),
-        onTap: () => Navigator.pushNamed(context, '/query'),
-      ),
-      DashboardActionItem(
-        icon: Icons.receipt_long_outlined,
-        label: 'Khata',
-        color: const Color(0xFFEA580C),
-        onTap: () => Navigator.pushNamed(context, '/invoices'),
-      ),
-      DashboardActionItem(
         icon: Icons.headset_mic_outlined,
         label: 'Help & Support',
         color: const Color(0xFF0891B2),
         onTap: () => Navigator.pushNamed(context, '/chatbot-help'),
       ),
-      DashboardActionItem(
-        icon: Icons.redeem_rounded,
-        label: 'Gift cards',
-        color: const Color(0xFFDB2777),
-        onTap: () => Navigator.pushNamed(context, '/gift-card'),
-      ),
-      DashboardActionItem(
-        icon: Icons.more_horiz_rounded,
-        label: 'More',
-        color: const Color(0xFF475569),
-        onTap: () => Navigator.pushNamed(context, '/more'),
-      ),
+      if (_staffModeLoaded && !_isStaffMode) ...[
+        DashboardActionItem(
+          icon: Icons.local_shipping_outlined,
+          label: 'Online orders',
+          color: const Color(0xFFD97706),
+          badgeCount: _onlinePendingOrders,
+          onTap: () => Navigator.pushNamed(context, '/online-orders'),
+        ),
+        DashboardActionItem(
+          icon: Icons.chat_bubble_outline_rounded,
+          label: 'AI Ask',
+          color: const Color(0xFF7C3AED),
+          onTap: () => Navigator.pushNamed(context, '/query'),
+        ),
+        DashboardActionItem(
+          icon: Icons.receipt_long_outlined,
+          label: 'Khata',
+          color: const Color(0xFFEA580C),
+          onTap: () => Navigator.pushNamed(context, '/invoices'),
+        ),
+        DashboardActionItem(
+          icon: Icons.redeem_rounded,
+          label: 'Gift cards',
+          color: const Color(0xFFDB2777),
+          onTap: () => Navigator.pushNamed(context, '/gift-card'),
+        ),
+        DashboardActionItem(
+          icon: Icons.more_horiz_rounded,
+          label: 'More',
+          color: const Color(0xFF475569),
+          onTap: () => Navigator.pushNamed(context, '/more'),
+        ),
+      ],
       DashboardActionItem(
         icon: Icons.logout_rounded,
         label: 'Logout',

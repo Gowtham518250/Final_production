@@ -57,7 +57,7 @@ void main() {
 
     expect(
       tester.getSize(find.byType(DashboardActionDock)).height,
-      lessThanOrEqualTo(80),
+      lessThanOrEqualTo(88),
     );
     for (final label in labels) {
       expect(find.text(label), findsOneWidget);
@@ -65,16 +65,16 @@ void main() {
     expect(find.text('3'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('dashboard-action-0'))).height,
-      lessThan(62),
+      lessThan(74),
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('dashboard-action-0'))).width,
-      120,
+      136,
     );
     expect(tester.takeException(), isNull);
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('dashboard-action-0'))).dx,
-      8,
+      12,
     );
 
     final firstButtonY = tester
@@ -160,13 +160,20 @@ void main() {
     for (final color in colors) {
       expect(
         find.byWidgetPredicate(
-          (widget) =>
-              widget is Material &&
-              widget.color == color.withValues(alpha: 0.09),
+          (widget) => widget is Icon && widget.color == color,
         ),
         findsOneWidget,
       );
     }
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Material &&
+            widget.borderRadius == BorderRadius.circular(16) &&
+            widget.color == Colors.white,
+      ),
+      findsNWidgets(colors.length),
+    );
     expect(tester.takeException(), isNull);
   });
 

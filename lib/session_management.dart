@@ -358,6 +358,11 @@ class SessionManagementService {
     // Set the active identity only after cleanup, then persist and verify all
     // new credentials before allowing the login flow to navigate.
     await ScopedSharedPreferences.setCurrentUserId(userId);
+    if (role.trim().toLowerCase() != 'customer') {
+      await ScopedSharedPreferences.setBool('is_staff_mode', false);
+      await ScopedSharedPreferences.remove('active_staff_name');
+      await ScopedSharedPreferences.remove('active_staff_worker_id');
+    }
     await SecureTokenStorage.saveUserId(userId);
     await SecureTokenStorage.saveRole(
       role.trim().toLowerCase() == 'customer'

@@ -241,6 +241,116 @@ void main() {
       expect(d.reason, 'same_notification_update');
     });
 
+    test('update that adds a UTR is the same notification slot', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'update',
+          source: 'post-b',
+          reference: '412345678901',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 20)),
+          sec: 20,
+        ),
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.candidateEcho);
+      expect(d.reason, 'same_notification_enrichment');
+    });
+
+    test('update that only adds a payer name is the same notification slot',
+        () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'update',
+          source: 'post-b',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 10)),
+          notificationPayer: 'ravi kumar',
+          sec: 10,
+        ),
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.candidateEcho);
+      expect(d.reason, 'same_notification_enrichment');
+    });
+
+    test('enrichment outside the 30 second update window stays distinct', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'update',
+          source: 'post-b',
+          reference: '412345678901',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 45)),
+          sec: 45,
+        ),
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.distinct);
+    });
+
+    test('enrichment with a conflicting payer stays distinct', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'update',
+          source: 'post-b',
+          reference: '412345678901',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0.add(const Duration(seconds: 10)),
+          notificationPayer: 'anita rao',
+          sec: 10,
+        ),
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id',
+          notificationAt: _t0,
+          notificationPayer: 'ravi kumar',
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.distinct);
+    });
+
+    test('different notification slots are never merged by enrichment', () {
+      final d = PaymentIdentityMatcher.compare(
+        sig(
+          'second',
+          source: 'post-b',
+          reference: '412345678901',
+          notificationStream: 'package|tag|id-2',
+          notificationAt: _t0.add(const Duration(seconds: 5)),
+          sec: 5,
+        ),
+        sig(
+          'first',
+          source: 'post-a',
+          notificationStream: 'package|tag|id-1',
+          notificationAt: _t0,
+        ),
+      );
+
+      expect(d.verdict, IdentityVerdict.distinct);
+    });
+
     test('notification repost conflicts stay distinct', () {
       final first = sig(
         'first',

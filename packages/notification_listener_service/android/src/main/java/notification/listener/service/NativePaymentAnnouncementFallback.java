@@ -410,6 +410,28 @@ final class NativePaymentAnnouncementFallback {
         Log.i(TAG, "Native payment speech completed.");
     }
 
+    /**
+     * Completion watchdog. While the engine is still audibly speaking, a
+     * queued utterance is just waiting its turn: extend instead of releasing
+     * the claim and retrying, which would announce the payment twice once the
+     * original utterance finally plays.
+     */
+    private static void onWatchdog(String utteranceId, int extensionsLeft) {
+        synchronized (LOCK) {
+            if (!IN_FLIGHT.containsKey(utteranceId)) return;
+        }
+        boolean speaking = false;
+        try {
+            speaking = tts != null && tts.isSpeaking();
+        } catch (RuntimeException ignored) {
+        }
+        if (speaking && extensionsLeft > 0) {
+            MAIN.postDelayed(() -> onWatchdog(utteranceId, extensionsLeft - 1), 15000L);
+            return;
+        }
+        failUtterance(utteranceId, "tts_completion_timeout");
+    }
+
     private static void failUtterance(String utteranceId, String reason) {
         if (STARTED.contains(utteranceId)) {
             completeUtterance(utteranceId);
@@ -426,10 +448,24 @@ final class NativePaymentAnnouncementFallback {
     private static void handleRequestFailure(SpeakRequest request, String reason) {
         NotificationRelayReceiver.markNativeAnnouncementHandled(
                 request.context, request.eventKey, false);
-        AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
-                request.context, stableIdentity(request.eventKey));
         SCHEDULED.remove(request.eventKey);
         releaseWakeLockIfIdle();
+
+        if ("tts_completion_timeout".equals(reason)) {
+            // The engine was idle yet never confirmed this utterance, so it
+            // may still play late. Keep the announcement claim and do NOT
+            // retry speech (the late original plus a retry = duplicate); the
+            // audible OS alert below is the safety net.
+            if (postAudibleFallback(request, reason)) {
+                Log.w(TAG, "TTS timeout; kept claim, posted audible OS fallback.");
+            } else {
+                Log.w(TAG, "TTS timeout; kept claim, durable event stays pending.");
+            }
+            return;
+        }
+
+        AtomicPaymentAnnouncementCoordinator.releaseSourceIdentity(
+                request.context, stableIdentity(request.eventKey));
 
         final boolean stillPending = NotificationRelayReceiver.isPendingEvent(
                 request.context, request.eventKey);
@@ -632,7 +668,7 @@ final class NativePaymentAnnouncementFallback {
                     queueDepth = IN_FLIGHT.size();
                 }
                 MAIN.postDelayed(
-                        () -> failUtterance(scheduledUtteranceId, "tts_completion_timeout"),
+                        () -> onWatchdog(scheduledUtteranceId, 8),
                         45000L + 15000L * queueDepth);
 
                 int result = tts.speak(message, TextToSpeech.QUEUE_ADD, params);

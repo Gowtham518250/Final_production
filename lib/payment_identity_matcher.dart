@@ -306,6 +306,32 @@ class PaymentIdentityMatcher {
         currentNotificationPayer != null &&
         previousNotificationPayer != null &&
         _payersCompatible(currentNotificationPayer, previousNotificationPayer);
+    // An in-place notification update usually ENRICHES the first post, e.g.
+    // "Rs 500 received" -> "Rs 500 received from Ravi, UTR 123". Evidence that
+    // exists on only one side is new information about the same notification
+    // slot, not a second payment. Two different references never reach here as
+    // an echo, and any payer/account conflict keeps the posts separate.
+    final bothHaveReference =
+        current.reference != null && previous.reference != null;
+    final oneSidedEvidence =
+        (current.reference == null) != (previous.reference == null) ||
+        (currentNotificationPayer == null) !=
+            (previousNotificationPayer == null) ||
+        (current.account == null) != (previous.account == null);
+    if (!bothHaveReference &&
+        oneSidedEvidence &&
+        current.notificationStream != null &&
+        current.notificationStream == previous.notificationStream &&
+        directionKnownEqual &&
+        notificationAt.difference(previousNotificationAt).abs() <=
+            notificationUpdateWindow &&
+        !notificationAccountConflict &&
+        !notificationPayerConflict) {
+      return const IdentityDecision(
+        IdentityVerdict.candidateEcho,
+        'same_notification_enrichment',
+      );
+    }
     if (current.reference == null &&
         previous.reference == null &&
         current.notificationStream != null &&
@@ -500,6 +526,7 @@ class PaymentIdentityMatcher {
       'same_payer',
       'utr_enrichment',
       'same_notification_update',
+      'same_notification_enrichment',
     };
     if (!ambiguous &&
         candidateId != null &&
