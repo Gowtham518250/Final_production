@@ -11,7 +11,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../../visual_widgets.dart';
-import '../../../agent_debug_log.dart';
 import '../models/ai_query_response.dart';
 import '../services/ai_query_service.dart';
 import '../widgets/ai_answer_card.dart';
@@ -195,17 +194,6 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
         }
         if (!response.isSuccess) {
           _errorMessage = response.errorMessage ?? 'Unable to process this question.';
-          // #region agent log
-          AgentDebugLog.log(
-            location: 'ai_query_screen.dart:_executeQuery',
-            message: 'Error banner from askQuery',
-            hypothesisId: 'H6',
-            data: {
-              'errorMessage': _errorMessage,
-              'source': 'askQuery',
-            },
-          );
-          // #endregion
         }
       });
       _scrollToBottom();
@@ -342,17 +330,6 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
         if (_errorMessage == null || _errorMessage!.isEmpty) {
           _errorMessage = 'Could not process the voice recording. Please retry.';
         }
-        // #region agent log
-        AgentDebugLog.log(
-          location: 'ai_query_screen.dart:_stopRecordingAndAsk',
-          message: 'Error banner from voice transcribe',
-          hypothesisId: 'H2',
-          data: {
-            'errorMessage': _errorMessage,
-            'source': 'voice',
-          },
-        );
-        // #endregion
       });
       if (kDebugMode) debugPrint('Ask Retail Mind voice query failed: $error');
     } finally {

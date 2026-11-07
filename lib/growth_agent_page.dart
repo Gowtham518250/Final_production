@@ -14,7 +14,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 import 'app_localizations.dart';
+import 'app_motion.dart';
 import 'growth_marketing_helpers.dart';
+import 'growth_studio_motion.dart';
 import 'live_translated_text.dart';
 import 'local_storage_service.dart';
 
@@ -30,7 +32,8 @@ class GrowthAgentPage extends StatefulWidget {
   State<GrowthAgentPage> createState() => _GrowthAgentPageState();
 }
 
-class _GrowthAgentPageState extends State<GrowthAgentPage> {
+class _GrowthAgentPageState extends State<GrowthAgentPage>
+    with SingleTickerProviderStateMixin {
   static const MethodChannel _creativeStudioChannel = MethodChannel(
     'com.retailmind.app/creative_studio',
   );
@@ -67,15 +70,31 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   bool _autoWeekly = false;
   int _weeklyDay = 0;
   Map<String, dynamic>? _currentDraft;
+  late final AnimationController _ambient;
 
   @override
   void initState() {
     super.initState();
+    _ambient = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    );
     _loadWorkspace();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (AppMotion.reduced(context)) {
+      _ambient.stop();
+    } else if (!_ambient.isAnimating) {
+      _ambient.repeat();
+    }
+  }
+
+  @override
   void dispose() {
+    _ambient.dispose();
     _shopController.dispose();
     _offerController.dispose();
     _discountPriceController.dispose();
@@ -1612,67 +1631,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Widget _wizardProgress() {
-    const steps = ['Goal', 'Design', 'Review'];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE7E2F7)),
-      ),
-      child: Row(
-        children: List.generate(steps.length, (index) {
-          final current = index == _wizardStep;
-          final complete = index < _wizardStep;
-          return Expanded(
-            child: InkWell(
-              onTap: index <= _wizardStep || _currentDraft != null
-                  ? () => _openWizardStep(index)
-                  : null,
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 13,
-                    backgroundColor: current || complete
-                        ? _purple
-                        : const Color(0xFFF1F0F7),
-                    child: complete
-                        ? const Icon(Icons.check, color: Colors.white, size: 15)
-                        : Text(
-                            '${index + 1}',
-                            style: TextStyle(
-                              color: current ? Colors.white : _muted,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                  ),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: LiveTranslatedText(
-                      steps[index],
-                      style: TextStyle(
-                        color: current ? _purple : _muted,
-                        fontSize: 11,
-                        fontWeight: current ? FontWeight.w800 : FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (index < steps.length - 1)
-                    Container(
-                      width: 7,
-                      height: 1,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      color: complete ? _purple : const Color(0xFFE2E8F0),
-                    ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ),
+    return GrowthWizardRail(
+      step: _wizardStep,
+      canOpenReview: _currentDraft != null,
+      onStepTap: _openWizardStep,
     );
   }
 
@@ -1706,7 +1668,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                   child: InkWell(
                     onTap: () => setState(() => _goal = goal.id),
                     borderRadius: BorderRadius.circular(16),
-                    child: AnimatedContainer(
+                    child: AnimatedScale(
+                      scale: selected ? 1.03 : 1,
+                      duration: AppMotion.medium,
+                      curve: Curves.easeOutBack,
+                      child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       constraints: const BoxConstraints(minHeight: 112),
                       padding: const EdgeInsets.all(12),
@@ -1756,6 +1722,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                           ),
                         ],
                       ),
+                    ),
                     ),
                   ),
                 );
@@ -2006,7 +1973,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
         title: const LiveTranslatedText(
-          'Promotion Studio',
+          'Grow My Shop',
           style: TextStyle(fontWeight: FontWeight.w800, color: _ink),
         ),
         backgroundColor: Colors.white,
@@ -2028,40 +1995,66 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const GrowthLoadingStage()
           : RefreshIndicator(
               onRefresh: _loadWorkspace,
               color: _purple,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
-                  _hero(),
+                  GrowthStagger(index: 0, child: _hero()),
                   const SizedBox(height: 18),
-                  _wizardProgress(),
+                  GrowthStagger(index: 1, child: _wizardProgress()),
                   const SizedBox(height: 16),
                   if (_message.isNotEmpty) ...[
-                    _notice(_message),
+                    GrowthStagger(index: 2, child: _notice(_message)),
                     const SizedBox(height: 12),
                   ],
-                  if (_wizardStep == 0) ...[
-                    _buildCampaignGoalStep(),
-                    const SizedBox(height: 18),
-                  ],
-                  if (_wizardStep == 1) ...[
-                    _sectionTitle(
-                      'Build your campaign',
-                      'Choose a product, customize the design, and add only offers you can honor.',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildCampaignForm(),
-                    OutlinedButton.icon(
-                      onPressed: () => _openWizardStep(0),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                      label: const LiveTranslatedText('Back to campaign goal'),
-                    ),
-                    const SizedBox(height: 18),
-                  ],
-                  if (_wizardStep == 2) ...[
+                  GrowthStepSwitch(
+                    step: _wizardStep,
+                    child: _wizardStep == 0
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildCampaignGoalStep(),
+                              const SizedBox(height: 18),
+                              _automationSettingsCard(),
+                              const SizedBox(height: 20),
+                              _sectionTitle(
+                                'Campaign drafts',
+                                'Open drafts for review or continue an approved promotion.',
+                              ),
+                              const SizedBox(height: 10),
+                              _campaignHistory(),
+                              const SizedBox(height: 16),
+                              _notice(
+                                'Poster artwork is composed on this device. Sharing is manual; no paid ads or bulk messages '
+                                'are started, and offer codes are not automatically redeemed at checkout.',
+                              ),
+                            ],
+                          )
+                        : _wizardStep == 1
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _sectionTitle(
+                                'Build your campaign',
+                                'Choose a product, customize the design, and add only offers you can honor.',
+                              ),
+                              const SizedBox(height: 10),
+                              _buildCampaignForm(),
+                              OutlinedButton.icon(
+                                onPressed: () => _openWizardStep(0),
+                                icon: const Icon(Icons.arrow_back_rounded),
+                                label: const LiveTranslatedText(
+                                  'Back to campaign goal',
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                     _sectionTitle(
                       'Review your promotion',
                       'Check the poster and details. Sharing unlocks only after approval.',
@@ -2200,24 +2193,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                       icon: const Icon(Icons.edit_outlined),
                       label: const LiveTranslatedText('Edit campaign design'),
                     ),
-                    const SizedBox(height: 18),
-                  ],
-                  const SizedBox(height: 20),
-                  if (_wizardStep == 0) ...[
-                    _automationSettingsCard(),
-                    const SizedBox(height: 20),
-                    _sectionTitle(
-                      'Campaign drafts',
-                      'Open drafts for review or continue an approved promotion.',
-                    ),
-                    const SizedBox(height: 10),
-                    _campaignHistory(),
-                    const SizedBox(height: 16),
-                    _notice(
-                      'Poster artwork is composed on this device. Sharing is manual; no paid ads or bulk messages '
-                      'are started, and offer codes are not automatically redeemed at checkout.',
-                    ),
-                  ],
+                            ],
+                          ),
+                  ),
                 ],
               ),
             ),
@@ -2225,68 +2203,78 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Widget _hero() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF11183F), Color(0xFF5428B8), Color(0xFF7C3AED)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x224C1D95),
-            blurRadius: 22,
-            offset: Offset(0, 9),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 30),
-              SizedBox(width: 10),
-              Expanded(
-                child: const LiveTranslatedText(
-                  'Create a promotion in 3 steps',
-                  style: TextStyle(
+    return GrowthAmbientBackdrop(
+      animation: _ambient,
+      height: _festivalName.isNotEmpty ? 214 : 176,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _ambient,
+                  builder: (context, child) => Transform.rotate(
+                    angle: AppMotion.reduced(context)
+                        ? 0
+                        : math.sin(_ambient.value * math.pi * 2) * 0.12,
+                    child: child,
+                  ),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: LiveTranslatedText(
+                    'Create a promotion in 3 steps',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const LiveTranslatedText(
+              'Choose a goal, build a branded design from live shop details, then review and share it yourself.',
+              style: TextStyle(color: Colors.white70, height: 1.45),
+            ),
+            if (_festivalName.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+                ),
+                child: Text(
+                  'UP NEXT  ·  $_festivalName',
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ),
             ],
-          ),
-          SizedBox(height: 9),
-          const LiveTranslatedText(
-            'Choose a goal, build a branded design from live shop details, then review and share it yourself.',
-            style: TextStyle(color: Colors.white70, height: 1.45),
-          ),
-          if (_festivalName.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
-              ),
-              child: Text(
-                'UP NEXT  ·  $_festivalName',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

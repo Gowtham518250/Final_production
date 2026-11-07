@@ -105,6 +105,7 @@ import 'bill_context.dart';
 import 'payment_direction_speech.dart';
 import 'payment_event.dart';
 import 'payment_identity_matcher.dart';
+import 'soundbox_announcement_coordinator.dart';
 import 'cross_isolate_payment_announcement_deduplicator.dart';
 import 'sms_background_receiver.dart';
 import 'local_storage_service.dart';
@@ -473,28 +474,7 @@ abstract class VoiceBuilder {
     final a = _amt(amount, lang);
     switch (direction) {
       case PaymentDirection.credited:
-        switch (lang) {
-          case VoiceLanguage.hindi:
-            return '$a का संभावित क्रेडिट है। भुगतान की पुष्टि करें।';
-          case VoiceLanguage.tamil:
-            return '$a வரவு வந்திருக்கலாம். பணம் கிடைத்ததை சரிபார்க்கவும்.';
-          case VoiceLanguage.telugu:
-            return '$a క్రెడిట్ అయి ఉండవచ్చు. చెల్లింపు వచ్చిందో నిర్ధారించండి.';
-          case VoiceLanguage.kannada:
-            return '$a ಕ್ರೆಡಿಟ್ ಆಗಿರಬಹುದು. ಪಾವತಿ ಬಂದಿರುವುದನ್ನು ಪರಿಶೀಲಿಸಿ.';
-          case VoiceLanguage.marathi:
-            return '$a जमा झाले असू शकते. पैसे आल्याची खात्री करा.';
-          case VoiceLanguage.gujarati:
-            return '$a જમા થયું હોઈ શકે છે. ચુકવણીની ખાતરી કરો.';
-          case VoiceLanguage.bengali:
-            return '$a জমা হয়ে থাকতে পারে। টাকা এসেছে কি না যাচাই করুন।';
-          case VoiceLanguage.punjabi:
-            return '$a ਜਮ੍ਹਾਂ ਹੋਈ ਹੋ ਸਕਦੀ ਹੈ। ਭੁਗਤਾਨ ਦੀ ਪੁਸ਼ਟੀ ਕਰੋ।';
-          case VoiceLanguage.malayalam:
-            return '$a ക്രെഡിറ്റ് ആയിരിക്കാം. പണം ലഭിച്ചതായി ഉറപ്പാക്കുക.';
-          default:
-            return '$a may have been credited. Please verify before marking paid.';
-        }
+        return received(amount, null, lang);
       case PaymentDirection.debited:
         switch (lang) {
           case VoiceLanguage.hindi:
@@ -925,6 +905,8 @@ class PdsConfig {
 
   // Voice
   static const Duration voiceMinGap = Duration(seconds: 2);
+  /// In-app speech hold so SMS/UTR can join before the phone announces.
+  static Duration soundboxHoldWindow = const Duration(milliseconds: 1500);
   static const int voiceBurstCount = 3;
   static const Duration voiceBurstWindow = Duration(seconds: 5);
   // FIX-3: language removed from PdsConfig — now on PaymentDetectionService
@@ -3327,6 +3309,7 @@ class PaymentDetectionService {
     billContext.clear();
     history.clear();
     _voice.debugResetTransientState();
+    _soundbox.reset();
   }
 
   // Watchdog heartbeat, exposed read-only so the dashboard can show a
@@ -3676,6 +3659,10 @@ class PaymentDetectionService {
   // ── Sub-systems ───────────────────────────────────────────────────────────
   final _pendingBuffer = PendingPaymentBuffer();
   final _voice = PriorityVoiceQueue();
+  late final _soundbox = SoundboxAnnouncementCoordinator<PaymentUiState>(
+    speak: (event, ui) => _voice.enqueue(event, ui),
+    holdWindow: () => PdsConfig.soundboxHoldWindow,
+  );
   final _floodGuard = _SourceFloodGuard();
   final _accRateLimit = _AccRateLimiter();
   final _behaviorMemory = BehavioralMemory();
@@ -6234,6 +6221,8 @@ class PaymentDetectionService {
 
     if (echoOf != null) {
       (_echoClaims[echoOf.id] ??= <String>{}).add(channel);
+      final merged = _applyEchoEnrichment(echoOf, event);
+      _soundbox.noteEcho(merged, event);
       PdsLogger.t('DROP', 'reason=unique_echo_paired');
       return true;
     }
@@ -6273,6 +6262,15 @@ class PaymentDetectionService {
     if (_recentEmittedPayments.length > 100) {
       _recentEmittedPayments.removeAt(0);
     }
+  }
+
+  PaymentEvent _applyEchoEnrichment(PaymentEvent primary, PaymentEvent echo) {
+    final merged = SoundboxAnnouncementCoordinator.enrich(primary, echo);
+    final index = _recentEmittedPayments.indexWhere((old) => old.id == primary.id);
+    if (index >= 0) {
+      _recentEmittedPayments[index] = merged;
+    }
+    return merged;
   }
 
   String? _paymentDetectionPhone(String text) {
@@ -6596,7 +6594,10 @@ class PaymentDetectionService {
     } else if (!forceMute &&
         !suppressRepeatedAnnouncement &&
         !finalEvent.nativeAnnouncementHandled) {
-      _voice.enqueue(finalEvent, finalUi);
+      final deferred = _soundbox.notePrimary(finalEvent, finalUi);
+      if (!deferred) {
+        _voice.enqueue(finalEvent, finalUi);
+      }
     }
 
     // ANTI-03: queue LIKELY for merchant confirmation (FIX-D: fully wired)

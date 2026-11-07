@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Core POS function: incoming bank/UPI payment SMS. Inbox is never shown. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -28,7 +29,8 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
-        android:label="Retail Mind"
+        android:label="@string/app_name"
+        android:description="@string/app_sensitive_access_purpose"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -88,7 +90,7 @@
             android:exported="false" />
 
         <service android:name="notification.listener.service.NotificationListener"
-                 android:label="Retail Mind Voice Detection"
+                 android:label="@string/notification_listener_label"
                  android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
                  android:exported="true">
             <intent-filter>
@@ -98,8 +100,11 @@
 
         <service
             android:name="slayer.accessibility.service.flutter_accessibility_service.AccessibilityListener"
+            android:label="@string/accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false">
+            android:description="@string/accessibility_service_description"
+            android:exported="false"
+            tools:replace="android:label,android:description,android:exported,android:permission">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>

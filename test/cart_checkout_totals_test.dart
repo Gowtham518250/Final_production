@@ -19,4 +19,9 @@ void main() {
       0,
     );
   });
+
+  test('UPI checkout stays pending until a matching confirmation', () {
+    expect(customerCheckoutPaymentStatus('upi'), 'pending');
+    expect(customerCheckoutPaymentStatus('cod'), 'cod');
+  });
 }

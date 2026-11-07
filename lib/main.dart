@@ -73,6 +73,12 @@ import 'gst_filing_page.dart';
 import 'inventory_upload_page.dart';
 import 'attendance_page.dart';
 import 'customers_page.dart'; // 🔧 FIXED: Added missing import
+import 'shop_browser_page.dart';
+import 'screens/customer/customer_login_page.dart';
+import 'screens/customer/customer_marketplace_page.dart';
+import 'screens/customer/customer_home_page.dart';
+import 'screens/customer/nearby_shops_page.dart';
+import 'screens/customer/order_history_page.dart';
 import 'khata_page.dart';
 import 'invoices_page.dart' hide Expanded;
 import 'chatbot_page.dart';
@@ -975,7 +981,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await ApiClient.resetAuthRuntimeState();
         if (!mounted) return;
         globalNavigatorKey.currentState?.pushNamedAndRemoveUntil(
-          '/login',
+          '/customer-login',
           (_) => false,
         );
         return;
@@ -2023,7 +2029,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         ),
                         '/geometric-registration': (context) =>
                             const GeometricRegistrationPage(),
-                        '/sales-entry': (context) => const SalesEntryPage(),
+                        '/sales-entry': (context) {
+                          final args = ModalRoute.of(context)?.settings.arguments;
+                          final openVoice =
+                              args is Map && args['openVoice'] == true;
+                          return SalesEntryPage(openVoiceOnStart: openVoice);
+                        },
                         '/data-upload': (context) => const DataUploadPage(),
                         '/query': (context) => RetailMindFeatureGate(
                           featureCode: 'ai_queries',
@@ -2064,6 +2075,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                             const InventoryUploadPage(),
                         '/attendance': (context) => const AttendancePage(),
                         '/customers': (context) => const CustomersPage(),
+                        '/customer-login': (context) =>
+                            const CustomerLoginPage(),
+                        '/shop-browser': (context) => const ShopBrowserPage(),
+                        '/customer-marketplace': (context) =>
+                            const CustomerMarketplacePage(),
+                        '/customer-home': (context) => const CustomerHomePage(),
+                        '/nearby-shops': (context) => const NearbyShopsPage(),
+                        '/customer-orders': (context) =>
+                            const OrderHistoryPage(),
                         '/invoices': (context) => const KhataPage(),
                         // NOTE: '/purchase-orders' was previously registered TWICE in
                         // this route map -- this second entry (pointing to the

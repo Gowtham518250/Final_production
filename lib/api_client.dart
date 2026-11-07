@@ -10,7 +10,6 @@ import 'rate_limiter.dart';
 import 'error_log_helper.dart';
 import 'dart:io';
 import 'secure_token_storage.dart';
-import 'agent_debug_log.dart';
 import 'timeout_config.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'comprehensive_logger.dart';
@@ -517,14 +516,6 @@ class ApiClient {
       if (token == null || token.isEmpty) return false;
       final delta = _accessTokenExpDeltaSec(token);
       if (delta == null || delta > 60) return true;
-      // #region agent log
-      AgentDebugLog.log(
-        location: 'api_client.dart:_ensureFreshAccessToken',
-        message: 'Proactive access token refresh',
-        hypothesisId: 'H1',
-        data: {'expDeltaSec': delta},
-      );
-      // #endregion
       final refreshed = await SessionManagementService.autoLogin();
       return refreshed != null && refreshed['success'] == true;
     } catch (_) {
@@ -1173,20 +1164,6 @@ class ApiClient {
         debugPrint('[AUTH] Access token expired: true');
         debugPrint('[AUTH] 401 from $endpoint; attempting refresh');
       }
-      // #region agent log
-      AgentDebugLog.log(
-        location: 'api_client.dart:_withTokenRefresh:401',
-        message: 'HTTP 401 before refresh',
-        hypothesisId: 'H1',
-        data: {
-          'endpoint': endpoint,
-          'hasAccess': accessTokenBeforeRequest?.isNotEmpty == true,
-          'expDeltaSec': AgentDebugLog.accessExpDeltaSec(
-            accessTokenBeforeRequest,
-          ),
-        },
-      );
-      // #endregion
 
       bool success = false;
       var ownsRefresh = false;
@@ -1329,18 +1306,6 @@ class ApiClient {
               '[AUTH] Original request retry status: ${retriedResponse.statusCode}',
             );
           }
-          // #region agent log
-          AgentDebugLog.log(
-            location: 'api_client.dart:_withTokenRefresh:retry',
-            message: 'Retry after refresh',
-            hypothesisId: 'H4',
-            data: {
-              'endpoint': endpoint,
-              'refreshSuccess': true,
-              'retryStatus': retriedResponse.statusCode,
-            },
-          );
-          // #endregion
           return retriedResponse;
         } catch (e) {
           if (kDebugMode)
@@ -1362,23 +1327,6 @@ class ApiClient {
         final authRejected = SessionManagementService.shouldTreatRefreshAsRejected(
           response.statusCode,
         );
-        // #region agent log
-        AgentDebugLog.log(
-          location: 'api_client.dart:_withTokenRefresh:fail',
-          message: 'Refresh failed; returning original 401',
-          hypothesisId: 'H4',
-          data: {
-            'endpoint': endpoint,
-            'ownsRefresh': ownsRefresh,
-            'hasLocalSession': hasLocalSession,
-            'authRejectedFromOriginalStatus': authRejected,
-            'originalStatus': response.statusCode,
-            'hasRefresh':
-                (await SecureTokenStorage.getRefreshToken())?.isNotEmpty ==
-                true,
-          },
-        );
-        // #endregion
         if (!hasLocalSession && ownsRefresh && authRejected && !_sessionExpiryNotified) {
           _sessionExpiryNotified = true;
           if (kDebugMode)
@@ -1557,35 +1505,9 @@ class ApiClient {
         try {
           await resp.stream.drain<void>();
         } catch (_) {}
-        // #region agent log
-        AgentDebugLog.log(
-          location: 'api_client.dart:postMultipart:401',
-          message: 'Multipart 401; refreshing and retrying',
-          hypothesisId: 'H2',
-          data: {'path': path, 'status': resp.statusCode},
-        );
-        // #endregion
         await SessionManagementService.autoLogin();
         resp = await send(base);
       }
-      // #region agent log
-      if (resp.statusCode == 401 || resp.statusCode == 403) {
-        AgentDebugLog.log(
-          location: 'api_client.dart:postMultipart',
-          message: 'Multipart auth error after refresh attempt',
-          hypothesisId: 'H2',
-          data: {
-            'path': path,
-            'status': resp.statusCode,
-            'hasAccess':
-                (await SecureTokenStorage.getToken())?.isNotEmpty == true,
-            'expDeltaSec': AgentDebugLog.accessExpDeltaSec(
-              await SecureTokenStorage.getToken(),
-            ),
-          },
-        );
-      }
-      // #endregion
       return resp;
     }
 

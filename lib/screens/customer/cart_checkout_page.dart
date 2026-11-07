@@ -80,7 +80,7 @@ class _CustomerCartPageState extends State<CustomerCartPage> {
               '${prefs.getString('customer_phone') ?? 'guest'}@customer.local')
           : (prefs.getString('customer_email') ?? 'guest@customer.local');
 
-      final paymentStatus = _paymentMode == 'cod' ? 'cod' : 'pending';
+      final paymentStatus = customerCheckoutPaymentStatus(_paymentMode);
 
       final orderId = await CustomerShopService.placeOrder(
         shopId: widget.shopId,
@@ -358,3 +358,7 @@ double cartItemsSubtotal(Iterable<Map<String, dynamic>> items) {
     return sum + (price * qty);
   });
 }
+
+/// Opening a UPI app must never mark the order paid.
+String customerCheckoutPaymentStatus(String paymentMode) =>
+    paymentMode == 'cod' ? 'cod' : 'pending';

@@ -469,7 +469,7 @@ void main() {
     );
   });
 
-  test('a referenced transfer is not paired with an older unreferenced signal', () async {
+  test('a late SMS UTR enriches the matching unreferenced notification', () async {
     final time = DateTime(2026, 10, 27, 10, 0);
     final olderNotification = _event(
       id: 'notif-no-utr',
@@ -503,7 +503,7 @@ void main() {
         referencedSms,
         now: time.add(const Duration(seconds: 5)),
       ),
-      isFalse,
+      isTrue,
     );
   });
 

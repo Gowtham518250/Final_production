@@ -118,9 +118,18 @@ void main() {
       expect(d.reason, 'weak_modality_pair');
     });
 
-    test('one-sided reference with shared account is not fuzzy-paired', () {
+    test('one-sided UTR plus shared account enriches inside the sound-box window', () {
       final d = PaymentIdentityMatcher.compare(
         sms('s', reference: '412345678901', sec: 5, account: '4222'),
+        sig('n', account: '4222'),
+      );
+      expect(d.verdict, IdentityVerdict.candidateEcho);
+      expect(d.reason, 'utr_enrichment');
+    });
+
+    test('one-sided UTR plus shared account stays distinct after the window', () {
+      final d = PaymentIdentityMatcher.compare(
+        sms('s', reference: '412345678901', sec: 90, account: '4222'),
         sig('n', account: '4222'),
       );
       expect(d.verdict, IdentityVerdict.distinct);

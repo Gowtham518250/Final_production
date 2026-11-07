@@ -57,7 +57,7 @@ void main() {
 
     expect(
       tester.getSize(find.byType(DashboardActionDock)).height,
-      lessThanOrEqualTo(64),
+      lessThanOrEqualTo(72),
     );
     for (final label in labels) {
       expect(find.text(label), findsOneWidget);
@@ -65,7 +65,7 @@ void main() {
     expect(find.text('3'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const ValueKey('dashboard-action-0'))).height,
-      lessThan(50),
+      lessThan(62),
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('dashboard-action-0'))).width,

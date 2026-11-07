@@ -34,6 +34,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'app_bottom_nav.dart';
 import 'payment_announcement_service.dart';
 import 'payment_detection_service.dart';
+import 'notification_access_disclosure.dart';
 import 'payment_event.dart';
 import 'payment_background_service.dart';
 import 'sale_payment_echo_policy.dart';
@@ -52,6 +53,7 @@ import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'inventory_management_service.dart';
 import 'sale_service.dart';
 import 'sale_payment_policy.dart';
+import 'pos_checkout_status.dart';
 import 'analytics_engine.dart';
 import 'format_helper.dart';
 import 'local_storage_service.dart';
@@ -70,10 +72,12 @@ const String salesGetEndpoint = '/api/invoices';
 class SalesEntryPage extends StatefulWidget {
   final String? pendingWhatsappText;
   final String? pendingWhatsappOrderId;
+  final bool openVoiceOnStart;
   const SalesEntryPage({
     super.key,
     this.pendingWhatsappText,
     this.pendingWhatsappOrderId,
+    this.openVoiceOnStart = false,
   });
 
   @override
@@ -900,6 +904,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   // â”€â”€ Payment mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   bool _isOnlinePayment = false; // false = cash/offline, true = online/UPI
   bool _paymentConfirmed = false; // only allow bill after this
+  /// True only after the cashier explicitly overrides auto-detect.
+  /// This is not UPI/SMS proof and must be stored as a manual audit mark.
+  bool _cashierManualOverride = false;
+  bool _posHighContrast = false;
   // Optimistic default (true) so the button doesn't flash on screen before
   // the first permission check resolves; _checkPaymentPermissions() in
   // initState corrects this within ~2s, and it's kept in sync afterwards by
@@ -3322,6 +3330,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // in that account's chosen language. The AppBar speaker repeats the guide.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_speakSaleGuideOncePerAccount());
+      unawaited(_loadPosContrastPref());
+      if (widget.openVoiceOnStart) {
+        _openVoiceBillingAssistant();
+      }
     });
 
     // Initialize voice pulse controllers
@@ -3343,6 +3355,19 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     }
     _loadPaymentConfig();
     _checkPaymentPermissions();
+  }
+
+  Future<void> _loadPosContrastPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _posHighContrast = prefs.getBool('pos_high_contrast') ?? false);
+  }
+
+  Future<void> _togglePosContrast() async {
+    final next = !_posHighContrast;
+    setState(() => _posHighContrast = next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('pos_high_contrast', next);
   }
 
   Future<void> _checkPaymentPermissions() async {
@@ -3376,14 +3401,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   // `_hasNotifPermission` now also drives a persistent inline button (see
   // the "Listening for UPI, SMS & Screen..." section below).
   Future<void> _openNotificationSettingsAndRecheck() async {
-    if (!_hasNotifPermission) {
-      await PaymentDetectionService.openNotificationSettings();
+    if (!_hasNotifPermission && mounted) {
+      await requestNotificationAccessWithDisclosure(context);
     }
-    if (!kIsWeb && !_hasSmsPermission) {
-      final status = await Permission.sms.request();
-      if (!status.isGranted && kDebugMode) {
-        debugPrint('⚠️ SMS permission was not granted: ${status.name}');
-      }
+    if (!kIsWeb && !_hasSmsPermission && mounted) {
+      await requestSmsAccessWithDisclosure(context);
     }
     // The user grants/denies access inside Android Settings, not inside the
     // app, so re-check as soon as they come back (also re-checked on app
@@ -4537,6 +4559,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       _paidAmount = 0;
       _pendingDetectedPaymentAmount = null;
       _paymentConfirmed = false;
+      _cashierManualOverride = false;
       // FIX-UPI-LOOP: Reset to Cash mode on new bill so the UPI waiting UI doesn't
       // show immediately on blank bills. The shopkeeper can manually switch to UPI
       // or it will auto-switch when a real payment arrives for the new bill.
@@ -4931,6 +4954,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             : 'Cash', // NEW: Pass payment type
         isBorrow: isBorrow, // NEW: Pass borrow flag to use correct endpoint
         invoiceNumber: billNumber,
+        paymentEvidence: _cashierManualOverride
+            ? 'cashier_manual_override'
+            : (_paymentConfirmed ? 'detected_or_cash' : 'unconfirmed'),
       );
 
       // If it's a borrow sale, also create an invoice!
@@ -6326,6 +6352,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       ),
       actions: [
         _AppBarIconBtn(
+          icon: _posHighContrast ? Icons.contrast : Icons.contrast_outlined,
+          tooltip: 'Counter contrast',
+          onTap: _togglePosContrast,
+        ),
+        _AppBarIconBtn(
           icon: Icons.record_voice_over_rounded,
           tooltip: 'Listen to sale steps',
           onTap: _toggleSaleGuidance,
@@ -7346,6 +7377,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             const SizedBox(height: 16),
 
             // â”€â”€ Payment Status Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (totalAmount > 0) _buildPosStatusChip(),
             if (totalAmount > 0)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
@@ -7371,8 +7403,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              color: Colors.grey,
+                              fontSize: _posHighContrast ? 13 : 10,
+                              color: Colors.black,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
                             ),
@@ -7380,7 +7412,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                           LiveTranslatedText(
                             '₹${totalAmount.toStringAsFixed(2)}',
                             style: GoogleFonts.spaceMono(
-                              fontSize: 18,
+                              fontSize: _posHighContrast ? 28 : 18,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
                             ),
@@ -7398,7 +7430,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              fontSize: 10,
+                              fontSize: _posHighContrast ? 13 : 10,
                               color: const Color(0xFF059669),
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -7407,7 +7439,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                           LiveTranslatedText(
                             '₹${_paidAmount.toStringAsFixed(2)}',
                             style: GoogleFonts.spaceMono(
-                              fontSize: 18,
+                              fontSize: _posHighContrast ? 26 : 18,
                               fontWeight: FontWeight.bold,
                               color: const Color(0xFF059669),
                             ),
@@ -7425,7 +7457,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.poppins(
-                              fontSize: 10,
+                              fontSize: _posHighContrast ? 13 : 10,
                               color: Colors.redAccent,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -7436,7 +7468,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             builder: (context, child) => LiveTranslatedText(
                               '₹${remainingDue.toStringAsFixed(2)}',
                               style: GoogleFonts.spaceMono(
-                                fontSize: 18,
+                                fontSize: _posHighContrast ? 26 : 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.redAccent.withOpacity(
                                   _paidAmount > 0 && !_paymentConfirmed
@@ -7598,6 +7630,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       _paidAmount = 0;
                       _pendingDetectedPaymentAmount = null;
                       _paymentConfirmed = false;
+      _cashierManualOverride = false;
                       message = '';
                       calculateTotal();
                     });
@@ -7622,6 +7655,44 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPosStatusChip() {
+    final lane = PosCheckoutStatus.lane(
+      isOnlinePayment: _isOnlinePayment,
+      paymentConfirmed: _paymentConfirmed,
+      cashierManualOverride: _cashierManualOverride,
+      isBorrow: _borrowWaitingForCustomer,
+      paidAmount: _paidAmount,
+      totalAmount: totalAmount,
+    );
+    final color = switch (lane) {
+      PosPaymentLane.paid || PosPaymentLane.cashReady =>
+        const Color(0xFF059669),
+      PosPaymentLane.waiting => const Color(0xFF4F46E5),
+      PosPaymentLane.partial || PosPaymentLane.cashierOverride =>
+        const Color(0xFFB45309),
+      PosPaymentLane.credit => const Color(0xFF6B7280),
+    };
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: LiveTranslatedText(
+        PosCheckoutStatus.label(lane),
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(
+          fontSize: _posHighContrast ? 18 : 14,
+          fontWeight: FontWeight.w800,
+          color: color,
         ),
       ),
     );
@@ -7874,29 +7945,39 @@ class _SalesEntryPageState extends State<SalesEntryPage>
               child: Column(
                 children: [
                   if (kIsWeb && !_paymentConfirmed)
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7ED),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFF59E0B)),
-                      ),
-                      child: const LiveTranslatedText(
-                        'This browser cannot read SMS or PhonePe notifications from your phone. Open Retail Mind in the Android app on the same phone to use automatic payment detection.',
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: LiveTranslatedText(
+                        'Use the Android app to auto-detect UPI.',
                         textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFFB45309),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     )
                   else if (!_paymentConfirmed &&
                       _paymentSoundEnabled &&
                       _hasNotifPermission &&
                       _hasSmsPermission)
-                    LiveTranslatedText(
-                      'Listening for UPI, SMS & Screen...',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: const Color(0xFF4B5563),
-                        fontWeight: FontWeight.w500,
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: LiveTranslatedText(
+                        'Listening',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: const Color(0xFF047857),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   // FIX: this used to be the ONLY way to grant notification
@@ -7949,16 +8030,43 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   ],
                   const SizedBox(height: 12),
                   GestureDetector(
-                    onTap: () {
+                    onTap: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const LiveTranslatedText(
+                            'Cashier override — not UPI verified',
+                          ),
+                          content: const LiveTranslatedText(
+                            'This marks the bill paid by cashier authority only. It is not a detected UPI or SMS payment. Continue?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext, false),
+                              child: const LiveTranslatedText('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext, true),
+                              child: const LiveTranslatedText(
+                                'Record cashier override',
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true || !mounted) return;
                       setState(() {
                         _paymentConfirmed = true;
+                        _cashierManualOverride = true;
                         _paidAmount = totalAmount;
-                        message = 'Payment Confirmed Manually! ✅';
+                        message = 'Cashier override recorded (not UPI verified)';
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: LiveTranslatedText(
-                            'Manual confirmation received. Buttons enabled.',
+                            'Cashier override recorded. This is not an automatically verified UPI payment.',
                           ),
                         ),
                       );
@@ -7969,18 +8077,18 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.08),
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
                         ),
                       ),
                       child: LiveTranslatedText(
-                        'Already received? Confirm Manually',
+                        'Cashier override (not UPI verified)',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
-                          color: const Color(0xFF6366F1),
-                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFB45309),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -8163,6 +8271,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       onTap: () => setState(() {
         _isOnlinePayment = isOnline;
         _paymentConfirmed = false;
+      _cashierManualOverride = false;
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -8214,6 +8323,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       onTap: () => setState(() {
         _isOnlinePayment = isOnline;
         _paymentConfirmed = false;
+      _cashierManualOverride = false;
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

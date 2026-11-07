@@ -39,6 +39,7 @@ import 'package:provider/provider.dart';
 import 'invoices_page.dart' hide Expanded;
 import 'gift_card_page.dart';
 import 'visual_widgets.dart';
+import 'growth_studio_motion.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:pdf/pdf.dart';
@@ -1525,15 +1526,8 @@ class _DashboardPageState extends State<DashboardPage>
                   return;
                 }
 
-                try {
-                  final status = await Permission.sms.request();
-                  if (kDebugMode) {
-                    debugPrint('📱 SMS permission request result: $status');
-                  }
-                } catch (e) {
-                  if (kDebugMode) {
-                    debugPrint('⚠️ SMS permission request failed: $e');
-                  }
+                if (ctx.mounted) {
+                  await requestSmsAccessWithDisclosure(context);
                 }
 
                 if (ctx.mounted) {
@@ -2733,116 +2727,8 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Widget _buildGrowMyShopCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const accent = Color(0xFF6D4AE8);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => Navigator.pushNamed(context, '/growth-agent'),
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? const [Color(0xFF211B3D), Color(0xFF31215A)]
-                  : const [Color(0xFFF6F2FF), Color(0xFFEEE8FF)],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: accent.withValues(alpha: isDark ? 0.52 : 0.24),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: accent.withValues(alpha: isDark ? 0.06 : 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: const Icon(
-                  Icons.campaign_rounded,
-                  color: Colors.white,
-                  size: 25,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: LiveTranslatedText(
-                            'Grow My Shop',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF30205F),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFDCFCE7),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            'FREE',
-                            style: GoogleFonts.poppins(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF166534),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    LiveTranslatedText(
-                      'Create a shop poster and share your offers with customers.',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        height: 1.4,
-                        color: isDark
-                            ? Colors.white70
-                            : const Color(0xFF62577D),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_rounded,
-                color: isDark ? const Color(0xFFC4B5FD) : accent,
-                size: 21,
-              ),
-            ],
-          ),
-        ),
-      ),
+    return GrowMyShopEntryCard(
+      onOpen: () => Navigator.pushNamed(context, '/growth-agent'),
     );
   }
 
@@ -12217,18 +12103,8 @@ class _DashboardPageState extends State<DashboardPage>
                         return;
                       }
 
-                      try {
-                        final status = await Permission.sms.request();
-                        if (kDebugMode) {
-                          debugPrint(
-                            '📱 SMS permission request result: $status',
-                          );
-                        }
-                      } catch (e) {
-                        if (kDebugMode) {
-                          debugPrint('⚠️ SMS permission request failed: $e');
-                        }
-                      }
+                      if (!mounted) return;
+                      await requestSmsAccessWithDisclosure(context);
 
                       // Android may take a moment to return from Settings/permission UI.
                       await Future<void>.delayed(
@@ -15306,7 +15182,9 @@ class _DashboardPageState extends State<DashboardPage>
                             ),
                             ElevatedButton(
                               onPressed: () async {
-                                await PaymentDetectionService.openAccessibilitySettings();
+                                await requestAccessibilityAccessWithDisclosure(
+                                  context,
+                                );
                                 setDlgState(() {});
                               },
                               style: ElevatedButton.styleFrom(
@@ -16542,55 +16420,27 @@ class _DashboardPageState extends State<DashboardPage>
             ).then((_) => _loadSales()),
           ),
           DashboardActionItem(
-            icon: Icons.local_shipping_rounded,
-            label: 'Online Orders',
+            icon: Icons.mic_rounded,
+            label: 'Voice bill',
+            color: const Color(0xFF0F766E),
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/sales-entry',
+              arguments: {'openVoice': true},
+            ).then((_) => _loadSales()),
+          ),
+          DashboardActionItem(
+            icon: Icons.menu_book_rounded,
+            label: 'Khata',
             color: const Color(0xFFD97706),
-            badgeCount: _onlinePendingOrders,
-            onTap: () => Navigator.pushNamed(context, '/online-orders'),
-          ),
-          DashboardActionItem(
-            icon: Icons.card_giftcard_rounded,
-            label: 'Gift Card',
-            color: const Color(0xFFDB2777),
-            onTap: _openGiftCardFromPrefs,
-          ),
-          if (!_isStaffMode)
-            DashboardActionItem(
-              icon: Icons.analytics_rounded,
-              label: 'AI Analytics',
-              color: const Color(0xFF7C3AED),
-              onTap: () => Navigator.pushNamed(context, '/query'),
-            ),
-          DashboardActionItem(
-            icon: Icons.translate_rounded,
-            label: AppLocalizations.of(context).language,
-            color: const Color(0xFF2563EB),
-            onTap: _showLanguageDialog,
-          ),
-          if (!_isStaffMode)
-            DashboardActionItem(
-              icon: Icons.lock_clock_rounded,
-              label: 'Daily Closing',
-              color: const Color(0xFF0F766E),
-              onTap: _showDailyClosingSheet,
-            ),
-          DashboardActionItem(
-            icon: Icons.help_outline_rounded,
-            label: 'How to Use',
-            color: const Color(0xFF059669),
-            onTap: () => _showHowToUseDialog(context),
+            onTap: () => Navigator.pushNamed(context, '/invoices'),
           ),
           DashboardActionItem(
             icon: Icons.grid_view_rounded,
-            label: 'More & Settings',
+            label: 'More',
             color: const Color(0xFF475569),
+            badgeCount: _onlinePendingOrders,
             onTap: () => Navigator.pushNamed(context, '/more'),
-          ),
-          DashboardActionItem(
-            icon: Icons.logout_rounded,
-            label: AppLocalizations.of(context).logout,
-            color: const Color(0xFFDC2626),
-            onTap: () => _performLogout(context),
           ),
         ],
       ),

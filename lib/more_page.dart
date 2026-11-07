@@ -11,6 +11,9 @@ class MorePage extends StatelessWidget {
   static const Color _primary = Color(0xFF4F46E5);
 
   static const List<_MoreAction> _actions = [
+    _MoreAction(title: 'Online orders', subtitle: 'Customer website orders', icon: Icons.local_shipping_rounded, color: Color(0xFFD97706), route: '/online-orders'),
+    _MoreAction(title: 'Gift cards', subtitle: 'Issue and redeem cards', icon: Icons.card_giftcard_rounded, color: Color(0xFFDB2777), route: '/gift-cards'),
+    _MoreAction(title: 'AI Ask', subtitle: 'Ask about your shop data', icon: Icons.analytics_rounded, color: Color(0xFF7C3AED), route: '/query'),
     _MoreAction(title: 'Shop profile', subtitle: 'Business details', icon: Icons.storefront_rounded, color: Color(0xFF4F46E5), route: '/shop-profile'),
     _MoreAction(title: 'Purchase orders', subtitle: 'Supplier orders and receiving', icon: Icons.local_shipping_rounded, color: Color(0xFFF59E0B), route: '/purchase-orders'),
     _MoreAction(title: 'Online store', subtitle: 'Manage your storefront', icon: Icons.shopping_bag_rounded, color: Color(0xFF0D9488), route: '/online-store'),

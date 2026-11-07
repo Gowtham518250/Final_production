@@ -28,7 +28,7 @@
 // ignore_for_file: prefer_const_constructors, unused_import
 
 // ─── External imports (same deps as existing project) ────────────────────────
-// No new packages required.
+import 'voice_item_confirmation.dart';
 
 // ─── Data models ──────────────────────────────────────────────────────────────
 
@@ -42,6 +42,7 @@ class ParsedItemV2 {
   final String? catalogMatchName; // canonical name from catalog, if any
   final double? catalogPrice;     // catalog price, for sanity check display
   final bool priceWasSpoken;       // true only when price tokens came from the transcript
+  final bool quantityPriceAmbiguous;
   bool isConfirmed;
 
   ParsedItemV2({
@@ -53,8 +54,14 @@ class ParsedItemV2 {
     this.catalogMatchName,
     this.catalogPrice,
     this.priceWasSpoken = false,
-    this.isConfirmed = true,
-  });
+    this.quantityPriceAmbiguous = false,
+    bool? isConfirmed,
+  }) : isConfirmed = isConfirmed ??
+            VoiceItemConfirmation.shouldAutoConfirm(
+              confidence: confidence.total,
+              catalogMatched: catalogMatchName != null,
+              quantityPriceAmbiguous: quantityPriceAmbiguous,
+            );
 
   /// Backward compat score for existing UI code
   double get confidenceScore => confidence.total;
@@ -968,6 +975,7 @@ class VoiceNlpEngineV2 {
       double qty;
       double price;
       String rawUnit;
+      var quantityPriceAmbiguous = false;
 
       if (pi == 0) {
         qty      = double.tryParse(m.group(1)!) ?? 1;
@@ -1000,6 +1008,7 @@ class VoiceNlpEngineV2 {
           price = 0;
         }
         rawUnit = '';
+        quantityPriceAmbiguous = true;
       } else {
         name     = m.group(1)!;
         qty      = 1;
@@ -1107,6 +1116,7 @@ class VoiceNlpEngineV2 {
         catalogMatchName: catalogHit ? resolvedName : null,
         catalogPrice:    catalogPrice,
         priceWasSpoken:  priceWasSpoken,
+        quantityPriceAmbiguous: quantityPriceAmbiguous,
       );
     }
     return null;

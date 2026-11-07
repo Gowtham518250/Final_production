@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../api_client.dart';
-import '../../../agent_debug_log.dart';
 import '../../../secure_token_storage.dart';
 import '../../../bank_reconciliation.dart';
 import '../../../sync_queue_manager.dart';
@@ -169,19 +168,6 @@ class AiQueryService {
         final detail = decoded is Map
             ? (decoded['detail'] ?? decoded['error'] ?? decoded['message'])?.toString()
             : null;
-        // #region agent log
-        AgentDebugLog.log(
-          location: 'ai_query_service.dart:transcribeVoiceQuery',
-          message: 'transcribe non-success',
-          hypothesisId: 'H2',
-          data: {
-            'status': response.statusCode,
-            'detail': (detail ?? '').length > 160
-                ? detail!.substring(0, 160)
-                : (detail ?? ''),
-          },
-        );
-        // #endregion
         throw Exception(
           _friendlyVoiceServiceError(detail, response.statusCode),
         );
@@ -463,29 +449,6 @@ class AiQueryService {
 
       stopwatch.stop();
       statusCode = response.statusCode;
-      // #region agent log
-      String? detailSnippet;
-      try {
-        final decoded = json.decode(response.body);
-        if (decoded is Map) {
-          final raw = (decoded['detail'] ?? decoded['message'] ?? decoded['error'])
-              ?.toString();
-          if (raw != null && raw.isNotEmpty) {
-            detailSnippet = raw.length > 160 ? raw.substring(0, 160) : raw;
-          }
-        }
-      } catch (_) {}
-      AgentDebugLog.log(
-        location: 'ai_query_service.dart:askQuery',
-        message: 'askquery HTTP result',
-        hypothesisId: 'H6',
-        data: {
-          'status': statusCode,
-          'languageCode': languageCode,
-          'detail': detailSnippet,
-        },
-      );
-      // #endregion
 
       // Step 3: Handle HTTP Status Codes
       if (response.statusCode == 200 || response.statusCode == 201) {

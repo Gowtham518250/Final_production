@@ -61,34 +61,24 @@ jobs:
           test -n "$ANDROID_KEY_PASSWORD" || { echo "ANDROID_KEY_PASSWORD secret missing"; exit 1; }
       - run: flutter pub get
       - name: Analyze project source
-        shell: bash
-        run: |
-          set +e
-          if analysis_output="$(flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1)"; then
-            analyze_status=0
-          else
-            analyze_status=$?
-          fi
-          printf '%s\n' "$analysis_output"
-
-          if printf '%s\n' "$analysis_output" | grep -Eq '^[[:space:]]*error[[:space:]]+-'; then
-            echo "Analyzer reported at least one error diagnostic."
-            exit 1
-          fi
-
-          if [ "$analyze_status" -ne 0 ]; then
-            echo "::warning::flutter analyze returned $analyze_status without errors; warning/info backlog remains non-blocking."
-          fi
-
-          echo "::notice::Warning and info diagnostics remain visible above; only analyzer errors fail this step."
-          exit 0
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - run: flutter test
       - name: Build signed Android App Bundle
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build appbundle --release
+          REDIS_BASE_URL: ${{ secrets.REDIS_BASE_URL }}
+          REDIS_API_KEY: ${{ secrets.REDIS_API_KEY }}
+        run: |
+          DEFINES=()
+          if [ -n "${REDIS_BASE_URL:-}" ]; then
+            DEFINES+=(--dart-define="REDIS_BASE_URL=$REDIS_BASE_URL")
+            DEFINES+=(--dart-define="REDIS_API_KEY=${REDIS_API_KEY:-}")
+          else
+            echo "::warning::REDIS_BASE_URL is unset. UTR dedup will use the 500-record local cache only."
+          fi
+          flutter build appbundle --release "${DEFINES[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: retail-mind-release-aab
@@ -121,18 +111,7 @@ jobs:
           test -n "$FIREBASE_STORAGE_BUCKET" || { echo "FIREBASE_STORAGE_BUCKET secret missing"; exit 1; }
           test -n "$FIREBASE_SENDER_ID" || { echo "FIREBASE_SENDER_ID secret missing"; exit 1; }
           flutter pub get
-          set +e
-          analysis_output="$(flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1)"
-          analyze_status=$?
-          set -e
-          printf '%s\n' "$analysis_output"
-          if printf '%s\n' "$analysis_output" | grep -Eq '^[[:space:]]*error[[:space:]]+-'; then
-            echo "Analyzer reported at least one error diagnostic."
-            exit 1
-          fi
-          if [ "$analyze_status" -ne 0 ]; then
-            echo "::warning::flutter analyze returned $analyze_status without errors; warning/info backlog remains non-blocking."
-          fi
+          flutter analyze --no-fatal-warnings --no-fatal-infos
           flutter build web --release \
             --dart-define=FIREBASE_WEB_API_KEY="$FIREBASE_WEB_API_KEY" \
             --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \

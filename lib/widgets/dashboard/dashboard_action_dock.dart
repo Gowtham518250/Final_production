@@ -50,7 +50,7 @@ class DashboardActionDock extends StatelessWidget {
               itemWidth * items.length + spacing * (items.length - 1);
 
           return SizedBox(
-            height: 56,
+            height: 64,
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: horizontalPadding,
@@ -128,8 +128,8 @@ class _DashboardActionButton extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(item.icon, color: foreground, size: 17),
-                      const SizedBox(height: 1),
+                      Icon(item.icon, color: foreground, size: item.primary ? 22 : 20),
+                      const SizedBox(height: 2),
                       LiveTranslatedText(
                         item.label,
                         textAlign: TextAlign.center,
@@ -137,7 +137,7 @@ class _DashboardActionButton extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: foreground,
-                          fontSize: 8,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                           height: 1.05,
                         ),

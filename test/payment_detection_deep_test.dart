@@ -856,7 +856,7 @@ void main() {
             decision: PaymentDecision.likely,
             direction: PaymentTransactionDirection.incomingCredit,
           );
-          expect(await spokenFor(credit), contains('credited'));
+          expect(await spokenFor(credit), contains('payment received'));
 
           final debitText = 'INR 5 debited from your account XXXX4222';
           final debit = PaymentEvent(
@@ -1545,7 +1545,7 @@ void main() {
           VoiceLanguage.english,
           PaymentDirection.credited,
         ),
-        contains('credited'),
+        contains('Payment received'),
       );
     });
 
@@ -1583,7 +1583,7 @@ void main() {
           VoiceLanguage.english,
           VoiceBuilder.detectDirection(notification),
         ),
-        contains('credited'),
+        contains('Payment received'),
       );
     });
 
@@ -1784,7 +1784,7 @@ void main() {
         );
 
         expect(credits, hasLength(1));
-        expect(credits.single, contains('credited'));
+        expect(credits.single, contains('Payment received'));
         expect(debits, hasLength(1));
         expect(debits.single, contains('debited'));
       },
@@ -1954,7 +1954,7 @@ void main() {
     queue.dispose();
 
     expect(spoken, hasLength(1));
-    expect(spoken.single, contains('credited'));
+    expect(spoken.single, contains('Payment received'));
   });
 
   test(
@@ -2205,7 +2205,7 @@ void main() {
       service.debugResetTransientDetectionState();
     });
 
-    test('likely voice wording describes a possible transaction, not confirmed settlement', () {
+    test('likely credit uses a sound-box received phrase', () {
       final credit = VoiceBuilder.detectedDirectional(
         500,
         VoiceLanguage.english,
@@ -2217,8 +2217,7 @@ void main() {
         PaymentDirection.debited,
       );
 
-      expect(credit, contains('may have been credited'));
-      expect(credit, contains('verify before marking paid'));
+      expect(credit, contains('Payment received'));
       expect(debit, contains('may have been debited'));
     });
 

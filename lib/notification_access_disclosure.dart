@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_accessibility_service/flutter_accessibility_service.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'live_translated_text.dart';
 
@@ -137,5 +139,182 @@ Future<NotificationAccessDisclosureResult>
         : NotificationAccessDisclosureResult.notEnabled;
   } catch (_) {
     return NotificationAccessDisclosureResult.unavailable;
+  }
+}
+
+enum SmsAccessDisclosureResult {
+  alreadyEnabled,
+  enabled,
+  declined,
+  notEnabled,
+  unavailable,
+}
+
+enum AccessibilityAccessDisclosureResult {
+  alreadyEnabled,
+  enabled,
+  declined,
+  notEnabled,
+  unavailable,
+}
+
+Future<bool> _showSensitiveAccessConsentDialog({
+  required BuildContext context,
+  required IconData icon,
+  required String title,
+  required List<String> paragraphs,
+  required String checkboxLabel,
+  required String confirmLabel,
+}) async {
+  var consentChecked = false;
+  final consent = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(icon),
+                const SizedBox(width: 10),
+                Expanded(child: LiveTranslatedText(title)),
+              ],
+            ),
+            content: SizedBox(
+              width: 380,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < paragraphs.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 12),
+                      LiveTranslatedText(paragraphs[i]),
+                    ],
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: consentChecked,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          consentChecked = value ?? false;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: LiveTranslatedText(
+                        checkboxLabel,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const LiveTranslatedText('Not now — use manual billing'),
+              ),
+              FilledButton(
+                onPressed: consentChecked
+                    ? () => Navigator.of(dialogContext).pop(true)
+                    : null,
+                child: LiveTranslatedText(confirmLabel),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+  return consent == true;
+}
+
+/// Incoming bank/UPI SMS only. Consent is required before the system prompt.
+Future<SmsAccessDisclosureResult> requestSmsAccessWithDisclosure(
+  BuildContext context,
+) async {
+  if (kIsWeb || !Platform.isAndroid) {
+    return SmsAccessDisclosureResult.unavailable;
+  }
+
+  try {
+    if ((await Permission.sms.status).isGranted) {
+      return SmsAccessDisclosureResult.alreadyEnabled;
+    }
+  } catch (_) {}
+
+  if (!context.mounted) return SmsAccessDisclosureResult.unavailable;
+
+  final consented = await _showSensitiveAccessConsentDialog(
+    context: context,
+    icon: Icons.sms_outlined,
+    title: 'Allow SMS access?',
+    paragraphs: const [
+      'Retail Mind can read incoming SMS on this phone to look for bank and UPI payment confirmations. Other messages may be seen briefly while that filter runs. Inbox threads are not shown in the app.',
+      'When a payment SMS is identified, amount and reference details may be saved in payment history. You can keep recording sales manually without SMS access.',
+    ],
+    checkboxLabel:
+        'I understand and agree to enable SMS access for Retail Mind payment detection.',
+    confirmLabel: 'Continue',
+  );
+
+  if (!consented || !context.mounted) {
+    return SmsAccessDisclosureResult.declined;
+  }
+
+  try {
+    final status = await Permission.sms.request();
+    return status.isGranted
+        ? SmsAccessDisclosureResult.enabled
+        : SmsAccessDisclosureResult.notEnabled;
+  } catch (_) {
+    return SmsAccessDisclosureResult.unavailable;
+  }
+}
+
+/// Restricted to bank/UPI packages in accessibilityservice.xml. No gestures.
+Future<AccessibilityAccessDisclosureResult>
+    requestAccessibilityAccessWithDisclosure(BuildContext context) async {
+  if (kIsWeb || !Platform.isAndroid) {
+    return AccessibilityAccessDisclosureResult.unavailable;
+  }
+
+  try {
+    if (await FlutterAccessibilityService.isAccessibilityPermissionEnabled()) {
+      return AccessibilityAccessDisclosureResult.alreadyEnabled;
+    }
+  } catch (_) {}
+
+  if (!context.mounted) {
+    return AccessibilityAccessDisclosureResult.unavailable;
+  }
+
+  final consented = await _showSensitiveAccessConsentDialog(
+    context: context,
+    icon: Icons.accessibility_new_outlined,
+    title: 'Allow payment screen reader?',
+    paragraphs: const [
+      'Retail Mind uses Android Accessibility only to read payment confirmation text from bank and UPI apps. It cannot tap, swipe, or control other apps.',
+      'Screen text from those apps can include amounts and account labels. You can turn this off in Android Settings and keep billing manually.',
+    ],
+    checkboxLabel:
+        'I understand and agree to enable the payment screen reader for Retail Mind.',
+    confirmLabel: 'Continue to Settings',
+  );
+
+  if (!consented || !context.mounted) {
+    return AccessibilityAccessDisclosureResult.declined;
+  }
+
+  try {
+    final granted =
+        await FlutterAccessibilityService.requestAccessibilityPermission();
+    return granted
+        ? AccessibilityAccessDisclosureResult.enabled
+        : AccessibilityAccessDisclosureResult.notEnabled;
+  } catch (_) {
+    return AccessibilityAccessDisclosureResult.unavailable;
   }
 }

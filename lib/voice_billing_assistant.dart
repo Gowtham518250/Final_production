@@ -44,6 +44,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'phonetic_normalizer.dart';
 import 'roman_indian_voice_normalizer.dart';
 import 'voice_nlp_engine.dart';
+import 'voice_item_confirmation.dart';
 import 'voice_feedback_learning_service.dart';
 import 'language_detection_visualizer.dart';
 import 'product_catalog_service.dart';
@@ -248,6 +249,7 @@ class ParsedItem {
   final String? productId;
   final double? gst;
   final String? priceWarning;
+  final bool quantityPriceAmbiguous;
   bool isConfirmed;
 
   ParsedItem({
@@ -262,8 +264,14 @@ class ParsedItem {
     this.productId,
     this.gst,
     this.priceWarning,
+    this.quantityPriceAmbiguous = false,
     bool? isConfirmed,
-  }) : isConfirmed = isConfirmed ?? (confidence >= 0.6 || catalogMatched);
+  }) : isConfirmed = isConfirmed ??
+            VoiceItemConfirmation.shouldAutoConfirm(
+              confidence: confidence,
+              catalogMatched: catalogMatched,
+              quantityPriceAmbiguous: quantityPriceAmbiguous,
+            );
 
   Map<String, dynamic> toMap() => {
     'name': name,
@@ -396,6 +404,7 @@ class MultiLangVoiceParser {
 
       String name, rawUnit;
       double qty, price;
+      var quantityPriceAmbiguous = false;
 
       if (pi == 0) {
         qty      = double.tryParse(match.group(1) ?? '1') ?? 1;
@@ -419,6 +428,7 @@ class MultiLangVoiceParser {
         double val = double.tryParse(match.group(2) ?? '1') ?? 1;
         qty = val; price = 0.0;
         rawUnit  = '';
+        quantityPriceAmbiguous = true;
       } else {
         name     = match.group(1) ?? '';
         qty      = 1.0;
@@ -473,6 +483,7 @@ class MultiLangVoiceParser {
         unit: unit,
         price: price,
         confidence: confidence,
+        quantityPriceAmbiguous: quantityPriceAmbiguous,
       );
     }
     return null;
@@ -3455,13 +3466,20 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     final confHigh = conf >= 0.85;
     final confMed  = conf >= 0.60 && conf < 0.85;
     final lowConf  = conf < 0.60;  // 🔧 FIX: Define lowConf variable
+    final needsReview = item.quantityPriceAmbiguous || !item.isConfirmed;
+    final customProduct = !item.catalogMatched &&
+        (item.productId == null || item.productId!.isEmpty);
     // < 0.60 = low confidence (red)
-    final borderColor = confHigh
+    final borderColor = item.quantityPriceAmbiguous
+        ? const Color(0xFFF59E0B)
+        : confHigh
         ? const Color(0xFF00C853).withValues(alpha: 0.7)   // 🟢 Green - exact match
         : confMed
             ? const Color(0xFFFFC107).withValues(alpha: 0.7)  // 🟡 Yellow - fuzzy match
             : const Color(0xFFFF3D00).withValues(alpha: 0.7); // 🔴 Red - needs check
-    final bgTint = confHigh
+    final bgTint = item.quantityPriceAmbiguous
+        ? const Color(0xFFFFFBEB)
+        : confHigh
         ? const Color(0xFF00C853).withValues(alpha: 0.04)
         : confMed
             ? const Color(0xFFFFC107).withValues(alpha: 0.04)
@@ -3488,18 +3506,22 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Container(
         decoration: BoxDecoration(
-          color: Color.lerp(const Color(0xFF0F1F38), bgTint, 1.0),
+          color: Color.lerp(Colors.white, bgTint, 1.0),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: 1.5),
+          border: Border.all(
+            color: borderColor,
+            width: needsReview ? 2 : 1.5,
+            style: customProduct ? BorderStyle.solid : BorderStyle.solid,
+          ),
         ),
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           leading: GestureDetector(
             onTap: () => setState(() => item.isConfirmed = !item.isConfirmed),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: 28,
-              height: 28,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: item.isConfirmed
@@ -3511,12 +3533,36 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 ),
               ),
               child: item.isConfirmed
-                  ? const Icon(Icons.check, color: Colors.white, size: 16)
-                  : null,
+                  ? const Icon(Icons.check, color: Colors.white, size: 22)
+                  : const Icon(Icons.priority_high, color: Color(0xFF94A3B8), size: 20),
             ),
           ),
           title: Row(
             children: [
+              if (item.quantityPriceAmbiguous)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: LiveTranslatedText(
+                    'Qty or price?',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFB45309),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              if (customProduct)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: LiveTranslatedText(
+                    'No stock',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF64748B),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               Expanded(
                 // DISPLAY ONLY: the stored/English name (item.name and the
                 // edit controller) is what the bill and stock deduction use.
@@ -3753,7 +3799,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           ),
           const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: _confirmOrder,
+            onPressed: ParsedItems.any(
+                  (item) => item.quantityPriceAmbiguous && !item.isConfirmed,
+                )
+                ? null
+                : _confirmOrder,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF10B981),
               foregroundColor: Colors.white,

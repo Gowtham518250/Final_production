@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'api_client.dart';
+import 'app_motion.dart';
+import 'growth_studio_motion.dart';
 
 class RetailGrowthSuitePage extends StatefulWidget {
   const RetailGrowthSuitePage({super.key});
   @override State<RetailGrowthSuitePage> createState()=>_RetailGrowthSuitePageState();
 }
 
-class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage> {
+class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ambient;
   bool loading=true;
   String error='';
   Map<String,dynamic> overview={};
@@ -24,8 +28,20 @@ class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage> {
   final copilot=TextEditingController();
   String answer='';
 
-  @override void initState(){ super.initState(); _load(); }
-  @override void dispose(){ copilot.dispose(); super.dispose(); }
+  @override void initState(){
+    super.initState();
+    _ambient = AnimationController(vsync: this, duration: const Duration(seconds: 8));
+    _load();
+  }
+  @override void didChangeDependencies(){
+    super.didChangeDependencies();
+    if (AppMotion.reduced(context)) {
+      _ambient.stop();
+    } else if (!_ambient.isAnimating) {
+      _ambient.repeat();
+    }
+  }
+  @override void dispose(){ _ambient.dispose(); copilot.dispose(); super.dispose(); }
 
   Future<Map<String,dynamic>> get(String path) async {
     final r=await ApiClient.getJson(path);
@@ -508,10 +524,10 @@ class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(title:LiveTranslatedText('Retail Growth',style:GoogleFonts.poppins(fontWeight:FontWeight.w800)),backgroundColor:Colors.white,foregroundColor:const Color(0xFF111827),elevation:0,actions:[IconButton(onPressed:loading?null:_load,icon:const Icon(Icons.refresh_rounded))]),
-      body:RefreshIndicator(onRefresh:_load,color:const Color(0xFF5B3DF5),child:ListView(padding:const EdgeInsets.all(16),children:[
-        _hero(),
+      body:loading? const GrowthLoadingStage():RefreshIndicator(onRefresh:_load,color:const Color(0xFF5B3DF5),child:ListView(padding:const EdgeInsets.all(16),children:[
+        GrowthStagger(index: 0, child: _hero()),
         const SizedBox(height: 12),
-        _growthAgentShortcut(),
+        GrowthStagger(index: 1, child: _growthAgentShortcut()),
         if(error.isNotEmpty) ...[const SizedBox(height:12),_error(error)],
         const SizedBox(height:18),
         _title('Business pulse','Live owner metrics'),
@@ -560,7 +576,7 @@ class _RetailGrowthSuitePageState extends State<RetailGrowthSuitePage> {
     );
   }
 
-  Widget _hero()=>Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(gradient:const LinearGradient(colors:[Color(0xFF11183F),Color(0xFF4C1D95),Color(0xFF5B3DF5)]),borderRadius:BorderRadius.circular(26),boxShadow:[BoxShadow(color:Color(0x334C1D95),blurRadius:28,offset:Offset(0,14))]),child:Row(children:[Container(width:52,height:52,decoration:BoxDecoration(color:Colors.white12,borderRadius:BorderRadius.circular(16)),child:const Icon(Icons.auto_awesome_rounded,color:Colors.white,size:27)),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[LiveTranslatedText('Retail Growth Suite',style:GoogleFonts.poppins(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800)),const SizedBox(height:3),LiveTranslatedText('AI insights, smart inventory, branches, delivery, loyalty, promotions and security.',style:GoogleFonts.poppins(color:Colors.white70,fontSize:11.5,height:1.4))]))]));
+  Widget _hero()=>GrowthAmbientBackdrop(animation:_ambient,height:148,child:Padding(padding:const EdgeInsets.all(20),child:Row(children:[Container(width:52,height:52,decoration:BoxDecoration(color:Colors.white12,borderRadius:BorderRadius.circular(16)),child:const Icon(Icons.auto_awesome_rounded,color:Colors.white,size:27)),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[LiveTranslatedText('Retail Growth Suite',style:GoogleFonts.poppins(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800)),const SizedBox(height:3),LiveTranslatedText('AI insights, smart inventory, branches, delivery, loyalty, promotions and security.',style:GoogleFonts.poppins(color:Colors.white70,fontSize:11.5,height:1.4))]))])));
   Widget _title(String a,String b)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[LiveTranslatedText(a,style:GoogleFonts.poppins(fontSize:17,fontWeight:FontWeight.w800,color:const Color(0xFF111827))),const SizedBox(height:2),LiveTranslatedText(b,style:GoogleFonts.poppins(fontSize:10.5,color:const Color(0xFF94A3B8)))]);
   Widget _growthAgentShortcut() => Material(
     color: Colors.transparent,

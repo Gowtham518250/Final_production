@@ -181,5 +181,63 @@ void main() {
       expect(SalePaymentPolicy.isFullyPaid(100, 100), isTrue);
       expect(SalePaymentPolicy.remainingDue(100, 100), 0);
     });
+
+    test('rejects non-finite or negative POS amounts', () {
+      expect(SalePaymentPolicy.isFullyPaid(double.nan, 100), isFalse);
+      expect(SalePaymentPolicy.isFullyPaid(50, double.infinity), isFalse);
+      expect(SalePaymentPolicy.isPartialPaid(double.nan, 100), isFalse);
+      expect(SalePaymentPolicy.remainingDue(double.nan, 100), 0);
+      expect(
+        SalePaymentPolicy.resolvePaidAmount(
+          totalAmount: double.nan,
+          enteredPaidAmount: 10,
+          isBorrow: false,
+          isCashPayment: true,
+          paymentConfirmed: true,
+        ),
+        0,
+      );
+      expect(
+        SalePaymentPolicy.resolvePaidAmount(
+          totalAmount: 100,
+          enteredPaidAmount: -20,
+          isBorrow: false,
+          isCashPayment: true,
+          paymentConfirmed: false,
+        ),
+        100,
+      );
+      expect(
+        SalePaymentPolicy.resolvePaidAmount(
+          totalAmount: 100,
+          enteredPaidAmount: 150,
+          isBorrow: false,
+          isCashPayment: true,
+          paymentConfirmed: true,
+        ),
+        100,
+      );
+      expect(
+        SalePaymentPolicy.resolvePaidAmount(
+          totalAmount: 100,
+          enteredPaidAmount: 40,
+          isBorrow: false,
+          isCashPayment: true,
+          paymentConfirmed: false,
+        ),
+        40,
+      );
+      expect(
+        SalePaymentPolicy.resolveDetectedReceiptAmount(
+          detectedAmount: -5,
+          remainingDue: 40,
+          isIncomingCredit: true,
+          isMerchantConfirmed: true,
+          isFailed: false,
+          isDuplicate: false,
+        ),
+        isNull,
+      );
+    });
   });
 }

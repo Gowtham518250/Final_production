@@ -393,6 +393,14 @@ class PaymentIdentityMatcher {
             (!ignorePayer &&
                 current.payer != null &&
                 previous.payer != null))) {
+      if (weakWindow > Duration.zero &&
+          age <= weakWindow &&
+          isWeakModalityPair(current.origin, previous.origin)) {
+        return const IdentityDecision(
+          IdentityVerdict.candidateEcho,
+          'utr_enrichment',
+        );
+      }
       return const IdentityDecision(
         IdentityVerdict.distinct,
         'one_sided_reference_not_fuzzy_matched',

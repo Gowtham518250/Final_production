@@ -21,6 +21,10 @@ class UtrDeduplicationService {
   );
   static const int _localUtrCacheMax = 500;
 
+  /// Cross-device Redis matching is active only when the release build
+  /// passed `--dart-define=REDIS_BASE_URL=...`.
+  static bool get isDistributedDedupEnabled => _redisBaseUrl.isNotEmpty;
+
   /// Check if a UTR has already been confirmed/registered
   /// Returns true if conflict detected (UTR already exists)
   static Future<bool> checkUtrConflict(String utr) async {

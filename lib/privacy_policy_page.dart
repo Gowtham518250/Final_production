@@ -5,6 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 class PrivacyPolicyPage extends StatelessWidget {
   const PrivacyPolicyPage({super.key});
 
+  static const publicUrl =
+      'https://retail-mind-web.onrender.com/privacy.html';
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -23,41 +26,61 @@ class PrivacyPolicyPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _section(
+              'Who we are',
+              'Retail Mind is a point-of-sale app for shop owners (Android package com.retailmind.app). '
+                  'This policy covers the mobile app and the Retail Mind cloud services used to sync shop data.',
+            ),
+            _section(
               'Why we read your SMS',
               'SMS permission can expose SMS message content to Retail Mind. The app '
-                  'uses SMS access to look for payment-related messages from '
-                  'supported banks and payment services. While processing SMS '
-                  'for this purpose, the app may encounter messages unrelated '
-                  'to payments. Relevant detected transaction details may be '
-                  'saved in payment history and handled by related app features. '
-                  'Do not enable SMS access unless you are comfortable with it.',
+                  'uses SMS access only to look for incoming payment-related messages from '
+                  'supported banks and payment services. Inbox threads are not displayed. '
+                  'While filtering, the app may briefly encounter messages unrelated '
+                  'to payments; those are discarded and are not stored as shop records. '
+                  'Relevant detected transaction details may be '
+                  'saved in payment history. Do not enable SMS access unless you are comfortable with it. '
+                  'Manual billing remains available without SMS access.',
             ),
             _section(
               'Why we use Notification Access',
               'Android notification access can expose notification text and metadata from '
                   'apps on this device while the permission is enabled. The listener '
-                  'may receive unrelated notifications before Retail Mind filters '
-                  'them for supported payment alerts, so it can encounter sensitive '
-                  'content unrelated to payments. Relevant detected transaction '
-                  'details may be saved in Online Payment History and handled by '
-                  'related app features according to their settings. A notification '
+                  'looks for supported payment alerts. Unrelated notifications may be seen '
+                  'before they are filtered out. Relevant detected transaction '
+                  'details may be saved in Online Payment History. A notification '
                   'does not prove settlement; verify incoming credits before treating '
-                  'them as paid. Enable this access only if you agree to this use.',
+                  'them as paid.',
             ),
             _section(
               'Why we use Accessibility Service',
-              'Accessibility access can expose text and interface information from other '
-                  'apps while enabled. Retail Mind uses this service as an additional '
-                  'payment-detection path. It may encounter sensitive information '
-                  'outside payment alerts. Enable it only if you understand and '
-                  'accept this access; manual billing remains available.',
+              'Accessibility is limited to reading on-screen text from bank and UPI apps '
+                  'so a payment confirmation can be matched to a bill. Retail Mind does not '
+                  'tap, swipe, type, or control other apps. The service does not request '
+                  'gesture control. Enable it only if you accept this access; manual billing remains available.',
+            ),
+            _section(
+              'Data we process',
+              'Shop catalog, sales, inventory, staff attendance, and account details you enter. '
+                  'Optional payment-alert fields (amount, reference, source app or SMS sender). '
+                  'Device identifiers used to keep your session signed in. '
+                  'Firebase may process crash, auth, and messaging data for the Android app.',
+            ),
+            _section(
+              'Retention',
+              'Business records stay until you delete them or delete the account. '
+                  'Non-payment SMS and notifications are not kept as shop records. '
+                  'Session tokens expire and can be revoked by signing out.',
             ),
             _section(
               'Your data rights',
               'You can export all your data anytime from '
                   'Settings → Export Data. You can delete your '
                   'account and all data from Settings → '
-                  'Delete Account.',
+                  'Delete Account. Under applicable Indian data-protection law you may also request access or erasure through the listing support contact.',
+            ),
+            _section(
+              'Public copy',
+              'A hosted copy of this policy for the Play Store listing is at $publicUrl',
             ),
             _section(
               'Contact',

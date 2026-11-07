@@ -178,6 +178,7 @@ class SaleService {
     bool isBorrow = false,
     String? invoiceNumber,
     bool refreshDashboard = true,
+    String paymentEvidence = 'unconfirmed',
   }) async {
     const String context = 'SALE_SUBMIT';
     final recordedPaidAmount = isBorrow ? 0.0 : paidAmount;
@@ -334,6 +335,7 @@ class SaleService {
               'paid_amount': recordedPaidAmount.toString(),
               'gst_applied': withTax,
               'payment_method': paymentMethod,
+              'payment_evidence': paymentEvidence,
               'is_borrow': isBorrow,
               'sync_status': 'pending',
               'pending_sync': true,
@@ -376,6 +378,7 @@ class SaleService {
         'total_amount': grandTotal,
         'paid_amount': recordedPaidAmount,
         'payment_method': paymentMethod,
+        'payment_evidence': paymentEvidence,
         'is_borrow': isBorrow,
         'tax': invoiceTax,
         'payment_status': paymentStatusFor(recordedPaidAmount, grandTotal),
@@ -402,6 +405,7 @@ class SaleService {
         totals: totals,
         invoiceTax: invoiceTax,
         paymentMethod: paymentMethod,
+        paymentEvidence: paymentEvidence,
         syncStatus: 'pending',
         invoiceNumber: canonicalInvoiceNumber,
         isBorrow: isBorrow,
@@ -740,6 +744,7 @@ class SaleService {
     required Map<String, dynamic> totals,
     required double invoiceTax,
     String paymentMethod = 'Cash',
+    String paymentEvidence = 'unconfirmed',
     String syncStatus = 'synced',
     String? invoiceNumber,
     bool isBorrow = false,
@@ -835,6 +840,7 @@ class SaleService {
       'payment_status': paymentStatusFor(paidAmount, grandTotal),
       'gst_applied': withTax,
       'payment_method': paymentMethod,
+      'payment_evidence': paymentEvidence,
       'is_borrow': isBorrow,
       'notes': isBorrow
           ? 'Payment via $paymentMethod - Borrow Invoice'

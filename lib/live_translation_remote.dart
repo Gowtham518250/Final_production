@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'api_client.dart';
-import 'agent_debug_log.dart';
 import 'secure_token_storage.dart';
 
 const int _maxRemoteBatchItems = 20;
@@ -94,23 +93,7 @@ Future<List<String>> translateTextBatchRemotely(
         },
       ).timeout(timeout);
 
-      if (response.statusCode != 200) {
-        // #region agent log
-        if (response.statusCode == 401 || response.statusCode == 403) {
-          AgentDebugLog.log(
-            location: 'live_translation_remote.dart:translate-batch',
-            message: 'translate-batch auth error after ApiClient refresh',
-            hypothesisId: 'H3',
-            data: {
-              'status': response.statusCode,
-              'hasAccess': token.trim().isNotEmpty,
-              'expDeltaSec': AgentDebugLog.accessExpDeltaSec(token),
-            },
-          );
-        }
-        // #endregion
-        continue;
-      }
+      if (response.statusCode != 200) continue;
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) continue;
       final translated = decoded['translations'];

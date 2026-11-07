@@ -1,8 +1,9 @@
 name: Flutter CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "clean-retailmind-20261023", "feature/ai-help-support-screen-guidance-20261030" ]
+    branches: [ "clean-retailmind-20261023", "chore/**", "feature/**" ]
   pull_request:
     branches: [ "clean-retailmind-20261023" ]
 
@@ -17,7 +18,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.44.x"
+          flutter-version: "3.47.x"
           channel: stable
           cache: true
 
@@ -25,28 +26,10 @@ jobs:
         run: flutter pub get
 
       - name: Analyze project source
-        # Keep the existing warning/info backlog visible but do not let it mask errors.
-        shell: bash
-        run: |
-          set +e
-          if analysis_output="$(flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1)"; then
-            analyze_status=0
-          else
-            analyze_status=$?
-          fi
-          printf '%s\n' "$analysis_output"
-
-          if printf '%s\n' "$analysis_output" | grep -Eq '^[[:space:]]*error[[:space:]]+-'; then
-            echo "Analyzer reported at least one error diagnostic."
-            exit 1
-          fi
-
-          if [ "$analyze_status" -ne 0 ]; then
-            echo "::warning::flutter analyze returned $analyze_status without errors; warning/info backlog remains non-blocking."
-          fi
-
-          echo "::notice::Warning and info diagnostics remain visible above; only analyzer errors fail this step."
-          exit 0
+        # Errors fail the job. --no-fatal-warnings/--no-fatal-infos keep the
+        # existing warning backlog visible without masking real errors.
+        # Flutter prints "error • ..." (bullet), not "error -".
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Run Flutter tests
         run: flutter test

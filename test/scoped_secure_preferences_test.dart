@@ -104,6 +104,18 @@ void main() {
     },
   );
 
+  test('owner session stays valid after a leftover SharedPreferences token is present', () async {
+    await SecureTokenStorage.saveUserId(41);
+    await SecureTokenStorage.saveRole(SessionRole.owner);
+    await SecureTokenStorage.saveToken('owner-secure-token');
+    await SharedPreferences.getInstance().then(
+      (prefs) => prefs.setString('auth_token', 'stale-prefs-token'),
+    );
+
+    expect(await SecureTokenStorage.isSessionValid(), isTrue);
+    expect(await SecureTokenStorage.getToken(), 'owner-secure-token');
+  });
+
   test('customer and owner credentials remain role-isolated for matching IDs', () async {
     await SecureTokenStorage.saveUserId(41);
     await SecureTokenStorage.saveRole(SessionRole.owner);

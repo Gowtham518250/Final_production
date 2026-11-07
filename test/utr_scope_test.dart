@@ -11,6 +11,10 @@ void main() {
     await ScopedSharedPreferences.setCurrentUserId(11);
   });
 
+  test('Redis cross-device UTR matching is off unless dart-define is set', () {
+    expect(UtrDeduplicationService.isDistributedDedupEnabled, isFalse);
+  });
+
   test('UTR cache is isolated per shop user', () async {
     await UtrDeduplicationService.registerUtr('UTR11A');
     expect(await UtrDeduplicationService.checkUtrConflict('UTR11A'), isTrue);

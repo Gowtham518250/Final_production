@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Retail Mind</string>
+    <string name="notification_listener_label">Retail Mind payment alerts</string>
+    <string name="accessibility_service_label">Retail Mind payment screen reader</string>
+    <string name="accessibility_service_description">Retail Mind reads on-screen text from bank and UPI apps only, so the shop can match an incoming payment to a bill. It does not tap, swipe, type, or control other apps. You can keep billing manually if this is off.</string>
+    <string name="app_sensitive_access_purpose">Retail Mind is a point-of-sale app. Optional SMS, notification, and accessibility access are used only to detect bank and UPI payment confirmations on this device. Manual billing remains available without them.</string>
+</resources>
