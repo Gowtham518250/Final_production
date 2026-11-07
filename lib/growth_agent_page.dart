@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:share_plus/share_plus.dart';
@@ -14,11 +15,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 import 'app_localizations.dart';
+import 'catalog_working_set.dart';
 import 'app_motion.dart';
 import 'growth_marketing_helpers.dart';
+import 'growth_poster_catalog.dart';
 import 'growth_studio_motion.dart';
 import 'live_translated_text.dart';
 import 'local_storage_service.dart';
+import 'low_memory_performance.dart';
 
 /// Free-first marketing assistant.
 ///
@@ -56,7 +60,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
   String _message = '';
   String _goal = 'nearby';
   String _language = 'en';
-  String _template = 'bold';
+  String _template = 'emerald';
+  String? _shopLogoUrl;
+  Uint8List? _shopLogoBytes;
+  List<_GodImageEntry> _godImages = <_GodImageEntry>[];
   String _adFormat = 'feed';
   String? _selectedProductKey;
   String _campaignStorageKey = 'retailmind_growth_campaigns_v1_guest';
@@ -172,7 +179,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
       } else {
         product.remove('unit_price');
       }
-      parsed.add(product);
+      parsed.add(CatalogWorkingSet.forBilling(product));
     }
     return parsed;
   }
@@ -192,6 +199,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
 
       var shopName = '';
       var shopDetails = <String, dynamic>{};
+      String? shopLogoUrl;
+      Uint8List? shopLogoBytes;
       var automationEnabled = false;
       var autoNewProducts = true;
       var autoWeekly = false;
@@ -398,10 +407,27 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
         // Remote history is optional; keep the local offline workspace intact.
       }
 
+      shopLogoUrl =
+          (shopDetails['logo_url'] ??
+                  shopDetails['shop_logo_url'] ??
+                  prefs.getString('shop_logo_url'))
+              ?.toString()
+              .trim();
+      if (shopLogoUrl != null && shopLogoUrl.isEmpty) shopLogoUrl = null;
+      shopLogoBytes = _decodeImageBytes(
+        prefs.getString('logo_base64') ??
+            prefs.getString('shop_logo') ??
+            shopDetails['logo_base64'],
+      );
+      final godImages = _readGodImages(prefs);
+
       if (!mounted) return;
       setState(() {
         _shopController.text = shopName.isEmpty ? 'My Shop' : shopName;
         _shopDetails = shopDetails;
+        _shopLogoUrl = shopLogoUrl;
+        _shopLogoBytes = shopLogoBytes;
+        _godImages = godImages;
         _automationEnabled = automationEnabled;
         _autoNewProducts = autoNewProducts;
         _autoWeekly = autoWeekly;
@@ -480,6 +506,128 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
         selectedProductId != savedProductId ||
         selectedProductName != savedProductName ||
         selectedProductPrice != savedProductPrice;
+  }
+
+  Uint8List? _decodeImageBytes(dynamic raw) {
+    if (raw == null) return null;
+    var text = raw.toString().trim();
+    if (text.isEmpty) return null;
+    if (text.contains(',')) text = text.split(',').last;
+    try {
+      return base64Decode(text);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _productImageUrl([Map<String, dynamic>? product]) {
+    final source = product ?? _selectedProduct;
+    if (source == null) return null;
+    for (final key in const [
+      'image_url',
+      'photo_url',
+      'product_image_url',
+      'thumbnail_url',
+      'image',
+    ]) {
+      final value = source[key]?.toString().trim() ?? '';
+      if (value.startsWith('http')) return value;
+    }
+    return null;
+  }
+
+  Uint8List? _productImageBytes([Map<String, dynamic>? product]) {
+    final source = product ?? _selectedProduct;
+    if (source == null) return null;
+    return _decodeImageBytes(
+      source['image_base64'] ?? source['photo_base64'] ?? source['image_bytes'],
+    );
+  }
+
+  static const _godImagesPrefsKey = 'retailmind_growth_god_images_v1';
+
+  List<_GodImageEntry> _readGodImages(SharedPreferences prefs) {
+    try {
+      final raw = prefs.getString(_godImagesPrefsKey);
+      if (raw == null || raw.trim().isEmpty) return <_GodImageEntry>[];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <_GodImageEntry>[];
+      return decoded
+          .whereType<Map>()
+          .map((item) {
+            final id = item['id']?.toString() ?? '';
+            final title = item['title']?.toString() ?? 'God image';
+            final bytes = _decodeImageBytes(item['image']);
+            if (id.isEmpty || bytes == null) return null;
+            return _GodImageEntry(id: id, title: title, bytes: bytes);
+          })
+          .whereType<_GodImageEntry>()
+          .toList();
+    } catch (_) {
+      return <_GodImageEntry>[];
+    }
+  }
+
+  Future<void> _saveGodImages() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _godImagesPrefsKey,
+      jsonEncode(
+        _godImages
+            .map(
+              (item) => {
+                'id': item.id,
+                'title': item.title,
+                'image': base64Encode(item.bytes),
+              },
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Uint8List? _godImageBytes([String? template]) {
+    final id = template ?? _template;
+    for (final item in _godImages) {
+      if (item.id == id) return item.bytes;
+    }
+    return null;
+  }
+
+  Future<void> _addGodImage() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 55,
+        maxWidth: 720,
+        maxHeight: 720,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty) return;
+      final nextIndex = _godImages.length + 1;
+      final entry = _GodImageEntry(
+        id: '${GrowthPosterStyle.userPrefix}${DateTime.now().millisecondsSinceEpoch}',
+        title: 'God image $nextIndex',
+        bytes: bytes,
+      );
+      setState(() {
+        _godImages = [..._godImages, entry];
+        _template = entry.id;
+      });
+      await _saveGodImages();
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('Could not add the god image. Try another photo.');
+    }
+  }
+
+  Future<void> _removeGodImage(String id) async {
+    setState(() {
+      _godImages = _godImages.where((item) => item.id != id).toList();
+      if (_template == id) _template = 'ganesha';
+    });
+    await _saveGodImages();
   }
 
   Map<String, dynamic>? get _selectedProduct {
@@ -1588,11 +1736,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
           : 'nearby';
       final language = draft['language']?.toString() ?? 'en';
       _language = const {'en', 'te', 'hi'}.contains(language) ? language : 'en';
-      final savedTemplate = draft['template']?.toString() ?? 'bold';
-      _template =
-          const {'bold', 'festive', 'fresh', 'minimal'}.contains(savedTemplate)
+      final savedTemplate = draft['template']?.toString() ?? 'emerald';
+      _template = GrowthPosterCatalog.accepts(savedTemplate)
           ? savedTemplate
-          : 'bold';
+          : 'emerald';
       final savedFormat = draft['ad_format']?.toString() ?? 'feed';
       _adFormat = const {'feed', 'square', 'story'}.contains(savedFormat)
           ? savedFormat
@@ -1771,94 +1918,179 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
   }
 
   Widget _templateSelectionCards() {
-    const items = <({String id, String title})>[
-      (id: 'bold', title: 'Shop spotlight'),
-      (id: 'festive', title: 'Festival offer'),
-      (id: 'fresh', title: 'Fresh & local'),
-      (id: 'minimal', title: 'Simple update'),
+    final colourItems = GrowthPosterCatalog.all;
+    final godItems = [
+      ...GrowthPosterCatalog.blessings,
+      ..._godImages.map(
+        (item) => GrowthPosterStyle.userGod(id: item.id, title: item.title),
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Design style',
+        const LiveTranslatedText(
+          'Card colours',
           style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
         ),
+        const SizedBox(height: 4),
+        const LiveTranslatedText(
+          '24 colour posters with your shop logo and product logo.',
+          style: TextStyle(color: _muted, fontSize: 11),
+        ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: 130,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final selected = _template == item.id;
-              return InkWell(
-                onTap: _busy
-                    ? null
-                    : () => setState(() => _template = item.id),
+        _posterStyleScroller(colourItems),
+        const SizedBox(height: 16),
+        const LiveTranslatedText(
+          'God image cards',
+          style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 4),
+        const LiveTranslatedText(
+          'Blessing posters plus your own god photos. Shop logo, product logo, and god image are shown on the card.',
+          style: TextStyle(color: _muted, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        _posterStyleScroller(godItems, includeAddGod: true),
+      ],
+    );
+  }
+
+  Widget _posterStyleScroller(
+    List<GrowthPosterStyle> items, {
+    bool includeAddGod = false,
+  }) {
+    return SizedBox(
+      height: 168,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length + (includeAddGod ? 1 : 0),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          if (includeAddGod && index == items.length) {
+            return _addGodImageCard();
+          }
+          final item = items[index];
+          final selected = GrowthPosterCatalog.of(_template).id == item.id;
+          final removable = item.id.startsWith(GrowthPosterStyle.userPrefix);
+          return InkWell(
+            onTap: _busy ? null : () => setState(() => _template = item.id),
+            onLongPress: removable && !_busy
+                ? () => _removeGodImage(item.id)
+                : null,
+            borderRadius: BorderRadius.circular(14),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 170),
+              width: 118,
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFFF3EFFF) : Colors.white,
                 borderRadius: BorderRadius.circular(14),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 170),
-                  width: 118,
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: selected ? const Color(0xFFF3EFFF) : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: selected ? _purple : const Color(0xFFE2E8F0),
-                      width: selected ? 1.6 : 1,
+                border: Border.all(
+                  color: selected ? _purple : const Color(0xFFE2E8F0),
+                  width: selected ? 1.6 : 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: item.colors,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.all(7),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              _MiniLogoDot(
+                                bytes: _shopLogoBytes,
+                                url: _shopLogoUrl,
+                                fallback: item.icon,
+                                light: item.light,
+                              ),
+                              const Spacer(),
+                              if (item.blessing)
+                                _MiniLogoDot(
+                                  bytes: _godImageBytes(item.id),
+                                  fallback: Icons.temple_hindu_rounded,
+                                  light: item.light,
+                                )
+                              else if (selected)
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                            ],
+                          ),
+                          const Spacer(),
+                          _MiniLogoDot(
+                            bytes: _productImageBytes(),
+                            url: _productImageUrl(),
+                            fallback: Icons.inventory_2_rounded,
+                            light: item.light,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: _templateColors(item.id),
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: selected
-                              ? const Align(
-                                  alignment: Alignment.topRight,
-                                  child: Padding(
-                                    padding: EdgeInsets.all(5),
-                                    child: Icon(
-                                      Icons.check_circle,
-                                      color: Colors.white,
-                                      size: 17,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      LiveTranslatedText(
-                        item.title,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                  const SizedBox(height: 6),
+                  LiveTranslatedText(
+                    item.title,
+                    style: const TextStyle(
+                      color: _ink,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              );
-            },
-          ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _addGodImageCard() {
+    return InkWell(
+      onTap: _busy ? null : _addGodImage,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 118,
+        padding: const EdgeInsets.all(7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFF59E0B)),
         ),
-      ],
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_photo_alternate_rounded, color: Color(0xFFB45309)),
+            SizedBox(height: 8),
+            LiveTranslatedText(
+              'Add god image',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFF7C2D12),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2781,18 +3013,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
     );
   }
 
-  List<Color> _templateColors(String template) {
-    switch (template) {
-      case 'festive':
-        return const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)];
-      case 'fresh':
-        return const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)];
-      case 'minimal':
-        return const [Color(0xFFF8FAFC), Color(0xFFFFFFFF)];
-      default:
-        return const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
-    }
-  }
+  List<Color> _templateColors(String template) =>
+      GrowthPosterCatalog.of(template).colors;
 
   Widget _emptyPreview() {
     return Container(
@@ -2859,6 +3081,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
           child: _PosterArtwork(
             template: template,
             format: format,
+            shopLogoUrl: _shopLogoUrl,
+            shopLogoBytes: _shopLogoBytes,
+            productImageUrl: _productImageUrl(),
+            productImageBytes: _productImageBytes(),
+            godImageBytes: _godImageBytes(template),
             shopName: _shopController.text.trim().isEmpty
                 ? 'My Shop'
                 : _shopController.text.trim(),
@@ -3194,6 +3421,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage>
 
 class _PosterArtwork extends StatelessWidget {
   const _PosterArtwork({
+    this.shopLogoUrl,
+    this.shopLogoBytes,
+    this.productImageUrl,
+    this.productImageBytes,
+    this.godImageBytes,
     required this.shopName,
     required this.headline,
     required this.productName,
@@ -3211,6 +3443,11 @@ class _PosterArtwork extends StatelessWidget {
     required this.format,
   });
 
+  final String? shopLogoUrl;
+  final Uint8List? shopLogoBytes;
+  final String? productImageUrl;
+  final Uint8List? productImageBytes;
+  final Uint8List? godImageBytes;
   final String shopName;
   final String headline;
   final String productName;
@@ -3229,30 +3466,23 @@ class _PosterArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isFestive = template == 'festive';
-    final isFresh = template == 'fresh';
-    final isMinimal = template == 'minimal';
+    final style = GrowthPosterCatalog.of(template);
+    final isFestive =
+        style.blessing ||
+        style.id == 'ruby' ||
+        style.id == 'gold' ||
+        style.id == 'lotus';
+    final isFresh = style.id == 'emerald' || style.id == 'mint' || style.id == 'forest';
+    final isMinimal = style.light;
     final isStory = format == 'story';
     final isSquare = format == 'square';
     final hasProduct = productName.trim().isNotEmpty;
     final hasOffer = offer.trim().isNotEmpty || discountPrice != null;
-    final colors = isFestive
-        ? const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)]
-        : isFresh
-        ? const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)]
-        : const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
+    final colors = style.colors;
     final textColor = isMinimal ? const Color(0xFF111827) : Colors.white;
     final mutedColor = isMinimal ? const Color(0xFF475569) : Colors.white70;
-    final accentColor = isFestive
-        ? const Color(0xFFFDE68A)
-        : isFresh
-        ? const Color(0xFFD9F99D)
-        : isMinimal
-        ? const Color(0xFFBE123C)
-        : const Color(0xFFFDE68A);
-    final accentTextColor = isFestive || !isMinimal
-        ? const Color(0xFF422006)
-        : Colors.white;
+    final accentColor = style.accent;
+    final accentTextColor = style.accentText;
     final cardColor = isMinimal
         ? const Color(0xFFF8FAFC)
         : Colors.white.withValues(alpha: 0.13);
@@ -3274,7 +3504,13 @@ class _PosterArtwork extends StatelessWidget {
         : language == 'hi'
         ? 'ऑफ़र कोడ్'
         : 'Offer code';
-    final badgeLabel = isFestive
+    final badgeLabel = style.blessing
+        ? (language == 'te'
+              ? 'దైవ ఆశీర్వాదం'
+              : language == 'hi'
+              ? 'दिव्य आशीर्वाद'
+              : 'DIVINE BLESSING')
+        : isFestive
         ? (hasOffer
               ? (language == 'te'
                     ? 'ప్రత్యేక ఆఫర్'
@@ -3377,43 +3613,71 @@ class _PosterArtwork extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: isStory ? 48 : 40,
-                        height: isStory ? 48 : 40,
-                        decoration: BoxDecoration(
-                          color: isMinimal
-                              ? const Color(0xFF111827)
-                              : Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(
-                            isMinimal ? 8 : 13,
-                          ),
-                        ),
-                        child: Icon(
-                          isFresh
-                              ? Icons.eco_rounded
-                              : isFestive
-                              ? Icons.celebration_rounded
-                              : isMinimal
-                              ? Icons.storefront_rounded
-                              : Icons.shopping_bag_rounded,
-                          color: isMinimal ? Colors.white : accentColor,
-                          size: isStory ? 28 : 24,
-                        ),
+                      _PosterBrandMark(
+                        bytes: shopLogoBytes,
+                        url: shopLogoUrl,
+                        size: isStory ? 48 : 40,
+                        radius: isMinimal ? 8 : 13,
+                        fallback: style.icon,
+                        accent: accentColor,
+                        light: isMinimal,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          shopName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: textColor,
-                            fontWeight: FontWeight.w900,
-                            fontSize: isStory ? 21 : 17,
-                            height: 1.05,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'SHOP LOGO',
+                              style: TextStyle(
+                                color: mutedColor,
+                                fontSize: isSquare ? 7 : 8,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Text(
+                              shopName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w900,
+                                fontSize: isStory ? 21 : 17,
+                                height: 1.05,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      if (style.blessing) ...[
+                        const SizedBox(width: 8),
+                        Column(
+                          children: [
+                            Text(
+                              'GOD IMAGE',
+                              style: TextStyle(
+                                color: mutedColor,
+                                fontSize: isSquare ? 7 : 8,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.7,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            _BlessingMark(
+                              bytes: godImageBytes,
+                              size: isStory
+                                  ? 58
+                                  : isSquare
+                                  ? 36
+                                  : 48,
+                              light: isMinimal,
+                              accent: accentColor,
+                              symbol: style.symbol.isEmpty ? 'ॐ' : style.symbol,
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                   SizedBox(
@@ -3522,6 +3786,26 @@ class _PosterArtwork extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
+                                  'PRODUCT LOGO',
+                                  style: TextStyle(
+                                    color: mutedColor,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                _PosterBrandMark(
+                                  bytes: productImageBytes,
+                                  url: productImageUrl,
+                                  size: isStory ? 56 : 48,
+                                  radius: 12,
+                                  fallback: Icons.inventory_2_rounded,
+                                  accent: accentColor,
+                                  light: true,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
                                   productName,
                                   maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
@@ -3547,31 +3831,49 @@ class _PosterArtwork extends StatelessWidget {
                             )
                           : Row(
                               children: [
-                                Icon(
-                                  Icons.local_mall_rounded,
-                                  color: accentColor,
+                                _PosterBrandMark(
+                                  bytes: productImageBytes,
+                                  url: productImageUrl,
                                   size: isStory
-                                      ? 38
+                                      ? 44
                                       : isSquare
-                                      ? 23
-                                      : 32,
+                                      ? 28
+                                      : 38,
+                                  radius: 12,
+                                  fallback: Icons.inventory_2_rounded,
+                                  accent: accentColor,
+                                  light: isMinimal,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: Text(
-                                    productName,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontSize: isStory
-                                          ? 18
-                                          : isSquare
-                                          ? 11
-                                          : 15,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'PRODUCT LOGO',
+                                        style: TextStyle(
+                                          color: mutedColor,
+                                          fontSize: isSquare ? 7 : 8,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.7,
+                                        ),
+                                      ),
+                                      Text(
+                                        productName,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: textColor,
+                                          fontSize: isStory
+                                              ? 18
+                                              : isSquare
+                                              ? 11
+                                              : 15,
+                                          height: 1.1,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 if (priceText.isNotEmpty) ...[
@@ -3767,4 +4069,152 @@ class _PosterArtwork extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MiniLogoDot extends StatelessWidget {
+  const _MiniLogoDot({
+    required this.fallback,
+    required this.light,
+    this.bytes,
+    this.url,
+  });
+
+  final Uint8List? bytes;
+  final String? url;
+  final IconData fallback;
+  final bool light;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PosterBrandMark(
+      bytes: bytes,
+      url: url,
+      size: 22,
+      radius: 7,
+      fallback: fallback,
+      accent: light ? const Color(0xFF111827) : Colors.white,
+      light: light,
+    );
+  }
+}
+
+class _PosterBrandMark extends StatelessWidget {
+  const _PosterBrandMark({
+    required this.size,
+    required this.radius,
+    required this.fallback,
+    required this.accent,
+    required this.light,
+    this.bytes,
+    this.url,
+  });
+
+  final Uint8List? bytes;
+  final String? url;
+  final double size;
+  final double radius;
+  final IconData fallback;
+  final Color accent;
+  final bool light;
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2;
+    final decoded = LowMemoryPerformance.decodeCacheDimension(size, dpr);
+    final image = bytes != null
+        ? LowMemoryPerformance.memoryImage(
+            bytes!,
+            logicalSize: size,
+            devicePixelRatio: dpr,
+            fit: BoxFit.cover,
+          )
+        : (url != null && url!.isNotEmpty)
+        ? Image.network(
+            url!,
+            fit: BoxFit.cover,
+            cacheWidth: decoded,
+            cacheHeight: decoded,
+            filterQuality: FilterQuality.low,
+            errorBuilder: (_, _, _) =>
+                Icon(fallback, color: accent, size: size * 0.55),
+          )
+        : null;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: light
+            ? const Color(0xFF111827)
+            : Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child:
+          image ??
+          Icon(fallback, color: light ? Colors.white : accent, size: size * 0.55),
+    );
+  }
+}
+
+class _BlessingMark extends StatelessWidget {
+  const _BlessingMark({
+    required this.size,
+    required this.light,
+    required this.accent,
+    required this.symbol,
+    this.bytes,
+  });
+
+  final Uint8List? bytes;
+  final double size;
+  final bool light;
+  final Color accent;
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context) {
+    if (bytes != null) {
+      return _PosterBrandMark(
+        bytes: bytes,
+        size: size,
+        radius: size / 2,
+        fallback: Icons.temple_hindu_rounded,
+        accent: accent,
+        light: light,
+      );
+    }
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: light ? const Color(0xFF111827) : Colors.white.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: light ? accent : Colors.white.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Text(
+        symbol,
+        style: TextStyle(
+          color: light ? Colors.white : accent,
+          fontSize: size * 0.42,
+          fontWeight: FontWeight.w800,
+          height: 1,
+        ),
+      ),
+    );
+  }
+}
+
+class _GodImageEntry {
+  const _GodImageEntry({
+    required this.id,
+    required this.title,
+    required this.bytes,
+  });
+
+  final String id;
+  final String title;
+  final Uint8List bytes;
 }

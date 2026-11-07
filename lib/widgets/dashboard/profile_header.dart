@@ -1,4 +1,5 @@
 import '../../live_translated_text.dart';
+import '../../low_memory_performance.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -100,7 +101,15 @@ class NavyProfileHeader extends StatelessWidget {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
                 ),
                 child: logoBytes != null
-                    ? ClipOval(child: Image.memory(logoBytes!, fit: BoxFit.cover))
+                    ? ClipOval(
+                        child: LowMemoryPerformance.memoryImage(
+                          logoBytes!,
+                          logicalSize: 44,
+                          devicePixelRatio:
+                              MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
+                          fit: BoxFit.cover,
+                        ),
+                      )
                     : Center(
                         child: LiveTranslatedText(
                           shopName.isNotEmpty ? shopName[0].toUpperCase() : 'S',

@@ -16,6 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app_localizations.dart';
 import 'visual_widgets.dart'; // AppBackground, GlassContainer, AppColors
 import 'shop_profile_persistence_service.dart';
+import 'low_memory_performance.dart';
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  GiftCardPage
@@ -1053,7 +1054,13 @@ class _GiftCardPageState extends State<GiftCardPage>
       ),
       child: ClipOval(
         child: _logoBytesValue != null
-            ? Image.memory(_logoBytesValue!, fit: BoxFit.cover)
+            ? LowMemoryPerformance.memoryImage(
+                _logoBytesValue!,
+                logicalSize: size,
+                devicePixelRatio:
+                    MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
+                fit: BoxFit.cover,
+              )
             : _buildProfileFallback(),
       ),
     );
@@ -1199,10 +1206,17 @@ class _GiftCardPageState extends State<GiftCardPage>
         color: const Color(0xFF1E293B),
       ),
       child: _logoBytesValue != null
-          ? Image.memory(
+          ? LowMemoryPerformance.memoryImage(
               _logoBytesValue!,
+              logicalSize: 360,
+              devicePixelRatio:
+                  MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
+              width: double.infinity,
+              height: double.infinity,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => _buildProfileFallbackCover(),
+              maxPixels: 720,
+              errorBuilder: (context, error, stackTrace) =>
+                  _buildProfileFallbackCover(),
             )
           : _buildProfileFallbackCover(),
     );
@@ -1537,8 +1551,11 @@ class _GiftCardPageState extends State<GiftCardPage>
                 child: _logoBytesValue != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
+                        child: LowMemoryPerformance.memoryImage(
                           _logoBytesValue!,
+                          logicalSize: 50,
+                          devicePixelRatio:
+                              MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
                           fit: BoxFit.cover,
                         ),
                       )

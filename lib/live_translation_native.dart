@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -12,6 +14,7 @@ final OnDeviceTranslatorModelManager _modelManager =
 final Map<String, Future<void>> _modelDownloads = <String, Future<void>>{};
 final Map<String, Future<OnDeviceTranslator>> _translatorTasks =
     <String, Future<OnDeviceTranslator>>{};
+Timer? _translatorIdleClose;
 
 TranslateLanguage? _targetFor(String code) {
   switch (code) {
@@ -251,5 +254,27 @@ Future<List<String>> translateTexts(
       }
     }
   }
+  _scheduleIdleTranslatorRelease();
   return result;
+}
+
+void _scheduleIdleTranslatorRelease() {
+  _translatorIdleClose?.cancel();
+  if (!DeviceCapabilityService.instance.isLowEndDevice) return;
+  // Models stay on disk. Closing the in-process translator frees RAM after
+  // the screen finishes translating; the next screen reopens the same files.
+  _translatorIdleClose = Timer(const Duration(seconds: 45), () {
+    unawaited(_releaseIdleTranslators());
+  });
+}
+
+Future<void> _releaseIdleTranslators() async {
+  final tasks = Map<String, Future<OnDeviceTranslator>>.from(_translatorTasks);
+  _translatorTasks.clear();
+  for (final task in tasks.values) {
+    try {
+      final translator = await task;
+      await translator.close();
+    } catch (_) {}
+  }
 }

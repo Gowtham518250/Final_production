@@ -155,7 +155,7 @@ class ProductDiscoveryCard extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: LiveTranslatedText(
-                  'Product results for ' + productQuery,
+                  'Prices for ' + productQuery,
                   style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF17264A)),
                 ),
               ),
@@ -163,18 +163,18 @@ class ProductDiscoveryCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           LiveTranslatedText(
-            'Online prices are ranked lowest first. Confirm the exact pack size before comparing.',
+            'Cheapest internet price is shown first. Check packet size before you compare.',
             style: GoogleFonts.inter(fontSize: 11.5, height: 1.45, color: const Color(0xFF64748B)),
           ),
           const SizedBox(height: 16),
           _sectionHeading(
             icon: Icons.price_check_rounded,
-            title: 'Online price comparison',
+            title: 'Online shops',
             count: offers.length,
           ),
           const SizedBox(height: 9),
           if (offers.isEmpty)
-            _emptyMessage('No priced online listings were returned. Try adding a brand or pack size.')
+            _emptyMessage('No online prices found. Try a brand name or packet size.')
           else
             ...offers.take(10).toList().asMap().entries.map((entry) {
               final offer = entry.value;
@@ -220,8 +220,8 @@ class ProductDiscoveryCard extends StatelessWidget {
                               padding: const EdgeInsets.only(bottom: 3),
                               child: LiveTranslatedText(
                                 purchaseAssistantMode
-                                    ? 'BEST LISTED PRICE · VERIFY PACK'
-                                    : 'LOWEST LISTED PRICE',
+                                    ? 'Lowest price · check packet'
+                                    : 'Lowest price',
                                 style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: const Color(0xFF047857), letterSpacing: 0.3),
                               ),
                             ),
@@ -267,22 +267,22 @@ class ProductDiscoveryCard extends StatelessWidget {
           const SizedBox(height: 8),
           _sectionHeading(
             icon: Icons.storefront_rounded,
-            title: 'Nearby shops',
+            title: 'Shops near you',
             count: shops.length,
           ),
           const SizedBox(height: 6),
           LiveTranslatedText(
             locationAvailable
-                ? 'Sorted by distance. Local stock and shelf prices are not confirmed by map listings.'
-                : 'Location is unavailable. Allow location access and ask again to find shops near you.',
+                ? 'Closest shops first. Call to confirm stock and price.'
+                : 'Turn on location to see shops near you.',
             style: GoogleFonts.inter(fontSize: 11, height: 1.45, color: const Color(0xFF64748B)),
           ),
           const SizedBox(height: 9),
           if (shops.isEmpty)
             _emptyMessage(
               locationAvailable
-                  ? 'No nearby shops were returned for this search.'
-                  : 'No nearby stores shown without your location.',
+                  ? 'No shops nearby for this search.'
+                  : 'Turn on location to see nearby shops.',
             )
           else
             ...shops.map((shop) {
@@ -335,7 +335,7 @@ class ProductDiscoveryCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 8),
                     LiveTranslatedText(
-                      productQuery + ' price / stock: call to confirm',
+                      'Call to confirm price and stock',
                       style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
                     ),
                     const SizedBox(height: 4),

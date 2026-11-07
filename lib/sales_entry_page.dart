@@ -10,6 +10,8 @@ import 'dart:ui' as ui;
 import 'dart:collection';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
+import 'catalog_working_set.dart';
+import 'low_memory_performance.dart';
 import 'secure_token_storage.dart';
 import 'secure_preferences_service.dart';
 import 'scoped_shared_preferences.dart';
@@ -2406,15 +2408,15 @@ class _SalesEntryPageState extends State<SalesEntryPage>
         );
         final barcode = _normalizeBarcode(value['barcode']?.toString() ?? '');
         final key = barcode.isNotEmpty ? barcode : entry.key.toString();
-        mergedProducts[key] = value;
+        mergedProducts[key] = CatalogWorkingSet.forBilling(value);
       }
 
       _localProducts = mergedProducts;
       known.addAll(
-        localMap.values.map((v) => <String, dynamic>{
+        localMap.values.map((v) => CatalogWorkingSet.forBilling(<String, dynamic>{
           ...Map<String, dynamic>.from(v),
           'source': 'Local Catalog',
-        }),
+        })),
       );
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading local products: $e');
@@ -4144,7 +4146,16 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       borderRadius: BorderRadius.circular(16),
                     ),
                     padding: const EdgeInsets.all(16),
-                    child: Image.memory(bytes, fit: BoxFit.contain),
+                    child: LowMemoryPerformance.memoryImage(
+                      bytes,
+                      logicalSize: 280,
+                      devicePixelRatio:
+                          MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
+                      width: 280,
+                      height: 280,
+                      fit: BoxFit.contain,
+                      maxPixels: 720,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   LiveTranslatedText(
@@ -10122,8 +10133,11 @@ class _BillCard extends StatelessWidget {
           // ── Header (Shop Details) ──
           if (shopLogo != null && shopLogo!.isNotEmpty) ...[
             Center(
-              child: Image.memory(
+              child: LowMemoryPerformance.memoryImage(
                 base64Decode(shopLogo!),
+                logicalSize: 60,
+                devicePixelRatio:
+                    MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
                 width: 60,
                 height: 60,
                 fit: BoxFit.contain,

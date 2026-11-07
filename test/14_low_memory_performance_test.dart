@@ -1,9 +1,15 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:retail_mind/low_memory_performance.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('runtime font downloads stay off after configure', () {
+    LowMemoryPerformance.configure();
+    expect(GoogleFonts.config.allowRuntimeFetching, isFalse);
+  });
 
   test('decoded image cache is bounded for low-memory devices', () {
     LowMemoryPerformance.configure();

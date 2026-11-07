@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api_client.dart';
+import 'catalog_working_set.dart';
 import 'local_storage_service.dart';
 import 'sync_queue_manager.dart';
 import 'sync_service.dart';
@@ -162,16 +163,23 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     return null;
   }
 
+  void _openTab(int index, {String? discoverySection}) {
+    setState(() {
+      _selectedBottomNavigation = index;
+      if (discoverySection != null) _activeDiscoverySection = discoverySection;
+    });
+  }
+
   Future<void> _scrollToSection(
     GlobalKey key, {
     int? navigationIndex,
     String? discoverySection,
   }) async {
     if (navigationIndex != null || discoverySection != null) {
-      setState(() {
-        if (navigationIndex != null) _selectedBottomNavigation = navigationIndex;
-        if (discoverySection != null) _activeDiscoverySection = discoverySection;
-      });
+      _openTab(navigationIndex ?? _selectedBottomNavigation, discoverySection: discoverySection);
+    }
+    if (navigationIndex != null && navigationIndex != 0 && key != _discoveryResultsKey) {
+      return;
     }
     await WidgetsBinding.instance.endOfFrame;
     final target = key.currentContext;
@@ -233,7 +241,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               LiveTranslatedText(
-                'Shopping preferences',
+                'How far to search',
                 style: GoogleFonts.poppins(
                   color: _ink,
                   fontSize: 18,
@@ -242,15 +250,15 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               ),
               const SizedBox(height: 6),
               LiveTranslatedText(
-                'Choose how far away to search for nearby shops.',
-                style: GoogleFonts.poppins(color: _muted, fontSize: 12),
+                'Choose the distance for shops near you.',
+                style: GoogleFonts.poppins(color: _muted, fontSize: 13),
               ),
               const SizedBox(height: 12),
               for (final radius in <double>[5, 10, 25])
                 RadioListTile<double>(
                   value: radius,
                   groupValue: _shoppingRadiusKm,
-                  title: LiveTranslatedText(radius.round().toString() + ' km radius'),
+                  title: LiveTranslatedText(radius.round().toString() + ' km'),
                   activeColor: _primary,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (value) {
@@ -461,18 +469,18 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       LiveTranslatedText(
-                        'Purchase Shopping Assistant',
+                        'Find products to buy',
                         style: GoogleFonts.poppins(
                           color: _ink,
-                          fontSize: 14.5,
+                          fontSize: 16,
                           height: 1.3,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 3),
                       LiveTranslatedText(
-                        'Find products beyond your inventory',
-                        style: GoogleFonts.poppins(color: const Color(0xFF5D6C89), fontSize: 11.5),
+                        'Search online or shops near you',
+                        style: GoogleFonts.poppins(color: const Color(0xFF5D6C89), fontSize: 12),
                       ),
                     ],
                   ),
@@ -515,8 +523,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: LiveTranslatedText(
-                            'Hi! 👋 What product are you looking to buy? I can search online stores and nearby shops even if it is not in your inventory.',
-                            style: GoogleFonts.poppins(color: _ink, fontSize: 12, height: 1.55),
+                            'Tell me the product name. I will show online prices and nearby shops you can buy from.',
+                            style: GoogleFonts.poppins(color: _ink, fontSize: 13, height: 1.5),
                           ),
                         ),
                       ),
@@ -599,6 +607,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       _shoppingPromptChip('Compare rice prices'),
                       const SizedBox(width: 8),
                       _shoppingPromptChip('Search cooking oil'),
+                      const SizedBox(width: 8),
+                      _shoppingPromptChip('Find tea powder'),
                     ],
                   ),
                 ),
@@ -630,7 +640,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           onSubmitted: (_) => _sendPurchaseShoppingQuery(),
                           style: GoogleFonts.poppins(color: _ink, fontSize: 12),
                           decoration: InputDecoration(
-                            hint: LiveTranslatedText('Ask for any product or supplier…'),
+                            hint: LiveTranslatedText('Type a product, like tea powder'),
                             hintStyle: GoogleFonts.poppins(color: const Color(0xFF8792A8), fontSize: 10.5),
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(vertical: 11),
@@ -670,8 +680,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: LiveTranslatedText(
-                        'Online prices may vary. Confirm stock and final price with the seller.',
-                        style: GoogleFonts.poppins(color: _muted, fontSize: 9.5, height: 1.4),
+                        'Prices on the internet can change. Confirm the final price with the seller before you pay.',
+                        style: GoogleFonts.poppins(color: _muted, fontSize: 11, height: 1.4),
                       ),
                     ),
                   ],
@@ -731,7 +741,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           borderRadius: BorderRadius.circular(23),
           onTap: () {
             if (section == 'low-stock') {
-              _scrollToSection(_lowStockKey, discoverySection: section);
+              _openTab(2, discoverySection: section);
             } else {
               _scrollToSection(_discoveryResultsKey, discoverySection: section);
             }
@@ -758,11 +768,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          pill('Online Listings', Icons.language_rounded, 'online'),
+          pill('Online shops', Icons.language_rounded, 'online'),
           const SizedBox(width: 8),
-          pill('Nearby Shops', Icons.location_on_outlined, 'nearby'),
+          pill('Shops near me', Icons.location_on_outlined, 'nearby'),
           const SizedBox(width: 8),
-          pill('Low Stock Ideas', Icons.lightbulb_outline_rounded, 'low-stock'),
+          pill('Running low', Icons.inventory_2_outlined, 'low-stock'),
         ],
       ),
     );
@@ -794,11 +804,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LiveTranslatedText('Search results will appear here', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 12)),
+                        LiveTranslatedText('Results show up here', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 14)),
                         const SizedBox(height: 4),
                         LiveTranslatedText(
-                          'Search any product, even when it is not in your inventory. Online listings and nearby shop results will appear after you search.',
-                          style: GoogleFonts.poppins(color: _muted, fontSize: 10.5, height: 1.45),
+                          'Search a product first. Then you will see online shops and shops near you.',
+                          style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.45),
                         ),
                       ],
                     ),
@@ -834,8 +844,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             child: const Icon(Icons.inventory_2_outlined, color: Color(0xFFCF8B18)),
           ),
           const SizedBox(width: 10),
-          Expanded(child: LiveTranslatedText('Low-stock reorder suggestions',
-              style: GoogleFonts.poppins(color: _ink, fontSize: 14, fontWeight: FontWeight.w800))),
+          Expanded(child: LiveTranslatedText('Items running low',
+              style: GoogleFonts.poppins(color: _ink, fontSize: 16, fontWeight: FontWeight.w800))),
           IconButton(
             tooltip: 'Refresh stock and online prices',
             onPressed: _reorderLoading ? null : () => _fetchReorderRecommendations(),
@@ -845,8 +855,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ),
         ]),
         LiveTranslatedText(
-          'Items at or below your reorder threshold. Online listings are comparison hints, not confirmed wholesale quotes. Creating a PO here does not place an online order.',
-          style: GoogleFonts.poppins(color: _muted, fontSize: 11, height: 1.55),
+          'These products are getting over in your shop. Check prices, then make an order to your supplier. This does not buy from the internet automatically.',
+          style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.5),
         ),
         if (_reorderLoading && _reorderSuggestions.isEmpty) ...[
           const SizedBox(height: 16),
@@ -860,8 +870,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             decoration: BoxDecoration(color: const Color(0xFFF8FAFD), borderRadius: BorderRadius.circular(13)),
             child: LiveTranslatedText(
               _reorderNotice.contains('SERPAPI_API_KEY')
-                  ? 'No low-stock items were returned, or online price search needs configuration. Check inventory thresholds and backend settings.'
-                  : 'No products are currently at or below their configured reorder level.',
+                  ? 'Could not check low stock right now. Refresh and try again.'
+                  : 'All products have enough stock. Nothing to reorder now.',
               style: GoogleFonts.poppins(color: _muted, fontSize: 11.5, height: 1.45),
             ),
           ),
@@ -915,15 +925,17 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ),
         ]),
         const SizedBox(height: 7),
-        LiveTranslatedText('Stock: ${stock.toStringAsFixed(stock % 1 == 0 ? 0 : 2)} • Reorder threshold: ${triggerStock.toStringAsFixed(triggerStock % 1 == 0 ? 0 : 2)} • Suggested quantity: $suggestedQty',
-            style: GoogleFonts.poppins(color: _muted, fontSize: 10.5, height: 1.5)),
+        LiveTranslatedText(
+          'You have ${stock.toStringAsFixed(stock % 1 == 0 ? 0 : 2)} left. Buy $suggestedQty more when stock goes to ${triggerStock.toStringAsFixed(triggerStock % 1 == 0 ? 0 : 2)}.',
+          style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.45),
+        ),
         const SizedBox(height: 8),
         Wrap(spacing: 12, runSpacing: 5, children: [
-          LiveTranslatedText('Recorded cost ${_money(recordedCost)}', style: GoogleFonts.poppins(color: const Color(0xFF53627E), fontSize: 11)),
-          if (bestPrice > 0) LiveTranslatedText('Lowest online ${_money(bestPrice)}', style: GoogleFonts.poppins(color: const Color(0xFF07856D), fontWeight: FontWeight.bold, fontSize: 11)),
+          LiveTranslatedText('Your last buy ${_money(recordedCost)}', style: GoogleFonts.poppins(color: const Color(0xFF53627E), fontSize: 12)),
+          if (bestPrice > 0) LiveTranslatedText('Lowest online ${_money(bestPrice)}', style: GoogleFonts.poppins(color: const Color(0xFF07856D), fontWeight: FontWeight.bold, fontSize: 12)),
           if (bestPrice > 0 && recordedCost > 0)
-            LiveTranslatedText(bestPrice < recordedCost ? '₹${(recordedCost - bestPrice).toStringAsFixed(2)} lower' : bestPrice > recordedCost ? '₹${(bestPrice - recordedCost).toStringAsFixed(2)} higher' : 'Same as recorded cost',
-                style: GoogleFonts.poppins(color: bestPrice <= recordedCost ? const Color(0xFF16885E) : const Color(0xFFB7791F), fontSize: 11, fontWeight: FontWeight.w600)),
+            LiveTranslatedText(bestPrice < recordedCost ? '₹${(recordedCost - bestPrice).toStringAsFixed(0)} cheaper online' : bestPrice > recordedCost ? '₹${(bestPrice - recordedCost).toStringAsFixed(0)} costlier online' : 'Same as your last buy',
+                style: GoogleFonts.poppins(color: bestPrice <= recordedCost ? const Color(0xFF16885E) : const Color(0xFFB7791F), fontSize: 12, fontWeight: FontWeight.w600)),
         ]),
         if (offers.isNotEmpty) ...[
           const SizedBox(height: 7),
@@ -951,7 +963,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           child: OutlinedButton.icon(
             onPressed: () => _showCreatePO(suggestion: item),
             icon: const Icon(Icons.playlist_add, size: 17),
-            label: LiveTranslatedText('Draft purchase order ($suggestedQty)', style: const TextStyle(fontSize: 11)),
+            label: LiveTranslatedText('Make order ($suggestedQty)', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
             style: OutlinedButton.styleFrom(
               foregroundColor: _primary,
               side: const BorderSide(color: Color(0xFFBFCBFF)),
@@ -980,52 +992,46 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   Widget _buildOrderOverview() {
-    Widget metric(String label, int count, IconData icon, Color color) {
+    Widget metric(String filter, String label, int count, IconData icon, Color color) {
+      final selected = _orderFilter == filter;
       return Expanded(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white,
-                const Color(0xFFF8F8FF),
-              ],
-            ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _border),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF3C4A7A).withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+            onTap: () => setState(() => _orderFilter = filter),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              decoration: BoxDecoration(
+                color: selected ? Colors.white : const Color(0xFFF8F8FF),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: selected ? _primary.withValues(alpha: 0.35) : _border),
               ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(icon, color: color, size: 18),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(icon, color: color, size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LiveTranslatedText(count.toString(), style: GoogleFonts.poppins(fontSize: 19, height: 1.1, fontWeight: FontWeight.w800, color: _ink)),
+                        const SizedBox(height: 3),
+                        LiveTranslatedText(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(fontSize: 11, color: _muted)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LiveTranslatedText(count.toString(), style: GoogleFonts.poppins(fontSize: 19, height: 1.1, fontWeight: FontWeight.w800, color: _ink)),
-                    const SizedBox(height: 3),
-                    LiveTranslatedText(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(fontSize: 9.5, color: _muted)),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       );
@@ -1039,36 +1045,42 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         border: Border.all(color: const Color(0xFFE5EBF7)),
       ),
       child: Row(children: [
-        metric('All orders', _orderCount('All'), Icons.receipt_long_rounded, _primary),
+        metric('All', 'All', _orderCount('All'), Icons.receipt_long_rounded, _primary),
         const SizedBox(width: 8),
-        metric('Pending', _orderCount('Pending'), Icons.schedule_rounded, const Color(0xFFD97706)),
+        metric('Pending', 'Waiting', _orderCount('Pending'), Icons.schedule_rounded, const Color(0xFFD97706)),
         const SizedBox(width: 8),
-        metric('Received', _orderCount('Received'), Icons.check_circle_rounded, const Color(0xFF059669)),
+        metric('Received', 'Arrived', _orderCount('Received'), Icons.check_circle_rounded, const Color(0xFF059669)),
       ]),
     );
   }
 
-  Widget _orderFilterChip(String filter) {
+  Widget _orderFilterChip(String filter, String label) {
     final selected = _orderFilter == filter;
     return Padding(
       padding: const EdgeInsets.only(right: 7),
       child: ChoiceChip(
-        label: LiveTranslatedText('$filter (' + _orderCount(filter).toString() + ')'),
+        label: LiveTranslatedText(label + ' (' + _orderCount(filter).toString() + ')'),
         selected: selected,
         onSelected: (_) => setState(() => _orderFilter = filter),
         showCheckmark: false,
         selectedColor: const Color(0xFFEDEAFF),
         backgroundColor: const Color(0xFFF7F8FC),
         side: BorderSide(color: selected ? _primary.withValues(alpha: 0.28) : const Color(0xFFE7EBF4)),
-        labelStyle: GoogleFonts.poppins(color: selected ? _primary : _muted, fontSize: 10.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        labelStyle: GoogleFonts.poppins(color: selected ? _primary : _muted, fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
     );
   }
 
   Widget _buildOrderCard(dynamic po, int i) {
     final status = (po['status'] ?? 'PENDING').toString().toUpperCase();
-    final statusLabel = status == 'DELIVERED' ? 'RECEIVED' : status;
+    final statusLabel = status == 'PENDING'
+        ? 'Waiting'
+        : (status == 'DELIVERED' || status == 'RECEIVED' || status == 'PARTIALLY_RECEIVED')
+            ? 'Arrived'
+            : status == 'CANCELLED'
+                ? 'Cancelled'
+                : status;
     final statusColor = _statusColor(status);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1083,7 +1095,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          LiveTranslatedText('PO #${po['id'] ?? i + 1}', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800)),
+          LiveTranslatedText('Order ${po['id'] ?? i + 1}', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 16)),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(8)),
@@ -1091,19 +1103,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ),
         ]),
         const SizedBox(height: 8),
-        LiveTranslatedText(po['supplier_name']?.toString() ?? 'Supplier', style: GoogleFonts.poppins(color: _muted)),
+        LiveTranslatedText('From ${po['supplier_name']?.toString() ?? 'your supplier'}', style: GoogleFonts.poppins(color: _muted, fontSize: 13)),
         const SizedBox(height: 4),
-        LiveTranslatedText('₹${po['total_cost']?.toString() ?? '0'}', style: GoogleFonts.poppins(color: const Color(0xFF079579), fontWeight: FontWeight.w800, fontSize: 18)),
+        LiveTranslatedText('₹${po['total_cost']?.toString() ?? '0'}', style: GoogleFonts.poppins(color: const Color(0xFF079579), fontWeight: FontWeight.w800, fontSize: 20)),
         if (status == 'PENDING') ...[
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: ElevatedButton.icon(
-              onPressed: () => _markDelivered(po['id']), icon: const Icon(Icons.check_rounded, size: 16), label: const LiveTranslatedText('Mark received'),
+              onPressed: () => _markDelivered(po['id']), icon: const Icon(Icons.check_rounded, size: 16), label: const LiveTranslatedText('Goods arrived'),
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16885E), foregroundColor: Colors.white),
             )),
             const SizedBox(width: 8),
             Expanded(child: ElevatedButton.icon(
-              onPressed: () => _cancelPO(po['id']), icon: const Icon(Icons.close, size: 16), label: const LiveTranslatedText('Cancel'),
+              onPressed: () => _cancelPO(po['id']), icon: const Icon(Icons.close, size: 16), label: const LiveTranslatedText('Cancel order'),
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC4C58), foregroundColor: Colors.white),
             )),
           ]),
@@ -1345,7 +1357,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           Future<void> pickProduct() async {
-            final products = await LocalStorageService.loadBackendProducts();
+            final products = CatalogWorkingSet.listForBilling(
+              await LocalStorageService.loadBackendProducts(),
+            );
             if (!ctx.mounted) return;
             final selected = await showDialog<Map<String, dynamic>>(
               context: ctx,
@@ -1416,13 +1430,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LiveTranslatedText('New Purchase Order', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  LiveTranslatedText('New order', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   _field(supplierC, 'Supplier Name'),
                   const SizedBox(height: 12),
                   _field(notesC, 'Notes (optional)'),
                   const SizedBox(height: 16),
-                  LiveTranslatedText('Items (at least one required)', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                  LiveTranslatedText('Add the products you want to buy', style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   ...orderItems.asMap().entries.map((e) {
                     final i = e.key;
@@ -1448,7 +1462,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.indigoAccent)),
                   ),
                   const SizedBox(height: 12),
-                  LiveTranslatedText('Estimated Total: ₹${total.toStringAsFixed(2)}',
+                  LiveTranslatedText('Total: ₹${total.toStringAsFixed(2)}',
                       style: GoogleFonts.poppins(color: Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -1458,12 +1472,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         final supplierName = supplierC.text.trim();
                         if (supplierName.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: LiveTranslatedText('Supplier name is required')));
+                            const SnackBar(content: LiveTranslatedText('Enter the supplier name')));
                           return;
                         }
                         if (orderItems.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: LiveTranslatedText('Add at least one item')));
+                            const SnackBar(content: LiveTranslatedText('Add at least one product')));
                           return;
                         }
                         final payload = {
@@ -1475,7 +1489,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         await _createPurchaseOrder(payload);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.indigoAccent, padding: const EdgeInsets.symmetric(vertical: 14)),
-                      child: const LiveTranslatedText('Create PO', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const LiveTranslatedText('Save order', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -1502,8 +1516,210 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     );
   }
 
+  String get _pageTitle {
+    switch (_selectedBottomNavigation) {
+      case 1:
+        return 'My orders';
+      case 2:
+        return 'Running low';
+      default:
+        return 'Buy stock';
+    }
+  }
+
+  Widget _buildHowToBuy() {
+    Widget step(String number, String title, String body, Color color) {
+      return Expanded(
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: color,
+              child: Text(number, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(height: 8),
+            LiveTranslatedText(title, textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 13)),
+            const SizedBox(height: 4),
+            LiveTranslatedText(body, textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _muted, fontSize: 11, height: 1.35)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LiveTranslatedText('How to buy stock', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 4),
+          LiveTranslatedText('Three simple steps. Use any language you like.', style: GoogleFonts.poppins(color: _muted, fontSize: 12)),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              step('1', 'Search', 'Type the product name.', const Color(0xFF5146F2)),
+              step('2', 'Compare', 'See online and nearby prices.', const Color(0xFF0F766E)),
+              step('3', 'Order', 'Call the seller or tap New order.', const Color(0xFFC2410C)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFindTab() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+      children: [
+        _buildHowToBuy(),
+        _buildPurchaseShoppingChat(),
+        _buildDiscoveryNavigation(),
+        _buildDiscoveryResultsSection(),
+      ],
+    );
+  }
+
+  Widget _buildOrdersTab() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 112),
+      children: [
+        _buildOrderOverview(),
+        Container(
+          key: _ordersSectionKey,
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: _border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEDEAFF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.receipt_long_rounded, color: _primary),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LiveTranslatedText(
+                          'Orders to your supplier',
+                          style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                        LiveTranslatedText(
+                          'See what is waiting and what has arrived.',
+                          style: GoogleFonts.poppins(color: _muted, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!_loading)
+                    IconButton(
+                      tooltip: 'Refresh orders',
+                      onPressed: _fetchOrders,
+                      icon: const Icon(Icons.refresh_rounded, color: _muted),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(children: [
+                  _orderFilterChip('All', 'All'),
+                  _orderFilterChip('Pending', 'Waiting'),
+                  _orderFilterChip('Received', 'Arrived'),
+                  _orderFilterChip('Cancelled', 'Cancelled'),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              if (_loading && _orders.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: CircularProgressIndicator(color: _primary, strokeWidth: 2),
+                  ),
+                )
+              else if (_orders.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFF),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: const Color(0xFFE8ECF5)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.receipt_long_outlined, color: Color(0xFF8A96B2), size: 36),
+                      const SizedBox(height: 8),
+                      LiveTranslatedText('No orders yet', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700, fontSize: 15)),
+                      const SizedBox(height: 4),
+                      LiveTranslatedText(
+                        'Tap New order when you want to buy from a supplier.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(color: _muted, fontSize: 12, height: 1.45),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_orders.where((order) => _matchesOrderFilter(order)).isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.filter_alt_off_rounded, color: Color(0xFF94A3B8), size: 30),
+                      const SizedBox(height: 8),
+                      LiveTranslatedText('Nothing in this list', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      LiveTranslatedText('Tap All, Waiting, or Arrived to see other orders.', textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _muted, fontSize: 12)),
+                    ],
+                  ),
+                )
+              else
+                ..._orders.asMap().entries.where((entry) => _matchesOrderFilter(entry.value)).map((entry) => _buildOrderCard(entry.value, entry.key)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRestockTab() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+      children: [
+        KeyedSubtree(
+          key: _lowStockKey,
+          child: _buildReorderSuggestions(),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tab = _selectedBottomNavigation;
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -1512,169 +1728,40 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         surfaceTintColor: _bg,
         elevation: 0,
         title: LiveTranslatedText(
-          'Purchase Orders',
-          style: GoogleFonts.poppins(color: _ink, fontSize: 21, fontWeight: FontWeight.w800),
+          _pageTitle,
+          style: GoogleFonts.poppins(color: _ink, fontSize: 22, fontWeight: FontWeight.w800),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: () => _scrollToSection(_ordersSectionKey, navigationIndex: 1),
-            icon: const Icon(Icons.description_outlined, size: 18),
-            label: LiveTranslatedText(
-              'My Orders',
-              style: GoogleFonts.poppins(color: _ink, fontSize: 9.5, fontWeight: FontWeight.w700),
+          if (tab == 0)
+            IconButton(
+              tooltip: 'Search distance',
+              onPressed: _showShoppingSettings,
+              icon: const Icon(Icons.tune_rounded),
             ),
-          ),
-          IconButton(
-            tooltip: 'Shopping preferences',
-            onPressed: _showShoppingSettings,
-            icon: const Icon(Icons.tune_rounded),
-          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: 'Create a purchase order',
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
-        elevation: 6,
-        onPressed: _showCreatePO,
-        icon: const Icon(Icons.add_rounded),
-        label: LiveTranslatedText(
-          'Create Purchase Order',
-          style: GoogleFonts.poppins(fontSize: 10.5, fontWeight: FontWeight.w700),
-        ),
-      ),
+      floatingActionButton: tab == 1
+          ? FloatingActionButton.extended(
+              tooltip: 'Make a new order',
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              elevation: 6,
+              onPressed: _showCreatePO,
+              icon: const Icon(Icons.add_rounded),
+              label: LiveTranslatedText(
+                'New order',
+                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            )
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: RefreshIndicator(
         onRefresh: _refreshAll,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 112),
-          children: [
-            _buildOrderOverview(),
-            Container(
-              key: _ordersSectionKey,
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(21),
-                border: Border.all(color: _border),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF263B78).withValues(alpha: 0.035),
-                    blurRadius: 16,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEDEAFF),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.receipt_long_rounded, color: _primary),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            LiveTranslatedText(
-                              'Your purchase orders',
-                              style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w800, fontSize: 15),
-                            ),
-                            LiveTranslatedText(
-                              'Track supplier orders and delivery status',
-                              style: GoogleFonts.poppins(color: _muted, fontSize: 10.5),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!_loading)
-                        IconButton(
-                          tooltip: 'Refresh orders',
-                          onPressed: _fetchOrders,
-                          icon: const Icon(Icons.refresh_rounded, color: _muted),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Row(children: [
-                      _orderFilterChip('All'),
-                      _orderFilterChip('Pending'),
-                      _orderFilterChip('Received'),
-                      _orderFilterChip('Cancelled'),
-                    ]),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_loading && _orders.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(
-                        child: CircularProgressIndicator(color: _primary, strokeWidth: 2),
-                      ),
-                    )
-                  else if (_orders.isEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFF),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: const Color(0xFFE8ECF5)),
-                      ),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.receipt_long_outlined, color: Color(0xFF8A96B2), size: 32),
-                          const SizedBox(height: 8),
-                          LiveTranslatedText('No purchase orders yet', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 4),
-                          LiveTranslatedText(
-                            'Create a draft when you are ready to order from a supplier.',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(color: _muted, fontSize: 10.5, height: 1.45),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (_orders.where((order) => _matchesOrderFilter(order)).isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.filter_alt_off_rounded, color: Color(0xFF94A3B8), size: 30),
-                          const SizedBox(height: 8),
-                          LiveTranslatedText('No ' + _orderFilter.toLowerCase() + ' orders', style: GoogleFonts.poppins(color: _ink, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 4),
-                          LiveTranslatedText('Choose another status to view your purchase orders.', textAlign: TextAlign.center, style: GoogleFonts.poppins(color: _muted, fontSize: 10.5)),
-                        ],
-                      ),
-                    )
-                  else
-                    ..._orders.asMap().entries.where((entry) => _matchesOrderFilter(entry.value)).map((entry) => _buildOrderCard(entry.value, entry.key)),
-                ],
-              ),
-            ),
-            _buildPurchaseShoppingChat(),
-            _buildDiscoveryNavigation(),
-            _buildDiscoveryResultsSection(),
-            KeyedSubtree(
-              key: _lowStockKey,
-              child: _buildReorderSuggestions(),
-            ),
-
-          ],
-        ),
+        child: tab == 1
+            ? _buildOrdersTab()
+            : tab == 2
+                ? _buildRestockTab()
+                : _buildFindTab(),
       ),
       bottomNavigationBar: _buildBottomNavigation(),
     );
@@ -1743,26 +1830,22 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           child: Row(
             children: [
               item(
-                icon: Icons.chat_bubble_rounded,
-                label: 'Shopping',
+                icon: Icons.search_rounded,
+                label: 'Find',
                 index: 0,
-                onTap: () => _scrollToSection(_shoppingTopKey, navigationIndex: 0),
+                onTap: () => _openTab(0),
               ),
               item(
-                icon: Icons.description_outlined,
-                label: 'My Orders',
+                icon: Icons.receipt_long_rounded,
+                label: 'Orders',
                 index: 1,
-                onTap: () => _scrollToSection(_ordersSectionKey, navigationIndex: 1),
+                onTap: () => _openTab(1),
               ),
               item(
-                icon: Icons.lightbulb_outline_rounded,
-                label: 'Suggestions',
+                icon: Icons.inventory_2_outlined,
+                label: 'Restock',
                 index: 2,
-                onTap: () => _scrollToSection(
-                  _lowStockKey,
-                  navigationIndex: 2,
-                  discoverySection: 'low-stock',
-                ),
+                onTap: () => _openTab(2, discoverySection: 'low-stock'),
               ),
             ],
           ),

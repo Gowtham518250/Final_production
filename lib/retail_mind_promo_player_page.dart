@@ -11,37 +11,44 @@ class RetailMindPromoPlayerPage extends StatefulWidget {
 }
 
 class _RetailMindPromoPlayerPageState extends State<RetailMindPromoPlayerPage> {
-  late final VideoPlayerController _controller;
-  late final Future<void> _initializeVideo;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.asset(
-      'assets/videos/retail_mind_promo.mp4',
-    );
-    _initializeVideo = _controller.initialize().then((_) {
-      return _controller.play();
-    });
-  }
+  VideoPlayerController? _controller;
+  Future<void>? _initializeVideo;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
+  Future<void> _startVideo() async {
+    if (_controller != null) return;
+    final controller = VideoPlayerController.asset(
+      'assets/videos/retail_mind_promo.mp4',
+    );
+    setState(() {
+      _controller = controller;
+      _initializeVideo = controller.initialize().then((_) {
+        return controller.play();
+      });
+    });
+  }
+
   Future<void> _togglePlayback() async {
-    final value = _controller.value;
+    final controller = _controller;
+    if (controller == null) {
+      await _startVideo();
+      return;
+    }
+    final value = controller.value;
     if (value.isPlaying) {
-      await _controller.pause();
+      await controller.pause();
       return;
     }
 
     if (value.position >= value.duration) {
-      await _controller.seekTo(Duration.zero);
+      await controller.seekTo(Duration.zero);
     }
-    await _controller.play();
+    await controller.play();
   }
 
   String _formatDuration(Duration duration) {
@@ -64,53 +71,114 @@ class _RetailMindPromoPlayerPageState extends State<RetailMindPromoPlayerPage> {
       ),
       body: SafeArea(
         top: false,
-        child: FutureBuilder<void>(
-          future: _initializeVideo,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Could not load the promo video.\n${snapshot.error}',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              );
-            }
+        child: _controller == null
+            ? _buildPoster()
+            : FutureBuilder<void>(
+                future: _initializeVideo,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Could not load the promo video.\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
 
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: CircularProgressIndicator(color: Color(0xFF818CF8)),
-              );
-            }
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF818CF8)),
+                    );
+                  }
 
-            return Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: VideoPlayer(_controller),
-                    ),
-                  ),
-                ),
-                _buildControls(),
-              ],
-            );
-          },
-        ),
+                  final controller = _controller;
+                  if (controller == null) return _buildPoster();
+
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: AspectRatio(
+                            aspectRatio: controller.value.aspectRatio,
+                            child: VideoPlayer(controller),
+                          ),
+                        ),
+                      ),
+                      _buildControls(),
+                    ],
+                  );
+                },
+              ),
       ),
     );
   }
 
+  Widget _buildPoster() {
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    'assets/videos/retail_mind_promo_poster.jpg',
+                    fit: BoxFit.cover,
+                    cacheWidth: 720,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  Center(
+                    child: IconButton(
+                      onPressed: _startVideo,
+                      iconSize: 72,
+                      color: Colors.white,
+                      icon: const Icon(Icons.play_circle_fill_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        _buildControls(),
+      ],
+    );
+  }
+
   Widget _buildControls() {
+    final controller = _controller;
+    if (controller == null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: _startVideo,
+              color: Colors.white,
+              iconSize: 30,
+              icon: const Icon(Icons.play_circle_fill_rounded),
+            ),
+            Text(
+              'Tap play',
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
     return ValueListenableBuilder<VideoPlayerValue>(
-      valueListenable: _controller,
+      valueListenable: controller,
       builder: (context, value, child) {
         final durationMs = value.duration.inMilliseconds.toDouble();
         final positionMs = value.position.inMilliseconds
@@ -143,7 +211,7 @@ class _RetailMindPromoPlayerPageState extends State<RetailMindPromoPlayerPage> {
                   value: positionMs,
                   activeColor: const Color(0xFF818CF8),
                   inactiveColor: Colors.white24,
-                  onChanged: (position) => _controller.seekTo(
+                  onChanged: (position) => controller.seekTo(
                     Duration(milliseconds: position.round()),
                   ),
                 ),

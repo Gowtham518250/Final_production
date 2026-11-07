@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../low_memory_performance.dart';
+
 class ShopLogoMark extends StatelessWidget {
   const ShopLogoMark({
     super.key,
@@ -29,8 +31,11 @@ class ShopLogoMark extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: bytes == null
           ? Icon(Icons.home_rounded, color: fallbackColor, size: size * 0.58)
-          : Image.memory(
+          : LowMemoryPerformance.memoryImage(
               bytes,
+              logicalSize: size,
+              devicePixelRatio:
+                  MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Icon(
                 Icons.home_rounded,

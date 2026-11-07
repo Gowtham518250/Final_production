@@ -1,6 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'device_capability_service.dart';
 
@@ -58,8 +60,44 @@ class LowMemoryPerformance {
     if (_configured) return;
     _configured = true;
 
+    // Poppins stays in Theme/GoogleFonts calls, but 2GB phones must not
+    // download extra font files on first launch.
+    GoogleFonts.config.allowRuntimeFetching = false;
     applyDeviceProfile();
     WidgetsBinding.instance.addObserver(_memoryPressureObserver);
+  }
+
+  /// Decode [bytes] only to the pixels needed for [logicalSize] on screen.
+  static Widget memoryImage(
+    Uint8List bytes, {
+    required double logicalSize,
+    required double devicePixelRatio,
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.cover,
+    int minPixels = 64,
+    int? maxPixels,
+    Widget Function(BuildContext, Object, StackTrace?)? errorBuilder,
+  }) {
+    final decoded = decodeCacheDimension(
+      logicalSize,
+      devicePixelRatio,
+      minPixels: minPixels,
+      maxPixels: maxPixels,
+    );
+    return Image.memory(
+      bytes,
+      width: width ?? logicalSize,
+      height: height ?? logicalSize,
+      fit: fit,
+      cacheWidth: decoded,
+      cacheHeight: decoded,
+      filterQuality: DeviceCapabilityService.instance.isLowEndDevice
+          ? FilterQuality.low
+          : FilterQuality.medium,
+      gaplessPlayback: true,
+      errorBuilder: errorBuilder,
+    );
   }
 
   /// Apply memory limits after device capability detection completes. Until
