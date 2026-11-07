@@ -1,13 +1,20 @@
 import 'live_translated_text.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'local_storage_service.dart';
 import 'cache_consistency_service.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
+import 'attendance_offline_service.dart';
+import 'models.dart';
+import 'payment_history_storage.dart';
+import 'payroll_expense_calculator.dart';
+import 'expense_sync_helper.dart';
+import 'worker_local_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 enum ExpenseCategory {
   rent,
@@ -17,7 +24,7 @@ enum ExpenseCategory {
   maintenance,
   marketing,
   transport,
-  other
+  other,
 }
 
 class Expense {
@@ -28,6 +35,8 @@ class Expense {
   final DateTime date;
   final String? reference;
   final String? receipt;
+  final bool isPending;
+  final String? sourceLabel;
 
   Expense({
     required this.id,
@@ -37,6 +46,8 @@ class Expense {
     required this.date,
     this.reference,
     this.receipt,
+    this.isPending = false,
+    this.sourceLabel,
   });
 
   Map<String, dynamic> toMap() => {
@@ -65,6 +76,15 @@ class Expense {
   );
 }
 
+class _ExpenseListRow {
+  final Expense? expense;
+  final String dateLabel;
+  final double dayTotal;
+
+  const _ExpenseListRow.header(this.dateLabel, this.dayTotal) : expense = null;
+  const _ExpenseListRow.expense(this.expense) : dateLabel = '', dayTotal = 0;
+}
+
 class ExpenseTrackerPage extends StatefulWidget {
   const ExpenseTrackerPage({super.key});
 
@@ -74,10 +94,16 @@ class ExpenseTrackerPage extends StatefulWidget {
 
 class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     with SingleTickerProviderStateMixin {
+  final Lock _expenseSyncWriteLock = Lock();
   late TabController _tabController;
   List<Expense> _expenses = [];
+  List<Worker> _workers = [];
+  List<WorkerPayment> _workerPayments = [];
+  List<Expense> _payrollExpenses = [];
   bool _isLoading = true;
+  bool _retryingPendingExpenses = false;
   String? _loadWarning;
+  String? _payrollWarning;
   String _filterBy = 'all'; // all, today, week, month
   ExpenseCategory? _selectedCategory;
 
@@ -86,18 +112,229 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadExpenses();
+    _loadPayrollData();
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([_loadExpenses(), _loadPayrollData()]);
+  }
+
+  Future<void> _loadPayrollData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final shopkeeperId = prefs.getInt('user_id') ?? prefs.getInt('userId');
+      if (shopkeeperId == null || shopkeeperId <= 0) {
+        throw StateError('Please log in to load payroll expenses.');
+      }
+
+      var workers = await WorkerLocalStorage.fetchWorkers(shopkeeperId);
+      var rosterRefreshFailed = false;
+      try {
+        final response = await ApiClient.getJson(
+          ApiClient.attendanceWorkers,
+        ).timeout(const Duration(seconds: 12));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          final rows = decoded is List
+              ? decoded
+              : decoded is Map && decoded['workers'] is List
+              ? decoded['workers'] as List
+              : null;
+          if (rows == null) {
+            throw const FormatException('Unexpected worker API response shape');
+          }
+          workers = rows
+              .whereType<Map>()
+              .map((row) => Worker.fromJson(Map<String, dynamic>.from(row)))
+              .toList();
+          await WorkerLocalStorage.saveWorkers(shopkeeperId, workers);
+        } else {
+          rosterRefreshFailed = true;
+          debugPrint(
+            'Payroll worker roster request failed: HTTP ${response.statusCode}',
+          );
+        }
+      } catch (error) {
+        rosterRefreshFailed = true;
+        debugPrint('Payroll worker roster refresh failed: $error');
+      }
+
+      final payments = await PaymentHistoryStorage.fetchAll(shopkeeperId);
+      final month = DateTime.now();
+      final localRecords = PayrollExpenseCalculator.recordsForMonth(
+        await OfflineAttendanceService.loadLocalRecords(),
+        month,
+      );
+      var attendanceRefreshFailed = false;
+      final remoteRecords = <Map<String, dynamic>>[];
+      const attendanceConcurrency = 2;
+      for (
+        var start = 0;
+        start < workers.length;
+        start += attendanceConcurrency
+      ) {
+        final end = (start + attendanceConcurrency)
+            .clamp(0, workers.length)
+            .toInt();
+        final batch = workers.sublist(start, end);
+        final attendanceResults = await Future.wait(
+          batch.map((worker) async {
+            try {
+              final response = await ApiClient.getJson(
+                '${ApiClient.attendancePrefix}/employee/${worker.id}',
+              ).timeout(const Duration(seconds: 12));
+              if (response.statusCode != 200) {
+                throw StateError('HTTP ${response.statusCode}');
+              }
+              final decoded = jsonDecode(response.body);
+              final rows = decoded is Map && decoded['records'] is List
+                  ? decoded['records'] as List
+                  : decoded is List
+                  ? decoded
+                  : null;
+              if (rows == null) {
+                throw const FormatException(
+                  'Unexpected attendance response shape',
+                );
+              }
+              return PayrollExpenseCalculator.recordsForMonth(rows, month);
+            } catch (error) {
+              attendanceRefreshFailed = true;
+              debugPrint(
+                'Payroll attendance refresh failed for worker ${worker.id}: $error',
+              );
+              return <Map<String, dynamic>>[];
+            }
+          }),
+        );
+        for (final records in attendanceResults) {
+          remoteRecords.addAll(records);
+        }
+      }
+      if (remoteRecords.isNotEmpty) {
+        await OfflineAttendanceService.mergeRemoteRecords(remoteRecords);
+      }
+      final attendanceRecords = remoteRecords.isEmpty
+          ? localRecords
+          : PayrollExpenseCalculator.recordsForMonth(
+              await OfflineAttendanceService.loadLocalRecords(),
+              month,
+            );
+
+      final payrollDataAvailable =
+          workers.isNotEmpty &&
+          (!attendanceRefreshFailed || attendanceRecords.isNotEmpty);
+      final warnings = <String>[
+        if (workers.isEmpty)
+          'No staff roster is available; worker payroll cannot be summarized.',
+        if (workers.isNotEmpty &&
+            rosterRefreshFailed &&
+            attendanceRefreshFailed)
+          'Showing cached staff and attendance. Pending payroll may be incomplete.',
+        if (workers.isNotEmpty &&
+            !rosterRefreshFailed &&
+            attendanceRefreshFailed &&
+            attendanceRecords.isNotEmpty)
+          'Some attendance records could not be refreshed. Pending payroll may be incomplete.',
+        if (workers.isNotEmpty &&
+            attendanceRefreshFailed &&
+            attendanceRecords.isEmpty)
+          'Attendance records could not be loaded. Pending payroll is unavailable.',
+      ];
+
+      final payrollExpenses = _buildPayrollExpenses(
+        workers: workers,
+        attendanceRecords: attendanceRecords,
+        payments: payments,
+        payrollDataAvailable: payrollDataAvailable,
+      );
+      if (mounted) {
+        setState(() {
+          _workers = workers;
+          _workerPayments = payments;
+          _payrollExpenses = payrollExpenses;
+          _payrollWarning = warnings.isEmpty ? null : warnings.join(' ');
+        });
+      }
+    } catch (error) {
+      debugPrint('Unable to load payroll expenses: $error');
+      if (mounted) {
+        setState(() {
+          _payrollExpenses = _buildPayrollExpenses(
+            workers: _workers,
+            attendanceRecords: const [],
+            payments: _workerPayments,
+            payrollDataAvailable: false,
+          );
+          _payrollWarning = 'Payroll expenses could not be loaded: $error';
+        });
+      }
+    }
+  }
+
+  List<Expense> _buildPayrollExpenses({
+    required List<Worker> workers,
+    required List<Map<String, dynamic>> attendanceRecords,
+    required List<WorkerPayment> payments,
+    required bool payrollDataAvailable,
+  }) {
+    final workerNames = {
+      for (final worker in workers)
+        if (int.tryParse(worker.id) != null) int.parse(worker.id): worker.name,
+    };
+    final expenses = <Expense>[
+      for (final payment in payments)
+        if (payment.amount.isFinite && payment.amount > 0)
+          Expense(
+            id: 'worker-payment-${payment.id}',
+            category: ExpenseCategory.salary,
+            amount: payment.amount,
+            description:
+                '${payment.type} payment · ${workerNames[payment.workerId] ?? 'Worker ${payment.workerId}'}',
+            date: payment.date,
+            sourceLabel: 'Paid · ${payment.type}',
+          ),
+    ];
+
+    if (payrollDataAvailable) {
+      final now = DateTime.now();
+      final balances = PayrollExpenseCalculator.calculate(
+        workers: workers,
+        attendanceRecords: attendanceRecords,
+        payments: payments,
+        month: DateTime(now.year, now.month),
+        now: now,
+      );
+      for (final balance in balances.values) {
+        if (balance.due <= 0) continue;
+        expenses.add(
+          Expense(
+            id: 'payroll-due-${balance.workerId}-${now.year}-${now.month}',
+            category: ExpenseCategory.salary,
+            amount: balance.due,
+            description: 'Attendance payroll · ${balance.workerName}',
+            date: DateTime(now.year, now.month, now.day),
+            isPending: true,
+            sourceLabel: 'Pending · ${balance.hours.toStringAsFixed(1)} hours',
+          ),
+        );
+      }
+    }
+    return expenses;
   }
 
   Future<void> _loadExpenses() async {
-    if (mounted) setState(() => _isLoading = true);
+    if (mounted && _expenses.isEmpty) setState(() => _isLoading = true);
 
     try {
-      final localExpenses = await LocalStorageService.loadExpenses();
+      var localExpenses = await LocalStorageService.loadExpenses();
       final token = await SecureTokenStorage.getToken();
       var remoteLoaded = false;
       List<Map<String, dynamic>> remoteExpenses = [];
 
       if (token != null && token.isNotEmpty) {
+        await _retryPendingExpenses(localExpenses);
+        localExpenses = await LocalStorageService.loadExpenses();
         final response = await ApiClient.getJson(
           '/expenses?limit=500',
           headers: {'Authorization': 'Bearer $token'},
@@ -150,8 +387,8 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
             .map((value) => value.toString())
             .toSet();
         for (final row in merged) {
-          final serverId =
-              (row['server_id'] ?? row['expense_id'] ?? '').toString();
+          final serverId = (row['server_id'] ?? row['expense_id'] ?? '')
+              .toString();
           if (serverId.isNotEmpty && confirmedServerIds.contains(serverId)) {
             row['sync_status'] = 'synced';
             row['is_synced'] = true;
@@ -165,10 +402,11 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
       final parsedExpenses = merged.map((raw) {
         final row = Map<String, dynamic>.from(raw);
         row['date'] ??=
-            row['expense_date'] ?? row['created_at'] ?? DateTime.now().toIso8601String();
+            row['expense_date'] ??
+            row['created_at'] ??
+            DateTime.now().toIso8601String();
         return Expense.fromMap(row);
-      }).toList()
-        ..sort((a, b) => b.date.compareTo(a.date));
+      }).toList()..sort((a, b) => b.date.compareTo(a.date));
 
       if (mounted) {
         setState(() {
@@ -186,10 +424,11 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
         final parsedExpenses = expenses.map((raw) {
           final row = Map<String, dynamic>.from(raw as Map);
           row['date'] ??=
-              row['expense_date'] ?? row['created_at'] ?? DateTime.now().toIso8601String();
+              row['expense_date'] ??
+              row['created_at'] ??
+              DateTime.now().toIso8601String();
           return Expense.fromMap(row);
-        }).toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+        }).toList()..sort((a, b) => b.date.compareTo(a.date));
         if (mounted) {
           setState(() {
             _loadWarning =
@@ -204,35 +443,167 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     }
   }
 
+  Future<void> _retryPendingExpenses(List<dynamic> localExpenses) async {
+    if (_retryingPendingExpenses) return;
+    final pending = ExpenseSyncHelper.pendingExpenses(localExpenses);
+    if (pending.isEmpty) return;
+
+    _retryingPendingExpenses = true;
+    try {
+      var nextIndex = 0;
+      Future<void> retryWorker() async {
+        while (nextIndex < pending.length) {
+          final expense = pending[nextIndex++];
+          final operationId = ExpenseSyncHelper.idempotencyKey(expense);
+          if (operationId == null) {
+            debugPrint(
+              'Skipping pending expense without a stable idempotency key.',
+            );
+            continue;
+          }
+
+          try {
+            final amount = double.tryParse(expense['amount']?.toString() ?? '');
+            final category = expense['category']?.toString().trim() ?? '';
+            final description = expense['description']?.toString().trim() ?? '';
+            final date = DateTime.tryParse(
+              (expense['date'] ?? expense['expense_date'])?.toString() ?? '',
+            );
+            if (amount == null ||
+                !amount.isFinite ||
+                amount <= 0 ||
+                category.isEmpty ||
+                date == null) {
+              throw const FormatException(
+                'Pending expense has invalid amount, category, or date.',
+              );
+            }
+
+            final response = await ApiClient.postJson(
+              '/expenses',
+              {
+                'category': category,
+                'amount': amount,
+                'description': description,
+                'expense_date': DateFormat('yyyy-MM-dd').format(date),
+                'idempotency_key': operationId,
+              },
+              headers: {'Authorization': '******'},
+            ).timeout(const Duration(seconds: 12));
+            if (response.statusCode < 200 || response.statusCode >= 300) {
+              throw StateError(
+                'Expense retry returned HTTP ${response.statusCode}.',
+              );
+            }
+
+            final decoded = jsonDecode(response.body);
+            final payload = decoded is Map && decoded['expense'] is Map
+                ? Map<String, dynamic>.from(decoded['expense'] as Map)
+                : decoded is Map
+                ? Map<String, dynamic>.from(decoded)
+                : <String, dynamic>{};
+            final serverId =
+                payload['id'] ?? payload['expense_id'] ?? payload['server_id'];
+            if (serverId == null || serverId.toString().isEmpty) {
+              throw const FormatException(
+                'Expense retry response did not confirm a server ID.',
+              );
+            }
+
+            await _expenseSyncWriteLock.synchronized(() async {
+              final latest = await LocalStorageService.loadExpenses();
+              final index = latest.indexWhere((raw) {
+                if (raw is! Map) return false;
+                final row = Map<String, dynamic>.from(raw);
+                return ExpenseSyncHelper.idempotencyKey(row) == operationId;
+              });
+              if (index < 0) return;
+              final row = Map<String, dynamic>.from(latest[index] as Map)
+                ..['id'] = serverId.toString()
+                ..['server_id'] = serverId.toString()
+                ..['expense_id'] = serverId.toString()
+                ..['sync_status'] = 'synced'
+                ..['is_synced'] = true
+                ..remove('retry_after');
+              latest[index] = row;
+              await LocalStorageService.saveExpenses(latest);
+            });
+          } catch (error) {
+            debugPrint('Pending expense retry failed: $error');
+            await _expenseSyncWriteLock.synchronized(() async {
+              final latest = await LocalStorageService.loadExpenses();
+              final index = latest.indexWhere((raw) {
+                if (raw is! Map) return false;
+                final row = Map<String, dynamic>.from(raw);
+                return ExpenseSyncHelper.idempotencyKey(row) == operationId;
+              });
+              if (index < 0) return;
+              final row = Map<String, dynamic>.from(latest[index] as Map);
+              final attempt =
+                  (int.tryParse(row['retry_count']?.toString() ?? '') ?? 0) + 1;
+              row['retry_count'] = attempt;
+              row['retry_after'] = ExpenseSyncHelper.nextRetryAt(
+                attempt,
+              ).toUtc().toIso8601String();
+              row['sync_status'] = 'pending_confirmation';
+              row['is_synced'] = false;
+              latest[index] = row;
+              await LocalStorageService.saveExpenses(latest);
+            });
+          }
+        }
+      }
+
+      final workerCount = pending.length < 3 ? pending.length : 3;
+      await Future.wait(
+        List<Future<void>>.generate(workerCount, (_) => retryWorker()),
+      );
+    } finally {
+      _retryingPendingExpenses = false;
+    }
+  }
+
   List<Expense> _getFilteredExpenses() {
-    var filtered = _expenses;
+    var filtered = <Expense>[..._expenses, ..._payrollExpenses];
 
     // Filter by category
     if (_selectedCategory != null) {
-      filtered = filtered.where((e) => e.category == _selectedCategory).toList();
+      filtered = filtered
+          .where((e) => e.category == _selectedCategory)
+          .toList();
     }
 
     // Filter by date range
     final now = DateTime.now();
     switch (_filterBy) {
       case 'today':
-        filtered = filtered.where((e) =>
+        filtered = filtered
+            .where(
+              (e) =>
             e.date.year == now.year &&
             e.date.month == now.month &&
-            e.date.day == now.day).toList();
+                  e.date.day == now.day,
+            )
+            .toList();
         break;
       case 'week':
         final weekAgo = now.subtract(const Duration(days: 7));
-        filtered = filtered.where((e) =>
-            e.date.isAfter(weekAgo) && e.date.isBefore(now.add(const Duration(days: 1))))
+        filtered = filtered
+            .where(
+              (e) =>
+                  e.date.isAfter(weekAgo) &&
+                  e.date.isBefore(now.add(const Duration(days: 1))),
+            )
             .toList();
         break;
       case 'month':
-        filtered = filtered.where((e) =>
-            e.date.year == now.year && e.date.month == now.month).toList();
+        filtered = filtered
+            .where((e) => e.date.year == now.year && e.date.month == now.month)
+            .toList();
         break;
     }
 
+    filtered.sort((a, b) => b.date.compareTo(a.date));
     return filtered;
   }
 
@@ -248,10 +619,16 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
 
   @override
   Widget build(BuildContext context) {
+    final filteredExpenses = _isLoading
+        ? const <Expense>[]
+        : _getFilteredExpenses();
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: LiveTranslatedText('Expense Tracker', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: LiveTranslatedText(
+          'Expense Tracker',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -260,10 +637,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
             icon: const Icon(Icons.add),
             onPressed: _showAddExpenseDialog,
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadExpenses,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshAll),
         ],
       ),
       body: _isLoading
@@ -282,15 +656,39 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                     ),
                     child: LiveTranslatedText(
                       _loadWarning!,
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.brown.shade800),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.brown.shade800,
+                      ),
+                    ),
+                  ),
+                if (_payrollWarning != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: LiveTranslatedText(
+                      _payrollWarning!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.brown.shade800,
+                      ),
                     ),
                   ),
                 // Summary Card
-                _buildSummaryCard(),
+                _buildSummaryCard(filteredExpenses),
                 
                 // Filter Tabs
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -308,28 +706,37 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                 ),
 
                 // Expenses List
-                Expanded(
-                  child: _buildExpensesList(),
-                ),
+                Expanded(child: _buildExpensesList(filteredExpenses)),
               ],
             ),
     );
   }
 
-  Widget _buildSummaryCard() {
-    final filtered = _getFilteredExpenses();
+  Widget _buildSummaryCard(List<Expense> filtered) {
     final total = _getTotalExpenses(filtered);
+    final paid = _getTotalExpenses(
+      filtered.where((expense) => !expense.isPending).toList(),
+    );
+    final pending = _getTotalExpenses(
+      filtered.where((expense) => expense.isPending).toList(),
+    );
     
     // Calculate by category
     final byCategory = <ExpenseCategory, double>{};
     for (var category in ExpenseCategory.values) {
-      byCategory[category] = filtered
-          .where((e) => e.category == category)
-          .fold(0, (sum, e) => sum + e.amount);
+      byCategory[category] = 0;
+    }
+    for (final expense in filtered) {
+      byCategory.update(
+        expense.category,
+        (total) => total + expense.amount,
+        ifAbsent: () => expense.amount,
+      );
     }
 
-    final topCategory = byCategory.entries
-        .reduce((a, b) => a.value > b.value ? a : b);
+    final topCategory = byCategory.entries.reduce(
+      (a, b) => a.value > b.value ? a : b,
+    );
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -342,7 +749,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LiveTranslatedText(
-            _filterBy == 'all' ? 'Total Expenses' : 'Expenses (${_filterBy})',
+            _filterBy == 'all'
+                ? 'Committed Expenses'
+                : 'Committed Expenses ($_filterBy)',
             style: GoogleFonts.poppins(
               color: Colors.white.withValues(alpha: 0.8),
               fontSize: 14,
@@ -356,6 +765,14 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
               fontSize: 32,
               fontWeight: FontWeight.bold,
             ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _summaryAmount('Paid', paid),
+              _summaryAmount('Pending payroll', pending, alignEnd: true),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -408,6 +825,30 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     );
   }
 
+  Widget _summaryAmount(String label, double amount, {bool alignEnd = false}) {
+    return Column(
+      crossAxisAlignment: alignEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        LiveTranslatedText(
+          label,
+          style: GoogleFonts.poppins(
+            color: Colors.white.withValues(alpha: 0.8),
+            fontSize: 12,
+          ),
+        ),
+        LiveTranslatedText(
+          '₹${amount.toStringAsFixed(0)}',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _filterBy == value;
     
@@ -429,9 +870,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
     );
   }
 
-  Widget _buildExpensesList() {
-    final filtered = _getFilteredExpenses();
-
+  Widget _buildExpensesList(List<Expense> filtered) {
     if (filtered.isEmpty) {
       return Center(
         child: Column(
@@ -445,38 +884,53 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
       );
     }
 
-    // Group by date
-    final grouped = <String, List<Expense>>{};
-    for (var expense in filtered) {
-      final key = DateFormat('MMM dd, yyyy').format(expense.date);
-      grouped.putIfAbsent(key, () => []).add(expense);
+    final dayTotals = <String, double>{};
+    for (final expense in filtered) {
+      final date = DateFormat('yyyy-MM-dd').format(expense.date);
+      dayTotals.update(
+        date,
+        (total) => total + expense.amount,
+        ifAbsent: () => expense.amount,
+      );
+    }
+
+    final rows = <_ExpenseListRow>[];
+    String? previousDate;
+    for (final expense in filtered) {
+      final date = DateFormat('yyyy-MM-dd').format(expense.date);
+      if (date != previousDate) {
+        rows.add(
+          _ExpenseListRow.header(
+            DateFormat('MMM dd, yyyy').format(expense.date),
+            dayTotals[date] ?? 0,
+          ),
+        );
+        previousDate = date;
+      }
+      rows.add(_ExpenseListRow.expense(expense));
     }
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: grouped.length,
+      itemCount: rows.length,
       itemBuilder: (context, index) {
-        final date = grouped.keys.toList()[index];
-        final expenses = grouped[date]!;
-        final dayTotal = _getTotalExpenses(expenses);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
+        final row = rows[index];
+        final expense = row.expense;
+        if (expense == null) {
+          return Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   LiveTranslatedText(
-                    date,
+                  row.dateLabel,
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey.shade700,
                     ),
                   ),
                   LiveTranslatedText(
-                    '₹${dayTotal.toStringAsFixed(0)}',
+                  '₹${row.dayTotal.toStringAsFixed(0)}',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF6366F1),
@@ -484,11 +938,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   ),
                 ],
               ),
-            ),
-            ...expenses.map((expense) => _buildExpenseCard(expense)),
-            const SizedBox(height: 12),
-          ],
         );
+        }
+        return _buildExpenseCard(expense);
       },
     );
   }
@@ -546,7 +998,20 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   ),
                   LiveTranslatedText(
                     expense.category.name,
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  if (expense.sourceLabel != null)
+                    LiveTranslatedText(
+                      expense.sourceLabel!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: expense.isPending
+                            ? Colors.deepOrange.shade700
+                            : Colors.green.shade700,
+                      ),
                   ),
                 ],
               ),
@@ -559,11 +1024,17 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
+                    color: expense.isPending
+                        ? Colors.deepOrange.shade700
+                        : Colors.black87,
                   ),
                 ),
                 LiveTranslatedText(
                   DateFormat('HH:mm').format(expense.date),
-                  style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade600),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                  ),
                 ),
               ],
             ),
@@ -582,7 +1053,10 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: LiveTranslatedText('Add Expense', style: GoogleFonts.poppins()),
+          title: LiveTranslatedText(
+            'Add Expense',
+            style: GoogleFonts.poppins(),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -591,7 +1065,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   controller: descriptionController,
                   decoration: InputDecoration(
                     hint: LiveTranslatedText('Description'),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -600,7 +1076,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     hint: LiveTranslatedText('Amount'),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -608,10 +1086,12 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                   value: selectedCategory,
                   isExpanded: true,
                   items: ExpenseCategory.values
-                      .map((e) => DropdownMenuItem(
+                      .map(
+                        (e) => DropdownMenuItem(
                             value: e,
                             child: LiveTranslatedText(e.name),
-                          ))
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -632,15 +1112,22 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                 try {
                   final amount = double.tryParse(amountController.text.trim());
                   final description = descriptionController.text.trim();
-                  if (amount == null || !amount.isFinite || amount <= 0 || description.isEmpty) {
+                  if (amount == null ||
+                      !amount.isFinite ||
+                      amount <= 0 ||
+                      description.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: LiveTranslatedText('Enter a description and an amount greater than zero.')),
+                      const SnackBar(
+                        content: LiveTranslatedText(
+                          'Enter a description and an amount greater than zero.',
+                        ),
+                      ),
                     );
                     return;
                   }
 
-                  final expenseId =
-                      DateTime.now().microsecondsSinceEpoch.toString();
+                  final expenseId = DateTime.now().microsecondsSinceEpoch
+                      .toString();
                   final expense = Expense(
                     id: expenseId,
                     category: selectedCategory,
@@ -655,7 +1142,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                     'operation_id': operationId,
                     'sync_status': 'pending',
                     'is_synced': false,
-                    'local_updated_at': DateTime.now().toUtc().toIso8601String(),
+                    'local_updated_at': DateTime.now()
+                        .toUtc()
+                        .toIso8601String(),
                   };
 
                   // Commit locally before attempting HTTP. A network timeout
@@ -675,8 +1164,10 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                           'category': selectedCategory.name,
                           'amount': amount,
                           'description': description,
-                          'expense_date':
-                              DateFormat('yyyy-MM-dd').format(expense.date),
+                          'expense_date': DateFormat(
+                            'yyyy-MM-dd',
+                          ).format(expense.date),
+                          'idempotency_key': operationId,
                         },
                         headers: {'Authorization': 'Bearer $token'},
                       ).timeout(const Duration(seconds: 12));
@@ -685,26 +1176,31 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                           response.statusCode < 300) {
                         try {
                           final decoded = jsonDecode(response.body);
-                          final payload = decoded is Map && decoded['expense'] is Map
+                          final payload =
+                              decoded is Map && decoded['expense'] is Map
                               ? Map<String, dynamic>.from(decoded['expense'])
                               : decoded is Map
                                   ? Map<String, dynamic>.from(decoded)
                                   : <String, dynamic>{};
-                          final value = payload['id'] ??
+                          final value =
+                              payload['id'] ??
                               payload['expense_id'] ??
                               payload['server_id'];
                           if (value != null) serverId = value.toString();
                         } catch (_) {
                           // An empty success body cannot prove the server ID.
                         }
-                        serverConfirmed = serverId != null && serverId!.isNotEmpty;
+                        serverConfirmed =
+                            serverId != null && serverId!.isNotEmpty;
                       } else {
                         debugPrint(
                           'Expense HTTP ${response.statusCode}; local copy retained.',
                         );
                       }
                     } catch (error) {
-                      debugPrint('Expense sync pending after request error: $error');
+                      debugPrint(
+                        'Expense sync pending after request error: $error',
+                      );
                     }
                   }
 
@@ -716,7 +1212,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                         row['local_id']?.toString() == expenseId;
                   });
                   if (rowIndex >= 0) {
-                    final row = Map<String, dynamic>.from(latest[rowIndex] as Map);
+                    final row = Map<String, dynamic>.from(
+                      latest[rowIndex] as Map,
+                    );
                     if (serverConfirmed) {
                       row['id'] = serverId;
                       row['server_id'] = serverId;
@@ -729,7 +1227,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                       row['sync_status'] = 'pending_confirmation';
                       row['is_synced'] = false;
                     }
-                    row['updated_at'] = DateTime.now().toUtc().toIso8601String();
+                    row['updated_at'] = DateTime.now()
+                        .toUtc()
+                        .toIso8601String();
                     latest[rowIndex] = row;
                     await LocalStorageService.saveExpenses(latest);
                   }
@@ -746,16 +1246,21 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage>
                     ),
                   );
                   await _loadExpenses();
-
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: LiveTranslatedText('Could not save expense: $e')),
+                      SnackBar(
+                        content: LiveTranslatedText(
+                          'Could not save expense: $e',
+                        ),
+                      ),
                     );
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+              ),
               child: const LiveTranslatedText('Add'),
             ),
           ],

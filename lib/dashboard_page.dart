@@ -42,6 +42,9 @@ import 'gift_card_page.dart';
 import 'visual_widgets.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'notification_access_disclosure.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
@@ -103,6 +106,7 @@ import 'payment_event.dart';
 import 'payment_alert_deduplicator.dart';
 import 'notification_service.dart';
 import 'inventory_management_service.dart';
+import 'widgets/dashboard/first_sale_guide.dart';
 import 'inventory_sync_service.dart';
 import 'retail_intelligence_page.dart';
 import 'retail_growth_kit.dart';
@@ -127,14 +131,13 @@ import 'widgets/online_analytics_card.dart';
 import 'widgets/error_boundary.dart'; // Phase 3: Dashboard crash protection
 import 'performance_optimizations.dart'; // 🚀 Advanced performance optimizations
 import 'low_memory_performance.dart';
+import 'app_endpoints.dart';
 
 // color constants for a cohesive shopkeeper-friendly theme
 const Color kPrimaryColor = Color(0xFF6366F1);
 const Color kSecondaryColor = Color(0xFF10B981); // Emerald instead of Cyan
 const Color kAccentColor = Color(0xFFF59E0B); // Amber
 const Color kInfoColor = Color(0xFF3B82F6); // Blue
-const String kRetailMindCustomerStoreUrl = 'https://retail-mind-1.onrender.com';
-
 // dashboard theme tokens - REDESIGNED FOR CLEAN WHITE BACKGROUND
 const Color bg = Color(0xFFFFFFFF); // Changed from #0F172A to white
 const Color indigo = Color(0xFF4F46E5); // Primary color
@@ -189,6 +192,7 @@ class _DashboardPageState extends State<DashboardPage>
   int _selectedChartIndex = 0;
   bool loading = false;
   bool _salesLoadInProgress = false;
+  bool _dashboardRefreshPending = false;
   bool _salesLoadedOnce = false;
   bool _salesLoadFailed = false;
   bool _salesHistoryHydrating = false;
@@ -266,9 +270,8 @@ class _DashboardPageState extends State<DashboardPage>
   int? _cachedTodayOnlineOrders; // Cache today's online orders
   int? _cachedTotalOnlineOrders; // Canonical backend total online orders
   DateTime? _lastMetricsCacheDate;
-  // Soundbox & Welcome Card state
+  // Soundbox state
   bool _soundboxActive = false;
-  bool _welcomeCardDismissed = true; // Load from prefs in initState
 
   bool _realtimeConnected = false;
   bool _prevRealtimeConnected = false;
@@ -288,6 +291,7 @@ class _DashboardPageState extends State<DashboardPage>
   // Online Store status tracking
   bool _isOnlineStoreActive = false;
   bool _onlineStoreLoading = true;
+  int? _onlineStoreShopId;
   bool _onlineStatsLoading = false;
   bool _onlineStatsLoaded = false;
   bool _onlineStatsFailed = false;
@@ -304,6 +308,9 @@ class _DashboardPageState extends State<DashboardPage>
   bool _retryingUnsyncedBills = false;
   bool _emptySalesRestoreInProgress = false;
   bool _salesReconciliationInProgress = false;
+
+  bool get _isDashboardRouteCurrent =>
+      ModalRoute.of(context)?.isCurrent ?? true;
 
   void _addToActivityFeed(String activity) {
     setState(() {
@@ -616,7 +623,6 @@ class _DashboardPageState extends State<DashboardPage>
         [
           _loadDailyInsightFromPrefs(),
           _loadSales(),
-          _loadWelcomeCardState(),
           _loadShopAndWorkerDataLocally(),
         ].map((future) => future.catchError((_) => null)),
       );
@@ -771,8 +777,12 @@ class _DashboardPageState extends State<DashboardPage>
     // 🚀 100/100 Real-Time Sync: React to background pulse updates
     _syncSubscription = SyncService.refreshStream.listen((_) {
       if (mounted) {
-        _loadSales(); // Auto-refresh UI when clouds sync in background
-        _addToActivityFeed('Cloud Sync: UI updated');
+        if (_isDashboardRouteCurrent) {
+          _loadSales();
+          _addToActivityFeed('Cloud Sync: UI updated');
+        } else {
+          _dashboardRefreshPending = true;
+        }
       }
     });
     _durableEventsSubscription = SyncService.durableEventsStream.listen((
@@ -2190,6 +2200,10 @@ class _DashboardPageState extends State<DashboardPage>
     List<Map<String, dynamic>> events,
   ) async {
     if (!mounted || events.isEmpty) return;
+    if (!_isDashboardRouteCurrent) {
+      _dashboardRefreshPending = true;
+      return;
+    }
 
     final types = events
         .map((event) => event['type']?.toString() ?? '')
@@ -2305,6 +2319,11 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _loadOnlineStoreStatus() async {
     try {
+      final shopId = await SecureTokenStorage.getUserId();
+      if (mounted) {
+        setState(() => _onlineStoreShopId = shopId);
+      }
+
       // ⚡ INSTANT: Show cached value immediately so UI isn't stuck on loading
       final prefs = await SharedPreferences.getInstance();
       final cachedStatus = prefs.getBool('online_store_active') ?? false;
@@ -2456,7 +2475,9 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _openOnlineStoreUrl() async {
-    final uri = Uri.parse(kRetailMindCustomerStoreUrl);
+    final shopId = _onlineStoreShopId;
+    if (shopId == null || shopId <= 0) return;
+    final uri = Uri.parse(AppEndpoints.customerShopUrl(shopId));
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened && mounted) {
@@ -2483,9 +2504,11 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _copyOnlineStoreUrl() async {
+    final shopId = _onlineStoreShopId;
+    if (shopId == null || shopId <= 0) return;
     try {
       await Clipboard.setData(
-        const ClipboardData(text: kRetailMindCustomerStoreUrl),
+        ClipboardData(text: AppEndpoints.customerShopUrl(shopId)),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2495,6 +2518,85 @@ class _DashboardPageState extends State<DashboardPage>
       );
     } catch (error) {
       if (kDebugMode) debugPrint('Unable to copy online shop URL: $error');
+    }
+  }
+
+  Future<void> _printOnlineStoreQr() async {
+    final shopId = _onlineStoreShopId;
+    if (shopId == null || shopId <= 0) return;
+    final shopUrl = AppEndpoints.customerShopUrl(shopId);
+    final printableShopName = shopName.trim().runes.every((rune) => rune < 128)
+        ? shopName.trim()
+        : 'Visit our online store';
+    final document = pw.Document();
+    document.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a5,
+        build: (context) => pw.Center(
+          child: pw.Column(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            children: [
+              pw.Text(
+                printableShopName,
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 12),
+              pw.Text(
+                'Scan to browse our online store',
+                textAlign: pw.TextAlign.center,
+                style: const pw.TextStyle(fontSize: 16),
+              ),
+              pw.SizedBox(height: 24),
+              pw.BarcodeWidget(
+                barcode: pw.Barcode.qrCode(),
+                data: shopUrl,
+                width: 250,
+                height: 250,
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                shopUrl,
+                textAlign: pw.TextAlign.center,
+                style: const pw.TextStyle(fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await Printing.layoutPdf(
+        name: 'shop-${shopId}-store-qr.pdf',
+        onLayout: (_) async => document.save(),
+      );
+    } catch (error) {
+      if (kDebugMode) debugPrint('Unable to print online store QR: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: LiveTranslatedText('Could not print the shop QR code.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyOnlineStoreShopId() async {
+    final shopId = _onlineStoreShopId;
+    if (shopId == null || shopId <= 0) return;
+
+    try {
+      await Clipboard.setData(ClipboardData(text: shopId.toString()));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: LiveTranslatedText('Shop ID copied.')),
+      );
+    } catch (error) {
+      if (kDebugMode) debugPrint('Unable to copy online shop ID: $error');
     }
   }
 
@@ -2740,6 +2842,54 @@ class _DashboardPageState extends State<DashboardPage>
                     color: isDark ? Colors.white70 : const Color(0xFF4B5563),
                   ),
                 ),
+                if (_onlineStoreShopId != null && _onlineStoreShopId! > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.only(
+                      left: 11,
+                      right: 4,
+                      top: 3,
+                      bottom: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.18)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF16A34A).withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.tag_rounded,
+                          size: 18,
+                          color: Color(0xFF16A34A),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Shop ID: $_onlineStoreShopId',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? const Color(0xFF86EFAC)
+                                  : const Color(0xFF166534),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Copy shop ID',
+                          onPressed: _copyOnlineStoreShopId,
+                          icon: const Icon(Icons.copy_rounded, size: 18),
+                          color: const Color(0xFF16A34A),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.only(
@@ -2772,7 +2922,9 @@ class _DashboardPageState extends State<DashboardPage>
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: LiveTranslatedText(
-                              kRetailMindCustomerStoreUrl,
+                              AppEndpoints.customerShopUrl(
+                                _onlineStoreShopId!,
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.poppins(
@@ -2798,6 +2950,83 @@ class _DashboardPageState extends State<DashboardPage>
                     ],
                   ),
                 ),
+                if (_onlineStoreShopId != null &&
+                    _onlineStoreShopId! > 0) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.18)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF16A34A).withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: QrImageView(
+                            data: AppEndpoints.customerShopUrl(
+                              _onlineStoreShopId!,
+                            ),
+                            size: 96,
+                            version: QrVersions.auto,
+                            gapless: false,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              LiveTranslatedText(
+                                'Print your store QR',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF166534),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              LiveTranslatedText(
+                                'Customers can scan it to open this shop.',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  height: 1.4,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF4B5563),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _printOnlineStoreQr,
+                                icon: const Icon(
+                                  Icons.print_rounded,
+                                  size: 17,
+                                ),
+                                label: const LiveTranslatedText('Print QR'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF15803D),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
@@ -3724,21 +3953,6 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
-  // ── Welcome Card ─────────────────────────────────────────────────────────
-  Future<void> _loadWelcomeCardState() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final dismissed = prefs.getBool('welcome_card_dismissed') ?? false;
-      if (mounted) setState(() => _welcomeCardDismissed = dismissed);
-    } catch (_) {}
-  }
-
-  Future<void> _dismissWelcomeCard() async {
-    // 🔒 SECURITY: Use scoped SharedPreferences
-    await ScopedSharedPreferences.setBool('welcome_card_dismissed', true);
-    if (mounted) setState(() => _welcomeCardDismissed = true);
-  }
-
   // ── Soundbox Status ───────────────────────────────────────────────────────
   Future<void> _checkSoundboxStatus() async {
     try {
@@ -3747,161 +3961,6 @@ class _DashboardPageState extends State<DashboardPage>
     } catch (_) {
       if (mounted) setState(() => _soundboxActive = false);
     }
-  }
-
-  // ── First-Time Welcome Card Widget ────────────────────────────────────────
-  Widget _buildWelcomeCard() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.waving_hand_rounded,
-                    semanticLabel: 'Waving Hand Rounded',
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LiveTranslatedText(
-                        'AI Shop Pro కి స్వాగతం! 👋',
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      LiveTranslatedText(
-                        'Welcome! Start with these 3 quick actions:',
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _dismissWelcomeCard,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      semanticLabel: 'Close Rounded',
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildWelcomeAction(
-                    icon: Icons.receipt_long_rounded,
-                    label: 'బిల్లు చేయి\nNew Bill',
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      '/sales-entry',
-                    ).then((_) => _loadSales()),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildWelcomeAction(
-                    icon: Icons.currency_rupee_rounded,
-                    label: 'నేటి సంపాదన\nToday Money',
-                    onTap: () => _showDailyClosingSheet(),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildWelcomeAction(
-                    icon: Icons.inventory_2_rounded,
-                    label: 'స్టాక్ చూడు\nCheck Stock',
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      '/inventory',
-                    ).then((_) => _loadSales()),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWelcomeAction({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(height: 6),
-            LiveTranslatedText(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   // ── Soundbox Status Chip ──────────────────────────────────────────────────
@@ -5063,7 +5122,13 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _loadSales() async {
-    if (!mounted || _salesLoadInProgress) return;
+    if (!mounted) return;
+    if (!_isDashboardRouteCurrent) {
+      _dashboardRefreshPending = true;
+      return;
+    }
+    if (_salesLoadInProgress) return;
+    _dashboardRefreshPending = false;
     _salesLoadInProgress = true;
 
     // Keep the first-load indicator, but do not flash the dashboard back into
@@ -14057,13 +14122,9 @@ class _DashboardPageState extends State<DashboardPage>
               '/shop-profile',
             ).then((_) => _refreshShopProfileAfterEdit()),
           ),
-          const SizedBox(height: 14),
-          _buildStepCard(
-            'Record Sale',
-            'Start your first billing operation',
-            Icons.add_shopping_cart_rounded,
-            sales.isNotEmpty,
-            () => Navigator.pushNamed(
+          const SizedBox(height: 18),
+          FirstSaleGuide(
+            onStartSale: () => Navigator.pushNamed(
               context,
               '/sales-entry',
             ).then((_) => _loadSales()),
@@ -16311,6 +16372,12 @@ class _DashboardPageState extends State<DashboardPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_dashboardRefreshPending && _isDashboardRouteCurrent) {
+      _dashboardRefreshPending = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isDashboardRouteCurrent) unawaited(_loadSales());
+      });
+    }
     final effectiveDark = Theme.of(context).brightness == Brightness.dark;
     if (isDarkMode != effectiveDark) {
       isDarkMode = effectiveDark;
@@ -16678,12 +16745,6 @@ class _DashboardPageState extends State<DashboardPage>
                 if (_analyticsIntegrityErrorCount > 0) ...[
                   const SizedBox(height: 12),
                   _buildAnalyticsIntegrityWarning(),
-                ],
-
-                // 0.07 FIRST-TIME WELCOME CARD (only once)
-                if (!_isStaffMode && !_welcomeCardDismissed) ...[
-                  const SizedBox(height: 16),
-                  _buildWelcomeCard(),
                 ],
 
                 // 0.0 Daily Health Score (single owner signal)

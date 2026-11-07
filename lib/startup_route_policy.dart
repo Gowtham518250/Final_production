@@ -15,21 +15,17 @@ String resolveStartupRoute({
   if (booting) return '/_boot';
 
   final normalizedRole = (role ?? '').trim().toUpperCase();
+  if (normalizedRole == 'CUSTOMER') return '/login';
   if (!authenticated) {
-    // Keep an expired customer session in the customer auth flow rather than
-    // unexpectedly redirecting the shopper to the owner/staff login screen.
-    if (normalizedRole == 'CUSTOMER') return '/customer-login';
     return '/login';
   }
-  if (normalizedRole == 'CUSTOMER') return '/customer-marketplace';
 
   // Worker verification is only needed when this owner account has active
   // staff to switch into. A confirmed empty roster skips the extra role/PIN
   // gate; an unavailable/unknown roster must fail closed and keep verification.
   // A current staff-mode session or a WORKER role never receives this bypass.
-  final canSkipWorkerGate = normalizedRole == 'OWNER' &&
-      !staffMode &&
-      hasActiveWorkers == false;
+  final canSkipWorkerGate =
+      normalizedRole == 'OWNER' && !staffMode && hasActiveWorkers == false;
   // Never infer OWNER from a missing role or a persisted token alone.
   if (!identityVerified && !canSkipWorkerGate) {
     return '/identity-verification';

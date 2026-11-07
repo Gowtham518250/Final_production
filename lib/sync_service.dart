@@ -640,9 +640,15 @@ class SyncService {
             date: date,
             sessionIndex: sessionIndex,
           );
-        } catch (_) {
+        } catch (error, stackTrace) {
           // The server accepted the checkout; local reconciliation will
           // correct any cache mismatch on the next attendance refresh.
+          await ErrorLogHelper.logException(
+            error,
+            stackTrace,
+            context: 'reconcile accepted worker checkout locally',
+            attributes: {'workerId': workerId},
+          );
         }
         if (kDebugMode) debugPrint('✅ Worker checked out: $workerId');
         return true;
@@ -2313,7 +2319,14 @@ class SyncService {
               ...savedProducts,
             ]),
           );
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          await ErrorLogHelper.logException(
+            error,
+            stackTrace,
+            context: 'cache accepted inventory product locally',
+            attributes: {'operationId': data['operation_id']?.toString() ?? ''},
+          );
+        }
         return true;
       }
       return false;
@@ -2362,13 +2375,8 @@ class SyncService {
         return false;
       }
 
-      // Customer order writes must never use the owner's auth_token_enc.
-      // Only fall back to the legacy plaintext customer token for existing
-      // installations that have not yet stored customer_token_enc.
-      final token =
-          await SecureTokenStorage.getCustomerToken() ??
-          prefs.getString('auth_token') ??
-          '';
+      // Customer order writes must never use the owner's access token.
+      final token = await SecureTokenStorage.getCustomerToken() ?? '';
       if (token.trim().isEmpty) return false;
 
       final payload = {
@@ -2490,7 +2498,14 @@ class SyncService {
               }
             }
           }
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          await ErrorLogHelper.logException(
+            error,
+            stackTrace,
+            context: 'reconcile accepted purchase order locally',
+            attributes: {'purchaseOrderId': data['local_id']?.toString() ?? ''},
+          );
+        }
       }
 
       if (!success && kDebugMode) {
@@ -2551,7 +2566,14 @@ class SyncService {
               await prefs.setString('purchase_orders_data', jsonEncode(list));
             }
           }
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          await ErrorLogHelper.logException(
+            error,
+            stackTrace,
+            context: 'reconcile purchase order status locally',
+            attributes: {'purchaseOrderId': data['po_id']?.toString() ?? ''},
+          );
+        }
       }
       return success;
     } catch (e) {

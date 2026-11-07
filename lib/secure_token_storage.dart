@@ -1,416 +1,421 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:encrypt/encrypt.dart' as enc;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 
+import 'package:encrypt/encrypt.dart' as enc;
+import 'package:flutter/foundation.dart'
+    show kDebugMode, debugPrint, visibleForTesting;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+/// Which kind of account the active session belongs to. Owner and customer
+/// accounts can share a numeric ID (different identity tables), so the role
+/// decides which token is returned.
+enum SessionRole { owner, customer }
+
+/// Thrown when a stored record cannot be decrypted or authenticated.
+/// The offending record is deleted before this is thrown, so callers should
+/// treat it as "session lost, ask the user to sign in again".
+class SecureStorageException implements Exception {
+  final String message;
+  const SecureStorageException(this.message);
+  @override
+  String toString() => 'SecureStorageException: $message';
+}
+
+class _KeyRef {
+  final String id;
+  final enc.Key key;
+  const _KeyRef(this.id, this.key);
+}
+
+/// Session credential storage.
+///
+/// Design:
+///  * Secrets live in the platform keystore (flutter_secure_storage) and are
+///    additionally sealed with AES-256-GCM (authenticated encryption).
+///  * Each record's storage slot name is bound as GCM associated data, so a
+///    record copied into another slot (another user, another field) fails
+///    authentication.
+///  * Payload format: `v2.<keyId>.<iv>.<ciphertext+tag>`. The key ID travels
+///    with the record, so key rotation is crash-safe: old and new records are
+///    each decryptable at every moment.
+///  * Everything used for scoping (user ID, role) comes from secure storage,
+///    never from SharedPreferences.
+///  * Key creation is serialized, and a lost/corrupt key is never silently
+///    replaced: records that depended on it are purged explicitly.
 class SecureTokenStorage {
+  SecureTokenStorage._();
+
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
+
+  // Record base names (scoped per user: `<base>_<userId>`).
   static const String _kToken = 'auth_token_enc';
+  static const String _kTokenTime = 'auth_time_enc';
   static const String _kCustomerToken = 'customer_token_enc';
+  static const String _kCustomerTokenTime = 'customer_time_enc';
   static const String _kRefreshToken = 'auth_refresh_enc';
-  static const String _kUser  = 'auth_user_enc';
-  static const String _kKey   = 'aes_device_key';
+  static const String _kUser = 'auth_user_enc';
 
-  /// 🔧 PHASE 2 FIX: Get user_id for token isolation - prevents cross-user token leakage
-  static Future<int?> _getUserId() async {
-    final secureUserId = await _storage.read(key: 'user_id');
-    if (secureUserId != null) {
-      final parsed = int.tryParse(secureUserId);
-      if (parsed != null && parsed > 0) return parsed;
-    }
+  static const List<String> _recordBases = <String>[
+    _kToken,
+    _kTokenTime,
+    _kCustomerToken,
+    _kCustomerTokenTime,
+    _kRefreshToken,
+    _kUser,
+  ];
 
+  // Plain (unencrypted) session metadata, still in secure storage.
+  static const String _kUserId = 'user_id';
+  static const String _kRole = 'auth_role';
+
+  // Key ring.
+  static const String _kCurrentKeyId = 'aes_current_kid';
+  static const String _kKeySlotPrefix = 'aes_key_';
+  static const List<String> _legacyKeySlots = <String>[
+    'aes_device_key',
+    'aes_device_key_salt',
+  ];
+
+  static const String _format = 'v2';
+  static const Duration _maxSessionAge = Duration(days: 7);
+
+  // ---------------------------------------------------------------- keys --
+
+  static Future<_KeyRef>? _currentKeyFuture;
+  static final Map<String, enc.Key> _keyCache = <String, enc.Key>{};
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _currentKeyFuture = null;
+    _keyCache.clear();
+  }
+
+  /// Serialized: concurrent callers share one in-flight future, so two
+  /// callers can never generate two different keys.
+  static Future<_KeyRef> _currentKey() async {
+    final future = _currentKeyFuture ??= _loadOrCreateCurrentKey();
     try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final scopedUserId = prefs.getInt('current_scoped_user_id');
-      if (scopedUserId != null && scopedUserId > 0) return scopedUserId;
-
-      // Older app versions persisted these IDs as either int or string.
-      // Use get() so a valid int value cannot throw a String? type-cast error.
-      final legacyUserId = prefs.get('user_id') ?? prefs.get('userId');
-      final parsedLegacy = int.tryParse(legacyUserId?.toString() ?? '');
-      if (parsedLegacy != null && parsedLegacy > 0) return parsedLegacy;
+      return await future;
     } catch (_) {
-      // ignore
-    }
-
-    return null;
-  }
-  
-  /// 🔧 PHASE 2 FIX: Get scoped key with user_id to prevent cross-user token leakage
-  static Future<String?> _getScopedKeyOrBase(String baseKey) async {
-    final userId = await _getUserId();
-    if (userId == null || userId == 0) {
-      return baseKey;
-    }
-    return '${baseKey}_$userId';
-  }
-
-  static Future<String> _getScopedKey(String baseKey) async {
-    final scopedKey = await _getScopedKeyOrBase(baseKey);
-    if (scopedKey == null) {
-      if (kDebugMode) {
-        debugPrint('⚠️ SECURITY: No user_id available for scoped secure token storage; using base key.');
-      }
-      return baseKey;
-    }
-    return scopedKey;
-  }
-
-  static Future<enc.Key> _getOrCreateKey() async {
-    final stored = await _storage.read(key: _kKey);
-    if (stored != null) {
-      try {
-        return enc.Key.fromBase64(stored);
-      } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ Failed to parse stored key, generating new one: $e');
-        }
-        // Continue to generate new key if parsing fails
-      }
-    }
-    
-    // Use cryptographically secure key generation with salt
-    final secureRandom = math.Random.secure();
-    final salt = List<int>.generate(32, (_) => secureRandom.nextInt(256));
-    final keyBytes = List<int>.generate(32, (_) => secureRandom.nextInt(256));
-    
-    // Store salt for future key derivation
-    await _storage.write(key: '${_kKey}_salt', value: base64UrlEncode(salt));
-    
-    final key = enc.Key(Uint8List.fromList(keyBytes));
-    await _storage.write(key: _kKey, value: key.base64);
-    
-    if (kDebugMode) {
-      print('✅ Generated new encryption key with salt');
-    }
-    return key;
-  }
-  
-  /// Rotate encryption key for enhanced security
-  static Future<void> rotateKey() async {
-    try {
-      if (kDebugMode) {
-        print('🔄 Rotating encryption key...');
-      }
-      
-      // Get old key
-      final oldKey = await _getOrCreateKey();
-      
-      // Generate new key
-      final secureRandom = math.Random.secure();
-      final newSalt = List<int>.generate(32, (_) => secureRandom.nextInt(256));
-      final newKeyBytes = List<int>.generate(32, (_) => secureRandom.nextInt(256));
-      final newKey = enc.Key(Uint8List.fromList(newKeyBytes));
-      
-      // Re-encrypt all data with new key
-      await _reencryptData(oldKey, newKey);
-      
-      // Store new key and salt
-      await _storage.write(key: '${_kKey}_salt', value: base64UrlEncode(newSalt));
-      await _storage.write(key: _kKey, value: newKey.base64);
-      
-      if (kDebugMode) {
-        print('✅ Encryption key rotated successfully');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Key rotation failed: $e');
-      }
+      _currentKeyFuture = null;
       rethrow;
     }
   }
-  
-  /// Re-encrypt all known encrypted secure-storage records for the current
-  /// user before the key itself is replaced. If any record cannot be
-  /// decrypted, rotation aborts so an old key is never discarded while
-  /// encrypted data still depends on it.
-  static Future<void> _reencryptData(enc.Key oldKey, enc.Key newKey) async {
-    final userId = await _getUserId();
-    final userSuffix = userId != null && userId > 0 ? '_$userId' : '';
 
-    const logicalKeys = <String>[
-      _kToken,
-      _kCustomerToken,
-      _kRefreshToken,
-      _kTime,
-      _kUser,
-    ];
-
-    for (final logicalKey in logicalKeys) {
-      final scopedKey = '$logicalKey$userSuffix';
-      final combined = await _storage.read(key: scopedKey);
-      if (combined == null || combined.isEmpty) continue;
-
-      final parts = combined.split(':');
-      if (parts.length != 2) {
-        throw StateError('Cannot rotate key: invalid encrypted payload for $scopedKey');
-      }
-
-      final oldIv = enc.IV.fromBase64(parts[0]);
-      final oldCipher = parts[1];
-      final oldEncrypter = enc.Encrypter(enc.AES(oldKey));
-      final plaintext = oldEncrypter.decrypt64(oldCipher, iv: oldIv);
-
-      final newIv = enc.IV.fromSecureRandom(16);
-      final newEncrypter = enc.Encrypter(enc.AES(newKey));
-      final encrypted = newEncrypter.encrypt(plaintext, iv: newIv);
-      await _storage.write(
-        key: scopedKey,
-        value: '${newIv.base64}:${encrypted.base64}',
-      );
+  static Future<_KeyRef> _loadOrCreateCurrentKey() async {
+    // v1 used a single key and a never-used salt; v1 records are not
+    // readable by v2, so drop the leftovers.
+    for (final slot in _legacyKeySlots) {
+      await _storage.delete(key: slot);
     }
 
-    if (kDebugMode) {
-      print('✅ Re-encrypted encrypted session records for current user');
+    final kid = await _storage.read(key: _kCurrentKeyId);
+    if (kid != null) {
+      final key = await _readKey(kid);
+      if (key != null) return _KeyRef(kid, key);
+
+      // The pointer exists but its key is missing or corrupt. Everything
+      // sealed with it is unrecoverable: say so, purge, start clean.
+      _log('Current key $kid is unreadable; purging dependent records.');
+      await _purgeAllRecords();
+      await _storage.delete(key: '$_kKeySlotPrefix$kid');
+      _keyCache.remove(kid);
     }
+    return _createKey(makeCurrent: true);
   }
 
-  static Future<void> saveUserId(int userId) async {
-    await _storage.write(key: 'user_id', value: userId.toString());
-  }
-
-  static Future<int?> getUserId() async => _getUserId();
-
-  static Future<void> clearUserId() async {
-    await _storage.delete(key: 'user_id');
-  }
-
-  static const String _kTime   = 'auth_time_enc';
-
-  static Future<String?> _readDecrypted(String baseKey) async {
-    final scopedKey = await _getScopedKey(baseKey);
-    var combined = await _storage.read(key: scopedKey);
-    if (combined == null && scopedKey != baseKey) {
-      combined = await _storage.read(key: baseKey);
-    } else if (combined == null && scopedKey == baseKey) {
-      final userId = await _getUserId();
-      if (userId != null && userId > 0) {
-        combined = await _storage.read(key: '${baseKey}_$userId');
-      }
-    }
-    if (combined == null) return null;
-
+  static Future<enc.Key?> _readKey(String kid) async {
+    final cached = _keyCache[kid];
+    if (cached != null) return cached;
+    final stored = await _storage.read(key: '$_kKeySlotPrefix$kid');
+    if (stored == null) return null;
     try {
-      final parts = combined.split(':');
-      if (parts.length < 2) return null;
-      final key = await _getOrCreateKey();
-      final iv = enc.IV.fromBase64(parts[0]);
-      final encrypter = enc.Encrypter(enc.AES(key));
-      return encrypter.decrypt(enc.Encrypted.fromBase64(parts[1]), iv: iv);
-    } catch (e) {
-      if (kDebugMode) debugPrint('SecureTokenStorage: decrypt failed for $baseKey ($e)');
+      final key = enc.Key.fromBase64(stored);
+      if (key.bytes.length != 32) return null;
+      _keyCache[kid] = key;
+      return key;
+    } catch (_) {
       return null;
     }
   }
 
-  static Future<void> saveToken(String token) async {
-    final key = await _getOrCreateKey();
-    final iv = enc.IV.fromSecureRandom(16);
-    final encrypter = enc.Encrypter(enc.AES(key));
-    final encrypted = encrypter.encrypt(token, iv: iv);
-    // Store iv:ciphertext together with user-scoped key
-    final scopedTokenKey = await _getScopedKey(_kToken);
-    final combined = '${iv.base64}:${encrypted.base64}';
-    await _storage.write(key: scopedTokenKey, value: combined);
-    if (scopedTokenKey != _kToken) {
-      await _storage.write(key: _kToken, value: combined);
+  static Future<_KeyRef> _createKey({required bool makeCurrent}) async {
+    final kid = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    final key = enc.Key.fromSecureRandom(32);
+    // Key first, pointer second: a crash between the two leaves an unused
+    // key, never a pointer to nothing.
+    await _storage.write(key: '$_kKeySlotPrefix$kid', value: key.base64);
+    _keyCache[kid] = key;
+    if (makeCurrent) {
+      await _storage.write(key: _kCurrentKeyId, value: kid);
     }
-    
-    // Save current timestamp for 7-day auto-login check (unique IV per field)
-    final now = DateTime.now().millisecondsSinceEpoch.toString();
-    final timeIv = enc.IV.fromSecureRandom(16);
-    final timeEnc = encrypter.encrypt(now, iv: timeIv);
-    final scopedTimeKey = await _getScopedKey(_kTime);
-    final timeCombined = '${timeIv.base64}:${timeEnc.base64}';
-    await _storage.write(key: scopedTimeKey, value: timeCombined);
-    if (scopedTimeKey != _kTime) {
-      await _storage.write(key: _kTime, value: timeCombined);
-    }
+    return _KeyRef(kid, key);
   }
 
-  static Future<void> saveCustomerToken(String token) async {
-    final key = await _getOrCreateKey();
-    final iv = enc.IV.fromSecureRandom(16);
-    final encrypter = enc.Encrypter(enc.AES(key));
-    final encrypted = encrypter.encrypt(token, iv: iv);
-    final combined = '${iv.base64}:${encrypted.base64}';
-    final scopedCustomerKey = await _getScopedKey(_kCustomerToken);
-    await _storage.write(key: scopedCustomerKey, value: combined);
-    if (scopedCustomerKey != _kCustomerToken) {
-      await _storage.write(key: _kCustomerToken, value: combined);
+  // -------------------------------------------------------- seal / unseal --
+
+  static Uint8List _aad(String slot) =>
+      Uint8List.fromList(utf8.encode(slot));
+
+  static Future<String> _seal(
+    String slot,
+    String plaintext, {
+    _KeyRef? with_,
+  }) async {
+    final ref = with_ ?? await _currentKey();
+    final iv = enc.IV.fromSecureRandom(12); // 96-bit nonce for GCM
+    final encrypter = enc.Encrypter(enc.AES(ref.key, mode: enc.AESMode.gcm));
+    final sealed = encrypter.encrypt(
+      plaintext,
+      iv: iv,
+      associatedData: _aad(slot),
+    );
+    return '$_format.${ref.id}.${iv.base64}.${sealed.base64}';
+  }
+
+  /// Returns null for legacy/unknown formats (treated as "no session").
+  /// Throws [SecureStorageException] if a v2 record fails authentication.
+  static Future<String?> _unseal(String slot, String payload) async {
+    final parts = payload.split('.');
+    if (parts.length != 4 || parts[0] != _format) return null;
+
+    final key = await _readKey(parts[1]);
+    if (key == null) {
+      throw const SecureStorageException('Encryption key for record not found');
     }
-  }
-
-  static Future<String?> getCustomerToken() async {
-    return _readDecrypted(_kCustomerToken);
-  }
-
-  static Future<String?> getToken() async {
-    // Owner and customer accounts can have the same numeric ID because they
-    // belong to different identity tables. Never read an owner JWT while a
-    // customer session is active.
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final role = (prefs.getString('role') ??
-              prefs.getString('user_role') ??
-              prefs.getString('user_type') ??
-              '')
-          .trim()
-          .toLowerCase();
-      if (role == 'customer') {
-        final customerToken = await getCustomerToken();
-        if (customerToken != null && customerToken.isNotEmpty) {
-          return customerToken;
-        }
-        // Compatibility for existing customer sessions that have not yet
-        // migrated their JWT into the dedicated encrypted customer-token slot.
-        final legacyCustomerToken = prefs.getString('auth_token');
-        if (legacyCustomerToken != null && legacyCustomerToken.isNotEmpty) {
-          return legacyCustomerToken;
-        }
-        return null;
-      }
-    } catch (_) {}
-
-    final secureToken = await _readDecrypted(_kToken);
-    if (secureToken != null && secureToken.isNotEmpty) {
-      return secureToken;
-    }
-
-    // Compatibility fallback for older owner/customer sessions.
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final legacyToken = prefs.getString('auth_token');
-      if (legacyToken != null && legacyToken.isNotEmpty) {
-        return legacyToken;
-      }
-    } catch (_) {}
-
-    return null;
-  }
-
-  static Future<void> saveRefreshToken(String token) async {
-    final key = await _getOrCreateKey();
-    final iv = enc.IV.fromSecureRandom(16);
-    final encrypter = enc.Encrypter(enc.AES(key));
-    final encrypted = encrypter.encrypt(token, iv: iv);
-    final combined = '${iv.base64}:${encrypted.base64}';
-    final scopedRefreshKey = await _getScopedKey(_kRefreshToken);
-    await _storage.write(key: scopedRefreshKey, value: combined);
-    if (scopedRefreshKey != _kRefreshToken) {
-      await _storage.write(key: _kRefreshToken, value: combined);
-    }
-  }
-
-  static Future<String?> getRefreshToken() async {
-    return _readDecrypted(_kRefreshToken);
-  }
-
-  static Future<bool> isSessionValid() async {
-    final token = await getToken();
-    if (token == null || token.isEmpty) return false;
-
-    final scopedTimeKey = await _getScopedKey(_kTime);
-    final combined = await _storage.read(key: scopedTimeKey);
-    if (combined == null) return false;
-
-    try {
-      final parts = combined.split(':');
-      if (parts.length < 2) return false;
-      final key = await _getOrCreateKey();
-      final iv = enc.IV.fromBase64(parts[0]);
-      final encrypter = enc.Encrypter(enc.AES(key));
-      final timestamp = int.tryParse(
-        encrypter.decrypt(enc.Encrypted.fromBase64(parts[1]), iv: iv),
+      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
+      return encrypter.decrypt(
+        enc.Encrypted.fromBase64(parts[3]),
+        iv: enc.IV.fromBase64(parts[2]),
+        associatedData: _aad(slot),
       );
-      if (timestamp == null) return false;
-
-      const maxSessionAge = Duration(days: 7);
-      return DateTime.now().difference(
-            DateTime.fromMillisecondsSinceEpoch(timestamp),
-          ) <=
-          maxSessionAge;
     } catch (e) {
-      if (kDebugMode) debugPrint('SecureTokenStorage.isSessionValid: timestamp check failed ($e)');
+      throw SecureStorageException('Record failed authentication ($slot)');
+    }
+  }
+
+  // ------------------------------------------------------ scoped records --
+
+  static Future<String?> _scopedSlot(String base) async {
+    final userId = await getUserId();
+    if (userId == null) return null;
+    return '${base}_$userId';
+  }
+
+  static Future<String> _requireSlot(String base) async {
+    final slot = await _scopedSlot(base);
+    if (slot == null) {
+      throw StateError('No authenticated user ID: call saveUserId() first.');
+    }
+    return slot;
+  }
+
+  static Future<void> _writeSecret(String base, String value) async {
+    final slot = await _requireSlot(base);
+    await _storage.write(key: slot, value: await _seal(slot, value));
+  }
+
+  /// null  -> nothing stored (or legacy record dropped).
+  /// throws -> record was corrupt; it has been deleted.
+  static Future<String?> _readSecret(String base) async {
+    final slot = await _scopedSlot(base);
+    if (slot == null) return null;
+    final raw = await _storage.read(key: slot);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final plain = await _unseal(slot, raw);
+      if (plain == null) await _storage.delete(key: slot); // legacy format
+      return plain;
+    } on SecureStorageException {
+      await _storage.delete(key: slot);
+      rethrow;
+    }
+  }
+
+  static Future<void> _deleteSecret(String base) async {
+    final slot = await _scopedSlot(base);
+    if (slot != null) await _storage.delete(key: slot);
+  }
+
+  static bool _isRecordSlot(String slot) => _recordBases
+      .any((base) => slot == base || slot.startsWith('${base}_'));
+
+  static Future<void> _purgeAllRecords() async {
+    final all = await _storage.readAll();
+    for (final slot in all.keys.where(_isRecordSlot)) {
+      await _storage.delete(key: slot);
+    }
+  }
+
+  // ------------------------------------------------------------ identity --
+
+  static Future<void> saveUserId(int userId) async {
+    if (userId <= 0) throw ArgumentError.value(userId, 'userId');
+    await _storage.write(key: _kUserId, value: userId.toString());
+  }
+
+  static Future<int?> getUserId() async {
+    final parsed = int.tryParse(await _storage.read(key: _kUserId) ?? '');
+    return (parsed != null && parsed > 0) ? parsed : null;
+  }
+
+  static Future<void> clearUserId() => _storage.delete(key: _kUserId);
+
+  static Future<void> saveRole(SessionRole role) =>
+      _storage.write(key: _kRole, value: role.name);
+
+  static Future<SessionRole> getRole() async {
+    final stored = await _storage.read(key: _kRole);
+    return stored == SessionRole.customer.name
+        ? SessionRole.customer
+        : SessionRole.owner;
+  }
+
+  // -------------------------------------------------------------- tokens --
+
+  /// Stores [token] and a timestamp (used for the client-side 7 day check).
+  static Future<void> _saveTokenWithTime(
+    String tokenBase,
+    String timeBase,
+    String token,
+  ) async {
+    await _writeSecret(tokenBase, token);
+    await _writeSecret(
+      timeBase,
+      DateTime.now().millisecondsSinceEpoch.toString(),
+    );
+  }
+
+  static Future<void> saveToken(String token) =>
+      _saveTokenWithTime(_kToken, _kTokenTime, token);
+
+  static Future<void> saveCustomerToken(String token) =>
+      _saveTokenWithTime(_kCustomerToken, _kCustomerTokenTime, token);
+
+  static Future<String?> getCustomerToken() => _readSecret(_kCustomerToken);
+
+  static Future<String?> getOwnerToken() => _readSecret(_kToken);
+
+  /// Returns the token for the active role. Never returns an owner JWT while
+  /// a customer session is active (or vice versa).
+  static Future<String?> getToken() async {
+    return await getRole() == SessionRole.customer
+        ? getCustomerToken()
+        : getOwnerToken();
+  }
+
+  static Future<void> saveRefreshToken(String token) =>
+      _writeSecret(_kRefreshToken, token);
+
+  static Future<String?> getRefreshToken() => _readSecret(_kRefreshToken);
+
+  /// True when a token exists for the active role and is younger than 7 days.
+  /// This is a convenience check only; the server must still enforce expiry.
+  static Future<bool> isSessionValid() async {
+    try {
+      final isCustomer = await getRole() == SessionRole.customer;
+      final token = await (isCustomer ? getCustomerToken() : getOwnerToken());
+      if (token == null || token.isEmpty) return false;
+
+      final stamp = await _readSecret(
+        isCustomer ? _kCustomerTokenTime : _kTokenTime,
+      );
+      final millis = int.tryParse(stamp ?? '');
+      if (millis == null) return false;
+
+      final age = DateTime.now().difference(
+        DateTime.fromMillisecondsSinceEpoch(millis),
+      );
+      // A negative age means the clock moved backwards: don't trust it.
+      return !age.isNegative && age <= _maxSessionAge;
+    } on SecureStorageException catch (e) {
+      _log('isSessionValid: $e');
       return false;
     }
   }
 
-  static Future<void> saveUser(Map<String, dynamic> userData) async {
-    final key = await _getOrCreateKey();
-    final iv = enc.IV.fromSecureRandom(16);
-    final encrypter = enc.Encrypter(enc.AES(key));
-    final jsonStr = json.encode(userData);
-    final encrypted = encrypter.encrypt(jsonStr, iv: iv);
-    final scopedKey = await _getScopedKey(_kUser);
-    await _storage.write(key: scopedKey, value: '${iv.base64}:${encrypted.base64}');
+  // ---------------------------------------------------------------- user --
+
+  static Future<void> saveUser(Map<String, dynamic> userData) =>
+      _writeSecret(_kUser, json.encode(userData));
+
+  static Future<Map<String, dynamic>?> getUser() async {
+    final raw = await _readSecret(_kUser);
+    if (raw == null) return null;
+    try {
+      return json.decode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      await _deleteSecret(_kUser);
+      throw const SecureStorageException('Stored user record is malformed');
+    }
   }
 
   static Future<String?> getUserEmail() async {
-    final user = await getUser();
-    final email = user?['email']?.toString().trim();
-    return email == null || email.isEmpty ? null : email;
+    final email = (await getUser())?['email']?.toString().trim();
+    return (email == null || email.isEmpty) ? null : email;
   }
 
-  static Future<Map<String, dynamic>?> getUser() async {
-    final scopedKey = await _getScopedKey(_kUser);
-    final combined = await _storage.read(key: scopedKey);
-    if (combined == null) return null;
-    try {
-      final parts = combined.split(':');
-      if (parts.length != 2) return null;
-      final key = await _getOrCreateKey();
-      final iv = enc.IV.fromBase64(parts[0]);
-      final encrypter = enc.Encrypter(enc.AES(key));
-      final decrypted = encrypter.decrypt(enc.Encrypted.fromBase64(parts[1]), iv: iv);
-      return json.decode(decrypted) as Map<String, dynamic>;
-    } catch (e) {
-      if (kDebugMode) debugPrint('SecureTokenStorage.getUser: decrypt failed ($e)');
-      return null;
-    }
-  }
+  // -------------------------------------------------------------- logout --
 
-  /// Clear only session credentials while preserving the device AES key.
-  /// Keep biometric settings and the encryption key across normal logins/logouts.
+  /// Removes the current user's session records, role and user ID.
+  /// The key ring is kept so other users' sessions on this device survive.
   static Future<void> clearAll() async {
-    final userId = await _getUserId();
-    if (userId != null && userId > 0) {
-      await _storage.delete(key: '${_kToken}_$userId');
-      await _storage.delete(key: '${_kCustomerToken}_$userId');
-      await _storage.delete(key: '${_kRefreshToken}_$userId');
-      await _storage.delete(key: '${_kTime}_$userId');
-      await _storage.delete(key: '${_kUser}_$userId');
+    for (final base in _recordBases) {
+      await _deleteSecret(base);
     }
-
-    await _storage.delete(key: _kToken);
-    await _storage.delete(key: _kCustomerToken);
-    await _storage.delete(key: _kRefreshToken);
-    await _storage.delete(key: _kTime);
-    await _storage.delete(key: _kUser);
-    await clearUserId();
+    await _storage.delete(key: _kRole);
+    await clearUserId(); // last, because the steps above need it
   }
-
 
   static Future<void> deleteToken() async {
-    final userId = await _getUserId();
-    if (userId != null && userId > 0) {
-      await _storage.delete(key: '${_kToken}_$userId');
-    }
-    await _storage.delete(key: _kToken);
+    await _deleteSecret(_kToken);
+    await _deleteSecret(_kTokenTime);
   }
 
-  /// Alias used by session management logout flow.
-  static Future<void> clearToken() async => deleteToken();
+  static Future<void> clearToken() => deleteToken();
 
-  static Future<void> clearRefreshToken() async {
-    final userId = await _getUserId();
-    if (userId != null && userId > 0) {
-      await _storage.delete(key: '${_kRefreshToken}_$userId');
+  static Future<void> clearRefreshToken() => _deleteSecret(_kRefreshToken);
+
+  // ------------------------------------------------------------ rotation --
+
+  /// Crash-safe key rotation covering every user on the device.
+  ///
+  /// 1. Decrypt every record first; if any fails, abort with nothing changed.
+  /// 2. Create the new key (the old one stays in place).
+  /// 3. Re-seal each record under the new key ID. Each record carries its
+  ///    own key ID, so a crash at any point leaves everything readable.
+  /// 4. Flip the "current key" pointer, then delete the old key.
+  ///
+  /// Call it while no other storage write is in flight.
+  static Future<void> rotateKey() async {
+    final oldRef = await _currentKey();
+    final all = await _storage.readAll();
+
+    final plain = <String, String>{};
+    for (final entry in all.entries) {
+      if (!_isRecordSlot(entry.key) || entry.value.isEmpty) continue;
+      final value = await _unseal(entry.key, entry.value);
+      if (value != null) plain[entry.key] = value; // skip legacy-format junk
     }
-    await _storage.delete(key: _kRefreshToken);
+
+    final newRef = await _createKey(makeCurrent: false);
+    for (final entry in plain.entries) {
+      await _storage.write(
+        key: entry.key,
+        value: await _seal(entry.key, entry.value, with_: newRef),
+      );
+    }
+
+    await _storage.write(key: _kCurrentKeyId, value: newRef.id);
+    _currentKeyFuture = Future<_KeyRef>.value(newRef);
+
+    await _storage.delete(key: '$_kKeySlotPrefix${oldRef.id}');
+    _keyCache.remove(oldRef.id);
+    _log('Key rotated; re-sealed ${plain.length} records.');
+  }
+
+  static void _log(String message) {
+    if (kDebugMode) debugPrint('SecureTokenStorage: $message');
   }
 }

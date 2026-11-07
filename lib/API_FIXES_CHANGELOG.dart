@@ -26,7 +26,7 @@
 ///
 /// Backend Endpoint Spec:
 /// POST /auth/login
-/// Request:  { "username": "Gowtham", "password": "Gowtham@2004" }
+/// Request:  { "username": "TEST_USERNAME_FROM_SECRET_MANAGER", "password": "TEST_PASSWORD_FROM_SECRET_MANAGER" }
 /// Response: { "access_token": "...", "token_type": "bearer", "role": "OWNER" }
 
 /// Issue #2: LOGIN RESPONSE PARSING - WRONG FIELD NAMES
@@ -83,7 +83,7 @@
 ///
 /// Backend Endpoint Spec:
 /// POST /auth/register
-/// Request:  { "username": "Gowtham", "email": "user@email.com", "password": "..." }
+/// Request:  { "username": "TEST_USERNAME_FROM_SECRET_MANAGER", "email": "user@email.com", "password": "..." }
 /// Response: { "access_token": "...", "token_type": "bearer", "role": "OWNER" }
 
 /// Issue #4: REGISTER RESPONSE PARSING - WRONG FIELD NAMES
@@ -118,7 +118,7 @@
 /// Test 1: Login with correct username field
 /// curl -X 'POST' 'https://retail-mind-vkbp.onrender.com/auth/login' \
 ///   -H 'Content-Type: application/json' \
-///   -d '{ "username": "Gowtham", "password": "Gowtham@2004" }'
+///   -d '{ "username": "TEST_USERNAME_FROM_SECRET_MANAGER", "password": "TEST_PASSWORD_FROM_SECRET_MANAGER" }'
 /// 
 /// Expected Response (200 OK):
 /// {
@@ -195,9 +195,8 @@
 /// ============================================================================
 
 /// 1. Clear app cache and data (fresh login session)
-/// 2. Test login with credentials:
-///    - Username: "Gowtham"
-///    - Password: "Gowtham@2004"
+/// 2. Test login using a disposable account provisioned through the approved
+///    secret manager; never store test credentials in source or documentation.
 /// 3. Test registration with new account
 /// 4. Verify JWT token is properly decoded and stored
 /// 5. Check that user_id is correctly extracted from JWT 'sub' claim

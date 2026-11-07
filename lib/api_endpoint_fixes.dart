@@ -19,8 +19,8 @@
 // 1. LOGIN ENDPOINT
 // POST /auth/login
 // Request: {
-//   "username": "Gowtham",
-//   "password": "Gowtham@2004"
+//   "username": "TEST_USERNAME_FROM_SECRET_MANAGER",
+//   "password": "TEST_PASSWORD_FROM_SECRET_MANAGER"
 // }
 // Response 200: {
 //   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -31,9 +31,9 @@
 // 2. REGISTER ENDPOINT
 // POST /auth/register
 // Request: {
-//   "username": "Gowtham",
+//   "username": "TEST_USERNAME_FROM_SECRET_MANAGER",
 //   "email": "vanamgowthamreddy33@gmail.com",
-//   "password": "Gowtham@2004"
+//   "password": "TEST_PASSWORD_FROM_SECRET_MANAGER"
 // }
 // Response 200: {
 //   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",

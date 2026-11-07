@@ -4899,7 +4899,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // First-sale celebration: detect if this is the first bill on this device/user.
     // (Helps D1→D7 retention; backend sync can happen later.)
     final bool isFirstSaleForThisShop =
-        (await LocalStorageService.loadSales()).isEmpty;
+        await LocalStorageService.getSalesCount() == 0;
 
     // Internal transaction id is separate from the customer-facing bill number.
     final saleId = 'SALE_${DateTime.now().microsecondsSinceEpoch}';
@@ -5022,8 +5022,25 @@ class _SalesEntryPageState extends State<SalesEntryPage>
           );
         }
 
-        // SHOW SUCCESS DIALOG WITH REAL BILL PDF
-        if (mounted) {
+        // Browser downloads cannot use dart:io's local file path flow. Keep
+        // sale completion non-modal on web so the bill screen remains usable.
+        if (mounted && kIsWeb) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: LiveTranslatedText(
+                cloudConfirmed
+                    ? 'Bill $billNumber is saved and synced. You can continue billing.'
+                    : 'Bill $billNumber is saved locally. Cloud sync is pending; do not create it again.',
+              ),
+              backgroundColor: cloudConfirmed
+                  ? const Color(0xFF059669)
+                  : const Color(0xFFD97706),
+              duration: const Duration(seconds: 6),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else if (mounted) {
+          // SHOW SUCCESS DIALOG WITH REAL BILL PDF
           final String shopName = _shopNameForDynamicQr ?? 'Retail Shop';
           final prefs2 = await SharedPreferences.getInstance();
           final shopPhone2 = prefs2.getString('shop_phone') ?? '';
@@ -5231,6 +5248,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             await BillGeneratorService.shareBill(
                               capturedBillPath,
                               customerName: capturedCustomer,
+                              shopName: _shopNameForDynamicQr,
                             );
                           },
                           icon: const Icon(Icons.share_rounded, size: 18),

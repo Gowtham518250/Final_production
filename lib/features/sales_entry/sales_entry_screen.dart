@@ -664,7 +664,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                               );
                             }
                             
-                            final success = await provider.submitSale();
+                            final success = await provider.submitSale(
+                              refreshDashboard: false,
+                            );
 
                             // Remove loading indicator
                             if (mounted) {
@@ -759,7 +761,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                               );
                             }
                             
-                            final success = await provider.saveAsCredit();
+                            final success = await provider.saveAsCredit(
+                              refreshDashboard: false,
+                            );
                             
                             // Remove loading indicator
                             if (mounted) {
@@ -841,7 +845,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                               );
                             }
                             
-                            final success = await provider.submitSale();
+                            final success = await provider.submitSale(
+                              refreshDashboard: false,
+                            );
                             
                             // Remove loading indicator
                             if (context.mounted) {
@@ -892,7 +898,9 @@ class _SalesEntryViewState extends State<_SalesEntryView> {
                               );
                             }
                             
-                            final success = await provider.saveAsCredit();
+                            final success = await provider.saveAsCredit(
+                              refreshDashboard: false,
+                            );
                             
                             // Remove loading indicator
                             if (context.mounted) {

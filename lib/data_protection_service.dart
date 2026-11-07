@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'local_storage_service.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
+import 'backup_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Data Protection Service: Ensures ZERO data loss through redundant sync & verification
 class DataProtectionService {
@@ -11,6 +13,19 @@ class DataProtectionService {
   
   /// ✅ SYNC WITH RETRY: Ensures all data reaches backend
   static Future<bool> syncAllData({int maxRetries = 3}) async {
+    if (maxRetries < 1) {
+      throw ArgumentError.value(
+        maxRetries,
+        'maxRetries',
+        'Must be at least 1.',
+      );
+    }
+
+    final token = await SecureTokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      throw StateError('Sign in before syncing data to the backend.');
+    }
+
     debugPrint('🔄 [DataProtection] Starting sync with retry...');
     
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -27,7 +42,11 @@ class DataProtectionService {
         
         // 3. Sync khata balances
         final khataBalances = await LocalStorageService.loadKhataBalances();
-        await _syncWithRetry('/api/sync/khata-balances', khataBalances, attempt);
+        await _syncWithRetry(
+          '/api/sync/khata-balances',
+          khataBalances,
+          attempt,
+        );
         
         // 4. Sync expenses
         final expenses = await LocalStorageService.loadExpenses();
@@ -36,7 +55,6 @@ class DataProtectionService {
         debugPrint('✅ [DataProtection] All data synced successfully');
         await _recordSyncTimestamp();
         return true;
-        
       } catch (e) {
         debugPrint('⚠️ [Sync] Attempt $attempt failed: $e');
         if (attempt == maxRetries) {
@@ -62,8 +80,7 @@ class DataProtectionService {
     try {
       final token = await SecureTokenStorage.getToken();
       if (token == null || token.isEmpty) {
-        debugPrint('⚠️ [Sync] No auth token');
-        return;
+        throw StateError('Authentication expired while syncing data.');
       }
       
       final response = await ApiClient.postJson(
@@ -73,7 +90,9 @@ class DataProtectionService {
       ).timeout(const Duration(seconds: 15));
       
       if (response.statusCode == 200) {
-        debugPrint('✅ [Sync] $endpoint synced (${(data as List?)?.length ?? 0} items)');
+        debugPrint(
+          '✅ [Sync] $endpoint synced (${(data as List?)?.length ?? 0} items)',
+        );
       } else {
         throw Exception('Server returned ${response.statusCode}');
       }
@@ -126,39 +145,31 @@ class DataProtectionService {
   }
   
   /// ✅ LOCAL BACKUP: Save all data to encrypted backup file
-  static Future<bool> createLocalBackup() async {
-    try {
-      final backup = {
-        'timestamp': DateTime.now().toIso8601String(),
-        'sales': await LocalStorageService.loadSales(),
-        'invoices': await LocalStorageService.loadLocalInvoices(),
-        'khata': await LocalStorageService.loadKhataBalances(),
-        'expenses': await LocalStorageService.loadExpenses(),
-      };
-      
-      // Store in a backup box
-      final backupJson = jsonEncode(backup);
-      debugPrint('✅ Local backup created: ${backupJson.length} bytes');
-      return true;
-    } catch (e) {
-      debugPrint('❌ Backup creation failed: $e');
-      return false;
+  static Future<String> createLocalBackup() async {
+    final result = await BackupService.createBackup();
+    if (result['success'] != true) {
+      throw StateError('Backup service did not confirm the backup write.');
     }
+    final path = result['path']?.toString();
+    if (path == null || path.isEmpty) {
+      throw StateError(
+        'Backup service did not return the saved file location.',
+      );
+    }
+    return path;
   }
   
   /// Record last successful sync time
   static Future<void> _recordSyncTimestamp() async {
     final timestamp = DateTime.now().toIso8601String();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastSyncKey, timestamp);
     debugPrint('📍 Sync completed at: $timestamp');
   }
   
   /// Get last sync time
   static Future<String?> getLastSyncTime() async {
-    try {
-      // Would read from SharedPreferences in full implementation
-      return null;
-    } catch (e) {
-      return null;
-    }
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastSyncKey);
   }
 }

@@ -20,9 +20,9 @@ import 'local_storage_service.dart';
 
 /// Free-first marketing assistant.
 ///
-/// Copy and poster rendering run locally. No advertising budget or paid image
-/// generation service is required. Campaigns are private drafts saved on this
-/// device, scoped to the signed-in user.
+/// Copy generation uses the authenticated shop service when available; poster
+/// artwork is composed locally. Adobe Express remains an optional manual editor.
+/// Campaigns are private drafts scoped to the signed-in user.
 class GrowthAgentPage extends StatefulWidget {
   const GrowthAgentPage({super.key});
 
@@ -31,8 +31,9 @@ class GrowthAgentPage extends StatefulWidget {
 }
 
 class _GrowthAgentPageState extends State<GrowthAgentPage> {
-  static const MethodChannel _creativeStudioChannel =
-      MethodChannel('com.retailmind.app/creative_studio');
+  static const MethodChannel _creativeStudioChannel = MethodChannel(
+    'com.retailmind.app/creative_studio',
+  );
 
   static const Color _ink = Color(0xFF182230);
   static const Color _muted = Color(0xFF64748B);
@@ -55,6 +56,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   String _adFormat = 'feed';
   String? _selectedProductKey;
   String _campaignStorageKey = 'retailmind_growth_campaigns_v1_guest';
+  Map<String, dynamic>? _upcomingFestival;
+  String _festivalStatus = 'Checking the festival calendar.';
   List<Map<String, dynamic>> _products = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _campaigns = <Map<String, dynamic>>[];
   Map<String, dynamic> _shopDetails = <String, dynamic>{};
@@ -86,22 +89,22 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     if (id != null && id.toString().trim().isNotEmpty) {
       return id.toString();
     }
-    return (product['name'] ?? 'product').toString() +
-        '_' +
-        index.toString();
+    return (product['name'] ?? 'product').toString() + '_' + index.toString();
   }
 
   double _number(dynamic value) {
     if (value is num && value.isFinite) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
+
   double? _productPrice(Map<String, dynamic>? product) {
     if (product == null) return null;
-    final raw = product['unit_price'] ??
-        product['selling_price'] ??
-        product['price'];
+    final raw =
+        product['unit_price'] ?? product['selling_price'] ?? product['price'];
     if (raw == null || raw.toString().trim().isEmpty) return null;
-    final value = raw is num ? raw.toDouble() : double.tryParse(raw.toString().trim());
+    final value = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw.toString().trim());
     if (value == null || !value.isFinite || value < 0) return null;
     return value;
   }
@@ -132,16 +135,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     for (final row in rows) {
       if (row is! Map) continue;
       final product = Map<String, dynamic>.from(row);
-      final name = (product['name'] ??
-              product['product_name'] ??
-              product['title'] ??
-              '')
-          .toString()
-          .trim();
+      final name =
+          (product['name'] ?? product['product_name'] ?? product['title'] ?? '')
+              .toString()
+              .trim();
       if (name.isEmpty || product['is_deleted'] == true) continue;
-      final stock = _number(product['current_stock'] ??
-          product['stock'] ??
-          product['quantity']);
+      final stock = _number(
+        product['current_stock'] ?? product['stock'] ?? product['quantity'],
+      );
       if (stock <= 0) continue;
       product['name'] = name;
       product['current_stock'] = stock;
@@ -157,6 +158,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   Future<void> _loadWorkspace() async {
+    final previousProductKey = _selectedProductKey;
     setState(() {
       _loading = true;
       _message = '';
@@ -165,7 +167,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.get('user_id') ?? prefs.get('userId') ?? 'guest';
-      _campaignStorageKey = 'retailmind_growth_campaigns_v1_' + userId.toString();
+      _campaignStorageKey =
+          'retailmind_growth_campaigns_v1_' + userId.toString();
 
       var shopName = '';
       var shopDetails = <String, dynamic>{};
@@ -173,6 +176,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       var autoNewProducts = true;
       var autoWeekly = false;
       var weeklyDay = 0;
+      Map<String, dynamic>? upcomingFestival;
+      var festivalStatus =
+          'Festival calendar is unavailable; using your shop and stock details.';
       for (final key in const ['shop_name', 'shopName', 'business_name']) {
         final value = prefs.getString(key)?.trim() ?? '';
         if (value.isNotEmpty) {
@@ -184,16 +190,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       // Fetch the actual shop profile when the existing backend has it. A
       // profile failure must not stop offline campaign drafting.
       try {
-        final profileResponse = await ApiClient.getJson('/api/shop/profile')
-            .timeout(const Duration(seconds: 8));
+        final profileResponse = await ApiClient.getJson(
+          '/api/shop/profile',
+        ).timeout(const Duration(seconds: 8));
         if (profileResponse.statusCode == 200) {
           final decoded = jsonDecode(profileResponse.body);
           if (decoded is Map) {
             final profileData = decoded['profile'] is Map
                 ? Map<String, dynamic>.from(decoded['profile'] as Map)
                 : decoded['shop_profile'] is Map
-                    ? Map<String, dynamic>.from(decoded['shop_profile'] as Map)
-                    : Map<String, dynamic>.from(decoded);
+                ? Map<String, dynamic>.from(decoded['shop_profile'] as Map)
+                : Map<String, dynamic>.from(decoded);
             shopDetails = profileData;
             for (final key in const [
               'shop_name',
@@ -214,6 +221,32 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       }
 
       try {
+        final festivalResponse = await ApiClient.getJson(
+          ApiClient.festivalsUpcoming,
+        ).timeout(const Duration(seconds: 8));
+        if (festivalResponse.statusCode == 200) {
+          upcomingFestival = GrowthCreativePlanner.nextFestival(
+            jsonDecode(festivalResponse.body),
+          );
+          if (upcomingFestival == null) {
+            festivalStatus =
+                'No upcoming festival was returned; using your shop and stock details.';
+          } else {
+            final days = _number(upcomingFestival['_days_until']).toInt();
+            festivalStatus = days == 0
+                ? 'Today\'s promotion is inspired by ${upcomingFestival['name']}.'
+                : '${upcomingFestival['name']} is coming in $days days.';
+          }
+        } else {
+          festivalStatus =
+              'Festival calendar is unavailable; using your shop and stock details.';
+        }
+      } catch (_) {
+        festivalStatus =
+            'Festival calendar is unavailable; using your shop and stock details.';
+      }
+
+      try {
         final settingsResponse = await ApiClient.getJson(
           '/growth/marketing/automation/settings',
         ).timeout(const Duration(seconds: 8));
@@ -223,7 +256,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             automationEnabled = decodedSettings['enabled'] == true;
             autoNewProducts = decodedSettings['new_products_enabled'] != false;
             autoWeekly = decodedSettings['weekly_enabled'] == true;
-            weeklyDay = int.tryParse(decodedSettings['weekly_day']?.toString() ?? '') ?? 0;
+            weeklyDay =
+                int.tryParse(decodedSettings['weekly_day']?.toString() ?? '') ??
+                0;
           }
         }
       } catch (_) {
@@ -258,11 +293,13 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       if (!remoteInventorySucceeded && products.isEmpty) {
         try {
           final local = await LocalStorageService.loadLocalProducts();
-          products = _parseProducts(local.entries.map((entry) {
-            final product = Map<String, dynamic>.from(entry.value as Map);
-            product['id'] ??= entry.key;
-            return product;
-          }).toList());
+          products = _parseProducts(
+            local.entries.map((entry) {
+              final product = Map<String, dynamic>.from(entry.value as Map);
+              product['id'] ??= entry.key;
+              return product;
+            }).toList(),
+          );
         } catch (_) {
           // A newly installed account can legitimately have no products.
         }
@@ -287,8 +324,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       // Merge the server's owner-scoped campaign history with local drafts.
       // Local copies win when a recent offline edit has not reached the API.
       try {
-        final historyResponse = await ApiClient.getJson('/growth/marketing/campaigns?limit=50')
-            .timeout(const Duration(seconds: 10));
+        final historyResponse = await ApiClient.getJson(
+          '/growth/marketing/campaigns?limit=50',
+        ).timeout(const Duration(seconds: 10));
         if (historyResponse.statusCode == 200) {
           final decoded = jsonDecode(historyResponse.body);
           final remoteRows = decoded is Map && decoded['campaigns'] is List
@@ -306,23 +344,33 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             final remote = merged[id];
             final localIsPendingSync = item['pending_sync'] == true;
             final localUpdated = DateTime.tryParse(
-              item['updated_at']?.toString() ?? item['created_at']?.toString() ?? '',
+              item['updated_at']?.toString() ??
+                  item['created_at']?.toString() ??
+                  '',
             );
             final remoteUpdated = remote == null
                 ? null
                 : DateTime.tryParse(
-                    remote['updated_at']?.toString() ?? remote['created_at']?.toString() ?? '',
+                    remote['updated_at']?.toString() ??
+                        remote['created_at']?.toString() ??
+                        '',
                   );
             if (remote == null ||
                 localIsPendingSync ||
                 (localUpdated != null &&
-                    (remoteUpdated == null || localUpdated.isAfter(remoteUpdated)))) {
+                    (remoteUpdated == null ||
+                        localUpdated.isAfter(remoteUpdated)))) {
               merged[id] = item;
             }
           }
           campaigns = merged.values.toList()
-            ..sort((a, b) => (b['updated_at'] ?? b['created_at'] ?? '').toString()
-                .compareTo((a['updated_at'] ?? a['created_at'] ?? '').toString()));
+            ..sort(
+              (a, b) => (b['updated_at'] ?? b['created_at'] ?? '')
+                  .toString()
+                  .compareTo(
+                    (a['updated_at'] ?? a['created_at'] ?? '').toString(),
+                  ),
+            );
           if (campaigns.length > 20) campaigns = campaigns.take(20).toList();
           await prefs.setString(_campaignStorageKey, jsonEncode(campaigns));
         }
@@ -338,9 +386,18 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _autoNewProducts = autoNewProducts;
         _autoWeekly = autoWeekly;
         _weeklyDay = weeklyDay.clamp(0, 6).toInt();
+        _upcomingFestival = upcomingFestival;
+        _festivalStatus = festivalStatus;
         _products = products;
         _campaigns = campaigns;
-        _selectedProductKey = products.isEmpty ? null : _productKey(products.first, 0);
+        _selectedProductKey =
+            previousProductKey != null &&
+                products.asMap().entries.any(
+                  (entry) =>
+                      _productKey(entry.value, entry.key) == previousProductKey,
+                )
+            ? previousProductKey
+            : null;
         _loading = false;
       });
 
@@ -357,7 +414,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _message = 'Could not load shop data. You can still create a general shop ad.';
+        _message =
+            'Could not load shop data. You can still create a general shop ad.';
       });
     }
   }
@@ -377,20 +435,24 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final savedProductPrice = draft['original_price'] is num
         ? (draft['original_price'] as num).toDouble()
         : draft['product_price'] is num
-            ? (draft['product_price'] as num).toDouble()
-            : null;
+        ? (draft['product_price'] as num).toDouble()
+        : null;
     final selectedProduct = _selectedProduct;
-    final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
+    final selectedRawId =
+        selectedProduct?['id'] ?? selectedProduct?['product_id'];
     final selectedProductId = selectedRawId?.toString() ?? '';
     final selectedProductName = selectedProduct?['name']?.toString() ?? '';
     final selectedProductPrice = _productPrice(selectedProduct);
-    return
-        _shopController.text.trim() != (draft['shop_name']?.toString() ?? '') ||
-        _headlineController.text.trim() != (draft['headline']?.toString() ?? '') ||
-        _captionController.text.trim() != (draft['caption']?.toString() ?? '') ||
+    return _shopController.text.trim() !=
+            (draft['shop_name']?.toString() ?? '') ||
+        _headlineController.text.trim() !=
+            (draft['headline']?.toString() ?? '') ||
+        _captionController.text.trim() !=
+            (draft['caption']?.toString() ?? '') ||
         _offerController.text.trim() != (draft['offer']?.toString() ?? '') ||
         enteredDiscount != savedDiscount ||
-        _offerValidUntilController.text.trim() != (draft['offer_valid_until']?.toString() ?? '') ||
+        _offerValidUntilController.text.trim() !=
+            (draft['offer_valid_until']?.toString() ?? '') ||
         _goal != (draft['goal']?.toString() ?? 'nearby') ||
         _language != (draft['language']?.toString() ?? 'en') ||
         _template != (draft['template']?.toString() ?? 'bold') ||
@@ -410,8 +472,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return null;
   }
 
+  String get _festivalName =>
+      _upcomingFestival?['name']?.toString().trim() ?? '';
+
+  String get _recommendedTemplate => GrowthCreativePlanner.templateFor(
+    festivalName: _festivalName,
+    productCategory: _selectedProduct?['category']?.toString(),
+  );
+
   Future<void> _persistCampaign(Map<String, dynamic> campaign) async {
-    final id = campaign['id']?.toString() ?? campaign['campaign_id']?.toString();
+    final id =
+        campaign['id']?.toString() ?? campaign['campaign_id']?.toString();
     if (id == null || id.isEmpty) return;
     final localDraft = Map<String, dynamic>.from(campaign)
       ..['id'] = id
@@ -434,39 +505,41 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     try {
       final rawProductId = localDraft['product_id'];
       final discountValue = localDraft['discount_price'];
-      final response = await ApiClient.postJson(
-        '/growth/marketing/campaigns',
-        <String, dynamic>{
-          'campaign_id': id,
-          'goal': localDraft['goal']?.toString() ?? 'nearby',
-          'language': localDraft['language']?.toString() ?? 'en',
-          'ad_format': localDraft['ad_format']?.toString() ?? 'feed',
-          'template': localDraft['template']?.toString() ?? 'bold',
-          'product_id': rawProductId == null ? null : int.tryParse(rawProductId.toString()),
-          'product_name': localDraft['product_name']?.toString() ?? '',
-          'product_price': localDraft['product_price'] == null
-              ? null
-              : _number(localDraft['product_price']),
-          'discount_price': discountValue == null
-              ? null
-              : _number(discountValue),
-          'offer_valid_until': localDraft['offer_valid_until']?.toString(),
-          'headline': localDraft['headline']?.toString() ?? '',
-          'caption': localDraft['caption']?.toString() ?? '',
-          'offer': localDraft['offer']?.toString() ?? '',
-          'offer_code': localDraft['offer_code']?.toString() ?? '',
-          'generation_source': localDraft['generation_source']?.toString() ?? 'manual',
-          'trigger_type': localDraft['trigger_type']?.toString() ?? 'manual',
-          'submit_for_approval': true,
-          'redemptions': _number(localDraft['redemptions']).toInt(),
-        },
-      ).timeout(const Duration(seconds: 12));
+      final response = await ApiClient.postJson('/growth/marketing/campaigns', <
+        String,
+        dynamic
+      >{
+        'campaign_id': id,
+        'goal': localDraft['goal']?.toString() ?? 'nearby',
+        'language': localDraft['language']?.toString() ?? 'en',
+        'ad_format': localDraft['ad_format']?.toString() ?? 'feed',
+        'template': localDraft['template']?.toString() ?? 'bold',
+        'product_id': rawProductId == null
+            ? null
+            : int.tryParse(rawProductId.toString()),
+        'product_name': localDraft['product_name']?.toString() ?? '',
+        'product_price': localDraft['product_price'] == null
+            ? null
+            : _number(localDraft['product_price']),
+        'discount_price': discountValue == null ? null : _number(discountValue),
+        'offer_valid_until': localDraft['offer_valid_until']?.toString(),
+        'headline': localDraft['headline']?.toString() ?? '',
+        'caption': localDraft['caption']?.toString() ?? '',
+        'offer': localDraft['offer']?.toString() ?? '',
+        'offer_code': localDraft['offer_code']?.toString() ?? '',
+        'generation_source':
+            localDraft['generation_source']?.toString() ?? 'manual',
+        'trigger_type': localDraft['trigger_type']?.toString() ?? 'manual',
+        'submit_for_approval': true,
+        'redemptions': _number(localDraft['redemptions']).toInt(),
+      }).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map) {
           final remote = Map<String, dynamic>.from(decoded)
             ..['tracking_mode'] = 'manual_local'
             ..['product_price'] ??= localDraft['product_price']
+            ..['festival_name'] = localDraft['festival_name']
             ..['pending_sync'] = false
             ..['requires_owner_review'] = true;
           _campaigns.removeWhere(
@@ -474,13 +547,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           );
           _campaigns.insert(0, remote);
           if (_currentDraft != null &&
-              (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id) {
+              (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])
+                      ?.toString() ==
+                  id) {
             _currentDraft = remote;
           }
           final serverShopName = remote['shop_name']?.toString().trim() ?? '';
           if (serverShopName.isNotEmpty) _shopController.text = serverShopName;
           if (remote['shop_details'] is Map) {
-            _shopDetails = Map<String, dynamic>.from(remote['shop_details'] as Map);
+            _shopDetails = Map<String, dynamic>.from(
+              remote['shop_details'] as Map,
+            );
           }
           if (_campaigns.length > 20) {
             _campaigns = _campaigns.take(20).toList();
@@ -488,10 +565,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
           if (mounted) setState(() {});
         } else {
-          _showMessage('Campaign saved locally. Server response was not recognized; approval sync is pending.');
+          _showMessage(
+            'Campaign saved locally. Server response was not recognized; approval sync is pending.',
+          );
         }
       } else {
-        _showMessage('Campaign saved locally. Server approval sync is pending.');
+        _showMessage(
+          'Campaign saved locally. Server approval sync is pending.',
+        );
       }
     } catch (_) {
       // Keep a local pending-sync marker; the next refresh will retry this draft.
@@ -521,11 +602,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   }
 
   String _shopPhoneText() =>
-      (_shopDetails['phone'] ?? _shopDetails['phone_number'] ?? '').toString().trim();
+      (_shopDetails['phone'] ?? _shopDetails['phone_number'] ?? '')
+          .toString()
+          .trim();
 
   String _formatDate(DateTime value) =>
-      value.year.toString().padLeft(4, '0') + '-' +
-      value.month.toString().padLeft(2, '0') + '-' +
+      value.year.toString().padLeft(4, '0') +
+      '-' +
+      value.month.toString().padLeft(2, '0') +
+      '-' +
       value.day.toString().padLeft(2, '0');
 
   Future<void> _saveAutomationSettings({
@@ -577,13 +662,21 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           _weeklyDay = previousWeeklyDay;
         });
       }
-      _showMessage('Could not save automation settings. Check your connection and try again.');
+      _showMessage(
+        'Could not save automation settings. Check your connection and try again.',
+      );
     }
   }
 
   Widget _automationSettingsCard() {
     const days = <String>[
-      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
     ];
     return Container(
       padding: const EdgeInsets.all(14),
@@ -597,7 +690,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         children: [
           const Text(
             'Automatic campaign drafts',
-            style: TextStyle(color: _ink, fontWeight: FontWeight.w800, fontSize: 15),
+            style: TextStyle(
+              color: _ink,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -607,14 +704,20 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Enable marketing automation'),
-            subtitle: const Text('Master switch for automatic draft generation'),
+            subtitle: const Text(
+              'Master switch for automatic draft generation',
+            ),
             value: _automationEnabled,
-            onChanged: _busy ? null : (value) => _saveAutomationSettings(enabled: value),
+            onChanged: _busy
+                ? null
+                : (value) => _saveAutomationSettings(enabled: value),
           ),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('New product drafts'),
-            subtitle: const Text('Prepare a draft when a new in-stock product is added'),
+            subtitle: const Text(
+              'Prepare a draft when a new in-stock product is added',
+            ),
             value: _autoNewProducts,
             onChanged: !_automationEnabled || _busy
                 ? null
@@ -623,7 +726,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Weekly shop promotion'),
-            subtitle: const Text('Prepare at most one weekly product highlight'),
+            subtitle: const Text(
+              'Prepare at most one weekly product highlight',
+            ),
             value: _autoWeekly,
             onChanged: !_automationEnabled || _busy
                 ? null
@@ -647,7 +752,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               onChanged: _busy || !_automationEnabled
                   ? null
                   : (value) {
-                      if (value != null) _saveAutomationSettings(weeklyDay: value);
+                      if (value != null)
+                        _saveAutomationSettings(weeklyDay: value);
                     },
             ),
           const SizedBox(height: 4),
@@ -669,24 +775,44 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
 
     final product = _selectedProduct;
-    final productName = product?['name']?.toString() ?? '';
+    if (product == null) {
+      _showMessage(
+        _products.isEmpty
+            ? 'Add an in-stock product before creating a product advertisement.'
+            : 'Choose the product you want to feature first.',
+      );
+      return;
+    }
+    final productName = product['name']?.toString() ?? '';
     final originalPrice = _productPrice(product);
-    final rawProductId = product?['id'] ?? product?['product_id'];
-    final productId = rawProductId == null ? null : int.tryParse(rawProductId.toString());
+    final rawProductId = product['id'] ?? product['product_id'];
+    final productId = rawProductId == null
+        ? null
+        : int.tryParse(rawProductId.toString());
+    final festivalName = _festivalName;
+    final creativeTemplate = _recommendedTemplate;
+    const creativeGoal = 'nearby';
+    const creativeFormat = 'feed';
     final discountText = _discountPriceController.text.trim();
     double? discountPrice;
     if (discountText.isNotEmpty) {
       discountPrice = double.tryParse(discountText);
-      if (discountPrice == null || !discountPrice.isFinite || discountPrice < 0) {
+      if (discountPrice == null ||
+          !discountPrice.isFinite ||
+          discountPrice < 0) {
         _showMessage('Enter a valid discounted price.');
         return;
       }
       if (productId == null || originalPrice == null) {
-        _showMessage('Select a server-synced product with a verified price before adding a discount.');
+        _showMessage(
+          'Select a server-synced product with a verified price before adding a discount.',
+        );
         return;
       }
       if (discountPrice >= originalPrice) {
-        _showMessage('Discounted price must be lower than the original product price.');
+        _showMessage(
+          'Discounted price must be lower than the original product price.',
+        );
         return;
       }
     }
@@ -701,13 +827,19 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       }
       final today = DateTime.now();
       final todayDate = DateTime(today.year, today.month, today.day);
-      final expiryDate = DateTime(offerValidUntil.year, offerValidUntil.month, offerValidUntil.day);
+      final expiryDate = DateTime(
+        offerValidUntil.year,
+        offerValidUntil.month,
+        offerValidUntil.day,
+      );
       if (expiryDate.isBefore(todayDate)) {
         _showMessage('Offer end date cannot be in the past.');
         return;
       }
       if (discountPrice == null) {
-        _showMessage('Enter a discounted price before setting an offer end date.');
+        _showMessage(
+          'Enter a discounted price before setting an offer end date.',
+        );
         return;
       }
     }
@@ -717,14 +849,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       final now = DateTime.now();
       final code = GrowthAdCopy.offerCode(now);
       final offerText = _offerController.text.trim();
-      var headline = GrowthAdCopy.headline(_goal, _language);
+      var headline = GrowthAdCopy.headline(creativeGoal, _language);
       var caption = GrowthAdCopy.caption(
         shopName: shop,
-        goal: _goal,
+        goal: creativeGoal,
         language: _language,
         productName: productName,
         price: discountPrice ?? originalPrice,
         offer: offerText,
+        festivalName: festivalName,
         offerCode: code,
       );
       final locationText = _shopAddressText();
@@ -733,7 +866,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         originalPrice,
         discountPrice,
       );
-      if (discountPrice != null && originalPrice != null && discountPercent != null) {
+      if (discountPrice != null &&
+          originalPrice != null &&
+          discountPercent != null) {
         caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
         caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
         caption += '\n' + discountPercent.toStringAsFixed(2) + '% OFF';
@@ -741,7 +876,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       if (offerValidUntil != null) {
         caption += '\nOffer valid until: ' + _formatDate(offerValidUntil);
       }
-      if (locationText.isNotEmpty) caption += '\nShop location: ' + locationText;
+      if (locationText.isNotEmpty)
+        caption += '\nShop location: ' + locationText;
       if (phoneText.isNotEmpty) caption += '\nContact: ' + phoneText;
 
       var generationSource = 'local_template';
@@ -760,15 +896,17 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         final response = await ApiClient.postJson(
           '/growth/marketing/generate',
           <String, dynamic>{
-            'goal': _goal,
+            'goal': creativeGoal,
             'language': _language,
-            'ad_format': _adFormat,
+            'ad_format': creativeFormat,
             'product_id': productId,
             'product_name': productName,
             'offer': offerText,
             'offer_code': code,
             'discount_price': discountPrice,
-            'offer_valid_until': offerValidUntil == null ? null : _formatDate(offerValidUntil),
+            'offer_valid_until': offerValidUntil == null
+                ? null
+                : _formatDate(offerValidUntil),
           },
         ).timeout(const Duration(seconds: 18));
 
@@ -781,11 +919,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             if (serverHeadline.isNotEmpty && serverCaption.isNotEmpty) {
               headline = serverHeadline;
               caption = serverCaption;
-              generationSource = data['generation_source']?.toString() ?? 'server';
+              generationSource =
+                  data['generation_source']?.toString() ?? 'server';
               authoritativeShopName = data['shop_name']?.toString() ?? shop;
-              authoritativeProductId = int.tryParse(data['product_id']?.toString() ?? '') ?? productId;
+              authoritativeProductId =
+                  int.tryParse(data['product_id']?.toString() ?? '') ??
+                  productId;
               if (data['shop_details'] is Map) {
-                authoritativeShopDetails = Map<String, dynamic>.from(data['shop_details'] as Map);
+                authoritativeShopDetails = Map<String, dynamic>.from(
+                  data['shop_details'] as Map,
+                );
               }
               authoritativeOriginalPrice = data['original_price'] is num
                   ? (data['original_price'] as num).toDouble()
@@ -796,41 +939,62 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               authoritativeDiscountPercent = data['discount_percent'] is num
                   ? (data['discount_percent'] as num).toDouble()
                   : authoritativeDiscountPercent;
-              offerValidUntil = DateTime.tryParse(data['offer_valid_until']?.toString() ?? '') ?? offerValidUntil;
+              offerValidUntil =
+                  DateTime.tryParse(
+                    data['offer_valid_until']?.toString() ?? '',
+                  ) ??
+                  offerValidUntil;
             }
           }
         } else if (discountPrice != null) {
-          String detail = 'The server could not verify this discount. Check the product price and try again.';
+          String detail =
+              'The server could not verify this discount. Check the product price and try again.';
           try {
             final body = jsonDecode(response.body);
-            if (body is Map && body['detail'] != null) detail = body['detail'].toString();
+            if (body is Map && body['detail'] != null)
+              detail = body['detail'].toString();
           } catch (_) {}
           throw StateError(detail);
         }
       } catch (error) {
         if (discountPrice != null) {
-          _showMessage(error is StateError ? error.message : 'Discount verification is unavailable. Try again when online.');
+          _showMessage(
+            error is StateError
+                ? error.message
+                : 'Discount verification is unavailable. Try again when online.',
+          );
           return;
         }
         // A no-discount campaign can still be drafted offline using the last
         // loaded shop profile. It remains local and requires owner review.
       }
 
+      if (festivalName.isNotEmpty) {
+        final festivalLine = GrowthAdCopy.festivalInvitation(
+          festivalName,
+          _language,
+        );
+        if (!caption.contains(festivalLine)) caption += '\n' + festivalLine;
+      }
+
       final draft = <String, dynamic>{
         'id': now.microsecondsSinceEpoch.toString(),
         'shop_name': authoritativeShopName,
         'shop_details': authoritativeShopDetails,
-        'goal': _goal,
+        'goal': creativeGoal,
         'language': _language,
-        'template': _template,
-        'ad_format': _adFormat,
+        'template': creativeTemplate,
+        'festival_name': festivalName,
+        'ad_format': creativeFormat,
         'product_id': authoritativeProductId,
         'product_name': productName,
         'product_price': authoritativeOriginalPrice,
         'original_price': authoritativeOriginalPrice,
         'discount_price': authoritativeDiscountPrice,
         'discount_percent': authoritativeDiscountPercent,
-        'offer_valid_until': offerValidUntil == null ? null : _formatDate(offerValidUntil),
+        'offer_valid_until': offerValidUntil == null
+            ? null
+            : _formatDate(offerValidUntil),
         'headline': headline,
         'caption': caption,
         'offer': offerText,
@@ -840,7 +1004,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         'redemptions': 0,
         'tracking_mode': 'manual_local',
         'generation_source': generationSource,
-        'trigger_type': authoritativeDiscountPrice != null || offerText.isNotEmpty ? 'owner_offer' : 'manual',
+        'trigger_type':
+            authoritativeDiscountPrice != null || offerText.isNotEmpty
+            ? 'owner_offer'
+            : 'manual',
         'content_version': 1,
         'status': 'PENDING_APPROVAL',
         'pending_sync': true,
@@ -849,10 +1016,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
       _shopDetails = authoritativeShopDetails;
       _shopController.text = authoritativeShopName;
+      _goal = creativeGoal;
+      _template = creativeTemplate;
+      _adFormat = creativeFormat;
       _discountPriceController.text = authoritativeDiscountPrice == null
           ? ''
           : authoritativeDiscountPrice.toString();
-      _offerValidUntilController.text = offerValidUntil == null ? '' : _formatDate(offerValidUntil);
+      _offerValidUntilController.text = offerValidUntil == null
+          ? ''
+          : _formatDate(offerValidUntil);
       _currentDraft = draft;
       _headlineController.text = headline;
       _captionController.text = caption;
@@ -862,11 +1034,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         generationSource == 'groq'
             ? 'AI campaign draft generated. Review the shop details, price and discount before approving.'
             : generationSource == 'template_fallback'
-                ? 'Campaign draft generated with verified shop data. Review it before approving.'
-                : 'Campaign draft saved. Review it before approving.',
+            ? 'Campaign draft generated with verified shop data. Review it before approving.'
+            : 'Campaign draft saved. Review it before approving.',
       );
     } catch (error) {
-      _showMessage(error is StateError ? error.message : 'Campaign draft could not be generated or saved.');
+      _showMessage(
+        error is StateError
+            ? error.message
+            : 'Campaign draft could not be generated or saved.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -879,24 +1055,30 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final shopName = _shopController.text.trim();
     final offer = _offerController.text.trim();
     final selectedProduct = _selectedProduct;
-    final selectedRawId = selectedProduct?['id'] ?? selectedProduct?['product_id'];
-    final selectedProductId = selectedRawId == null ? null : int.tryParse(selectedRawId.toString());
-    final savedProductId = current['product_id'] == null ? null : int.tryParse(current['product_id'].toString());
+    final selectedRawId =
+        selectedProduct?['id'] ?? selectedProduct?['product_id'];
+    final selectedProductId = selectedRawId == null
+        ? null
+        : int.tryParse(selectedRawId.toString());
+    final savedProductId = current['product_id'] == null
+        ? null
+        : int.tryParse(current['product_id'].toString());
     final savedProductName = current['product_name']?.toString() ?? '';
     final selectedProductName = selectedProduct?['name']?.toString() ?? '';
-    final productChanged = selectedProductId != savedProductId ||
+    final productChanged =
+        selectedProductId != savedProductId ||
         selectedProductName != savedProductName;
     final productName = selectedProductName;
     final savedOriginalPrice = current['original_price'] is num
         ? (current['original_price'] as num).toDouble()
         : current['product_price'] is num
-            ? (current['product_price'] as num).toDouble()
-            : null;
+        ? (current['product_price'] as num).toDouble()
+        : null;
     final originalPrice = selectedProduct != null
         ? _productPrice(selectedProduct)
         : (savedProductId == null && selectedProductId == null)
-            ? savedOriginalPrice
-            : null;
+        ? savedOriginalPrice
+        : null;
     final priceChanged = originalPrice != savedOriginalPrice;
 
     final discountText = _discountPriceController.text.trim();
@@ -908,20 +1090,27 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           discountPrice < 0 ||
           discountPrice >= originalPrice ||
           selectedProductId == null) {
-        _showMessage('Select a server-synced product and enter a valid lower discounted price.');
+        _showMessage(
+          'Select a server-synced product and enter a valid lower discounted price.',
+        );
         return null;
       }
     }
     DateTime? offerValidUntil;
     if (_offerValidUntilController.text.trim().isNotEmpty) {
-      offerValidUntil = DateTime.tryParse(_offerValidUntilController.text.trim());
+      offerValidUntil = DateTime.tryParse(
+        _offerValidUntilController.text.trim(),
+      );
       if (offerValidUntil == null || discountPrice == null) {
         _showMessage('Enter a valid offer end date and discounted price.');
         return null;
       }
       final now = DateTime.now();
-      if (DateTime(offerValidUntil.year, offerValidUntil.month, offerValidUntil.day)
-          .isBefore(DateTime(now.year, now.month, now.day))) {
+      if (DateTime(
+        offerValidUntil.year,
+        offerValidUntil.month,
+        offerValidUntil.day,
+      ).isBefore(DateTime(now.year, now.month, now.day))) {
         _showMessage('Offer end date cannot be in the past.');
         return null;
       }
@@ -932,11 +1121,23 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final captionWasNotManuallyEdited = caption == originalCaption;
     final shopChanged = shopName != (current['shop_name']?.toString() ?? '');
     final offerChanged = offer != (current['offer']?.toString() ?? '');
-    final discountChanged = discountPrice != (current['discount_price'] is num ? (current['discount_price'] as num).toDouble() : null);
-    final dateText = offerValidUntil == null ? '' : _formatDate(offerValidUntil);
-    final dateChanged = dateText != (current['offer_valid_until']?.toString() ?? '');
+    final discountChanged =
+        discountPrice !=
+        (current['discount_price'] is num
+            ? (current['discount_price'] as num).toDouble()
+            : null);
+    final dateText = offerValidUntil == null
+        ? ''
+        : _formatDate(offerValidUntil);
+    final dateChanged =
+        dateText != (current['offer_valid_until']?.toString() ?? '');
     if (captionWasNotManuallyEdited &&
-        (shopChanged || offerChanged || discountChanged || dateChanged || productChanged || priceChanged)) {
+        (shopChanged ||
+            offerChanged ||
+            discountChanged ||
+            dateChanged ||
+            productChanged ||
+            priceChanged)) {
       caption = GrowthAdCopy.caption(
         shopName: shopName,
         goal: current['goal']?.toString() ?? 'nearby',
@@ -944,19 +1145,27 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         productName: productName,
         price: discountPrice ?? originalPrice,
         offer: offer,
+        festivalName: current['festival_name']?.toString(),
         offerCode: current['offer_code']?.toString() ?? '',
       );
-      final percent = GrowthMarketingPricing.discountPercent(originalPrice, discountPrice);
+      final percent = GrowthMarketingPricing.discountPercent(
+        originalPrice,
+        discountPrice,
+      );
       if (discountPrice != null && originalPrice != null && percent != null) {
         caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
         caption += '\nDiscounted price: ₹' + discountPrice.toStringAsFixed(2);
         caption += '\n' + percent.toStringAsFixed(2) + '% OFF';
       }
-      if (offerValidUntil != null) caption += '\nOffer valid until: ' + dateText;
+      if (offerValidUntil != null)
+        caption += '\nOffer valid until: ' + dateText;
     }
     // Keep verified facts in the caption even when the owner edits its wording.
     if (discountPrice != null && originalPrice != null) {
-      final percent = GrowthMarketingPricing.discountPercent(originalPrice, discountPrice);
+      final percent = GrowthMarketingPricing.discountPercent(
+        originalPrice,
+        discountPrice,
+      );
       if (!caption.contains('Original price:')) {
         caption += '\nOriginal price: ₹' + originalPrice.toStringAsFixed(2);
       }
@@ -993,17 +1202,23 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       ..['original_price'] = originalPrice
       ..['product_price'] = originalPrice
       ..['discount_price'] = discountPrice
-      ..['discount_percent'] = GrowthMarketingPricing.discountPercent(originalPrice, discountPrice)
+      ..['discount_percent'] = GrowthMarketingPricing.discountPercent(
+        originalPrice,
+        discountPrice,
+      )
       ..['offer_valid_until'] = offerValidUntil == null ? null : dateText
       ..['headline'] = _headlineController.text.trim()
       ..['caption'] = caption
       ..['offer'] = offer
-      ..['trigger_type'] = discountPrice != null || offer.isNotEmpty ? 'owner_offer' : 'manual'
+      ..['trigger_type'] = discountPrice != null || offer.isNotEmpty
+          ? 'owner_offer'
+          : 'manual'
       ..['goal'] = _goal
       ..['language'] = _language
       ..['template'] = _template
       ..['ad_format'] = _adFormat
-      ..['content_version'] = (_number(current['content_version']).toInt()).clamp(1, 2147483646) + 1
+      ..['content_version'] =
+          (_number(current['content_version']).toInt()).clamp(1, 2147483646) + 1
       ..['approved_version'] = null
       ..['approved_by'] = null
       ..['approved_at'] = null
@@ -1024,7 +1239,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         _hasUnsavedCampaignEdits) {
       final saved = await _saveCurrentEdits();
       if (saved != null) {
-        _showMessage('Your edits were saved as a new pending version. Review that version and approve it separately.');
+        _showMessage(
+          'Your edits were saved as a new pending version. Review that version and approve it separately.',
+        );
       }
       return;
     }
@@ -1041,22 +1258,36 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         <String, dynamic>{'expected_version': version},
       ).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
-        throw StateError('Approval failed. Refresh the campaign and review its latest version.');
+        throw StateError(
+          'Approval failed. Refresh the campaign and review its latest version.',
+        );
       }
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map) throw StateError('The approval response was not recognized.');
-      final approved = Map<String, dynamic>.from(decoded)..['pending_sync'] = false;
-      _campaigns.removeWhere((item) => (item['campaign_id'] ?? item['id'])?.toString() == id);
+      if (decoded is! Map)
+        throw StateError('The approval response was not recognized.');
+      final approved = Map<String, dynamic>.from(decoded)
+        ..['pending_sync'] = false;
+      _campaigns.removeWhere(
+        (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
+      );
       _campaigns.insert(0, approved);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
-      if (_currentDraft != null && (_currentDraft!['id'] ?? _currentDraft!['campaign_id'])?.toString() == id) {
+      if (_currentDraft != null &&
+          (_currentDraft!['id'] ?? _currentDraft!['campaign_id'])?.toString() ==
+              id) {
         _currentDraft = approved;
       }
       if (mounted) setState(() {});
-      _showMessage('Campaign approved. You can now share the approved poster manually.');
+      _showMessage(
+        'Campaign approved. You can now share the approved poster manually.',
+      );
     } catch (error) {
-      _showMessage(error is StateError ? error.message : 'Could not approve this campaign.');
+      _showMessage(
+        error is StateError
+            ? error.message
+            : 'Could not approve this campaign.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1080,33 +1311,49 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         },
       ).timeout(const Duration(seconds: 12));
       if (response.statusCode != 200) {
-        throw StateError('Rejection failed. Refresh the campaign and try again.');
+        throw StateError(
+          'Rejection failed. Refresh the campaign and try again.',
+        );
       }
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map) throw StateError('The rejection response was not recognized.');
-      final rejected = Map<String, dynamic>.from(decoded)..['pending_sync'] = false;
-      _campaigns.removeWhere((item) => (item['campaign_id'] ?? item['id'])?.toString() == id);
+      if (decoded is! Map)
+        throw StateError('The rejection response was not recognized.');
+      final rejected = Map<String, dynamic>.from(decoded)
+        ..['pending_sync'] = false;
+      _campaigns.removeWhere(
+        (item) => (item['campaign_id'] ?? item['id'])?.toString() == id,
+      );
       _campaigns.insert(0, rejected);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
-      if (_currentDraft != null && (_currentDraft!['id'] ?? _currentDraft!['campaign_id'])?.toString() == id) {
+      if (_currentDraft != null &&
+          (_currentDraft!['id'] ?? _currentDraft!['campaign_id'])?.toString() ==
+              id) {
         _currentDraft = rejected;
       }
       if (mounted) setState(() {});
-      _showMessage('Campaign rejected. It will not be eligible for sharing until a new version is reviewed.');
+      _showMessage(
+        'Campaign rejected. It will not be eligible for sharing until a new version is reviewed.',
+      );
     } catch (error) {
-      _showMessage(error is StateError ? error.message : 'Could not reject this campaign.');
+      _showMessage(
+        error is StateError ? error.message : 'Could not reject this campaign.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<Map<String, dynamic>?> _refreshCampaignFromServer(String campaignId) async {
+  Future<Map<String, dynamic>?> _refreshCampaignFromServer(
+    String campaignId,
+  ) async {
     final response = await ApiClient.getJson(
       '/growth/marketing/campaigns?limit=100',
     ).timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) {
-      throw StateError('Could not verify the latest campaign approval. Connect to the internet and retry.');
+      throw StateError(
+        'Could not verify the latest campaign approval. Connect to the internet and retry.',
+      );
     }
     final decoded = jsonDecode(response.body);
     final rows = decoded is Map && decoded['campaigns'] is List
@@ -1131,7 +1378,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     if (_campaigns.length > 20) _campaigns = _campaigns.take(20).toList();
 
     if (_currentDraft != null &&
-        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == campaignId) {
+        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() ==
+            campaignId) {
       _currentDraft = latest;
     }
     final prefs = await SharedPreferences.getInstance();
@@ -1145,8 +1393,13 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     if (_busy || draft == null) return;
     final version = _number(draft['content_version']).toInt();
     final approvedVersion = _number(draft['approved_version']).toInt();
-    if (draft['status'] != 'APPROVED' || version < 1 || approvedVersion != version || _hasUnsavedCampaignEdits) {
-      _showMessage('Only the unchanged, server-approved campaign version can be shared.');
+    if (draft['status'] != 'APPROVED' ||
+        version < 1 ||
+        approvedVersion != version ||
+        _hasUnsavedCampaignEdits) {
+      _showMessage(
+        'Only the unchanged, server-approved campaign version can be shared.',
+      );
       return;
     }
     setState(() => _busy = true);
@@ -1157,11 +1410,15 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           latest['status'] != 'APPROVED' ||
           _number(latest['content_version']).toInt() != version ||
           _number(latest['approved_version']).toInt() != version) {
-        _showMessage('This campaign version is no longer approved. Refresh and review the latest version.');
+        _showMessage(
+          'This campaign version is no longer approved. Refresh and review the latest version.',
+        );
         return;
       }
       if (_hasUnsavedCampaignEdits) {
-        _showMessage('This campaign has unsaved edits. Save the new version and approve it before sharing.');
+        _showMessage(
+          'This campaign has unsaved edits. Save the new version and approve it before sharing.',
+        );
         return;
       }
       await WidgetsBinding.instance.endOfFrame;
@@ -1198,15 +1455,20 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     final id = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
     final version = _number(campaign['content_version']).toInt();
     final approvedVersion = _number(campaign['approved_version']).toInt();
-    if (id.isEmpty || campaign['status'] != 'APPROVED' ||
-        version < 1 || approvedVersion != version) {
+    if (id.isEmpty ||
+        campaign['status'] != 'APPROVED' ||
+        version < 1 ||
+        approvedVersion != version) {
       _showMessage('Only an approved campaign caption can be shared.');
       return;
     }
     if (_currentDraft != null &&
-        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id &&
+        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() ==
+            id &&
         _hasUnsavedCampaignEdits) {
-      _showMessage('Save your edits and obtain approval for the new version before sharing.');
+      _showMessage(
+        'Save your edits and obtain approval for the new version before sharing.',
+      );
       return;
     }
     try {
@@ -1215,7 +1477,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           latest['status'] != 'APPROVED' ||
           _number(latest['content_version']).toInt() != version ||
           _number(latest['approved_version']).toInt() != version) {
-        _showMessage('This campaign version is no longer approved. Review the latest version.');
+        _showMessage(
+          'This campaign version is no longer approved. Review the latest version.',
+        );
         return;
       }
       final caption = latest['caption']?.toString().trim() ?? '';
@@ -1225,7 +1489,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       }
       await Share.share(caption);
     } catch (_) {
-      _showMessage('Could not verify this campaign approval. Connect to the internet and retry.');
+      _showMessage(
+        'Could not verify this campaign approval. Connect to the internet and retry.',
+      );
     }
   }
 
@@ -1244,14 +1510,18 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     );
     _campaigns.insert(0, updated);
     if (_currentDraft != null &&
-        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() == id) {
+        (_currentDraft!['campaign_id'] ?? _currentDraft!['id'])?.toString() ==
+            id) {
       _currentDraft = updated;
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_campaignStorageKey, jsonEncode(_campaigns));
     if (mounted) setState(() {});
-    _showMessage('Manual redemption count updated on this device only. It does not change campaign approval.');
+    _showMessage(
+      'Manual redemption count updated on this device only. It does not change campaign approval.',
+    );
   }
+
   void _openCampaignForEditing(Map<String, dynamic> campaign) {
     final draft = Map<String, dynamic>.from(campaign);
     final productName = draft['product_name']?.toString() ?? '';
@@ -1261,12 +1531,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     String? matchingProductKey;
     for (var i = 0; i < _products.length; i++) {
       final product = _products[i];
-      final sameName =
-          (product['name']?.toString() ?? '') == productName;
+      final sameName = (product['name']?.toString() ?? '') == productName;
       final currentPrice = _productPrice(product);
-      final samePrice = draftPrice == null ||
-          (currentPrice != null &&
-              (currentPrice - draftPrice).abs() < 0.001);
+      final samePrice =
+          draftPrice == null ||
+          (currentPrice != null && (currentPrice - draftPrice).abs() < 0.001);
       if (productName.isNotEmpty && sameName && samePrice) {
         matchingProductKey = _productKey(product, i);
         break;
@@ -1281,32 +1550,32 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           : _shopDetails;
       _offerController.text = draft['offer']?.toString() ?? '';
       _discountPriceController.text = draft['discount_price']?.toString() ?? '';
-      _offerValidUntilController.text = draft['offer_valid_until']?.toString() ?? '';
+      _offerValidUntilController.text =
+          draft['offer_valid_until']?.toString() ?? '';
       _headlineController.text = draft['headline']?.toString() ?? '';
       _captionController.text = draft['caption']?.toString() ?? '';
       final goal = draft['goal']?.toString() ?? 'nearby';
-      _goal = const {
-        'nearby',
-        'new_product',
-        'clear_stock',
-        'regular_customers',
-      }.contains(goal)
+      _goal =
+          const {
+            'nearby',
+            'new_product',
+            'clear_stock',
+            'regular_customers',
+          }.contains(goal)
           ? goal
           : 'nearby';
       final language = draft['language']?.toString() ?? 'en';
-      _language = const {'en', 'te', 'hi'}.contains(language)
-          ? language
-          : 'en';
+      _language = const {'en', 'te', 'hi'}.contains(language) ? language : 'en';
       final savedTemplate = draft['template']?.toString() ?? 'bold';
-      _template = const {'bold', 'festive', 'fresh', 'minimal'}
-              .contains(savedTemplate)
+      _template =
+          const {'bold', 'festive', 'fresh', 'minimal'}.contains(savedTemplate)
           ? savedTemplate
           : 'bold';
       final savedFormat = draft['ad_format']?.toString() ?? 'feed';
       _adFormat = const {'feed', 'square', 'story'}.contains(savedFormat)
           ? savedFormat
           : 'feed';
-      _selectedProductKey = matchingProductKey ?? '';
+      _selectedProductKey = matchingProductKey;
     });
     _showMessage(
       matchingProductKey == null && productName.isNotEmpty
@@ -1314,7 +1583,6 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           : 'Draft reopened. Review it before sharing.',
     );
   }
-
 
   Future<void> _openCreativeStudio() async {
     try {
@@ -1339,7 +1607,8 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   Widget build(BuildContext context) {
     final draftStatus = _currentDraft?['status']?.toString() ?? '';
     final draftVersion = _number(_currentDraft?['content_version']).toInt();
-    final isApproved = draftStatus == 'APPROVED' &&
+    final isApproved =
+        draftStatus == 'APPROVED' &&
         draftVersion > 0 &&
         _number(_currentDraft?['approved_version']).toInt() == draftVersion &&
         !_hasUnsavedCampaignEdits;
@@ -1356,12 +1625,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         elevation: 0,
         actions: [
           IconButton(
-            tooltip: 'Open Adobe Express Creative Studio',
+            tooltip: 'Open the optional Adobe Express editor',
             onPressed: _openCreativeStudio,
             icon: const Icon(Icons.palette_outlined, color: _purple),
           ),
           IconButton(
-            tooltip: AppLocalizations.of(context).translate('Refresh shop data'),
+            tooltip: AppLocalizations.of(
+              context,
+            ).translate('Refresh shop data'),
             onPressed: _loading ? null : _loadWorkspace,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -1376,20 +1647,22 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
                   _hero(),
-                  const SizedBox(height: 14),
-                  _automationSettingsCard(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
                   if (_message.isNotEmpty) ...[
                     _notice(_message),
                     const SizedBox(height: 12),
                   ],
-                  _sectionTitle('1. Tell us about your promotion',
-                      'The free assistant uses your real in-stock products.'),
+                  _sectionTitle(
+                    '1. Your ad plan',
+                    'Your shop profile, in-stock items and upcoming festivals shape the design automatically.',
+                  ),
                   const SizedBox(height: 10),
                   _buildCampaignForm(),
                   const SizedBox(height: 18),
-                  _sectionTitle('2. Preview and edit your advertisement',
-                      'Check every price and offer before sharing.'),
+                  _sectionTitle(
+                    '2. Preview and review',
+                    'Check every detail. Sharing stays locked until you approve the campaign.',
+                  ),
                   const SizedBox(height: 10),
                   if (_currentDraft == null)
                     _emptyPreview()
@@ -1412,25 +1685,36 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFFFBEB),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFFDE68A)),
+                                border: Border.all(
+                                  color: const Color(0xFFFDE68A),
+                                ),
                               ),
                               child: const Text(
                                 'Review this exact campaign version. Sharing is disabled until the owner approves it.',
-                                style: TextStyle(color: Color(0xFF92400E), fontSize: 12),
+                                style: TextStyle(
+                                  color: Color(0xFF92400E),
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 10),
                             FilledButton.icon(
-                              onPressed: _busy ? null : () => _approveCampaign(_currentDraft!),
+                              onPressed: _busy
+                                  ? null
+                                  : () => _approveCampaign(_currentDraft!),
                               icon: const Icon(Icons.check_circle_outline),
                               label: const Text('Approve campaign'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF15803D),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                               ),
                             ),
                             OutlinedButton.icon(
-                              onPressed: _busy ? null : () => _rejectCampaign(_currentDraft!),
+                              onPressed: _busy
+                                  ? null
+                                  : () => _rejectCampaign(_currentDraft!),
                               icon: const Icon(Icons.cancel_outlined),
                               label: const Text('Reject campaign'),
                             ),
@@ -1440,11 +1724,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF0FDF4),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                                border: Border.all(
+                                  color: const Color(0xFFBBF7D0),
+                                ),
                               ),
                               child: const Text(
                                 'Approved version. You can now share this poster manually.',
-                                style: TextStyle(color: Color(0xFF166534), fontSize: 12),
+                                style: TextStyle(
+                                  color: Color(0xFF166534),
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -1460,17 +1749,25 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                                       ),
                                     )
                                   : const Icon(Icons.share_rounded),
-                              label: Text(_busy ? 'Preparing poster…' : 'Share approved poster'),
+                              label: Text(
+                                _busy
+                                    ? 'Preparing poster…'
+                                    : 'Share approved poster',
+                              ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: _purple,
-                                padding: const EdgeInsets.symmetric(vertical: 15),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 15,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
                             ),
                             OutlinedButton.icon(
-                              onPressed: _busy ? null : () => _shareCaption(_currentDraft!),
+                              onPressed: _busy
+                                  ? null
+                                  : () => _shareCaption(_currentDraft!),
                               icon: const Icon(Icons.text_snippet_outlined),
                               label: const Text('Share approved caption'),
                             ),
@@ -1480,7 +1777,9 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF8FAFC),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
                               ),
                               child: const Text(
                                 'This campaign is not approved. Save it to the server and submit it for owner review before sharing.',
@@ -1491,17 +1790,20 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                         ],
                       ),
                     ),
+                  const SizedBox(height: 20),
+                  _automationSettingsCard(),
                   const SizedBox(height: 24),
-                  _sectionTitle('3. Campaign approvals and history',
-                      'Review pending drafts and see which campaign versions were approved.'),
+                  _sectionTitle(
+                    '3. Campaign approvals and history',
+                    'Review pending drafts and see which campaign versions were approved.',
+                  ),
                   const SizedBox(height: 10),
                   _campaignHistory(),
                   const SizedBox(height: 16),
                   _notice(
-                    'Free mode: posters and captions are generated locally. '
-                    'Sharing is manual. No paid ads are started and no bulk messages are sent. '
-                    'Offer codes here are for manual tracking only; they are not automatically '
-                    'redeemed at checkout.',
+                    'Ad copy uses the available campaign service; poster artwork is composed on this device. '
+                    'Adobe Express is an optional manual editor. Sharing is manual, no paid ads or bulk messages '
+                    'are started, and offer codes are not automatically redeemed at checkout.',
                   ),
                 ],
               ),
@@ -1536,7 +1838,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               SizedBox(width: 10),
               Expanded(
                 child: const LiveTranslatedText(
-                  'Your free marketing helper',
+                  'Your next ad, planned for you',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -1548,9 +1850,29 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           ),
           SizedBox(height: 9),
           const LiveTranslatedText(
-            'Create a shop poster, add your real products, and share it with customers. No ad budget needed.',
+            'Retail Mind builds a ready-to-review promotion from your shop details, live stock and seasonal moments.',
             style: TextStyle(color: Colors.white70, height: 1.45),
           ),
+          if (_festivalName.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+              ),
+              child: Text(
+                'UP NEXT  ·  $_festivalName',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1560,223 +1882,480 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LiveTranslatedText(title,
-            style: const TextStyle(
-              color: _ink,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            )),
+        LiveTranslatedText(
+          title,
+          style: const TextStyle(
+            color: _ink,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         const SizedBox(height: 3),
-        LiveTranslatedText(subtitle, style: const TextStyle(color: _muted, fontSize: 12)),
+        LiveTranslatedText(
+          subtitle,
+          style: const TextStyle(color: _muted, fontSize: 12),
+        ),
       ],
     );
   }
 
   Widget _buildCampaignForm() {
-    return Container(
-      padding: const EdgeInsets.all(16),
+    final product = _selectedProduct;
+    final productPrice = _productPrice(product);
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, child) => Opacity(
+        opacity: progress,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - progress)),
+          child: child,
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9F8FF),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: const Color(0xFFE5DEFF)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.storefront_rounded,
+                    color: _purple,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _shopController.text.trim().isEmpty
+                              ? 'My Shop'
+                              : _shopController.text.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          _shopAddressText().isEmpty
+                              ? 'Shop details from your saved profile'
+                              : _shopAddressText(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: _muted, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF15803D),
+                    size: 19,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            _productPickerCard(),
+            const SizedBox(height: 10),
+            _animatedCreativePlanCard(),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _language,
+              decoration: const InputDecoration(
+                label: LiveTranslatedText('Advertisement language'),
+                prefixIcon: Icon(Icons.translate_rounded),
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'en', child: Text('English')),
+                DropdownMenuItem(value: 'te', child: Text('తెలుగు (Telugu)')),
+                DropdownMenuItem(value: 'hi', child: Text('हिन्दी (Hindi)')),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      if (value != null) setState(() => _language = value);
+                    },
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _offerController,
+              textCapitalization: TextCapitalization.sentences,
+              onChanged: (_) => setState(() {}),
+              maxLength: 90,
+              decoration: const InputDecoration(
+                label: LiveTranslatedText('Offer details (optional)'),
+                hint: LiveTranslatedText(
+                  'Only enter a discount if you really offer it',
+                ),
+                prefixIcon: Icon(Icons.local_offer_outlined),
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _discountPriceController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Discounted price (₹, optional)',
+                prefixIcon: const Icon(Icons.sell_outlined),
+                border: const OutlineInputBorder(),
+                helperText: product == null || productPrice == null
+                    ? 'A verified in-stock product price is required for a discount.'
+                    : 'Original inventory price: ₹${productPrice.toStringAsFixed(2)}',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _offerValidUntilController,
+              keyboardType: TextInputType.datetime,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Offer valid until (YYYY-MM-DD)',
+                hintText: '2026-12-31',
+                prefixIcon: Icon(Icons.event_outlined),
+                border: OutlineInputBorder(),
+                helperText:
+                    'Optional. Only applies when a discounted price is entered.',
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _busy || product == null ? null : _generateCampaign,
+              icon: const Icon(Icons.auto_awesome_rounded),
+              label: const LiveTranslatedText('Create ad for selected product'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _purple,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _openCreativeStudio,
+              icon: const Icon(Icons.palette_outlined),
+              label: const Text('Customize manually in Adobe Express'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _productPickerCard() {
+    final selectedProduct = _selectedProduct;
+    final selectedPrice = _productPrice(selectedProduct);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: selectedProduct == null
+            ? const Color(0xFFF8FAFC)
+            : const Color(0xFFF6F4FF),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: selectedProduct == null
+              ? const Color(0xFFE2E8F0)
+              : const Color(0xFFD8CCFF),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _shopController,
-            readOnly: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              label: LiveTranslatedText('Shop name'),
-              helperText: 'Managed from your saved Shop Profile.',
-              prefixIcon: Icon(Icons.storefront_rounded),
-              border: OutlineInputBorder(),
+          Row(
+            children: [
+              Icon(
+                selectedProduct == null
+                    ? Icons.inventory_2_outlined
+                    : Icons.check_circle_rounded,
+                color: selectedProduct == null ? _muted : _purple,
+              ),
+              const SizedBox(width: 9),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Choose a product to feature',
+                      style: TextStyle(
+                        color: _ink,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Only in-stock items are available',
+                      style: TextStyle(color: _muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const Text(
+                'REQUIRED',
+                style: TextStyle(
+                  color: _purple,
+                  fontSize: 9,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          if (_products.isEmpty)
+            const Text(
+              'No in-stock products found. Add stock to a product, then refresh this page.',
+              style: TextStyle(color: _muted, fontSize: 12, height: 1.4),
+            )
+          else
+            DropdownButtonFormField<String>(
+              key: ValueKey<String?>(_selectedProductKey),
+              initialValue: _selectedProductKey,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Select product',
+                prefixIcon: Icon(Icons.shopping_bag_outlined),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+              items: List<DropdownMenuItem<String>>.generate(_products.length, (
+                index,
+              ) {
+                final item = _products[index];
+                final price = _productPrice(item);
+                final stockValue = _number(item['current_stock']);
+                final stock = stockValue == stockValue.truncateToDouble()
+                    ? stockValue.toStringAsFixed(0)
+                    : stockValue.toString();
+                final details = <String>[
+                  if (price != null)
+                    '₹${price.toStringAsFixed(price == price.truncateToDouble() ? 0 : 2)}',
+                  '$stock in stock',
+                ].join(' · ');
+                return DropdownMenuItem<String>(
+                  value: _productKey(item, index),
+                  child: Text(
+                    '${item['name']} · $details',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }),
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _selectedProductKey = value),
+            ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: animation.drive(
+                  Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero),
+                ),
+                child: child,
+              ),
+            ),
+            child: selectedProduct == null
+                ? const SizedBox.shrink(key: ValueKey<String>('no-product'))
+                : Padding(
+                    key: ValueKey<String>(_selectedProductKey ?? ''),
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.auto_awesome_rounded,
+                          color: _purple,
+                          size: 17,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            selectedProduct['name'].toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _ink,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (selectedPrice != null)
+                          Text(
+                            '₹${selectedPrice.toStringAsFixed(selectedPrice == selectedPrice.truncateToDouble() ? 0 : 2)}',
+                            style: const TextStyle(
+                              color: _purple,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _animatedCreativePlanCard() {
+    final key = '$_recommendedTemplate:$_festivalName';
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: animation.drive(
+            Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero),
+          ),
+          child: child,
+        ),
+      ),
+      child: KeyedSubtree(
+        key: ValueKey<String>(key),
+        child: _autoCreativePlanCard(),
+      ),
+    );
+  }
+
+  Widget _autoCreativePlanCard() {
+    final template = _recommendedTemplate;
+    final festivalName = _festivalName;
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFF3F0FF), Color(0xFFFFF7ED)],
+        ),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: const Color(0xFFE5DEFF)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              festivalName.isNotEmpty
+                  ? Icons.celebration_rounded
+                  : Icons.auto_awesome_rounded,
+              color: _purple,
             ),
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
+          const SizedBox(width: 11),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Shop details on poster', style: TextStyle(fontWeight: FontWeight.w800, color: _ink)),
-                const SizedBox(height: 5),
-                Text(
-                  _shopAddressText().isEmpty ? 'Add your shop address in Shop Profile to show its location.' : _shopAddressText(),
-                  style: const TextStyle(fontSize: 12, color: _muted),
-                ),
-                if (_shopPhoneText().isNotEmpty)
-                  Text(_shopPhoneText(), style: const TextStyle(fontSize: 12, color: _muted)),
-                if (_shopAddressText().isEmpty)
-                  TextButton(
-                    onPressed: () => _showMessage('Open Shop Profile and save your shop address, city and PIN code.'),
-                    child: const Text('Shop profile details needed'),
+                const Text(
+                  'Automatic creative plan',
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _festivalStatus,
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _planChip(GrowthCreativePlanner.templateLabel(template)),
+                    _planChip('Feed format · chosen automatically'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: _templateColors(template)
+                      .map(
+                        (color) => Container(
+                          width: 15,
+                          height: 15,
+                          margin: const EdgeInsets.only(right: 5),
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0x33000000),
+                              width: 0.5,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _goal,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              label: LiveTranslatedText('What do you want to achieve?'),
-              prefixIcon: Icon(Icons.flag_outlined),
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: 'nearby',
-                child: LiveTranslatedText('Attract nearby customers'),
-              ),
-              DropdownMenuItem(
-                value: 'new_product',
-                child: LiveTranslatedText('Promote a product'),
-              ),
-              DropdownMenuItem(
-                value: 'clear_stock',
-                child: LiveTranslatedText('Promote available stock'),
-              ),
-              DropdownMenuItem(
-                value: 'regular_customers',
-                child: LiveTranslatedText('Invite regular customers back'),
-              ),
-            ],
-            onChanged: _busy
-                ? null
-                : (value) {
-                    if (value != null) setState(() => _goal = value);
-                  },
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _language,
-            decoration: const InputDecoration(
-              label: LiveTranslatedText('Advertisement language'),
-              prefixIcon: Icon(Icons.translate_rounded),
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'en', child: Text('English')),
-              DropdownMenuItem(value: 'te', child: Text('తెలుగు (Telugu)')),
-              DropdownMenuItem(value: 'hi', child: Text('हिन्दी (Hindi)')),
-            ],
-            onChanged: _busy
-                ? null
-                : (value) {
-                    if (value != null) setState(() => _language = value);
-                  },
-          ),
-          const SizedBox(height: 16),
-          _buildTemplatePicker(),
-          const SizedBox(height: 12),
-          _buildAdFormatPicker(),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _selectedProductKey,
-            isExpanded: true,
-            decoration: InputDecoration(
-              label: const LiveTranslatedText('Feature an in-stock product (optional)'),
-              prefixIcon: const Icon(Icons.inventory_2_outlined),
-              border: const OutlineInputBorder(),
-                helper: LiveTranslatedText(_products.isEmpty
-                  ? 'No in-stock products loaded. You can still create a general shop ad.'
-                  : _products.length.toString() + ' in-stock products available'),
-            ),
-            items: <DropdownMenuItem<String>>[
-              const DropdownMenuItem<String>(
-                value: '',
-                child: LiveTranslatedText('General shop ad — no specific product'),
-              ),
-              ..._products.asMap().entries.map((entry) {
-              final product = entry.value;
-              final key = _productKey(product, entry.key);
-              final price = _productPrice(product);
-              final priceLabel = price == null
-                  ? ''
-                  : ' · ₹' +
-                      (price == price.truncateToDouble()
-                          ? price.toStringAsFixed(0)
-                          : price.toStringAsFixed(2));
-              return DropdownMenuItem<String>(
-                value: key,
-                child: Text(
-                  product['name'].toString() + priceLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }),
-            ],
-            onChanged: _busy || _products.isEmpty
-                ? null
-                : (value) => setState(() {
-                      _selectedProductKey = value;
-                      _discountPriceController.clear();
-                      _offerValidUntilController.clear();
-                    }),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _offerController,
-            textCapitalization: TextCapitalization.sentences,
-            onChanged: (_) => setState(() {}),
-            maxLength: 90,
-            decoration: const InputDecoration(
-              label: LiveTranslatedText('Offer details (optional)'),
-              hint: LiveTranslatedText('Only enter a discount if you really offer it'),
-              prefixIcon: Icon(Icons.local_offer_outlined),
-              border: OutlineInputBorder(),
-              counterText: '',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _discountPriceController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Discounted price (₹, optional)',
-              prefixIcon: const Icon(Icons.sell_outlined),
-              border: const OutlineInputBorder(),
-              helperText: _selectedProduct == null || _productPrice(_selectedProduct) == null
-                  ? 'Select a server-synced product to validate a discount.'
-                  : 'Original inventory price: ₹' + _productPrice(_selectedProduct)!.toStringAsFixed(2),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _offerValidUntilController,
-            keyboardType: TextInputType.datetime,
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              labelText: 'Offer valid until (YYYY-MM-DD)',
-              hintText: '2026-12-31',
-              prefixIcon: Icon(Icons.event_outlined),
-              border: OutlineInputBorder(),
-              helperText: 'Optional. Only applies when a discounted price is entered.',
-            ),
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: _busy ? null : _generateCampaign,
-            icon: const Icon(Icons.auto_awesome_rounded),
-            label: const LiveTranslatedText('Create free ad'),
-            style: FilledButton.styleFrom(
-              backgroundColor: _purple,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _planChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: _purple,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -1794,197 +2373,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
   }
 
-  Widget _buildTemplatePicker() {
-    const templates = <Map<String, String>>[
-          {'id': 'bold', 'name': 'Bold gradient', 'subtitle': 'Big headline'},
-      {'id': 'festive', 'name': 'Festive offer', 'subtitle': 'Bright & punchy'},
-      {'id': 'fresh', 'name': 'Fresh & local', 'subtitle': 'Friendly colours'},
-          {'id': 'minimal', 'name': 'Clean minimal', 'subtitle': 'Product first'},
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const LiveTranslatedText(
-          'Choose an ad design',
-          style: TextStyle(
-            color: _ink,
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const LiveTranslatedText(
-          'Switch designs any time before sharing.',
-          style: TextStyle(color: _muted, fontSize: 12),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 116,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: templates.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 9),
-            itemBuilder: (context, index) {
-              final entry = templates[index];
-              final id = entry['id']!;
-              final selected = _template == id;
-              final colors = _templateColors(id);
-              return InkWell(
-                borderRadius: BorderRadius.circular(15),
-                onTap: _busy
-                    ? null
-                    : () {
-                        setState(() {
-                          _template = id;
-                          if (_currentDraft != null) {
-                            _currentDraft = Map<String, dynamic>.from(
-                              _currentDraft!,
-                            )..['template'] = id;
-                          }
-                        });
-                      },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: 126,
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: selected ? const Color(0xFFEEF2FF) : Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                      color: selected ? _purple : const Color(0xFFE2E8F0),
-                      width: selected ? 2 : 1,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: id == 'minimal'
-                                ? const Color(0xFFF8FAFC)
-                                : null,
-                            gradient: id == 'minimal'
-                                ? null
-                                : LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: colors,
-                                  ),
-                            borderRadius: BorderRadius.circular(9),
-                            border: id == 'minimal'
-                                ? Border.all(
-                                    color: const Color(0xFFE2E8F0),
-                                  )
-                                : null,
-                          ),
-                          padding: const EdgeInsets.all(7),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                width: 28,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: id == 'minimal'
-                                      ? const Color(0xFF111827)
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              Container(
-                                width: id == 'festive' ? 58 : 43,
-                                height: 13,
-                                decoration: BoxDecoration(
-                                  color: id == 'minimal'
-                                      ? const Color(0xFFBE123C)
-                                      : (id == 'festive'
-                                          ? const Color(0xFFFDE68A)
-                                          : Colors.white.withValues(alpha: 0.86)),
-                                  borderRadius: BorderRadius.circular(
-                                    id == 'festive' ? 3 : 5,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      LiveTranslatedText(
-                        entry['name']!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _ink,
-                          fontSize: 10.5,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                        ),
-                      ),
-                      LiveTranslatedText(
-                        entry['subtitle']!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: _muted, fontSize: 9.5),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAdFormatPicker() {
-    return DropdownButtonFormField<String>(
-      value: _adFormat,
-      decoration: const InputDecoration(
-        label: LiveTranslatedText('Ad placement / image size'),
-        prefixIcon: Icon(Icons.aspect_ratio_rounded),
-        border: OutlineInputBorder(),
-        helper: LiveTranslatedText(
-          'Exports target 1080px wide: feed ads, square posts, or vertical Stories/Status.',
-        ),
-      ),
-      items: const [
-        DropdownMenuItem(
-          value: 'feed',
-          child: LiveTranslatedText('Feed ad · 4:5 · 1080×1350'),
-        ),
-        DropdownMenuItem(
-          value: 'square',
-          child: LiveTranslatedText('Square ad · 1:1 · 1080×1080'),
-        ),
-        DropdownMenuItem(
-          value: 'story',
-          child: LiveTranslatedText('Story / Status · 9:16 · 1080×1920'),
-        ),
-      ],
-      onChanged: _busy
-          ? null
-          : (value) {
-              if (value == null) return;
-              setState(() {
-                _adFormat = value;
-                if (_currentDraft != null) {
-                  _currentDraft = Map<String, dynamic>.from(_currentDraft!)
-                      ..['ad_format'] = value;
-                }
-              });
-            },
-    );
-  }
-
   Widget _emptyPreview() {
     return Container(
       padding: const EdgeInsets.all(26),
       decoration: BoxDecoration(
-            color: Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
@@ -1993,13 +2386,13 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
           Icon(Icons.campaign_outlined, size: 44, color: _purple),
           SizedBox(height: 10),
           const LiveTranslatedText(
-                'Your advertisement will appear here',
+            'Your advertisement will appear here',
             style: TextStyle(fontWeight: FontWeight.w700, color: _ink),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 5),
           const LiveTranslatedText(
-                'Choose your goal and tap Create free ad.',
+            'Choose an in-stock product. Retail Mind will plan the festival theme and design automatically.',
             style: TextStyle(color: _muted),
             textAlign: TextAlign.center,
           ),
@@ -2011,17 +2404,24 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   Widget _posterPreview() {
     final product = _currentDraft!['product_name']?.toString() ?? '';
     final price = _currentDraft!['product_price'] is num
-            ? (_currentDraft!['product_price'] as num).toDouble()
+        ? (_currentDraft!['product_price'] as num).toDouble()
         : null;
     final discountText = _discountPriceController.text.trim();
-    final editedDiscount = discountText.isEmpty ? null : double.tryParse(discountText);
+    final editedDiscount = discountText.isEmpty
+        ? null
+        : double.tryParse(discountText);
     final previewDiscount = discountText.isEmpty
         ? (_currentDraft!['discount_price'] is num
-            ? (_currentDraft!['discount_price'] as num).toDouble()
-            : null)
+              ? (_currentDraft!['discount_price'] as num).toDouble()
+              : null)
         : editedDiscount;
-    final previewDiscountPercent = GrowthMarketingPricing.discountPercent(price, previewDiscount);
-    final width = math.min(360.0, MediaQuery.of(context).size.width - 48.0).toDouble();
+    final previewDiscountPercent = GrowthMarketingPricing.discountPercent(
+      price,
+      previewDiscount,
+    );
+    final width = math
+        .min(360.0, MediaQuery.of(context).size.width - 48.0)
+        .toDouble();
     final template = _currentDraft!['template']?.toString() ?? _template;
     final format = _currentDraft!['ad_format']?.toString() ?? _adFormat;
     final heightFactor = switch (format) {
@@ -2039,7 +2439,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             template: template,
             format: format,
             shopName: _shopController.text.trim().isEmpty
-                    ? 'My Shop'
+                ? 'My Shop'
                 : _shopController.text.trim(),
             headline: _headlineController.text.trim(),
             productName: product,
@@ -2052,6 +2452,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
             offer: _offerController.text.trim(),
             offerCode: _currentDraft!['offer_code'].toString(),
             language: _currentDraft!['language']?.toString() ?? 'en',
+            festivalName: _currentDraft!['festival_name']?.toString() ?? '',
           ),
         ),
       ),
@@ -2125,13 +2526,18 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         final product = campaign['product_name']?.toString() ?? '';
         final code = campaign['offer_code']?.toString() ?? '';
         final status = campaign['status']?.toString() ?? 'DRAFT';
-        final campaignId = (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
-        final date = DateTime.tryParse(campaign['created_at']?.toString() ?? '');
+        final campaignId =
+            (campaign['campaign_id'] ?? campaign['id'])?.toString() ?? '';
+        final date = DateTime.tryParse(
+          campaign['created_at']?.toString() ?? '',
+        );
         final dateLabel = date == null
             ? ''
-            : date.day.toString().padLeft(2, '0') + '/' +
-                date.month.toString().padLeft(2, '0') + '/' +
-                date.year.toString();
+            : date.day.toString().padLeft(2, '0') +
+                  '/' +
+                  date.month.toString().padLeft(2, '0') +
+                  '/' +
+                  date.year.toString();
         final redemptions = _number(campaign['redemptions']).toInt();
         final discountPrice = campaign['discount_price'] is num
             ? (campaign['discount_price'] as num).toDouble()
@@ -2139,9 +2545,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         final originalPrice = campaign['original_price'] is num
             ? (campaign['original_price'] as num).toDouble()
             : campaign['product_price'] is num
-                ? (campaign['product_price'] as num).toDouble()
-                : null;
-        final canApprove = status == 'PENDING_APPROVAL' && campaign['pending_sync'] != true;
+            ? (campaign['product_price'] as num).toDouble()
+            : null;
+        final canApprove =
+            status == 'PENDING_APPROVAL' && campaign['pending_sync'] != true;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
@@ -2172,10 +2579,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          campaign['headline']?.toString() ?? 'Shop advertisement',
+                          campaign['headline']?.toString() ??
+                              'Shop advertisement',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: _ink, fontWeight: FontWeight.w800),
+                          style: const TextStyle(
+                            color: _ink,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         Text(
                           (product.isEmpty ? 'Shop promotion' : product) +
@@ -2191,16 +2602,29 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
               const SizedBox(height: 9),
               if (discountPrice != null && originalPrice != null)
                 Text(
-                  '₹' + originalPrice.toStringAsFixed(2) + ' → ₹' + discountPrice.toStringAsFixed(2) +
-                      ' · ' + _number(campaign['discount_percent']).toStringAsFixed(2) + '% OFF',
-                  style: const TextStyle(color: Color(0xFF15803D), fontWeight: FontWeight.w700, fontSize: 12),
+                  '₹' +
+                      originalPrice.toStringAsFixed(2) +
+                      ' → ₹' +
+                      discountPrice.toStringAsFixed(2) +
+                      ' · ' +
+                      _number(campaign['discount_percent']).toStringAsFixed(2) +
+                      '% OFF',
+                  style: const TextStyle(
+                    color: Color(0xFF15803D),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (code.isNotEmpty) _chip('Code: ' + code, Icons.confirmation_number_outlined),
-                  _chip('Redemptions: ' + redemptions.toString(), Icons.local_offer_outlined),
+                  if (code.isNotEmpty)
+                    _chip('Code: ' + code, Icons.confirmation_number_outlined),
+                  _chip(
+                    'Redemptions: ' + redemptions.toString(),
+                    Icons.local_offer_outlined,
+                  ),
                   if (campaign['pending_sync'] == true)
                     _chip('Sync pending', Icons.sync_problem_outlined),
                 ],
@@ -2218,8 +2642,13 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                   ),
                   if (canApprove)
                     TextButton.icon(
-                      onPressed: _busy ? null : () => _approveCampaign(campaign),
-                      icon: const Icon(Icons.check_circle_outline, color: Color(0xFF15803D)),
+                      onPressed: _busy
+                          ? null
+                          : () => _approveCampaign(campaign),
+                      icon: const Icon(
+                        Icons.check_circle_outline,
+                        color: Color(0xFF15803D),
+                      ),
                       label: const Text('Approve'),
                     ),
                   if (canApprove)
@@ -2243,7 +2672,10 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
                 ],
               ),
               if (campaignId.isEmpty)
-                const Text('This local draft needs a campaign ID before it can sync.', style: TextStyle(color: _muted, fontSize: 11)),
+                const Text(
+                  'This local draft needs a campaign ID before it can sync.',
+                  style: TextStyle(color: _muted, fontSize: 11),
+                ),
             ],
           ),
         );
@@ -2273,10 +2705,21 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(20)),
-      child: Text(status.replaceAll('_', ' '), style: TextStyle(color: foreground, fontSize: 10, fontWeight: FontWeight.w800)),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status.replaceAll('_', ' '),
+        style: TextStyle(
+          color: foreground,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
+
   Widget _chip(String label, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -2306,8 +2749,11 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded,
-              color: Color(0xFF1D4ED8), size: 19),
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFF1D4ED8),
+            size: 19,
+          ),
           const SizedBox(width: 9),
           Expanded(
             child: LiveTranslatedText(
@@ -2339,6 +2785,7 @@ class _PosterArtwork extends StatelessWidget {
     required this.offer,
     required this.offerCode,
     required this.language,
+    required this.festivalName,
     required this.template,
     required this.format,
   });
@@ -2355,6 +2802,7 @@ class _PosterArtwork extends StatelessWidget {
   final String offer;
   final String offerCode;
   final String language;
+  final String festivalName;
   final String template;
   final String format;
 
@@ -2370,17 +2818,17 @@ class _PosterArtwork extends StatelessWidget {
     final colors = isFestive
         ? const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)]
         : isFresh
-            ? const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)]
-            : const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
+        ? const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)]
+        : const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
     final textColor = isMinimal ? const Color(0xFF111827) : Colors.white;
     final mutedColor = isMinimal ? const Color(0xFF475569) : Colors.white70;
     final accentColor = isFestive
         ? const Color(0xFFFDE68A)
         : isFresh
-            ? const Color(0xFFD9F99D)
-            : isMinimal
-                ? const Color(0xFFBE123C)
-                : const Color(0xFFFDE68A);
+        ? const Color(0xFFD9F99D)
+        : isMinimal
+        ? const Color(0xFFBE123C)
+        : const Color(0xFFFDE68A);
     final accentTextColor = isFestive || !isMinimal
         ? const Color(0xFF422006)
         : Colors.white;
@@ -2390,43 +2838,68 @@ class _PosterArtwork extends StatelessWidget {
     final cardBorder = isMinimal
         ? const Color(0xFFCBD5E1)
         : Colors.white.withValues(alpha: 0.28);
-    final cornerRadius = isFestive ? 8.0 : isMinimal ? 4.0 : 18.0;
+    final cornerRadius = isFestive
+        ? 8.0
+        : isMinimal
+        ? 4.0
+        : 18.0;
     final visitLabel = language == 'te'
         ? 'ఈరోజే సందర్శించండి'
         : language == 'hi'
-            ? 'आज ही आएँ'
-            : 'VISIT US TODAY';
+        ? 'आज ही आएँ'
+        : 'VISIT US TODAY';
     final offerCodeLabel = language == 'te'
         ? 'ఆఫర్ కోడ్'
         : language == 'hi'
-            ? 'ऑफ़र कोడ్'
-            : 'Offer code';
+        ? 'ऑफ़र कोడ్'
+        : 'Offer code';
     final badgeLabel = isFestive
         ? (hasOffer
-            ? (language == 'te' ? 'ప్రత్యేక ఆఫర్' : language == 'hi' ? 'खास ऑफ़र' : 'SPECIAL OFFER')
-            : (language == 'te' ? 'షాప్ ప్రమోషన్' : language == 'hi' ? 'दुकान प्रमोशन' : 'SHOP PROMOTION'))
+              ? (language == 'te'
+                    ? 'ప్రత్యేక ఆఫర్'
+                    : language == 'hi'
+                    ? 'खास ऑफ़र'
+                    : 'SPECIAL OFFER')
+              : (language == 'te'
+                    ? 'షాప్ ప్రమోషన్'
+                    : language == 'hi'
+                    ? 'दुकान प्रमोशन'
+                    : 'SHOP PROMOTION'))
         : isFresh
-            ? (language == 'te' ? 'మీ స్థానిక దుకాణం' : language == 'hi' ? 'आपकी स्थानीय दुकान' : 'YOUR LOCAL SHOP')
-            : isMinimal
-                ? (language == 'te' ? 'దుకాణ సమాచారం' : language == 'hi' ? 'दुकान की जानकारी' : 'SHOP UPDATE')
-                : (language == 'te' ? 'దుకాణ ప్రత్యేకతలు' : language == 'hi' ? 'दुकान की खास बातें' : 'SHOP HIGHLIGHTS');
+        ? (language == 'te'
+              ? 'మీ స్థానిక దుకాణం'
+              : language == 'hi'
+              ? 'आपकी स्थानीय दुकान'
+              : 'YOUR LOCAL SHOP')
+        : isMinimal
+        ? (language == 'te'
+              ? 'దుకాణ సమాచారం'
+              : language == 'hi'
+              ? 'दुकान की जानकारी'
+              : 'SHOP UPDATE')
+        : (language == 'te'
+              ? 'దుకాణ ప్రత్యేకతలు'
+              : language == 'hi'
+              ? 'दुकान की खास बातें'
+              : 'SHOP HIGHLIGHTS');
     final displayPrice = discountPrice ?? price;
     final priceText = displayPrice == null
         ? ''
         : '₹' +
-            (displayPrice == displayPrice.truncateToDouble()
-                ? displayPrice.toStringAsFixed(0)
-                : displayPrice.toStringAsFixed(2));
+              (displayPrice == displayPrice.truncateToDouble()
+                  ? displayPrice.toStringAsFixed(0)
+                  : displayPrice.toStringAsFixed(2));
     final originalPrice = price;
     final originalPriceText = originalPrice == null
         ? ''
         : '₹' +
-            (originalPrice == originalPrice.truncateToDouble()
-                ? originalPrice.toStringAsFixed(0)
-                : originalPrice.toStringAsFixed(2));
+              (originalPrice == originalPrice.truncateToDouble()
+                  ? originalPrice.toStringAsFixed(0)
+                  : originalPrice.toStringAsFixed(2));
     final discountLabel = discountPercent == null
         ? ''
-        : discountPercent!.toStringAsFixed(discountPercent! % 1 == 0 ? 0 : 2) + '% OFF';
+        : discountPercent!.toStringAsFixed(discountPercent! % 1 == 0 ? 0 : 2) +
+              '% OFF';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
@@ -2450,7 +2923,9 @@ class _PosterArtwork extends StatelessWidget {
                   width: isStory ? 230 : 180,
                   height: isStory ? 230 : 180,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: isFestive ? 0.10 : 0.09),
+                    color: Colors.white.withValues(
+                      alpha: isFestive ? 0.10 : 0.09,
+                    ),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -2469,7 +2944,13 @@ class _PosterArtwork extends StatelessWidget {
                 ),
               ),
             Padding(
-              padding: EdgeInsets.all(isStory ? 26 : isSquare ? 13 : 21),
+              padding: EdgeInsets.all(
+                isStory
+                    ? 26
+                    : isSquare
+                    ? 13
+                    : 21,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2482,16 +2963,18 @@ class _PosterArtwork extends StatelessWidget {
                           color: isMinimal
                               ? const Color(0xFF111827)
                               : Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(isMinimal ? 8 : 13),
+                          borderRadius: BorderRadius.circular(
+                            isMinimal ? 8 : 13,
+                          ),
                         ),
                         child: Icon(
                           isFresh
                               ? Icons.eco_rounded
                               : isFestive
-                                  ? Icons.celebration_rounded
-                                  : isMinimal
-                                      ? Icons.storefront_rounded
-                                      : Icons.shopping_bag_rounded,
+                              ? Icons.celebration_rounded
+                              : isMinimal
+                              ? Icons.storefront_rounded
+                              : Icons.shopping_bag_rounded,
                           color: isMinimal ? Colors.white : accentColor,
                           size: isStory ? 28 : 24,
                         ),
@@ -2512,11 +2995,21 @@ class _PosterArtwork extends StatelessWidget {
                       ),
                     ],
                   ),
-                  SizedBox(height: isStory ? 28 : isSquare ? 8 : 18),
+                  SizedBox(
+                    height: isStory
+                        ? 28
+                        : isSquare
+                        ? 8
+                        : 18,
+                  ),
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: isFestive ? 10 : 11,
-                      vertical: isStory ? 9 : isSquare ? 4 : 7,
+                      vertical: isStory
+                          ? 9
+                          : isSquare
+                          ? 4
+                          : 7,
                     ),
                     decoration: BoxDecoration(
                       color: accentColor,
@@ -2528,12 +3021,41 @@ class _PosterArtwork extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: accentTextColor,
-                        fontSize: isStory ? 11 : isSquare ? 8 : 9.5,
+                        fontSize: isStory
+                            ? 11
+                            : isSquare
+                            ? 8
+                            : 9.5,
                         fontWeight: FontWeight.w900,
                         letterSpacing: isMinimal ? 0.4 : 1.0,
                       ),
                     ),
                   ),
+                  if (festivalName.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.celebration_rounded,
+                          color: accentColor,
+                          size: isSquare ? 12 : 15,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            festivalName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: isSquare ? 9 : 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   SizedBox(height: isSquare ? 7 : 14),
                   Text(
                     headline.isEmpty ? 'Your neighbourhood shop' : headline,
@@ -2542,15 +3064,33 @@ class _PosterArtwork extends StatelessWidget {
                     style: TextStyle(
                       color: textColor,
                       height: 1.04,
-                      fontSize: isStory ? 34 : isSquare ? 21 : isMinimal ? 26 : 28,
+                      fontSize: isStory
+                          ? 34
+                          : isSquare
+                          ? 21
+                          : isMinimal
+                          ? 26
+                          : 28,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  SizedBox(height: isStory ? 24 : isSquare ? 7 : 15),
+                  SizedBox(
+                    height: isStory
+                        ? 24
+                        : isSquare
+                        ? 7
+                        : 15,
+                  ),
                   if (hasProduct)
                     Container(
                       width: double.infinity,
-                      padding: EdgeInsets.all(isStory ? 17 : isSquare ? 8 : 13),
+                      padding: EdgeInsets.all(
+                        isStory
+                            ? 17
+                            : isSquare
+                            ? 8
+                            : 13,
+                      ),
                       decoration: BoxDecoration(
                         color: cardColor,
                         borderRadius: BorderRadius.circular(cornerRadius),
@@ -2589,7 +3129,11 @@ class _PosterArtwork extends StatelessWidget {
                                 Icon(
                                   Icons.local_mall_rounded,
                                   color: accentColor,
-                                  size: isStory ? 38 : isSquare ? 23 : 32,
+                                  size: isStory
+                                      ? 38
+                                      : isSquare
+                                      ? 23
+                                      : 32,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -2599,7 +3143,11 @@ class _PosterArtwork extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: textColor,
-                                      fontSize: isStory ? 18 : isSquare ? 11 : 15,
+                                      fontSize: isStory
+                                          ? 18
+                                          : isSquare
+                                          ? 11
+                                          : 15,
                                       height: 1.1,
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -2615,7 +3163,11 @@ class _PosterArtwork extends StatelessWidget {
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.w900,
-                                        fontSize: isStory ? 22 : isSquare ? 14 : 18,
+                                        fontSize: isStory
+                                            ? 22
+                                            : isSquare
+                                            ? 14
+                                            : 18,
                                       ),
                                     ),
                                   ),
@@ -2623,7 +3175,8 @@ class _PosterArtwork extends StatelessWidget {
                               ],
                             ),
                     ),
-                  if (discountPrice != null && originalPriceText.isNotEmpty) ...[
+                  if (discountPrice != null &&
+                      originalPriceText.isNotEmpty) ...[
                     SizedBox(height: isSquare ? 4 : 8),
                     Row(
                       children: [
@@ -2663,7 +3216,11 @@ class _PosterArtwork extends StatelessWidget {
                       width: double.infinity,
                       padding: EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: isStory ? 13 : isSquare ? 5 : 9,
+                        vertical: isStory
+                            ? 13
+                            : isSquare
+                            ? 5
+                            : 9,
                       ),
                       decoration: BoxDecoration(
                         color: accentColor,
@@ -2677,18 +3234,28 @@ class _PosterArtwork extends StatelessWidget {
                           color: accentTextColor,
                           height: 1.15,
                           fontWeight: FontWeight.w900,
-                          fontSize: isStory ? 16 : isSquare ? 10 : 13,
+                          fontSize: isStory
+                              ? 16
+                              : isSquare
+                              ? 10
+                              : 13,
                         ),
                       ),
                     ),
                   ],
                   const Spacer(),
-                  Divider(color: isMinimal ? const Color(0xFFE2E8F0) : Colors.white30),
+                  Divider(
+                    color: isMinimal ? const Color(0xFFE2E8F0) : Colors.white30,
+                  ),
                   Text(
                     visitLabel,
                     style: TextStyle(
                       color: mutedColor,
-                      fontSize: isStory ? 13 : isSquare ? 8.5 : 10.5,
+                      fontSize: isStory
+                          ? 13
+                          : isSquare
+                          ? 8.5
+                          : 10.5,
                       fontWeight: FontWeight.w900,
                       letterSpacing: isMinimal ? 0.9 : 1.4,
                     ),
@@ -2700,7 +3267,11 @@ class _PosterArtwork extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: textColor,
-                      fontSize: isStory ? 15 : isSquare ? 10 : 12,
+                      fontSize: isStory
+                          ? 15
+                          : isSquare
+                          ? 10
+                          : 12,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -2711,7 +3282,11 @@ class _PosterArtwork extends StatelessWidget {
                         shopAddress,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: mutedColor, fontSize: isSquare ? 6.5 : 8.5, height: 1.1),
+                        style: TextStyle(
+                          color: mutedColor,
+                          fontSize: isSquare ? 6.5 : 8.5,
+                          height: 1.1,
+                        ),
                       ),
                     ),
                   if (shopPhone.trim().isNotEmpty)
@@ -2721,7 +3296,10 @@ class _PosterArtwork extends StatelessWidget {
                         shopPhone,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: mutedColor, fontSize: isSquare ? 6.5 : 8.5),
+                        style: TextStyle(
+                          color: mutedColor,
+                          fontSize: isSquare ? 6.5 : 8.5,
+                        ),
                       ),
                     ),
                   if (offerValidUntil.trim().isNotEmpty)
@@ -2731,7 +3309,10 @@ class _PosterArtwork extends StatelessWidget {
                         'Valid until: ' + offerValidUntil,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: mutedColor, fontSize: isSquare ? 6.5 : 8.5),
+                        style: TextStyle(
+                          color: mutedColor,
+                          fontSize: isSquare ? 6.5 : 8.5,
+                        ),
                       ),
                     ),
                   if (hasOffer) ...[
@@ -2741,7 +3322,11 @@ class _PosterArtwork extends StatelessWidget {
                       style: TextStyle(
                         color: mutedColor,
                         fontWeight: FontWeight.w700,
-                        fontSize: isStory ? 12 : isSquare ? 8 : 10,
+                        fontSize: isStory
+                            ? 12
+                            : isSquare
+                            ? 8
+                            : 10,
                       ),
                     ),
                   ],

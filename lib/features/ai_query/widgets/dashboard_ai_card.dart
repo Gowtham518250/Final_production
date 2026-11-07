@@ -116,33 +116,42 @@ class DashboardAiQueryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 9),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
+              DecoratedBox(
                 decoration: BoxDecoration(
                   color: const Color(0xFF6366F1),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LiveTranslatedText(
-                      'Ask AI',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 15,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.28),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
                   ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LiveTranslatedText(
+                        'AI Insights',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Colors.white,
+                        size: 13,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

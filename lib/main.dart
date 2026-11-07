@@ -20,7 +20,6 @@ import 'bank_recon_page.dart';
 import 'gift_cards_page.dart';
 import 'system_management_page.dart';
 import 'owner_orders_page.dart';
-import 'shop_browser_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'local_storage_service.dart';
 import 'cache_consistency_service.dart';
@@ -38,13 +37,6 @@ import 'features/billing/retailmind_feature_gate.dart';
 import 'visual_widgets.dart';
 import 'forgot_password_page.dart';
 import 'decent_login_page.dart';
-import 'screens/customer/customer_login_page.dart';
-import 'screens/customer/nearby_shops_page.dart';
-import 'screens/customer/customer_marketplace_page.dart';
-import 'screens/customer/customer_ai_shopping_page.dart';
-import 'screens/customer/customer_home_page.dart';
-import 'screens/customer/order_history_page.dart';
-import 'screens/customer/cart_checkout_page.dart';
 import 'screens/owner/online_orders_tab.dart';
 import 'screens/owner/online_shopping_config_page.dart';
 import 'screens/owner/online_store_hub_page.dart';
@@ -160,7 +152,9 @@ void main() async {
       await DeviceCapabilityService.instance.initialize();
     } catch (error) {
       if (kDebugMode) {
-        debugPrint('Device capability detection failed; keeping conservative memory limits: $error');
+        debugPrint(
+          'Device capability detection failed; keeping conservative memory limits: $error',
+        );
       }
     } finally {
       LowMemoryPerformance.applyDeviceProfile();
@@ -174,410 +168,419 @@ void main() async {
   runApp(_StartupGate(ready: bootstrapReady.future));
 
   try {
-  // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
-  bool firebaseInitialized = false;
-  try {
-    if (kIsWeb) {
-      // Web Firebase options - use environment variables or actual config
-      final webApiKey = const String.fromEnvironment(
-        'FIREBASE_WEB_API_KEY',
-        defaultValue: '',
-      );
-      final authDomain = const String.fromEnvironment(
-        'FIREBASE_AUTH_DOMAIN',
-        defaultValue: '',
-      );
-      final projectId = const String.fromEnvironment(
-        'FIREBASE_PROJECT_ID',
-        defaultValue: '',
-      );
-      final storageBucket = const String.fromEnvironment(
-        'FIREBASE_STORAGE_BUCKET',
-        defaultValue: '',
-      );
-      final messagingSenderId = const String.fromEnvironment(
-        'FIREBASE_SENDER_ID',
-        defaultValue: '',
-      );
-      final appId = const String.fromEnvironment(
-        'FIREBASE_WEB_APP_ID',
-        defaultValue: '',
-      );
-
-      if (webApiKey.isNotEmpty && projectId.isNotEmpty) {
-        await Firebase.initializeApp(
-          options: FirebaseOptions(
-            apiKey: webApiKey,
-            authDomain: authDomain.isNotEmpty
-                ? authDomain
-                : '$projectId.firebaseapp.com',
-            projectId: projectId,
-            storageBucket: storageBucket.isNotEmpty
-                ? storageBucket
-                : '$projectId.appspot.com',
-            messagingSenderId: messagingSenderId.isNotEmpty
-                ? messagingSenderId
-                : '123456789',
-            appId: appId,
-          ),
-        );
-        firebaseInitialized = true;
-        debugPrint('✅ Firebase initialized for web with environment config');
-      } else {
-        debugPrint(
-          '⚠️ Firebase web credentials not provided in environment variables. Firebase features disabled.',
-        );
-        // Disable Firebase-dependent features
-        firebaseInitialized = false;
-      }
-
-      debugPrint('⚠️ Crashlytics not supported on web, skipping.');
-    } else {
-      // Mobile Firebase initialization with proper error handling and retry logic
-      try {
-        await Firebase.initializeApp();
-        firebaseInitialized = true;
-        debugPrint('✅ Firebase initialized for mobile');
-
-        // Store initialization state immediately after successful init
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('firebase_initialized', true);
-
-        // Capture all errors in Crashlytics (production only)
-        FlutterError.onError = (FlutterErrorDetails details) {
-          if (firebaseInitialized) {
-            FirebaseCrashlytics.instance.recordFlutterError(details);
-          }
-          if (kDebugMode) {
-            FlutterError.presentError(details);
-          }
-        };
-
-        // Capture async errors
-        PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-          if (firebaseInitialized) {
-            FirebaseCrashlytics.instance.recordError(error, stack);
-          }
-          if (kDebugMode) {
-            debugPrint('Uncaught async error: $error\n$stack');
-          }
-          return true;
-        };
-
-        if (kDebugMode) {
-          // Disable Crashlytics in debug mode for faster development
-          if (firebaseInitialized) {
-            await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-              false,
-            );
-          }
-        } else {
-          // Enable collection in production
-          if (firebaseInitialized) {
-            await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-              true,
-            );
-          }
-        }
-
-        // Initialize Push Notifications only if Firebase is initialized.
-        // Deliberately NOT awaited: FCM token/permission work is network-bound
-        // and must not delay the first frame on 2GB devices.
-        Future<void>(() async {
-          try {
-            await PushNotificationService.initialize();
-            debugPrint('✅ Push Notification Service initialized');
-          } catch (e) {
-            debugPrint('⚠️ Push Notification init error: $e');
-            // Don't disable Firebase entirely - push notifications might fail while other features work
-            await prefs.setBool('push_notifications_enabled', false);
-          }
-        });
-
-        debugPrint('✅ Firebase & Crashlytics initialized');
-      } catch (firebaseError) {
-        debugPrint('🚨 Firebase mobile initialization failed: $firebaseError');
-        firebaseInitialized = false;
-
-        // Store failure state
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('firebase_initialized', false);
-        await prefs.setString('firebase_init_error', firebaseError.toString());
-        await prefs.setInt(
-          'firebase_init_error_timestamp',
-          DateTime.now().millisecondsSinceEpoch,
-        );
-
-        // Set up basic error handlers even without Firebase
-        FlutterError.onError = (FlutterErrorDetails details) {
-          if (kDebugMode) {
-            FlutterError.presentError(details);
-          }
-        };
-
-        PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-          if (kDebugMode) {
-            debugPrint(
-              'Uncaught async error (Firebase unavailable): $error\n$stack',
-            );
-          }
-          return true;
-        };
-
-        debugPrint(
-          '⚠️ Running without Firebase - crash reporting and push notifications disabled',
-        );
-      }
-    }
-  } catch (e) {
-    debugPrint('🚨 Firebase outer initialization error: $e');
-    firebaseInitialized = false;
-    // Store Firebase initialization state for feature flagging
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('firebase_initialized', false);
-    await prefs.setString('firebase_init_error', e.toString());
-    await prefs.setInt(
-      'firebase_init_error_timestamp',
-      DateTime.now().millisecondsSinceEpoch,
-    );
-
-    // Set up basic error handlers even without Firebase
-    FlutterError.onError = (FlutterErrorDetails details) {
-      if (kDebugMode) {
-        FlutterError.presentError(details);
-      }
-    };
-
-    PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-      if (kDebugMode) {
-        debugPrint(
-          'Uncaught async error (Firebase unavailable): $error\n$stack',
-        );
-      }
-      return true;
-    };
-  }
-
-  // Store Firebase initialization state for feature flagging (if not already set)
-  final firebasePrefs = await SharedPreferences.getInstance();
-  if (!firebasePrefs.containsKey('firebase_initialized')) {
-    await firebasePrefs.setBool('firebase_initialized', firebaseInitialized);
-  }
-
-  // 🔊 Background service initialization deferred to post-frame callback in MyApp to prevent startup crashes
-
-  // 🛡️ SAFE HIVE INITIALIZATION WITH PROPER BACKUP AND ROLLBACK (100/100 STABILITY)
-  bool hiveRecoveryNeeded = false;
-  String? hiveBackupPath;
-  bool hiveInitSuccess = false;
-
-  try {
-    // Hive.initFlutter performs the required runtime bootstrap. Opening a
-    // throwaway box, writing it, closing it and deleting it on every launch
-    // added synchronous startup I/O but did not validate the real user boxes.
-    // Actual application boxes are opened by their owning storage services.
-    await Hive.initFlutter();
-    hiveInitSuccess = true;
-    if (kDebugMode) debugPrint('✅ Hive initialized successfully');
-  } catch (e) {
-    debugPrint('🚨 Hive init failure: $e');
-    hiveInitSuccess = false;
-    hiveRecoveryNeeded = true;
-  }
-
-  // If Hive initialization failed, attempt recovery with proper backup and rollback
-  if (!hiveInitSuccess && !kIsWeb) {
-    debugPrint('🔄 Attempting Hive recovery with backup...');
+    // 🚨 FIREBASE & CRASHLYTICS INITIALIZATION
+    bool firebaseInitialized = false;
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final hiveDir = Directory('${appDir.path}/hive');
+      if (kIsWeb) {
+        // Web Firebase options - use environment variables or actual config
+        final webApiKey = const String.fromEnvironment(
+          'FIREBASE_WEB_API_KEY',
+          defaultValue: '',
+        );
+        final authDomain = const String.fromEnvironment(
+          'FIREBASE_AUTH_DOMAIN',
+          defaultValue: '',
+        );
+        final projectId = const String.fromEnvironment(
+          'FIREBASE_PROJECT_ID',
+          defaultValue: '',
+        );
+        final storageBucket = const String.fromEnvironment(
+          'FIREBASE_STORAGE_BUCKET',
+          defaultValue: '',
+        );
+        final messagingSenderId = const String.fromEnvironment(
+          'FIREBASE_SENDER_ID',
+          defaultValue: '',
+        );
+        final appId = const String.fromEnvironment(
+          'FIREBASE_WEB_APP_ID',
+          defaultValue: '',
+        );
 
-      // Create timestamped backup with verification
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final backupDir = Directory('${appDir.path}/hive_backup_$timestamp');
-
-      if (await hiveDir.exists()) {
-        // Verify backup directory doesn't already exist
-        if (await backupDir.exists()) {
-          debugPrint(
-            '⚠️ Backup directory already exists, using alternative name',
+        if (webApiKey.isNotEmpty && projectId.isNotEmpty) {
+          await Firebase.initializeApp(
+            options: FirebaseOptions(
+              apiKey: webApiKey,
+              authDomain: authDomain.isNotEmpty
+                  ? authDomain
+                  : '$projectId.firebaseapp.com',
+              projectId: projectId,
+              storageBucket: storageBucket.isNotEmpty
+                  ? storageBucket
+                  : '$projectId.appspot.com',
+              messagingSenderId: messagingSenderId.isNotEmpty
+                  ? messagingSenderId
+                  : '123456789',
+              appId: appId,
+            ),
           );
-          final altTimestamp = timestamp + 1;
-          final altBackupDir = Directory(
-            '${appDir.path}/hive_backup_$altTimestamp',
-          );
-          await hiveDir.rename(altBackupDir.path);
-          hiveBackupPath = altBackupDir.path;
+          firebaseInitialized = true;
+          debugPrint('✅ Firebase initialized for web with environment config');
         } else {
-          await hiveDir.rename(backupDir.path);
-          hiveBackupPath = backupDir.path;
+          debugPrint(
+            '⚠️ Firebase web credentials not provided in environment variables. Firebase features disabled.',
+          );
+          // Disable Firebase-dependent features
+          firebaseInitialized = false;
         }
 
-        // Verify backup was created successfully
-        if (await Directory(hiveBackupPath!).exists()) {
-          debugPrint('📦 Hive data backed up to: $hiveBackupPath');
+        debugPrint('⚠️ Crashlytics not supported on web, skipping.');
+      } else {
+        // Mobile Firebase initialization with proper error handling and retry logic
+        try {
+          await Firebase.initializeApp();
+          firebaseInitialized = true;
+          debugPrint('✅ Firebase initialized for mobile');
 
-          // Store backup info in SharedPreferences for potential restore
+          // Store initialization state immediately after successful init
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('hive_backup_path', hiveBackupPath);
-          await prefs.setInt('hive_backup_timestamp', timestamp);
+          await prefs.setBool('firebase_initialized', true);
 
-          // Try to recover with fresh Hive initialization
-          try {
-            await Hive.initFlutter();
+          // Capture all errors in Crashlytics (production only)
+          FlutterError.onError = (FlutterErrorDetails details) {
+            if (firebaseInitialized) {
+              FirebaseCrashlytics.instance.recordFlutterError(details);
+            }
+            if (kDebugMode) {
+              FlutterError.presentError(details);
+            }
+          };
 
-            // Verify the fresh initialization works
-            final testBox = await Hive.openBox('recovery_test');
-            await testBox.put('test', 'success');
-            await testBox.delete('test');
-            await testBox.close();
-            await Hive.deleteBoxFromDisk('recovery_test');
+          // Capture async errors
+          PlatformDispatcher.instance.onError =
+              (Object error, StackTrace stack) {
+                if (firebaseInitialized) {
+                  FirebaseCrashlytics.instance.recordError(error, stack);
+                }
+                if (kDebugMode) {
+                  debugPrint('Uncaught async error: $error\n$stack');
+                }
+                return true;
+              };
 
-            debugPrint(
-              '✅ Hive recovered successfully with fresh initialization',
-            );
-            hiveRecoveryNeeded = false;
-
-            // Mark recovery as successful
-            await prefs.setBool('hive_recovery_success', true);
-            await prefs.setInt(
-              'hive_recovery_timestamp',
-              DateTime.now().millisecondsSinceEpoch,
-            );
-          } catch (recoveryError) {
-            debugPrint('❌ Fresh Hive initialization failed: $recoveryError');
-            hiveRecoveryNeeded = true;
-
-            // ROLLBACK: Attempt to restore from backup
-            debugPrint('🔄 Attempting rollback from backup...');
-            try {
-              if (await hiveDir.exists()) {
-                await hiveDir.delete(recursive: true);
-              }
-              await Directory(hiveBackupPath!).rename(hiveDir.path);
-              debugPrint('✅ Rollback successful - data restored from backup');
-
-              // Try initialization with restored data
-              await Hive.initFlutter();
-              debugPrint('✅ Hive initialized with restored data');
-              hiveRecoveryNeeded = false;
-
-              await prefs.setBool('hive_rollback_success', true);
-            } catch (rollbackError) {
-              debugPrint('❌ Rollback failed: $rollbackError');
-              // Keep backup directory for manual recovery
-              await prefs.setBool('hive_recovery_needed', true);
-              await prefs.setBool('hive_rollback_failed', true);
-              await prefs.setString(
-                'hive_error',
-                'Recovery and rollback both failed. Manual intervention may be needed.',
-              );
+          if (kDebugMode) {
+            // Disable Crashlytics in debug mode for faster development
+            if (firebaseInitialized) {
+              await FirebaseCrashlytics.instance
+                  .setCrashlyticsCollectionEnabled(false);
+            }
+          } else {
+            // Enable collection in production
+            if (firebaseInitialized) {
+              await FirebaseCrashlytics.instance
+                  .setCrashlyticsCollectionEnabled(true);
             }
           }
-        } else {
-          debugPrint(
-            '❌ Backup verification failed - backup directory not found',
-          );
-          hiveRecoveryNeeded = true;
-        }
-      } else {
-        debugPrint(
-          '⚠️ Hive directory does not exist, creating fresh initialization',
-        );
-        await Hive.initFlutter();
-        hiveRecoveryNeeded = false;
-        debugPrint('✅ Fresh Hive initialization completed');
-      }
-    } catch (backupError) {
-      debugPrint('❌ Backup/recovery process failed: $backupError');
-      hiveRecoveryNeeded = true;
 
-      // LAST RESORT: Create emergency backup before deletion
+          // Initialize Push Notifications only if Firebase is initialized.
+          // Deliberately NOT awaited: FCM token/permission work is network-bound
+          // and must not delay the first frame on 2GB devices.
+          Future<void>(() async {
+            try {
+              await PushNotificationService.initialize();
+              debugPrint('✅ Push Notification Service initialized');
+            } catch (e) {
+              debugPrint('⚠️ Push Notification init error: $e');
+              // Don't disable Firebase entirely - push notifications might fail while other features work
+              await prefs.setBool('push_notifications_enabled', false);
+            }
+          });
+
+          debugPrint('✅ Firebase & Crashlytics initialized');
+        } catch (firebaseError) {
+          debugPrint(
+            '🚨 Firebase mobile initialization failed: $firebaseError',
+          );
+          firebaseInitialized = false;
+
+          // Store failure state
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('firebase_initialized', false);
+          await prefs.setString(
+            'firebase_init_error',
+            firebaseError.toString(),
+          );
+          await prefs.setInt(
+            'firebase_init_error_timestamp',
+            DateTime.now().millisecondsSinceEpoch,
+          );
+
+          // Set up basic error handlers even without Firebase
+          FlutterError.onError = (FlutterErrorDetails details) {
+            if (kDebugMode) {
+              FlutterError.presentError(details);
+            }
+          };
+
+          PlatformDispatcher
+              .instance
+              .onError = (Object error, StackTrace stack) {
+            if (kDebugMode) {
+              debugPrint(
+                'Uncaught async error (Firebase unavailable): $error\n$stack',
+              );
+            }
+            return true;
+          };
+
+          debugPrint(
+            '⚠️ Running without Firebase - crash reporting and push notifications disabled',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('🚨 Firebase outer initialization error: $e');
+      firebaseInitialized = false;
+      // Store Firebase initialization state for feature flagging
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('firebase_initialized', false);
+      await prefs.setString('firebase_init_error', e.toString());
+      await prefs.setInt(
+        'firebase_init_error_timestamp',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+
+      // Set up basic error handlers even without Firebase
+      FlutterError.onError = (FlutterErrorDetails details) {
+        if (kDebugMode) {
+          FlutterError.presentError(details);
+        }
+      };
+
+      PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+        if (kDebugMode) {
+          debugPrint(
+            'Uncaught async error (Firebase unavailable): $error\n$stack',
+          );
+        }
+        return true;
+      };
+    }
+
+    // Store Firebase initialization state for feature flagging (if not already set)
+    final firebasePrefs = await SharedPreferences.getInstance();
+    if (!firebasePrefs.containsKey('firebase_initialized')) {
+      await firebasePrefs.setBool('firebase_initialized', firebaseInitialized);
+    }
+
+    // 🔊 Background service initialization deferred to post-frame callback in MyApp to prevent startup crashes
+
+    // 🛡️ SAFE HIVE INITIALIZATION WITH PROPER BACKUP AND ROLLBACK (100/100 STABILITY)
+    bool hiveRecoveryNeeded = false;
+    String? hiveBackupPath;
+    bool hiveInitSuccess = false;
+
+    try {
+      // Hive.initFlutter performs the required runtime bootstrap. Opening a
+      // throwaway box, writing it, closing it and deleting it on every launch
+      // added synchronous startup I/O but did not validate the real user boxes.
+      // Actual application boxes are opened by their owning storage services.
+      await Hive.initFlutter();
+      hiveInitSuccess = true;
+      if (kDebugMode) debugPrint('✅ Hive initialized successfully');
+    } catch (e) {
+      debugPrint('🚨 Hive init failure: $e');
+      hiveInitSuccess = false;
+      hiveRecoveryNeeded = true;
+    }
+
+    // If Hive initialization failed, attempt recovery with proper backup and rollback
+    if (!hiveInitSuccess && !kIsWeb) {
+      debugPrint('🔄 Attempting Hive recovery with backup...');
       try {
         final appDir = await getApplicationDocumentsDirectory();
         final hiveDir = Directory('${appDir.path}/hive');
 
-        // Create emergency backup with unique timestamp
-        final emergencyTimestamp = DateTime.now().millisecondsSinceEpoch;
-        final emergencyBackup = Directory(
-          '${appDir.path}/hive_emergency_backup_$emergencyTimestamp',
-        );
+        // Create timestamped backup with verification
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final backupDir = Directory('${appDir.path}/hive_backup_$timestamp');
 
         if (await hiveDir.exists()) {
-          await hiveDir.rename(emergencyBackup.path);
-          debugPrint('📦 Emergency backup created: ${emergencyBackup.path}');
-
-          // Store emergency backup info
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-            'hive_emergency_backup_path',
-            emergencyBackup.path,
-          );
-          await prefs.setInt(
-            'hive_emergency_backup_timestamp',
-            emergencyTimestamp,
-          );
-
-          // Try to reinitialize with fresh Hive
-          try {
-            await Hive.initFlutter();
-
-            // Verify fresh initialization
-            final testBox = await Hive.openBox('emergency_test');
-            await testBox.put('test', 'success');
-            await testBox.delete('test');
-            await testBox.close();
-            await Hive.deleteBoxFromDisk('emergency_test');
-
-            debugPrint('✅ Hive reinitialized after emergency backup');
-            hiveRecoveryNeeded = false;
-            await prefs.setBool('hive_emergency_recovery', true);
-          } catch (freshInitError) {
+          // Verify backup directory doesn't already exist
+          if (await backupDir.exists()) {
             debugPrint(
-              '❌ Fresh initialization after emergency backup failed: $freshInitError',
+              '⚠️ Backup directory already exists, using alternative name',
             );
-            // Attempt rollback from emergency backup
+            final altTimestamp = timestamp + 1;
+            final altBackupDir = Directory(
+              '${appDir.path}/hive_backup_$altTimestamp',
+            );
+            await hiveDir.rename(altBackupDir.path);
+            hiveBackupPath = altBackupDir.path;
+          } else {
+            await hiveDir.rename(backupDir.path);
+            hiveBackupPath = backupDir.path;
+          }
+
+          // Verify backup was created successfully
+          if (await Directory(hiveBackupPath!).exists()) {
+            debugPrint('📦 Hive data backed up to: $hiveBackupPath');
+
+            // Store backup info in SharedPreferences for potential restore
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('hive_backup_path', hiveBackupPath);
+            await prefs.setInt('hive_backup_timestamp', timestamp);
+
+            // Try to recover with fresh Hive initialization
             try {
-              if (await hiveDir.exists()) {
-                await hiveDir.delete(recursive: true);
-              }
-              await emergencyBackup.rename(hiveDir.path);
               await Hive.initFlutter();
-              debugPrint('✅ Rollback from emergency backup successful');
-              hiveRecoveryNeeded = false;
-            } catch (emergencyRollbackError) {
+
+              // Verify the fresh initialization works
+              final testBox = await Hive.openBox('recovery_test');
+              await testBox.put('test', 'success');
+              await testBox.delete('test');
+              await testBox.close();
+              await Hive.deleteBoxFromDisk('recovery_test');
+
               debugPrint(
-                '❌ Emergency rollback failed: $emergencyRollbackError',
+                '✅ Hive recovered successfully with fresh initialization',
               );
-              await prefs.setBool('hive_critical_failure', true);
-              await prefs.setString(
-                'hive_critical_error',
-                'Multiple recovery attempts failed. Manual recovery required.',
+              hiveRecoveryNeeded = false;
+
+              // Mark recovery as successful
+              await prefs.setBool('hive_recovery_success', true);
+              await prefs.setInt(
+                'hive_recovery_timestamp',
+                DateTime.now().millisecondsSinceEpoch,
               );
+            } catch (recoveryError) {
+              debugPrint('❌ Fresh Hive initialization failed: $recoveryError');
+              hiveRecoveryNeeded = true;
+
+              // ROLLBACK: Attempt to restore from backup
+              debugPrint('🔄 Attempting rollback from backup...');
+              try {
+                if (await hiveDir.exists()) {
+                  await hiveDir.delete(recursive: true);
+                }
+                await Directory(hiveBackupPath!).rename(hiveDir.path);
+                debugPrint('✅ Rollback successful - data restored from backup');
+
+                // Try initialization with restored data
+                await Hive.initFlutter();
+                debugPrint('✅ Hive initialized with restored data');
+                hiveRecoveryNeeded = false;
+
+                await prefs.setBool('hive_rollback_success', true);
+              } catch (rollbackError) {
+                debugPrint('❌ Rollback failed: $rollbackError');
+                // Keep backup directory for manual recovery
+                await prefs.setBool('hive_recovery_needed', true);
+                await prefs.setBool('hive_rollback_failed', true);
+                await prefs.setString(
+                  'hive_error',
+                  'Recovery and rollback both failed. Manual intervention may be needed.',
+                );
+              }
             }
+          } else {
+            debugPrint(
+              '❌ Backup verification failed - backup directory not found',
+            );
+            hiveRecoveryNeeded = true;
           }
         } else {
-          // No existing hive directory, create fresh
+          debugPrint(
+            '⚠️ Hive directory does not exist, creating fresh initialization',
+          );
           await Hive.initFlutter();
           hiveRecoveryNeeded = false;
-          debugPrint('✅ Fresh Hive initialization (no existing data)');
+          debugPrint('✅ Fresh Hive initialization completed');
         }
-      } catch (emergencyError) {
-        debugPrint('❌ Emergency backup process failed: $emergencyError');
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('hive_critical_failure', true);
-        await prefs.setString('hive_critical_error', emergencyError.toString());
+      } catch (backupError) {
+        debugPrint('❌ Backup/recovery process failed: $backupError');
+        hiveRecoveryNeeded = true;
+
+        // LAST RESORT: Create emergency backup before deletion
+        try {
+          final appDir = await getApplicationDocumentsDirectory();
+          final hiveDir = Directory('${appDir.path}/hive');
+
+          // Create emergency backup with unique timestamp
+          final emergencyTimestamp = DateTime.now().millisecondsSinceEpoch;
+          final emergencyBackup = Directory(
+            '${appDir.path}/hive_emergency_backup_$emergencyTimestamp',
+          );
+
+          if (await hiveDir.exists()) {
+            await hiveDir.rename(emergencyBackup.path);
+            debugPrint('📦 Emergency backup created: ${emergencyBackup.path}');
+
+            // Store emergency backup info
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(
+              'hive_emergency_backup_path',
+              emergencyBackup.path,
+            );
+            await prefs.setInt(
+              'hive_emergency_backup_timestamp',
+              emergencyTimestamp,
+            );
+
+            // Try to reinitialize with fresh Hive
+            try {
+              await Hive.initFlutter();
+
+              // Verify fresh initialization
+              final testBox = await Hive.openBox('emergency_test');
+              await testBox.put('test', 'success');
+              await testBox.delete('test');
+              await testBox.close();
+              await Hive.deleteBoxFromDisk('emergency_test');
+
+              debugPrint('✅ Hive reinitialized after emergency backup');
+              hiveRecoveryNeeded = false;
+              await prefs.setBool('hive_emergency_recovery', true);
+            } catch (freshInitError) {
+              debugPrint(
+                '❌ Fresh initialization after emergency backup failed: $freshInitError',
+              );
+              // Attempt rollback from emergency backup
+              try {
+                if (await hiveDir.exists()) {
+                  await hiveDir.delete(recursive: true);
+                }
+                await emergencyBackup.rename(hiveDir.path);
+                await Hive.initFlutter();
+                debugPrint('✅ Rollback from emergency backup successful');
+                hiveRecoveryNeeded = false;
+              } catch (emergencyRollbackError) {
+                debugPrint(
+                  '❌ Emergency rollback failed: $emergencyRollbackError',
+                );
+                await prefs.setBool('hive_critical_failure', true);
+                await prefs.setString(
+                  'hive_critical_error',
+                  'Multiple recovery attempts failed. Manual recovery required.',
+                );
+              }
+            }
+          } else {
+            // No existing hive directory, create fresh
+            await Hive.initFlutter();
+            hiveRecoveryNeeded = false;
+            debugPrint('✅ Fresh Hive initialization (no existing data)');
+          }
+        } catch (emergencyError) {
+          debugPrint('❌ Emergency backup process failed: $emergencyError');
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('hive_critical_failure', true);
+          await prefs.setString(
+            'hive_critical_error',
+            emergencyError.toString(),
+          );
+        }
       }
     }
-  }
 
-  // Store final Hive status
-  final hivePrefs = await SharedPreferences.getInstance();
-  await hivePrefs.setBool('hive_recovery_needed', hiveRecoveryNeeded);
-  await hivePrefs.setBool(
-    'hive_initialized',
-    hiveInitSuccess || !hiveRecoveryNeeded,
-  );
+    // Store final Hive status
+    final hivePrefs = await SharedPreferences.getInstance();
+    await hivePrefs.setBool('hive_recovery_needed', hiveRecoveryNeeded);
+    await hivePrefs.setBool(
+      'hive_initialized',
+      hiveInitSuccess || !hiveRecoveryNeeded,
+    );
 
     // 🚀 PRODUCTION ARCHITECTURE INITIALIZATION (Ultra-Fast + Zero Data Loss)
     try {
@@ -585,7 +588,9 @@ void main() async {
       // operation queue. Initialize through that owner once, avoiding the
       // duplicate Hive open/cleanup pass that previously ran on every launch.
       await EnhancedLocalStorageService.initialize();
-      debugPrint('✅ Enhanced Local Storage Service and operation queue initialized');
+      debugPrint(
+        '✅ Enhanced Local Storage Service and operation queue initialized',
+      );
 
       // The canonical SyncService owns the durable outbox. The background
       // worker remains only as a compatibility adapter for legacy
@@ -616,8 +621,8 @@ void main() async {
     // the splash screen disappears.
     final backgroundInitializationDelay =
         DeviceCapabilityService.instance.isLowEndDevice
-            ? const Duration(seconds: 8)
-            : const Duration(seconds: 3);
+        ? const Duration(seconds: 8)
+        : const Duration(seconds: 3);
     Future.delayed(backgroundInitializationDelay, () async {
       try {
         // 1. Move the heavy DB purging here so it doesn't block the UI thread
@@ -694,17 +699,24 @@ void main() async {
               : int.tryParse(rawStartupUserId?.toString() ?? '') ?? 0;
           if (startupUserId > 0) {
             // Check if user has a valid local session (token exists)
-            final hasValidSession = await SessionManagementService.isTokenValid();
+            final hasValidSession =
+                await SessionManagementService.isTokenValid();
 
             if (hasValidSession) {
               if (kDebugMode)
-                debugPrint('✅ Valid local session found - user stays logged in');
+                debugPrint(
+                  '✅ Valid local session found - user stays logged in',
+                );
               // Try to refresh token in background if online, but don't block on failure
               try {
-                final autoLoginResult = await SessionManagementService.autoLogin()
-                    .timeout(const Duration(seconds: 5), onTimeout: () => null);
+                final autoLoginResult =
+                    await SessionManagementService.autoLogin().timeout(
+                      const Duration(seconds: 5),
+                      onTimeout: () => null,
+                    );
                 if (autoLoginResult != null) {
-                  if (kDebugMode) debugPrint('✅ Session refreshed successfully');
+                  if (kDebugMode)
+                    debugPrint('✅ Session refreshed successfully');
                 } else {
                   if (kDebugMode)
                     debugPrint(
@@ -933,9 +945,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     ApiClient.onSessionExpired.listen((_) async {
       if (!mounted) return;
 
-      // Customer tokens are stored separately from owner/staff access tokens.
-      // Handle their expiry in the customer flow instead of redirecting a
-      // shopper to the owner login screen or leaving an expired token active.
+      // Customer sign-in is handled by the separate customer website.
       final prefs = await SharedPreferences.getInstance();
       final activeRole =
           (prefs.getString('user_role') ??
@@ -953,13 +963,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           'customer_id',
           'user_id',
           'userId',
+          'user_role',
+          'user_type',
+          'role',
+          'app_mode',
         ]) {
           await prefs.remove(key);
         }
         await ApiClient.resetAuthRuntimeState();
         if (!mounted) return;
         globalNavigatorKey.currentState?.pushNamedAndRemoveUntil(
-          '/customer-login',
+          '/login',
           (_) => false,
         );
         return;
@@ -1439,9 +1453,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final loginPrefs = await SharedPreferences.getInstance();
     _hasSeenOnboarding = loginPrefs.getBool('has_seen_onboarding') ?? false;
 
-    // Customer sessions use a separate encrypted token and must not be
-    // validated as owner/staff sessions. Restore the marketplace directly on
-    // cold start instead of falling through to owner access-token validation.
+    // Customer sign-in and shopping are handled by the separate customer
+    // website. Remove stale customer credentials so they cannot be mistaken
+    // for an owner session on a shared device.
     final storedRole =
         (loginPrefs.getString('user_role') ??
                 loginPrefs.getString('user_type') ??
@@ -1450,42 +1464,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             .trim()
             .toUpperCase();
     if (storedRole == 'CUSTOMER') {
-      final customerToken = await SecureTokenStorage.getCustomerToken();
-      final customerId =
-          await SecureTokenStorage.getUserId() ??
-          int.tryParse(
-            loginPrefs.getString('customer_id') ??
-                loginPrefs.getString('user_id') ??
-                '',
-          ) ??
-          0;
-      var customerTokenIsUsable = false;
-      final tokenParts = (customerToken ?? '').split('.');
-      if (tokenParts.length == 3) {
-        try {
-          final payload = json.decode(
-            utf8.decode(base64Url.decode(base64Url.normalize(tokenParts[1]))),
-          );
-          final expiry = payload is Map ? payload['exp'] : null;
-          if (expiry is num) {
-            customerTokenIsUsable =
-                DateTime.now().millisecondsSinceEpoch < expiry * 1000;
-          }
-        } catch (_) {
-          customerTokenIsUsable = false;
-        }
+      await SecureTokenStorage.clearAll();
+      await SessionLogoutService.exitCustomerMode();
+      for (final key in [
+        'user_role',
+        'user_type',
+        'role',
+        'app_mode',
+        'customer_id',
+        'customer_token',
+        'user_id',
+        'userId',
+      ]) {
+        await loginPrefs.remove(key);
       }
-      if (customerTokenIsUsable && customerId > 0) {
-        if (kDebugMode) {
-          debugPrint('[AUTH] Restored unexpired customer marketplace session');
-        }
-        return true;
-      }
-      if (kDebugMode) {
-        debugPrint(
-          '[AUTH] Customer session is missing, invalid, or expired; returning to customer login',
-        );
-      }
+      await ApiClient.resetAuthRuntimeState();
       return false;
     }
 
@@ -1607,10 +1600,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // session. A confirmed empty roster skips the extra Owner-vs-Staff
       // verification screen; an offline/unknown roster still keeps the gate.
       final hasActiveWorkers =
-          !booting &&
-              authenticated &&
-              role == 'OWNER' &&
-              !staffMode
+          !booting && authenticated && role == 'OWNER' && !staffMode
           ? await WorkerVerificationPolicy.hasActiveWorkersForShop(
               userId: userId,
             )
@@ -1729,10 +1719,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     navigatorObservers: [GuidedVoiceRouteObserver()],
                     builder: (context, child) {
                       final media = MediaQuery.of(context);
-                      final reduceMotion = LowMemoryPerformance.useReducedMotion;
+                      final reduceMotion =
+                          LowMemoryPerformance.useReducedMotion;
                       return MediaQuery(
                         data: media.copyWith(
-                          disableAnimations: media.disableAnimations || reduceMotion,
+                          disableAnimations:
+                              media.disableAnimations || reduceMotion,
                         ),
                         child: GuidedDictationOverlay(
                           child: child ?? const SizedBox.shrink(),
@@ -1896,7 +1888,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       visualDensity: VisualDensity.adaptivePlatformDensity,
                     ),
                     themeMode: themeController.themeMode,
-                    themeAnimationDuration: LowMemoryPerformance.useReducedMotion
+                    themeAnimationDuration:
+                        LowMemoryPerformance.useReducedMotion
                         ? Duration.zero
                         : const Duration(milliseconds: 420),
                     themeAnimationCurve: Curves.easeInOutCubic,
@@ -1971,49 +1964,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           },
                         ),
                         '/login': (context) => const DecentLoginPage(),
-                        '/customer-login': (context) =>
-                            const CustomerLoginPage(),
-                        '/customer-marketplace': (context) =>
-                            const CustomerMarketplacePage(),
-                        '/customer-ai-shopping': (context) =>
-                            const CustomerAiShoppingPage(),
-                        '/nearby-shops': (context) => const NearbyShopsPage(),
-                        '/customer-home': (context) => const CustomerHomePage(),
-                        // Checkout previously navigated to this missing route,
-                        // which showed the generic Not found page after a successful order.
-                        '/order-tracking': (context) =>
-                            const OrderHistoryPage(),
-                        '/customer-orders': (context) =>
-                            const OrderHistoryPage(),
-                        '/customer-cart': (context) {
-                          final args = ModalRoute.of(
-                            context,
-                          )?.settings.arguments;
-                          if (args is Map<String, dynamic>) {
-                            return CustomerCartPage(
-                              cartItems: List<Map<String, dynamic>>.from(
-                                args['cart'] ?? [],
-                              ),
-                              shopId: args['shopId']?.toString() ?? '',
-                              shopName: args['shopName']?.toString() ?? 'Shop',
-                            );
-                          }
-                          final legacy = args as List<Map<String, dynamic>>?;
-                          return CustomerCartPage(cartItems: legacy ?? []);
-                        },
                         '/online-store': (context) => RetailMindFeatureGate(
-                          featureCode: 'online_orders', child: const OnlineStoreHubPage()),
+                          featureCode: 'online_orders',
+                          child: const OnlineStoreHubPage(),
+                        ),
                         '/retail-growth': (context) =>
                             const RetailGrowthSuitePage(),
                         '/growth-agent': (context) => const GrowthAgentPage(),
-                        '/online-store-manager': (context) => RetailMindFeatureGate(
-                          featureCode: 'online_orders', child: const OnlineStoreManagerPage()),
+                        '/online-store-manager': (context) =>
+                            RetailMindFeatureGate(
+                              featureCode: 'online_orders',
+                              child: const OnlineStoreManagerPage(),
+                            ),
                         '/online-orders': (context) => RetailMindFeatureGate(
-                          featureCode: 'online_orders', child: const OnlineOrdersTab()),
-                        '/online-payment-history': (context) => RetailMindFeatureGate(
-                          featureCode: 'online_orders', child: const OnlinePaymentHistoryPage()),
-                        '/online-shopping-config': (context) => RetailMindFeatureGate(
-                          featureCode: 'online_orders', child: const OnlineShoppingConfigPage()),
+                          featureCode: 'online_orders',
+                          child: const OnlineOrdersTab(),
+                        ),
+                        '/online-payment-history': (context) =>
+                            RetailMindFeatureGate(
+                              featureCode: 'online_orders',
+                              child: const OnlinePaymentHistoryPage(),
+                            ),
+                        '/online-shopping-config': (context) =>
+                            RetailMindFeatureGate(
+                              featureCode: 'online_orders',
+                              child: const OnlineShoppingConfigPage(),
+                            ),
                         '/register': (context) {
                           final arguments = ModalRoute.of(
                             context,
@@ -2038,20 +2014,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                             const SystemManagementPage(),
                         // Canonical online-order screen. Keep the legacy route name working for old navigation links.
                         '/owner-orders': (context) => RetailMindFeatureGate(
-                          featureCode: 'online_orders', child: const OnlineOrdersTab()),
-                        '/shop-browser': (context) => const ShopBrowserPage(),
+                          featureCode: 'online_orders',
+                          child: const OnlineOrdersTab(),
+                        ),
                         '/geometric-registration': (context) =>
                             const GeometricRegistrationPage(),
                         '/sales-entry': (context) => const SalesEntryPage(),
                         '/data-upload': (context) => const DataUploadPage(),
                         '/query': (context) => RetailMindFeatureGate(
-                          featureCode: 'ai_queries', child: const AiQueryScreen()),
+                          featureCode: 'ai_queries',
+                          child: const AiQueryScreen(),
+                        ),
                         '/ai-query': (context) => RetailMindFeatureGate(
-                          featureCode: 'ai_queries', child: const AiQueryScreen()),
+                          featureCode: 'ai_queries',
+                          child: const AiQueryScreen(),
+                        ),
                         '/ask-retail-mind': (context) => RetailMindFeatureGate(
-                          featureCode: 'ai_queries', child: const AiQueryScreen()),
-                         '/subscriptions': (context) => const RetailMindSubscriptionPage(),
-                         '/billing': (context) => const RetailMindSubscriptionPage(),
+                          featureCode: 'ai_queries',
+                          child: const AiQueryScreen(),
+                        ),
+                        '/subscriptions': (context) =>
+                            const RetailMindSubscriptionPage(),
+                        '/billing': (context) =>
+                            const RetailMindSubscriptionPage(),
                         '/forgot-password': (context) =>
                             const ForgotPasswordPage(),
                         '/reset-password': (context) =>

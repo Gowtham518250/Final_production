@@ -1,10 +1,11 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'app_endpoints.dart';
 
 class CustomerAPIClient {
-  static const String baseUrl = 'https://retail-mind-vkbp.onrender.com/api';
-  static const String wsUrl = 'wss://retail-mind-vkbp.onrender.com/ws';
+  static String get baseUrl => AppEndpoints.customerApiBaseUrl;
+  static String get wsUrl => AppEndpoints.customerWebSocketBaseUrl;
 
   // 🔒 SECURITY FIX: Use SecureStorage instead of static variables
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
@@ -56,7 +57,9 @@ class CustomerAPIClient {
       }
       final headers = await _headers;
       final res = await http.get(
-        Uri.parse('$baseUrl/customers/$customerId/bills?limit=$limit&offset=$offset'),
+        Uri.parse(
+          '$baseUrl/customers/$customerId/bills?limit=$limit&offset=$offset',
+        ),
         headers: headers,
       );
 

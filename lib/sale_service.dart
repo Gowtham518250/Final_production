@@ -13,6 +13,7 @@ import 'sync_service.dart';
 import 'agent_debug_log.dart';
 import 'crash_recovery_service.dart';
 import 'smart_reorder_ai.dart';
+import 'gst_calculator.dart';
 
 /// PRODUCTION-READY SALE SERVICE: Integrated Idempotency, Encryption, and Error Handling
 class SaleService {
@@ -129,7 +130,13 @@ class SaleService {
     if (!gstRate.isFinite || gstRate < 0 || gstRate > 100) {
       throw const FormatException('GST rate must be between 0 and 100.');
     }
-    final taxAmount = withTax ? money(lineTotal * gstRate / 100) : 0.0;
+    final taxAmount = withTax
+        ? GstCalculator.calculateItemGST(
+            price: lineTotal,
+            quantity: 1,
+            gstRate: gstRate,
+          ).totalGST
+        : 0.0;
     final totalWithTax = money(lineTotal + taxAmount);
 
     final custom =
@@ -171,6 +178,7 @@ class SaleService {
     String paymentMethod = 'Cash',
     bool isBorrow = false,
     String? invoiceNumber,
+    bool refreshDashboard = true,
   }) async {
     const String context = 'SALE_SUBMIT';
     final recordedPaidAmount = isBorrow ? 0.0 : paidAmount;
@@ -438,7 +446,7 @@ class SaleService {
       unawaited(
         _recordLocalSalesVelocity(saleId: saleId, lineItems: lineItems),
       );
-      SyncService.triggerDashboardRefresh();
+      if (refreshDashboard) SyncService.triggerDashboardRefresh();
       recoveryCanBeCleared = true;
 
       // Single upload path: the encrypted durable queue owns the request. The
@@ -771,30 +779,11 @@ class SaleService {
     String? invoiceNumber,
     bool isBorrow = false,
   }) async {
-    List<dynamic> history = await LocalStorageService.loadSales();
-
-    int existingIndex = history.indexWhere((s) {
-      if (s is! Map) return false;
-      final id = (s['sale_id'] ?? s['invoice_number'] ?? s['id'] ?? '')
-          .toString();
-      return id == saleId;
-    });
-
     final String safePhone = customerPhone.isNotEmpty
         ? customerPhone
         : 'GUEST_${saleId.length >= 6 ? saleId.substring(saleId.length - 6) : saleId.padLeft(6, '0')}';
 
-    final existingSale = existingIndex >= 0
-        ? Map<String, dynamic>.from(history[existingIndex] as Map)
-        : null;
     final String saleTimestamp = DateTime.now().toUtc().toIso8601String();
-    final String businessDate =
-        (existingSale?['business_date'] ??
-                existingSale?['sale_date'] ??
-                existingSale?['invoice_date'] ??
-                existingSale?['date'] ??
-                saleTimestamp)
-            .toString();
 
     final List<Map<String, dynamic>> normalizedItems = items.map((item) {
       final double price = (item['unit_price'] ?? item['price'] ?? 0.0) is num
@@ -854,17 +843,15 @@ class SaleService {
       'invoice_number': invoiceNumber ?? saleId,
       'bill_number': invoiceNumber ?? saleId,
       'invoice_display_number': invoiceNumber ?? saleId,
-      'created_at': existingSale?['created_at'] ?? saleTimestamp,
-      'sale_timestamp':
-          existingSale?['sale_timestamp'] ??
-          (existingSale?['created_at'] ?? saleTimestamp),
+      'created_at': saleTimestamp,
+      'sale_timestamp': saleTimestamp,
       'updated_at': saleTimestamp,
       'user_id': userId,
       'sync_status': syncStatus,
       'pending_sync': syncStatus != 'synced',
       'sync_attempts': 0,
       'last_sync_attempt': null,
-      'backend_id': existingSale?['backend_id'],
+      'backend_id': null,
       'is_deleted': false,
       'customer_name': customerName.isNotEmpty
           ? customerName
@@ -875,7 +862,7 @@ class SaleService {
           : null,
       'guest_id': safePhone,
       'items': normalizedItems,
-      'business_date': businessDate,
+      'business_date': saleTimestamp,
       'subtotal': (totals['subtotal'] ?? (grandTotal - invoiceTax)).toString(),
       'total': grandTotal.toString(),
       'total_amount': grandTotal,
@@ -889,20 +876,7 @@ class SaleService {
           : 'Payment via $paymentMethod - Regular Sale',
     };
 
-    if (existingIndex >= 0) {
-      history[existingIndex] = {
-        ...existingSale!,
-        ...saleRecord,
-        'updated_at': saleTimestamp,
-      };
-    } else {
-      history.add(saleRecord);
-    }
-
-    if (history.length > 5000) {
-      history = history.sublist(history.length - 5000);
-    }
-    await LocalStorageService.saveSales(history);
+    await LocalStorageService.upsertSaleRecord(saleRecord, saleId: saleId);
     if (kDebugMode)
       debugPrint('📝 Created local sale with sync metadata: $saleId');
   }

@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'otp_service.dart';
 import 'visual_widgets.dart';
-import 'customer_login_page.dart';
 import 'widgets/otp_code_input.dart';
 import 'scoped_shared_preferences.dart';
 import 'security_service.dart';
@@ -562,10 +561,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
     // Verification is an authentication gate. Return to login instead of
     // popping into a potentially protected page or leaving the gate blank.
     unawaited(GuidedVoiceService.instance.stop());
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/login',
-      (route) => false,
-    );
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
   @override
@@ -716,9 +712,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage>
                 color: Colors.white.withValues(alpha: 0.10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.18),
-                  ),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
                 ),
                 child: IconButton(
                   tooltip: 'Back to Login',

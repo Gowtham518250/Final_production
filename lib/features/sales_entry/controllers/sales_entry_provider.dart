@@ -502,7 +502,7 @@ class SalesEntryProvider extends ChangeNotifier {
     };
   }
 
-  Future<bool> submitSale() async {
+  Future<bool> submitSale({bool refreshDashboard = true}) async {
     if (entries.isEmpty) return false;
     if (!_validateSaleDraftPrices()) return false;
     if (totalAmount <= 0) return false;
@@ -550,6 +550,7 @@ class SalesEntryProvider extends ChangeNotifier {
         },
         paymentMethod: selectedPaymentMethod,
         invoiceNumber: billNumber,
+        refreshDashboard: refreshDashboard,
       );
 
       if (result['success'] == true) {
@@ -581,7 +582,7 @@ class SalesEntryProvider extends ChangeNotifier {
     return digits;
   }
 
-  Future<bool> saveAsCredit() async {
+  Future<bool> saveAsCredit({bool refreshDashboard = true}) async {
     lastCreditError = null;
     if (isSaving) {
       lastCreditError = 'A sale is already being saved. Please wait.';
@@ -659,6 +660,7 @@ class SalesEntryProvider extends ChangeNotifier {
         paymentMethod: 'Credit',
         isBorrow: true,
         invoiceNumber: billNumber,
+        refreshDashboard: refreshDashboard,
       );
 
       if (result['success'] == true) {

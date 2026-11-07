@@ -24,6 +24,7 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
   bool _loading = true;
   String _query = '';
   String _sort = 'DATE_DESC';
+  bool _restoreInProgress = false;
 
   @override
   void initState() {
@@ -81,11 +82,41 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
     return 'unknown-${invoice.hashCode}';
   }
 
-  Future<void> _loadPaidInvoices() => _loadPaidInvoicesFromLocalOnly();
+  Future<void> _loadPaidInvoices() async {
+    final loaded = await _loadPaidInvoicesFromLocalOnly();
 
-  Future<void> _loadPaidInvoicesFromLocalOnly() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
+    // The local ledger is authoritative for display. Only fetch cloud data
+    // when it is empty, and never start a second restore from the refresh pass.
+    if (!loaded || !mounted || _paidInvoices.isNotEmpty || _restoreInProgress) {
+      return;
+    }
+    unawaited(_restorePaidInvoices());
+  }
+
+  Future<void> _restorePaidInvoices() async {
+    _restoreInProgress = true;
+    try {
+      await SyncService.downloadUserDataSafe();
+      if (!mounted) return;
+      await _loadPaidInvoicesFromLocalOnly(showLoading: false);
+    } catch (e) {
+      if (mounted && _paidInvoices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: LiveTranslatedText(
+              'Paid invoices will appear after cloud sync completes.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      _restoreInProgress = false;
+    }
+  }
+
+  Future<bool> _loadPaidInvoicesFromLocalOnly({bool showLoading = true}) async {
+    if (!mounted) return false;
+    if (showLoading) setState(() => _loading = true);
 
     try {
       final raw = await LocalStorageService.loadLocalInvoices();
@@ -103,15 +134,15 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
               invoice['grand_total'],
         );
         final paid = _amount(
-          invoice['paid_amount'] ??
-              invoice['amount_paid'] ??
-              invoice['paid'],
+          invoice['paid_amount'] ?? invoice['amount_paid'] ?? invoice['paid'],
         ).clamp(0.0, total);
-        final outstanding =
-            (total - paid).clamp(0.0, double.infinity).toDouble();
+        final outstanding = (total - paid)
+            .clamp(0.0, double.infinity)
+            .toDouble();
 
-        final status =
-            (invoice['payment_status'] ?? invoice['status'] ?? '').toString().toUpperCase();
+        final status = (invoice['payment_status'] ?? invoice['status'] ?? '')
+            .toString()
+            .toUpperCase();
         if (outstanding > 0.01 && status != 'PAID') continue;
 
         canonical[key] = {
@@ -126,31 +157,14 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
       final paid = canonical.values.toList();
       paid.sort((a, b) => _dateOf(b).compareTo(_dateOf(a)));
 
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _paidInvoices = paid;
         _loading = false;
       });
-
-      // Rehydrate after app-data clear/login before showing an empty paid list.
-      unawaited(() async {
-        try {
-          await SyncService.downloadUserDataSafe();
-          if (!mounted) return;
-          final restored = await LocalStorageService.loadLocalInvoices();
-          final restoredKeys = restored.whereType<Map>().map((m) => _invoiceKey(Map<String, dynamic>.from(m))).toSet();
-          final localKeys = paid.map(_invoiceKey).toSet();
-          if (restoredKeys.length != localKeys.length || restoredKeys.difference(localKeys).isNotEmpty) {
-            await _loadPaidInvoicesFromLocalOnly();
-          }
-        } catch (e) {
-          if (mounted && _paidInvoices.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: LiveTranslatedText('Paid invoices will appear after cloud sync completes.')));
-          }
-        }
-      }());
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _paidInvoices = [];
         _loading = false;
@@ -161,6 +175,7 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
           backgroundColor: Colors.red.shade700,
         ),
       );
+      return false;
     }
   }
 
@@ -173,8 +188,9 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
       final phone = (invoice['customer_phone'] ?? invoice['phone'] ?? '')
           .toString()
           .toLowerCase();
-      final number =
-          (invoice['invoice_number'] ?? invoice['sale_id'] ?? '').toString().toLowerCase();
+      final number = (invoice['invoice_number'] ?? invoice['sale_id'] ?? '')
+          .toString()
+          .toLowerCase();
       return name.contains(_query) ||
           phone.contains(_query) ||
           number.contains(_query);
@@ -200,7 +216,9 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
 
   String _formatDate(DateTime date) {
     if (date.year <= 1970) return 'Date unavailable';
-    final hour = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
     final amPm = date.hour >= 12 ? 'PM' : 'AM';
     return '${date.day.toString().padLeft(2, '0')}/'
@@ -273,29 +291,26 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
                       sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final animation = CurvedAnimation(
-                              parent: _animationController,
-                              curve: Interval(
-                                (index / invoices.length).clamp(0.0, 0.82),
-                                ((index + 1) / invoices.length).clamp(0.18, 1.0),
-                                curve: Curves.easeOutCubic,
-                              ),
-                            );
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(0, 0.06),
-                                  end: Offset.zero,
-                                ).animate(animation),
-                                child: _buildPaidCard(invoices[index]),
-                              ),
-                            );
-                          },
-                          childCount: invoices.length,
-                        ),
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final animation = CurvedAnimation(
+                            parent: _animationController,
+                            curve: Interval(
+                              (index / invoices.length).clamp(0.0, 0.82),
+                              ((index + 1) / invoices.length).clamp(0.18, 1.0),
+                              curve: Curves.easeOutCubic,
+                            ),
+                          );
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, 0.06),
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: _buildPaidCard(invoices[index]),
+                            ),
+                          );
+                        }, childCount: invoices.length),
                       ),
                     ),
                 ],
@@ -336,9 +351,7 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.16),
               shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.32),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.32)),
             ),
             child: const Icon(
               Icons.check_rounded,
@@ -475,12 +488,14 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
   }
 
   Widget _buildPaidCard(Map<String, dynamic> invoice) {
-    final name = (invoice['customer_name'] ?? invoice['name'] ?? 'Cash Customer')
+    final name =
+        (invoice['customer_name'] ?? invoice['name'] ?? 'Cash Customer')
+            .toString();
+    final phone = (invoice['customer_phone'] ?? invoice['phone'] ?? '')
         .toString();
-    final phone =
-        (invoice['customer_phone'] ?? invoice['phone'] ?? '').toString();
     final number =
-        (invoice['invoice_number'] ?? invoice['sale_id'] ?? 'Invoice').toString();
+        (invoice['invoice_number'] ?? invoice['sale_id'] ?? 'Invoice')
+            .toString();
     final total = _amount(invoice['total_amount']);
     final paid = _amount(invoice['paid_amount']);
     final date = _dateOf(invoice);
@@ -691,11 +706,13 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
 
   void _showInvoiceDetails(Map<String, dynamic> invoice) {
     final name =
-        (invoice['customer_name'] ?? invoice['name'] ?? 'Cash Customer').toString();
-    final phone =
-        (invoice['customer_phone'] ?? invoice['phone'] ?? '').toString();
+        (invoice['customer_name'] ?? invoice['name'] ?? 'Cash Customer')
+            .toString();
+    final phone = (invoice['customer_phone'] ?? invoice['phone'] ?? '')
+        .toString();
     final number =
-        (invoice['invoice_number'] ?? invoice['sale_id'] ?? 'Invoice').toString();
+        (invoice['invoice_number'] ?? invoice['sale_id'] ?? 'Invoice')
+            .toString();
     final total = _amount(invoice['total_amount']);
     final paid = _amount(invoice['paid_amount']);
     final date = _dateOf(invoice);
@@ -791,9 +808,7 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0FDF4),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFFBBF7D0),
-                      ),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
                     ),
                     child: Row(
                       children: [
@@ -828,13 +843,15 @@ class _PaidInvoicesPageState extends State<PaidInvoicesPage>
                     const SizedBox(height: 8),
                     ...lineItems.whereType<Map>().map((item) {
                       final itemMap = Map<String, dynamic>.from(item);
-                      final itemName = (itemMap['product_name'] ??
-                              itemMap['product'] ??
-                              itemMap['name'] ??
-                              'Item')
-                          .toString();
-                      final qty =
-                          _amount(itemMap['quantity'] ?? itemMap['qty'] ?? 1);
+                      final itemName =
+                          (itemMap['product_name'] ??
+                                  itemMap['product'] ??
+                                  itemMap['name'] ??
+                                  'Item')
+                              .toString();
+                      final qty = _amount(
+                        itemMap['quantity'] ?? itemMap['qty'] ?? 1,
+                      );
                       final value = _amount(
                         itemMap['total'] ??
                             itemMap['line_total'] ??

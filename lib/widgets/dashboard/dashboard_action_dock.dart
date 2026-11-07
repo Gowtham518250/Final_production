@@ -37,34 +37,48 @@ class DashboardActionDock extends StatelessWidget {
       top: false,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const columns = 5;
-          const horizontalPadding = 12.0;
-          const spacing = 6.0;
-          final itemWidth =
-              (constraints.maxWidth -
-                  horizontalPadding * 2 -
-                  spacing * (columns - 1)) /
-              columns;
+          const horizontalPadding = 0.0;
+          const spacing = 4.0;
+          const minItemWidth = 76.0;
+          const maxItemWidth = 120.0;
+          final availableWidth = constraints.maxWidth - horizontalPadding * 2;
+          final fitWidth = items.isEmpty
+              ? maxItemWidth
+              : (availableWidth - spacing * (items.length - 1)) / items.length;
+          final itemWidth = fitWidth.clamp(minItemWidth, maxItemWidth);
+          final rowWidth =
+              itemWidth * items.length + spacing * (items.length - 1);
 
-          return Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: horizontalPadding,
-              vertical: 8,
-            ),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border(top: BorderSide(color: borderColor)),
-            ),
-            child: Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: [
-                for (final item in items)
-                  SizedBox(
-                    width: itemWidth,
-                    child: _DashboardActionButton(item: item),
+          return SizedBox(
+            height: 56,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border(top: BorderSide(color: borderColor)),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: rowWidth < availableWidth ? availableWidth : rowWidth,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      for (var index = 0; index < items.length; index++) ...[
+                        if (index > 0) const SizedBox(width: spacing),
+                        SizedBox(
+                          key: ValueKey('dashboard-action-$index'),
+                          width: itemWidth,
+                          child: _DashboardActionButton(item: items[index]),
+                        ),
+                      ],
+                    ],
                   ),
-              ],
+                ),
+              ),
             ),
           );
         },
@@ -85,15 +99,15 @@ class _DashboardActionButton extends StatelessWidget {
       message: item.label,
       child: Material(
         color: item.primary ? item.color : item.color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: item.onTap,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            constraints: const BoxConstraints(minHeight: 68),
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(10),
               border: item.primary
                   ? null
                   : Border.all(color: item.color.withValues(alpha: 0.3)),
@@ -114,8 +128,8 @@ class _DashboardActionButton extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(item.icon, color: foreground, size: 21),
-                      const SizedBox(height: 3),
+                      Icon(item.icon, color: foreground, size: 17),
+                      const SizedBox(height: 1),
                       LiveTranslatedText(
                         item.label,
                         textAlign: TextAlign.center,
@@ -123,7 +137,7 @@ class _DashboardActionButton extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: foreground,
-                          fontSize: 9,
+                          fontSize: 8,
                           fontWeight: FontWeight.w700,
                           height: 1.05,
                         ),

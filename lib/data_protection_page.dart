@@ -41,45 +41,51 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
 
   Future<void> _performSync() async {
     setState(() => _syncing = true);
+    var succeeded = false;
+    var message = 'Sync failed. Your local data is unchanged.';
+    try {
+      succeeded = await DataProtectionService.syncAllData(maxRetries: 3);
+      message = succeeded
+          ? '✅ All data synced to backend!'
+          : '⚠️ Sync failed after retries. Your local data is unchanged.';
+    } on StateError catch (error) {
+      message = error.message.toString();
+    } catch (error) {
+      message = 'Sync failed: $error';
+    }
     
-    final result = await DataProtectionService.syncAllData(maxRetries: 3);
-    
-    if (mounted) {
+    if (!mounted) return;
+    setState(() => _syncing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText(
-            result 
-              ? '✅ All data synced to backend!' 
-              : '⚠️ Sync partially failed (retrying)',
-          ),
-          backgroundColor: result ? Colors.green : Colors.orange,
+        content: LiveTranslatedText(message),
+        backgroundColor: succeeded ? Colors.green : Colors.orange,
         ),
       );
-      
-      setState(() => _syncing = false);
-      await _loadStatus();
-    }
+    if (succeeded) await _loadStatus();
   }
 
   Future<void> _createBackup() async {
     setState(() => _backing = true);
+    String message;
+    var succeeded = false;
+    try {
+      final path = await DataProtectionService.createLocalBackup();
+      message = '✅ Local backup saved to $path';
+      succeeded = true;
+    } catch (error) {
+      message = '❌ Backup failed: $error';
+    }
     
-    final result = await DataProtectionService.createLocalBackup();
-    
-    if (mounted) {
+    if (!mounted) return;
+    setState(() => _backing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: LiveTranslatedText(
-            result 
-              ? '✅ Local backup created!' 
-              : '❌ Backup failed',
-          ),
-          backgroundColor: result ? Colors.green : Colors.red,
+        content: LiveTranslatedText(message),
+        backgroundColor: succeeded ? Colors.green : Colors.red,
+        duration: const Duration(seconds: 6),
         ),
       );
-      
-      setState(() => _backing = false);
-    }
   }
 
   @override
@@ -149,7 +155,8 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
                   if (_integrityStatus['integrity_issues'] != null &&
                       (_integrityStatus['integrity_issues'] as List).isNotEmpty)
                     _buildWarningCard(
-                      title: 'Issues Found (${_integrityStatus['issue_count']})',
+                      title:
+                          'Issues Found (${_integrityStatus['issue_count']})',
                       issues: _integrityStatus['integrity_issues'],
                     ),
                   const SizedBox(height: 24),
@@ -234,13 +241,15 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
               ),
             ),
             const SizedBox(height: 12),
-            ...items.map((item) => Padding(
+            ...items.map(
+              (item) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: LiveTranslatedText(
                 '• $item',
                 style: GoogleFonts.poppins(fontSize: 12),
               ),
-            )),
+              ),
+            ),
           ],
         ),
       ),
@@ -267,13 +276,15 @@ class _DataProtectionPageState extends State<DataProtectionPage> {
               ),
             ),
             const SizedBox(height: 8),
-            ...issues.map((issue) => LiveTranslatedText(
+            ...issues.map(
+              (issue) => LiveTranslatedText(
               '⚠️ $issue',
               style: GoogleFonts.poppins(
                 fontSize: 11,
                 color: Colors.orange[800],
               ),
-            )),
+              ),
+            ),
           ],
         ),
       ),

@@ -246,6 +246,11 @@ class BackgroundSyncWorker {
       final operation = await OperationQueueService.instance.getNextOperation();
       
       if (operation == null) break;
+      if (!await OperationQueueService.instance.isOwnedByCurrentSession(
+        operation,
+      )) {
+        continue;
+      }
       
       // Skip if not matching priority filter
       if (priorityOnly != null && operation.priority != priorityOnly) {
@@ -269,6 +274,11 @@ class BackgroundSyncWorker {
         }
         
         // Send to backend
+        if (!await OperationQueueService.instance.isOwnedByCurrentSession(
+          operation,
+        )) {
+          continue;
+        }
         final success = await _sendOperationToBackend(operation);
         
         if (success) {

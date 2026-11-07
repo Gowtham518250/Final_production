@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/foundation.dart';
 
 /// Generates a professional single-transaction bill PDF and returns the file path.
 class BillGeneratorService {
@@ -36,46 +37,49 @@ class BillGeneratorService {
       if (value is num) return value.toDouble();
       return double.tryParse(value?.toString() ?? '') ?? fallback;
     }
-    final grossSubtotal = money(items.fold<double>(
-      0.0,
-      (sum, item) => sum + money(
-        readNumber(item['qty'], 1) * readNumber(item['price']),
+
+    final grossSubtotal = money(
+      items.fold<double>(
+        0.0,
+        (sum, item) =>
+            sum + money(readNumber(item['qty'], 1) * readNumber(item['price'])),
       ),
-    ));
-    final specialDiscount = money(items.fold<double>(
-      0.0,
-      (sum, item) => sum + money(readNumber(item['discount_amount'])),
-    ));
-    final taxableSubtotal = money(items.fold<double>(
-      0.0,
-      (sum, item) {
+    );
+    final specialDiscount = money(
+      items.fold<double>(
+        0.0,
+        (sum, item) => sum + money(readNumber(item['discount_amount'])),
+      ),
+    );
+    final taxableSubtotal = money(
+      items.fold<double>(0.0, (sum, item) {
         final grossLine = money(
           readNumber(item['qty'], 1) * readNumber(item['price']),
         );
-        final discount = money(readNumber(item['discount_amount'])
-            .clamp(0.0, grossLine)
-            .toDouble());
-        return sum + money((grossLine - discount)
-            .clamp(0.0, double.infinity)
-            .toDouble());
-      },
-    ));
+        final discount = money(
+          readNumber(item['discount_amount']).clamp(0.0, grossLine).toDouble(),
+        );
+        return sum +
+            money(
+              (grossLine - discount).clamp(0.0, double.infinity).toDouble(),
+            );
+      }),
+    );
     final taxTotal = withTax
-        ? money(items.fold<double>(
-            0.0,
-            (sum, item) {
+        ? money(
+            items.fold<double>(0.0, (sum, item) {
               final qty = readNumber(item['qty'], 1);
               final price = readNumber(item['price']);
-              final discount = readNumber(item['discount_amount'])
-                  .clamp(0.0, qty * price)
-                  .toDouble();
-              final taxableLine = money((qty * price - discount)
-                  .clamp(0.0, double.infinity)
-                  .toDouble());
+              final discount = readNumber(
+                item['discount_amount'],
+              ).clamp(0.0, qty * price).toDouble();
+              final taxableLine = money(
+                (qty * price - discount).clamp(0.0, double.infinity).toDouble(),
+              );
               final rate = readNumber(item['gst_rate'] ?? item['gst']);
               return sum + money(taxableLine * rate / 100);
-            },
-          ))
+            }),
+          )
         : 0.0;
     final cgst = money(taxTotal / 2);
     final sgst = money(taxTotal - cgst);
@@ -93,13 +97,37 @@ class BillGeneratorService {
                 children: [
                   pw.Text(
                     shopName.toUpperCase(),
-                    style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
                   ),
                   if (shopAddress != null && shopAddress.isNotEmpty)
-                    pw.Text(shopAddress, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
-                  pw.Text(shopPhone, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                    pw.Text(
+                      shopAddress,
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  pw.Text(
+                    shopPhone,
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
                   if (gstNumber != null && gstNumber.isNotEmpty)
-                    pw.Text('GST: $gstNumber', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                    pw.Text(
+                      'GST: $gstNumber',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -113,18 +141,42 @@ class BillGeneratorService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('Bill No: $invoiceId', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                    pw.Text('Customer: ${customerName.isNotEmpty ? customerName : "Guest"}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(
+                      'Bill No: $invoiceId',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 10,
+                      ),
+                    ),
+                    pw.Text(
+                      'Customer: ${customerName.isNotEmpty ? customerName : "Guest"}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(dateStr, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                    pw.Text(
+                      dateStr,
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: pw.BoxDecoration(
-                        color: paymentStatus == 'PAID' ? PdfColors.green100 : PdfColors.red100,
+                        color: paymentStatus == 'PAID'
+                            ? PdfColors.green100
+                            : PdfColors.red100,
                         borderRadius: pw.BorderRadius.circular(4),
                       ),
                       child: pw.Text(
@@ -132,7 +184,9 @@ class BillGeneratorService {
                         style: pw.TextStyle(
                           fontSize: 9,
                           fontWeight: pw.FontWeight.bold,
-                          color: paymentStatus == 'PAID' ? PdfColors.green800 : PdfColors.red800,
+                          color: paymentStatus == 'PAID'
+                              ? PdfColors.green800
+                              : PdfColors.red800,
                         ),
                       ),
                     ),
@@ -146,9 +200,17 @@ class BillGeneratorService {
             // ── ITEMS TABLE ──
             pw.TableHelper.fromTextArray(
               headers: ['#', 'Item', 'Qty', 'Rate', 'Amount'],
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
-              cellStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 9,
+              ),
+              cellStyle: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+              ),
               border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
               cellAlignments: {
                 0: pw.Alignment.center,
@@ -160,17 +222,22 @@ class BillGeneratorService {
               data: items.asMap().entries.map((e) {
                 final i = e.key;
                 final item = e.value;
-                final name = (item['product_name'] ?? item['item'] ?? 'Item').toString();
+                final name = (item['product_name'] ?? item['item'] ?? 'Item')
+                    .toString();
                 final qty = readNumber(item['qty'], 1);
                 final rate = readNumber(item['price']);
-                final discountAmount = readNumber(item['discount_amount'])
-                    .clamp(0.0, qty * rate)
-                    .toDouble();
-                final total = money(math.max(0.0, (qty * rate) - discountAmount));
+                final discountAmount = readNumber(
+                  item['discount_amount'],
+                ).clamp(0.0, qty * rate).toDouble();
+                final total = money(
+                  math.max(0.0, (qty * rate) - discountAmount),
+                );
                 return [
                   '${i + 1}',
                   name,
-                  qty % 1 == 0 ? qty.toInt().toString() : qty.toStringAsFixed(2),
+                  qty % 1 == 0
+                      ? qty.toInt().toString()
+                      : qty.toStringAsFixed(2),
                   '₹${rate.toStringAsFixed(2)}',
                   '₹${total.toStringAsFixed(2)}',
                 ];
@@ -204,21 +271,51 @@ class BillGeneratorService {
                       style: pw.TextStyle(fontSize: 9),
                     ),
                   if (withTax) ...[
-                    pw.Text('CGST: ₹${cgst.toStringAsFixed(2)}',
-                        style: pw.TextStyle(fontSize: 9)),
-                    pw.Text('SGST: ₹${sgst.toStringAsFixed(2)}',
-                        style: pw.TextStyle(fontSize: 9)),
+                    pw.Text(
+                      'CGST: ₹${cgst.toStringAsFixed(2)}',
+                      style: pw.TextStyle(fontSize: 9),
+                    ),
+                    pw.Text(
+                      'SGST: ₹${sgst.toStringAsFixed(2)}',
+                      style: pw.TextStyle(fontSize: 9),
+                    ),
                   ],
                   pw.Row(
                     mainAxisSize: pw.MainAxisSize.min,
                     children: [
-                      pw.Text('GRAND TOTAL:  ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
-                      pw.Text('₹${totalAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                      pw.Text(
+                        'GRAND TOTAL:  ',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      pw.Text(
+                        '₹${totalAmount.toStringAsFixed(2)}',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
                   ),
                   if (paidAmount > 0 && paidAmount < totalAmount) ...[
-                    pw.Text('Paid: ₹${paidAmount.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
-                    pw.Text('Balance Due: ₹${due.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.red700)),
+                    pw.Text(
+                      'Paid: ₹${paidAmount.toStringAsFixed(2)}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.green700,
+                      ),
+                    ),
+                    pw.Text(
+                      'Balance Due: ₹${due.toStringAsFixed(2)}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.red700,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -230,8 +327,22 @@ class BillGeneratorService {
             pw.Center(
               child: pw.Column(
                 children: [
-                  pw.Text('Thank you for shopping with us!', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
-                  pw.Text('Powered by Retail Mind', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey500)),
+                  pw.Text(
+                    'Thank you for shopping with us!',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                  pw.Text(
+                    'Powered by Retail Mind',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey500,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -242,26 +353,43 @@ class BillGeneratorService {
 
     // Save to Downloads
     final dir = await _getDownloadsDir();
-    final fileName = 'Bill_${invoiceId.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}.pdf';
+    final fileName =
+        'Bill_${invoiceId.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}.pdf';
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(await pdf.save());
 
-    print('✅ Bill saved: ${file.path}');
+    debugPrint('✅ Bill saved: ${file.path}');
     return file.path;
   }
 
+  @visibleForTesting
+  static String buildShareMessage({String? customerName, String? shopName}) {
+    final customer = customerName?.trim();
+    final shop = shopName?.trim();
+    final greeting = customer == null || customer.isEmpty
+        ? 'Thank you for shopping with us!'
+        : 'Dear $customer, thank you for shopping with us!';
+    final shopLine = shop == null || shop.isEmpty ? '' : ' at $shop';
+    return '$greeting\nPlease find your digital bill$shopLine attached.';
+  }
+
   /// Share the generated bill as a PDF file (WhatsApp, email, etc.)
-  static Future<void> shareBill(String filePath, {String? customerName}) async {
+  static Future<void> shareBill(
+    String filePath, {
+    String? customerName,
+    String? shopName,
+  }) async {
     try {
       final xFile = XFile(filePath, mimeType: 'application/pdf');
-      await Share.shareXFiles([xFile],
-        subject: 'Your Bill – AI Shop Pro',
-        text: customerName != null && customerName.isNotEmpty
-            ? '🛍️ Dear $customerName, thank you for shopping with us!\nPlease find your digital bill attached.\n\n---\n🚀 *Powered by AI Shop Pro*\nThe #1 Smart Billing App for Retailers.\nGet it here: https://aishoppro.com/app'
-            : '🛍️ Thank you for shopping with us!\nPlease find your digital bill attached.\n\n---\n🚀 *Powered by AI Shop Pro*\nThe #1 Smart Billing App for Retailers.\nGet it here: https://aishoppro.com/app',
+      final shop = shopName?.trim();
+      await Share.shareXFiles(
+        [xFile],
+        subject: shop == null || shop.isEmpty ? 'Your bill' : 'Bill from $shop',
+        text: buildShareMessage(customerName: customerName, shopName: shopName),
       );
     } catch (e) {
-      print('Share bill error: $e');
+      debugPrint('Share bill error: $e');
+      rethrow;
     }
   }
 
@@ -272,7 +400,8 @@ class BillGeneratorService {
       final bytes = await file.readAsBytes();
       await Printing.layoutPdf(onLayout: (_) async => bytes);
     } catch (e) {
-      print('Print bill error: $e');
+      debugPrint('Print bill error: $e');
+      rethrow;
     }
   }
 

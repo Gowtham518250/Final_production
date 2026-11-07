@@ -1,3 +1,5 @@
+import '../../../gst_calculator.dart';
+
 class SalesItem {
   final String id;
   final String itemName;
@@ -39,8 +41,7 @@ class SalesItem {
     );
   }
 
-  static double _money(double value) =>
-      double.parse(value.toStringAsFixed(2));
+  static double _money(double value) => double.parse(value.toStringAsFixed(2));
 
   double get billableQuantity {
     if (!quantity.isFinite || quantity <= 0) return 0.0;
@@ -62,15 +63,20 @@ class SalesItem {
     return _money(discount.clamp(0.0, subtotal).toDouble());
   }
 
-  double get taxableAmount =>
-      _money((subtotal - discountAmount).clamp(0.0, double.infinity).toDouble());
+  double get taxableAmount => _money(
+    (subtotal - discountAmount).clamp(0.0, double.infinity).toDouble(),
+  );
 
   double get effectiveGstRate {
     if (!gst.isFinite || gst <= 0) return 0.0;
     return gst.clamp(0.0, 100.0).toDouble();
   }
 
-  double get totalGstAmount => _money(taxableAmount * effectiveGstRate / 100);
+  double get totalGstAmount => GstCalculator.calculateItemGST(
+    price: taxableAmount,
+    quantity: 1,
+    gstRate: effectiveGstRate,
+  ).totalGST;
 
   double get finalAmount => _money(taxableAmount + totalGstAmount);
 }

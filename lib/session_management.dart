@@ -209,7 +209,13 @@ class SessionManagementService {
 
       // Do not swallow secure-storage failures: navigation must not proceed
       // with a login that appears successful but has no persisted token.
-      await SecureTokenStorage.saveToken(accessToken);
+      final isCustomerSession =
+          await SecureTokenStorage.getRole() == SessionRole.customer;
+      if (isCustomerSession) {
+        await SecureTokenStorage.saveCustomerToken(accessToken);
+      } else {
+        await SecureTokenStorage.saveToken(accessToken);
+      }
       final storedAccessToken = await SecureTokenStorage.getToken();
       if (storedAccessToken != accessToken) {
         throw StateError('Access token could not be persisted and verified.');
@@ -344,6 +350,11 @@ class SessionManagementService {
     // new credentials before allowing the login flow to navigate.
     await ScopedSharedPreferences.setCurrentUserId(userId);
     await SecureTokenStorage.saveUserId(userId);
+    await SecureTokenStorage.saveRole(
+      role.trim().toLowerCase() == 'customer'
+          ? SessionRole.customer
+          : SessionRole.owner,
+    );
     await saveTokens(
       refreshToken: refreshToken,
       accessToken: accessToken,
@@ -664,9 +675,9 @@ class SessionManagementService {
           await prefs.remove(_userNameKey);
           await prefs.remove(_userEmailKey);
           try {
-            await SecureTokenStorage.clearUserId();
+            await SecureTokenStorage.clearAll();
           } catch (e) {
-            if (kDebugMode) debugPrint('⚠️ Error clearing secure user id: $e');
+            if (kDebugMode) debugPrint('⚠️ Error clearing secure session: $e');
           }
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Error clearing SharedPreferences: $e');

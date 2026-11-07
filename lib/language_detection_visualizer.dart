@@ -183,6 +183,8 @@ class _LanguageDetectionVisualizerState
     _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(begin: const Offset(0, -0.3), end: Offset.zero)
         .animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
+    _lastScript = ScriptDetector.detect(widget.transcript);
+    _words = _buildDetectedWords(widget.transcript, widget.parsedItems);
     _fadeCtrl.forward();
     _slideCtrl.forward();
   }
@@ -190,7 +192,20 @@ class _LanguageDetectionVisualizerState
   @override
   void didUpdateWidget(LanguageDetectionVisualizer old) {
     super.didUpdateWidget(old);
-    if (old.transcript != widget.transcript) {
+    final parsedNamesChanged =
+        old.parsedItems.length != widget.parsedItems.length ||
+        List.generate(old.parsedItems.length, (index) {
+          final oldName = (old.parsedItems[index]['product_name'] ??
+                  old.parsedItems[index]['name'] ??
+                  '')
+              .toString();
+          final newName = (widget.parsedItems[index]['product_name'] ??
+                  widget.parsedItems[index]['name'] ??
+                  '')
+              .toString();
+          return oldName != newName;
+        }).contains(true);
+    if (old.transcript != widget.transcript || parsedNamesChanged) {
       _analyzeTranscript();
     }
   }

@@ -121,9 +121,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
     }
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (ctx) => RoleSelectionPage(email: email),
-      ),
+      MaterialPageRoute(builder: (ctx) => RoleSelectionPage(email: email)),
     );
   }
 
@@ -252,6 +250,16 @@ class _DecentLoginPageState extends State<DecentLoginPage>
         final refreshToken = data['refresh_token']?.toString() ?? '';
         final tokenType = data['token_type']?.toString() ?? 'bearer';
         final role = data['role']?.toString() ?? 'OWNER';
+
+        if (role.trim().toUpperCase() == 'CUSTOMER') {
+          if (mounted) {
+            setState(() {
+              errorMessage =
+                  'Customer accounts sign in through the customer website.';
+            });
+          }
+          return;
+        }
 
         if (accessToken.isEmpty) {
           setState(() {
@@ -417,9 +425,7 @@ class _DecentLoginPageState extends State<DecentLoginPage>
         unawaited(_runPostLoginSyncInBackground(userId));
         if (!mounted) return;
         final normalizedRole = role.trim().toUpperCase();
-        if (normalizedRole == 'CUSTOMER') {
-          Navigator.of(context).pushReplacementNamed('/customer-verification');
-        } else if (normalizedRole == 'OWNER') {
+        if (normalizedRole == 'OWNER') {
           await _routeAfterOwnerLogin(
             userId: userId,
             email: emailController.text.trim(),

@@ -27,6 +27,7 @@ import 'secure_preferences_service.dart';
 import 'shop_logo_format.dart';
 import 'scoped_shared_preferences.dart';
 import 'guided_dictation_overlay.dart';
+import 'app_endpoints.dart';
 
 class ShopProfilePage extends StatefulWidget {
   const ShopProfilePage({super.key});
@@ -1595,17 +1596,25 @@ class _ShopProfilePageState extends State<ShopProfilePage> {
                                       try {
                                         final prefs =
                                             await SharedPreferences.getInstance();
-                                        final shopId =
-                                            prefs.getString('shop_id') ??
-                                            prefs
-                                                .getInt('user_id')
-                                                ?.toString() ??
-                                            '1';
+                                        final shopId = int.tryParse(
+                                          prefs.getString('shop_id') ??
+                                              prefs
+                                                  .getInt('user_id')
+                                                  ?.toString() ??
+                                              '',
+                                        );
+                                        if (shopId == null || shopId <= 0) {
+                                          throw StateError(
+                                            'A valid shop ID is unavailable.',
+                                          );
+                                        }
                                         final shopName =
                                             prefs.getString('shop_name') ??
                                             shopNameController.text.trim();
                                         final shopUrl =
-                                            'https://retail-mind-web.onrender.com/shop/$shopId';
+                                            AppEndpoints.customerShopUrl(
+                                              shopId,
+                                            );
                                         await Share.share(
                                           '🛍️ Browse products from $shopName\n$shopUrl',
                                           subject: 'Visit $shopName',

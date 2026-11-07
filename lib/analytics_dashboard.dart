@@ -39,24 +39,29 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
   bool _loading = true;
   // 0 = Today, 1 = 7 Days, 2 = 30 Days, 3 = Yearly — matches AnalyticsEngine.selectedTimeFilter
   int _selectedFilter = 0;
-  static const List<String> _periodLabels = ['Today', '7 Days', '30 Days', 'Yearly'];
+  static const List<String> _periodLabels = [
+    'Today',
+    '7 Days',
+    '30 Days',
+    'Yearly',
+  ];
 
-  Timer? _autoRefreshTimer;
+  StreamSubscription<void>? _refreshSubscription;
+  bool _analyticsLoadInProgress = false;
+  bool _refreshPending = false;
 
   @override
   void initState() {
     super.initState();
     _loadAnalytics();
-    // "Instant" updates: silently refresh while this screen stays open,
-    // so a sale made elsewhere shows up here without a manual reload.
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      _loadAnalytics(silent: true);
+    _refreshSubscription = SyncService.refreshStream.listen((_) {
+      unawaited(_loadAnalytics(silent: true));
     });
   }
 
   @override
   void dispose() {
-    _autoRefreshTimer?.cancel();
+    _refreshSubscription?.cancel();
     super.dispose();
   }
 
@@ -69,12 +74,17 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
   }
 
   Future<void> _loadAnalytics({bool silent = false}) async {
+    if (!mounted) return;
+    if (_analyticsLoadInProgress) {
+      _refreshPending = true;
+      return;
+    }
+    _analyticsLoadInProgress = true;
     if (!silent) setState(() => _loading = true);
     try {
       // Render the durable local ledger immediately, then reconcile from the
-      // backend only when the read cache is stale. This prevents a 15-second
-      // timer from becoming a permanent network poll while still converging
-      // after changes made by another device.
+      // backend only when the read cache is stale. Refreshes are driven by
+      // sync events rather than repeatedly recalculating the full ledger.
       var rawSales = await LocalStorageService.loadSales();
       final salesCacheFresh = await CacheConsistencyService.isFresh(
         'sales',
@@ -103,7 +113,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
         final dt = _engine.getLocalDate(s);
         final eventDt = _engine.getEventDate(s);
         final day = DateTime(dt.year, dt.month, dt.day);
-        final daysAgo = DateTime(now.year, now.month, now.day).difference(day).inDays;
+        final daysAgo = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).difference(day).inDays;
 
         final bool inRange = switch (_selectedFilter) {
           0 => daysAgo == 0,
@@ -117,13 +131,15 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
         // Sales/profit are gross-business metrics. A customer owing money
         // does not make the sale itself equal to ₹0. Collected cash is shown
         // separately by the engine.
-        final amount = _toDouble(s['gross_revenue'] ?? s['total_amount'] ?? s['total']);
+        final amount = _toDouble(
+          s['gross_revenue'] ?? s['total_amount'] ?? s['total'],
+        );
 
         final rawItems = s['items'] is List
             ? s['items'] as List
             : (s['line_items'] is List
-                ? s['line_items'] as List
-                : const <dynamic>[]);
+                  ? s['line_items'] as List
+                  : const <dynamic>[]);
         for (final rawItem in rawItems) {
           if (rawItem is! Map) continue;
           final item = Map<String, dynamic>.from(rawItem);
@@ -131,13 +147,14 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
           final itemCost = _toDouble(item['cost_price']);
           totalCost += itemCost * qty;
 
-          final itemName = (item['product_name'] ??
-                  item['product'] ??
-                  item['item'] ??
-                  item['description'] ??
-                  'Unknown')
-              .toString()
-              .trim();
+          final itemName =
+              (item['product_name'] ??
+                      item['product'] ??
+                      item['item'] ??
+                      item['description'] ??
+                      'Unknown')
+                  .toString()
+                  .trim();
           if (itemName.isNotEmpty && itemName.toLowerCase() != 'unknown') {
             itemsSold[itemName] = (itemsSold[itemName] ?? 0) + qty.round();
           }
@@ -159,9 +176,17 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
       });
     } catch (e) {
       if (mounted && !silent) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LiveTranslatedText('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: LiveTranslatedText('Error: $e')));
       }
       if (mounted) setState(() => _loading = false);
+    } finally {
+      _analyticsLoadInProgress = false;
+      if (_refreshPending && mounted) {
+        _refreshPending = false;
+        unawaited(_loadAnalytics(silent: true));
+      }
     }
   }
 
@@ -181,7 +206,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
     final avgOrder = transactions > 0 ? revenue / transactions : 0.0;
     final growth = _engine.filteredGrowthPercentage;
 
-    final nf = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2);
+    final nf = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 2,
+    );
     final revenueLabel = nf.format(revenue);
     final collectedLabel = nf.format(collected);
     final outstandingLabel = nf.format(outstanding);
@@ -192,7 +221,14 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: LiveTranslatedText('Enterprise Analytics', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+        title: LiveTranslatedText(
+          'Enterprise Analytics',
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.black),
@@ -213,7 +249,13 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                       segments: List.generate(_periodLabels.length, (i) {
                         return ButtonSegment(
                           value: i,
-                          label: LiveTranslatedText(_periodLabels[i], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                          label: LiveTranslatedText(
+                            _periodLabels[i],
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
                         );
                       }),
                       selected: {_selectedFilter},
@@ -231,12 +273,19 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      Icon(growth >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 16, color: growth >= 0 ? Colors.green : Colors.red),
+                      Icon(
+                        growth >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 16,
+                        color: growth >= 0 ? Colors.green : Colors.red,
+                      ),
                       const SizedBox(width: 4),
                       LiveTranslatedText(
                         '${growth.abs().toStringAsFixed(1)}% vs previous period',
-                        style: GoogleFonts.poppins(fontSize: 12, color: growth >= 0 ? Colors.green : Colors.red, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: growth >= 0 ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -251,13 +300,48 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _buildKPICard('Invoiced', revenueLabel, Colors.green, Icons.receipt_long),
-                  _buildKPICard('Collected', collectedLabel, Colors.teal, Icons.payments),
-                  _buildKPICard('Pending', outstandingLabel, Colors.orange, Icons.account_balance_wallet),
-                  _buildKPICard('Profit', profitLabel, Colors.blue, Icons.wallet),
-                  _buildKPICard('Margin', '${_profitMargin.toStringAsFixed(1)}%', Colors.orange, Icons.percent),
-                  _buildKPICard('Transactions', '$transactions', Colors.purple, Icons.receipt),
-                  _buildKPICard('Avg Order', avgOrderLabel, Colors.teal, Icons.shopping_cart),
+                  _buildKPICard(
+                    'Invoiced',
+                    revenueLabel,
+                    Colors.green,
+                    Icons.receipt_long,
+                  ),
+                  _buildKPICard(
+                    'Collected',
+                    collectedLabel,
+                    Colors.teal,
+                    Icons.payments,
+                  ),
+                  _buildKPICard(
+                    'Pending',
+                    outstandingLabel,
+                    Colors.orange,
+                    Icons.account_balance_wallet,
+                  ),
+                  _buildKPICard(
+                    'Profit',
+                    profitLabel,
+                    Colors.blue,
+                    Icons.wallet,
+                  ),
+                  _buildKPICard(
+                    'Margin',
+                    '${_profitMargin.toStringAsFixed(1)}%',
+                    Colors.orange,
+                    Icons.percent,
+                  ),
+                  _buildKPICard(
+                    'Transactions',
+                    '$transactions',
+                    Colors.purple,
+                    Icons.receipt,
+                  ),
+                  _buildKPICard(
+                    'Avg Order',
+                    avgOrderLabel,
+                    Colors.teal,
+                    Icons.shopping_cart,
+                  ),
                   _buildKPICard('Cost', costLabel, Colors.red, Icons.factory),
                 ],
               ),
@@ -265,7 +349,14 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
 
               // Hourly Distribution Chart
               if (_hourlyDistribution.isNotEmpty) ...[
-                LiveTranslatedText('Hourly Sales Distribution', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+                LiveTranslatedText(
+                  'Hourly Sales Distribution',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Container(
                   height: 250,
@@ -273,7 +364,12 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   child: _buildHourlyChart(),
                 ),
@@ -281,7 +377,14 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
               ],
 
               // Top Products
-              LiveTranslatedText('Top Selling Products', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+              LiveTranslatedText(
+                'Top Selling Products',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
               const SizedBox(height: 12),
               ..._buildTopProductsList(),
               const SizedBox(height: 80), // room for the FAB
@@ -292,8 +395,13 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.indigoAccent,
         icon: const Icon(Icons.description, color: Colors.white),
-        label: LiveTranslatedText('Export GST JSON (Tally)',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
+        label: LiveTranslatedText(
+          'Export GST JSON (Tally)',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         onPressed: () async {
           final prefs = await SharedPreferences.getInstance();
           final shopName = prefs.getString('shop_name') ?? 'My Shop';
@@ -301,16 +409,30 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: LiveTranslatedText('📄 Generating CA-ready GST Report...')));
+              const SnackBar(
+                content: LiveTranslatedText(
+                  '📄 Generating CA-ready GST Report...',
+                ),
+              ),
+            );
           }
 
-          final result = await TallyExportService.exportGstReturns(shopName, shopGst);
+          final result = await TallyExportService.exportGstReturns(
+            shopName,
+            shopGst,
+          );
 
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: LiveTranslatedText(result['message'] ?? 'Export complete'),
-              backgroundColor: result['success'] == true ? Colors.green : Colors.red,
-            ));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: LiveTranslatedText(
+                  result['message'] ?? 'Export complete',
+                ),
+                backgroundColor: result['success'] == true
+                    ? Colors.green
+                    : Colors.red,
+              ),
+            );
           }
         },
       ),
@@ -324,16 +446,32 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: color, size: 28),
           const SizedBox(height: 8),
-          LiveTranslatedText(label, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.black54)),
+          LiveTranslatedText(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.black54,
+            ),
+          ),
           const SizedBox(height: 4),
-          LiveTranslatedText(value, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+          LiveTranslatedText(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
         ],
       ),
     );
@@ -370,12 +508,16 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
       return [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          child: LiveTranslatedText('No sales in this period', style: GoogleFonts.poppins(color: Colors.black54)),
+          child: LiveTranslatedText(
+            'No sales in this period',
+            style: GoogleFonts.poppins(color: Colors.black54),
+          ),
         ),
       ];
     }
 
-    final items = _itemsSold.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final items = _itemsSold.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
     return items.take(5).map((entry) {
       return Container(
@@ -388,8 +530,20 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            LiveTranslatedText(entry.key, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.black)),
-            LiveTranslatedText('${entry.value} sold', style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.bold)),
+            LiveTranslatedText(
+              entry.key,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+              ),
+            ),
+            LiveTranslatedText(
+              '${entry.value} sold',
+              style: GoogleFonts.poppins(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       );

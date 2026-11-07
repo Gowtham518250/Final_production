@@ -18,6 +18,7 @@ import 'package:synchronized/synchronized.dart';
 /// Features: User Isolation, Hive Performance, Auto-recovery, and Zero Data Leakage.
 class LocalStorageService {
   static final Lock _paymentWriteLock = Lock();
+  static final Lock _salesWriteLock = Lock();
 
   // Box names are deterministic per authenticated user. Cache the validated
   // name for this process so every storage read does not hit the filesystem
@@ -66,6 +67,26 @@ class LocalStorageService {
       );
 
     return null; // Return null for non-critical operations that check with _hasValidUserId()
+  }
+
+  static bool _legacyValueBelongsToUser(dynamic value, int userId) {
+    if (value is Map) {
+      for (final key in const ['_user_id', 'user_id', 'owner_user_id']) {
+        if (value.containsKey(key)) {
+          return int.tryParse(value[key]?.toString() ?? '') == userId;
+        }
+      }
+      if (value.isEmpty) return true;
+      return value.values.every(
+        (nested) => nested is Map || nested is Iterable
+            ? _legacyValueBelongsToUser(nested, userId)
+            : false,
+      );
+    }
+    if (value is Iterable) {
+      return value.every((nested) => _legacyValueBelongsToUser(nested, userId));
+    }
+    return false;
   }
 
   /// ✅ FIX: Call on app startup to check and migrate schema if needed with proper backup and rollback
@@ -293,11 +314,32 @@ class LocalStorageService {
           // Check if unscoped box exists
           if (Hive.isBoxOpen(boxName) || await _boxExists(boxName)) {
             final oldBox = await Hive.openBox(boxName);
+            final rawBoxOwner = oldBox.get('_user_id');
+            final boxOwner = int.tryParse(rawBoxOwner?.toString() ?? '');
+            final recordKeys = oldBox.keys
+                .where((key) => key != '_user_id')
+                .toList();
+            final ownershipVerified = rawBoxOwner != null
+                ? boxOwner == userId
+                : recordKeys.every(
+                    (key) =>
+                        _legacyValueBelongsToUser(oldBox.get(key), userId),
+                  );
+            if (!ownershipVerified) {
+              if (kDebugMode) {
+                debugPrint(
+                  '🔒 Retaining unscoped $boxName: legacy ownership cannot be verified for user $userId.',
+                );
+              }
+              await oldBox.close();
+              continue;
+            }
+
             final scopedBoxName = '${boxName}_$userId';
             final newBox = await Hive.openBox(scopedBoxName);
 
-            // Migrate all data
-            for (final key in oldBox.keys) {
+            // Migrate only records whose ownership was verified above.
+            for (final key in recordKeys) {
               final value = oldBox.get(key);
               await newBox.put(key, value);
             }
@@ -732,13 +774,25 @@ class LocalStorageService {
     ];
     for (final name in legacy) {
       try {
-        if (Hive.isBoxOpen(name)) {
-          await Hive.box(name).close();
+        if (!await Hive.boxExists(name)) continue;
+
+        final wasAlreadyOpen = Hive.isBoxOpen(name);
+        final box = wasAlreadyOpen
+            ? Hive.box(name)
+            : await Hive.openBox(name);
+        if (box.isNotEmpty) {
+          if (!wasAlreadyOpen) await box.close();
+          if (kDebugMode) {
+            debugPrint(
+              '🔒 Retaining non-empty legacy Hive box $name until its data can be safely recovered.',
+            );
+          }
+          continue;
         }
-        if (await Hive.boxExists(name)) {
-          await Hive.deleteBoxFromDisk(name);
-          if (kDebugMode) debugPrint('🧹 Deleted legacy Hive box: $name');
-        }
+
+        if (wasAlreadyOpen) await box.close();
+        await Hive.deleteBoxFromDisk(name);
+        if (kDebugMode) debugPrint('🧹 Deleted empty legacy Hive box: $name');
       } catch (e) {
         if (kDebugMode) debugPrint('⚠️ purgeLegacyUnscopedHiveBoxes $name: $e');
       }
@@ -810,59 +864,146 @@ class LocalStorageService {
   // =========== SALES (BUSINESS CRITICAL) ===========
 
   static Future<void> saveSales(List<dynamic> salesHistory) async {
-    if (!await _hasValidUserId()) {
-      if (kDebugMode) debugPrint('⚠️ saveSales skipped — no logged-in user');
-      return;
-    }
-    final box = await _getBox(_salesBoxBase, encrypted: true);
-    final userId = await _getUserId();
+    await _salesWriteLock.synchronized(() async {
+      if (!await _hasValidUserId()) {
+        if (kDebugMode) debugPrint('⚠️ saveSales skipped — no logged-in user');
+        return;
+      }
+      final box = await _getBox(_salesBoxBase, encrypted: true);
+      final userId = await _getUserId();
 
-    // Callers are responsible for loading/merging the current history when
-    // they need an additive update. This method persists exactly the list it
-    // receives, avoiding the previous double-merge O(n²) path.
-    // SalesDedupHelper only collapses records sharing a stable business ID;
-    // content-identical sales remain separate legitimate transactions.
-    final dedupedSales = SalesDedupHelper.dedupeBills(salesHistory);
-    final List<StoredSale> typedSales = dedupedSales.map<StoredSale>((sale) {
-      return StoredSale.fromJson(Map<String, dynamic>.from(sale));
-    }).toList();
+      // Callers are responsible for loading/merging the current history when
+      // they need an additive update. This method persists exactly the list it
+      // receives, avoiding the previous double-merge O(n²) path.
+      final dedupedSales = SalesDedupHelper.dedupeBills(salesHistory);
+      final typedSales = dedupedSales.map<StoredSale>((sale) {
+        return StoredSale.fromJson(Map<String, dynamic>.from(sale));
+      }).toList();
 
-    await box.put(
-      'all_sales',
-      typedSales.map((sale) => sale.toJson()).toList(),
-    );
-    if (userId != null) {
+      await box.put(
+        'all_sales',
+        typedSales.map((sale) => sale.toJson()).toList(),
+      );
+      if (userId != null) {
+        await _updateFullHistoryRestoreCounts(
+          userId,
+          salesCount: typedSales.length,
+        );
+      }
+      if (kDebugMode) {
+        debugPrint(
+          '💾 [LocalStorage] Replaced sales with ${typedSales.length} deduplicated records for user: $userId',
+        );
+      }
+    });
+  }
+
+  /// Adds or updates one sale without deserializing and rebuilding the entire
+  /// sales history in Dart. Hive still writes the list value, but this keeps
+  /// memory use to one shallow list copy and the sale being saved.
+  static Future<void> upsertSaleRecord(
+    Map<String, dynamic> sale, {
+    required String saleId,
+    int maxRecords = 5000,
+  }) async {
+    await _salesWriteLock.synchronized(() async {
+      if (!await _hasValidUserId()) {
+        throw StateError('Cannot save a sale without an authenticated user.');
+      }
+      if (saleId.trim().isEmpty || maxRecords <= 0) {
+        throw ArgumentError('A sale ID and positive record limit are required.');
+      }
+
+      final userId = await _getUserId();
+      if (userId == null || userId <= 0) {
+        throw StateError('Cannot save a sale without an authenticated user.');
+      }
+      final box = await _getBox(
+        _salesBoxBase,
+        encrypted: true,
+        authenticatedUserId: userId,
+      );
+      final storedRows = box.get(
+        'all_sales',
+        defaultValue: const <dynamic>[],
+      );
+      if (storedRows is! Iterable) {
+        throw StateError('Stored sales history has an invalid format.');
+      }
+
+      final updatedRows = List<dynamic>.of(storedRows);
+      final existingIndex = updatedRows.indexWhere((raw) {
+        if (raw is! Map) return false;
+        final existingId =
+            (raw['sale_id'] ?? raw['invoice_number'] ?? raw['id'] ?? '')
+                .toString();
+        return existingId == saleId;
+      });
+
+      final Map<String, dynamic> row;
+      if (existingIndex >= 0) {
+        final existing = Map<String, dynamic>.from(
+          updatedRows[existingIndex] as Map,
+        );
+        row = <String, dynamic>{
+          ...existing,
+          ...sale,
+          'created_at': existing['created_at'] ?? sale['created_at'],
+          'sale_timestamp':
+              existing['sale_timestamp'] ??
+              existing['created_at'] ??
+              sale['sale_timestamp'],
+          'business_date':
+              existing['business_date'] ??
+              existing['sale_date'] ??
+              existing['invoice_date'] ??
+              existing['date'] ??
+              sale['business_date'],
+          'backend_id': existing['backend_id'],
+        };
+      } else {
+        row = Map<String, dynamic>.from(sale);
+      }
+
+      final persistedRow = StoredSale.fromJson(row).toJson();
+      if (existingIndex >= 0) {
+        updatedRows[existingIndex] = persistedRow;
+      } else {
+        updatedRows.add(persistedRow);
+      }
+      if (updatedRows.length > maxRecords) {
+        updatedRows.removeRange(0, updatedRows.length - maxRecords);
+      }
+
+      await box.put('all_sales', updatedRows);
       await _updateFullHistoryRestoreCounts(
         userId,
-        salesCount: typedSales.length,
+        salesCount: updatedRows.length,
       );
-    }
-    if (kDebugMode) {
-      debugPrint(
-        '💾 [LocalStorage] Replaced sales with ${typedSales.length} deduplicated records for user: $userId',
-      );
-    }
+    });
   }
 
   /// Replace the canonical sales snapshot without content-based collapsing.
   /// Use this only when the caller has already reconciled stable identities.
   static Future<void> replaceSalesCanonical(List<dynamic> salesHistory) async {
-    if (!await _hasValidUserId()) return;
-    final userId = await _getUserId();
-    final box = await _getBox(_salesBoxBase, encrypted: true);
-    final typedSales = salesHistory.whereType<Map>().map<StoredSale>((sale) {
-      return StoredSale.fromJson(Map<String, dynamic>.from(sale));
-    }).toList();
-    await box.put(
-      'all_sales',
-      typedSales.map((sale) => sale.toJson()).toList(),
-    );
-    if (userId != null) {
-      await _updateFullHistoryRestoreCounts(
-        userId,
-        salesCount: typedSales.length,
+    await _salesWriteLock.synchronized(() async {
+      if (!await _hasValidUserId()) return;
+      final userId = await _getUserId();
+      final box = await _getBox(_salesBoxBase, encrypted: true);
+      final typedSales = salesHistory.whereType<Map>().map<StoredSale>((sale) {
+        return StoredSale.fromJson(Map<String, dynamic>.from(sale));
+      }).toList();
+      await box.put(
+        'all_sales',
+        typedSales.map((sale) => sale.toJson()).toList(),
       );
-    }
+      if (userId != null) {
+        await _updateFullHistoryRestoreCounts(
+          userId,
+          salesCount: typedSales.length,
+        );
+      }
+    });
   }
 
   static Future<void> _updateFullHistoryRestoreCounts(

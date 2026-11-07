@@ -67,6 +67,7 @@ class BillPreviewDialog extends StatelessWidget {
       await BillGeneratorService.shareBill(
         path,
         customerName: provider.customerNameController.text.trim(),
+        shopName: provider.shopName,
       );
     } catch (error) {
       if (!context.mounted) return;

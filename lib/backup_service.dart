@@ -20,15 +20,15 @@ class BackupService {
         throw Exception('No app data to backup');
       }
       
-      // Include both SharedPreferences and the encrypted Hive-backed business snapshot.
-      String? localStorageSnapshot;
-      try {
+      // Do not report a full backup if the user-scoped business snapshot
+      // could not be exported.
         final snapshotPath = await LocalStorageService.exportSecureBackup();
-        if (snapshotPath != null) {
-          localStorageSnapshot = await File(snapshotPath).readAsString();
+      if (snapshotPath == null) {
+        throw StateError('Could not export the local business-data snapshot.');
         }
-      } catch (e) {
-        if (kDebugMode) debugPrint('⚠️ Secure local snapshot unavailable: $e');
+      final localStorageSnapshot = await File(snapshotPath).readAsString();
+      if (localStorageSnapshot.isEmpty) {
+        throw StateError('The local business-data snapshot is empty.');
       }
 
       final prefsData = _getAllPreferences(prefs);
@@ -49,7 +49,8 @@ class BackupService {
 
       // Save backup file
       final backupPath = await _saveBackupFile(backupData);
-    if (kDebugMode) debugPrint('✅ Backup created successfully at: $backupPath');
+      if (kDebugMode)
+        debugPrint('✅ Backup created successfully at: $backupPath');
       
       return {
         'success': true,
@@ -82,14 +83,17 @@ class BackupService {
       final backupData = jsonDecode(jsonStr) as Map<String, dynamic>;
       
       // Validate backup structure
-      if (!backupData.containsKey('timestamp') || !backupData.containsKey('data')) {
+      if (!backupData.containsKey('timestamp') ||
+          !backupData.containsKey('data')) {
         throw Exception('Invalid backup file format');
       }
 
       // App Version Compatibility Check
       final version = backupData['version']?.toString();
       if (version != '2.0' && version != '2.1') {
-        throw Exception('Incompatible backup version ($version). Expected 2.0 or 2.1');
+        throw Exception(
+          'Incompatible backup version ($version). Expected 2.0 or 2.1',
+        );
       }
 
       // Staleness Check (Max 30 days)
@@ -99,17 +103,23 @@ class BackupService {
         if (backupDate != null) {
           final ageDays = DateTime.now().difference(backupDate).inDays;
           if (ageDays > 30) {
-            throw Exception('Backup is too old to restore ($ageDays days). Max allowed is 30 days.');
+            throw Exception(
+              'Backup is too old to restore ($ageDays days). Max allowed is 30 days.',
+            );
           }
         }
       }
 
       // Validate checksum if present
       if (backupData.containsKey('checksum')) {
-        final prefsData = backupData['data']['preferences'] as Map<String, dynamic>?;
+        final prefsData =
+            backupData['data']['preferences'] as Map<String, dynamic>?;
         final localSnapshot = backupData['data']['local_storage_backup'];
         final calculatedChecksum = version == '2.1'
-            ? _generateChecksum({'preferences': prefsData ?? <String, dynamic>{}, 'local_storage_backup': localSnapshot})
+            ? _generateChecksum({
+                'preferences': prefsData ?? <String, dynamic>{},
+                'local_storage_backup': localSnapshot,
+              })
             : _generateChecksum(prefsData ?? <String, dynamic>{});
         if (calculatedChecksum != backupData['checksum']) {
           throw Exception('Backup file corrupted: checksum mismatch');
@@ -119,7 +129,8 @@ class BackupService {
       final prefs = await SharedPreferences.getInstance();
       
       // Restore all preferences
-      final prefsData = backupData['data']['preferences'] as Map<String, dynamic>;
+      final prefsData =
+          backupData['data']['preferences'] as Map<String, dynamic>;
       int restoredCount = 0;
       
       for (var entry in prefsData.entries) {
@@ -127,17 +138,23 @@ class BackupService {
           await _restorePreference(prefs, entry.key, entry.value);
           restoredCount++;
         } catch (e) {
-    if (kDebugMode) debugPrint('⚠️ Failed to restore key ${entry.key}: $e');
+          if (kDebugMode)
+            debugPrint('⚠️ Failed to restore key ${entry.key}: $e');
           // Continue with next entry
         }
       }
 
       final localSnapshot = backupData['data']['local_storage_backup'];
       if (localSnapshot is String && localSnapshot.isNotEmpty) {
-        final restored = await LocalStorageService.importSecureBackup(localSnapshot);
+        final restored = await LocalStorageService.importSecureBackup(
+          localSnapshot,
+        );
         if (!restored) throw Exception('Local business-data restore failed');
       }
-    if (kDebugMode) debugPrint('✅ Backup restored successfully: $restoredCount items restored');
+      if (kDebugMode)
+        debugPrint(
+          '✅ Backup restored successfully: $restoredCount items restored',
+        );
       return true;
     } catch (e) {
     if (kDebugMode) debugPrint('❌ Backup restore failed: $e');
@@ -170,7 +187,11 @@ class BackupService {
               'path': file.path,
               'timestamp': data['timestamp'] ?? '',
               'fileSize': stat.size ~/ 1024,
-              'date': DateTime.tryParse(data['timestamp'] ?? '')?.toString().split('.')[0] ?? 'Unknown',
+              'date':
+                  DateTime.tryParse(
+                    data['timestamp'] ?? '',
+                  )?.toString().split('.')[0] ??
+                  'Unknown',
               'name': file.path.split('/').last,
             });
           } catch (_) {
@@ -180,7 +201,9 @@ class BackupService {
       }
 
       // Sort by timestamp descending
-      backups.sort((a, b) => (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? ''));
+      backups.sort(
+        (a, b) => (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? ''),
+      );
       return backups;
     } catch (e) {
       throw Exception('Failed to list backups: $e');
@@ -231,7 +254,8 @@ class BackupService {
       final directory = await getDownloadsDirectory();
       if (directory == null) throw Exception('Downloads directory not found');
 
-      final fileName = 'retail_mind_backup_${DateTime.now().millisecondsSinceEpoch}.json';
+      final fileName =
+          'retail_mind_backup_${DateTime.now().millisecondsSinceEpoch}.json';
       final exportFile = File('${directory.path}/$fileName');
       
       await sourceFile.copy(exportFile.path);
@@ -263,10 +287,7 @@ class BackupService {
   static Map<String, dynamic> _getAllPreferences(SharedPreferences prefs) {
     // SECURITY FIX C4: Exclude sensitive keys from backup.
     // These should never be serialized to a file that may be exported.
-    const sensitiveKeyPrefixes = [
-      '_otp_',
-      '_protected_',
-    ];
+    const sensitiveKeyPrefixes = ['_otp_', '_protected_'];
     const sensitiveKeys = {
       'master_pin',
       'app_password',
@@ -374,7 +395,8 @@ class BackupService {
 
       // Validate checksum if present
       if (backupData.containsKey('checksum')) {
-        final prefsData = backupData['data']['preferences'] as Map<String, dynamic>?;
+        final prefsData =
+            backupData['data']['preferences'] as Map<String, dynamic>?;
         if (prefsData != null) {
           final calculatedChecksum = _generateChecksum(prefsData);
           return calculatedChecksum == backupData['checksum'];
@@ -387,4 +409,3 @@ class BackupService {
     }
   }
 }
-
