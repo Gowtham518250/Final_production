@@ -2676,7 +2676,7 @@ class _PosterArtwork extends StatelessWidget {
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.w900,
-                                        fontSize: isStory ? 22 : isSquare ? 14 : 18,
+                                        fontSize: isPriceBurst ? (isStory ? 38 : 32) : isStory ? 22 : isSquare ? 14 : 18,
                                       ),
                                     ),
                                   ),
