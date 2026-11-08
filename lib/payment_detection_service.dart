@@ -954,6 +954,15 @@ abstract class PdsLogger {
     }
   }
 
+  /// Short non-reversible tag used to correlate ONE payment across Dart and
+  /// native trace lines without logging amounts, names or references. The
+  /// native side uses the same SHA-256 prefix, so a `slot=` value printed by
+  /// Dart equals the one printed by the Android gate / native TTS fallback.
+  static String tag(String? value) {
+    if (value == null || value.isEmpty) return '-';
+    return sha256.convert(utf8.encode(value)).toString().substring(0, 8);
+  }
+
   static void d(String tag, String msg) {
     if (kDebugMode) {
       _emit(_LogLevel.debug, tag, msg);
@@ -2554,6 +2563,17 @@ class PriorityVoiceQueue {
     // unverified candidates. Keep them ahead of routine voice prompts; the
     // wording still asks the owner to verify likely events.
     final priority = e.isFailed ? _VP.critical : _VP.high;
+    // Positive-path trace: one line per payment that is actually queued to be
+    // spoken. Two SPEAK_ENQ lines for one real payment = the duplicate, and
+    // src/app/slot/ref show which signals produced them.
+    PdsLogger.t(
+      'SPEAK_ENQ',
+      'id=${e.id} src=${PaymentDetectionService._eventOrigin(e.detectionSource)} '
+          'app=${e.app.name} slot=${PdsLogger.tag(e.sourceEventIdentity)} '
+          'amt=${PdsLogger.tag('${e.amount.toStringAsFixed(2)}|${e.direction.name}')} '
+          'ref=${e.normalizedReferenceId != null ? 1 : 0} '
+          'possible=${isPossibleRepeat ? 1 : 0}',
+    );
     _queue.add(
       _VI(
         text,
@@ -2576,6 +2596,10 @@ class PriorityVoiceQueue {
 
   void enqueueRaw(String text, _VP priority, {String? fingerprint}) {
     if (!PdsConfig.isVoiceEnabled || text.isEmpty) return;
+    PdsLogger.t(
+      'SPEAK_ENQ_RAW',
+      'prio=${priority.name} fp=${PdsLogger.tag(fingerprint)} len=${text.length}',
+    );
     if (fingerprint != null) {
       final voiceFingerprint = fingerprint.startsWith('voice_')
           ? fingerprint

@@ -305,14 +305,26 @@ class PaymentAnnouncementService {
       (_, at) => now.difference(at) > _sameKeyWindow,
     );
 
+    final traceKey = (dedupeKey == null || dedupeKey.isEmpty)
+        ? '-'
+        : dedupeKey.hashCode.toRadixString(16);
     if (dedupeKey != null && dedupeKey.isNotEmpty) {
       final inFlight = _inFlightSpeech[dedupeKey];
-      if (inFlight != null) return inFlight;
+      if (inFlight != null) {
+        debugPrint('[PDS-TRACE] SPEAK_SKIP reason=in_flight key=$traceKey');
+        return inFlight;
+      }
       if (_recentSpeechKeys.containsKey(dedupeKey)) {
         // This exact payment key completed successfully very recently.
+        debugPrint('[PDS-TRACE] SPEAK_SKIP reason=recent key=$traceKey');
         return Future<bool>.value(true);
       }
     }
+    // Last stop before TTS. Text is never logged, only its length.
+    debugPrint(
+      '[PDS-TRACE] SPEAK_OUT key=$traceKey len=${message.length} '
+      't=${now.millisecondsSinceEpoch}',
+    );
 
     final lang = _lang.resolve(language);
     final calculatedTimeout = _voice.calculateTimeout(

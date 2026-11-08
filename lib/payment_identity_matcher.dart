@@ -149,9 +149,12 @@ class EchoResolution {
 class PaymentIdentityMatcher {
   PaymentIdentityMatcher._();
 
-  /// Amount/direction alone is weak evidence. Keep the cross-channel window
-  /// short so a genuine second same-value payment is not swallowed.
-  static const Duration weakModalityWindow = Duration(seconds: 60);
+  /// Amount/direction alone is weak evidence, so a weak pair is only MUTED and
+  /// flagged "possible repeat" (never merged). Bank SMS routinely arrives
+  /// minutes after the payment-app notification, so 60s let the late SMS be
+  /// announced as a second payment. Three minutes covers normal SMS delay while
+  /// ambiguity (several candidates) still keeps real payments separate.
+  static const Duration weakModalityWindow = Duration(minutes: 3);
   static const String weakModalityReason = 'weak_modality_pair';
 
   /// Same notification slot, amount and direction can be an update/repost even
@@ -203,10 +206,17 @@ class PaymentIdentityMatcher {
   static bool _isTruecaller(String origin) =>
       origin == 'truecaller_notification';
 
-  /// Only pair a plain bank SMS with a payment-app notification on weak evidence.
+  /// A bank SMS reaches the app either through the SMS receiver ('sms') or as
+  /// the Messages-app notification of that same SMS ('notification+sms').
+  /// Both are the SMS side of a pair with a payment-app notification.
+  static bool _isSmsSide(String origin) =>
+      origin == 'sms' || origin == 'notification+sms';
+
+  /// Only pair a bank SMS (or its Messages-app copy) with a payment-app
+  /// notification on weak evidence.
   static bool isWeakModalityPair(String a, String b) =>
-      (a == 'sms' && b == 'notification') ||
-      (a == 'notification' && b == 'sms');
+      (_isSmsSide(a) && b == 'notification') ||
+      (a == 'notification' && _isSmsSide(b));
 
   /// Loose: any SMS involvement, used only to pick the long time window.
   static bool _involvesSms(String origin) => origin.contains('sms');

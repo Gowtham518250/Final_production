@@ -511,9 +511,6 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         if (mounted) Navigator.of(context).maybePop();
                       },
                       knownProducts: _knownProducts,
-                      initialLocale: _speechInputLang == 'en-US'
-                          ? 'en-IN'
-                          : _speechInputLang,
                       autoStart: true,
                     ),
                   ),
