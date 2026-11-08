@@ -206,11 +206,14 @@ class ProductionVoiceBillingService {
           : null;
       final finalPrice = spokenPrice ?? catalogPrice ?? 0.0;
 
-      final unit = _cleanUnit(
-        item.unit,
-        fallback:
-            product?['unit']?.toString() ?? product?['uom']?.toString() ?? '',
-      );
+      // A unit the cashier actually said ("2 kg rice") always wins. When no
+      // unit was spoken, the engine's unit is only a guess ('pc'), so the
+      // shop's own unit for that product is more accurate than the guess.
+      final catalogUnit =
+          product?['unit']?.toString() ?? product?['uom']?.toString() ?? '';
+      final unit = item.unitWasSpoken || catalogUnit.trim().isEmpty
+          ? _cleanUnit(item.unit, fallback: catalogUnit)
+          : _cleanUnit(catalogUnit, fallback: item.unit);
 
       final warning = _priceWarning(
         productName: canonicalName,

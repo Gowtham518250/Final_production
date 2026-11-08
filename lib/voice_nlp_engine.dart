@@ -44,6 +44,11 @@ class ParsedItemV2 {
   final bool
   priceWasSpoken; // true only when price tokens came from the transcript
   final bool quantityPriceAmbiguous;
+
+  /// True only when the cashier actually said a unit ("2 kg rice"). When
+  /// false, [unit] is a guess ('pc' or a generic per-product default) and
+  /// the shop catalog's own unit should win.
+  final bool unitWasSpoken;
   bool isConfirmed;
 
   ParsedItemV2({
@@ -56,6 +61,7 @@ class ParsedItemV2 {
     this.catalogPrice,
     this.priceWasSpoken = false,
     this.quantityPriceAmbiguous = false,
+    this.unitWasSpoken = false,
     bool? isConfirmed,
   }) : isConfirmed =
            isConfirmed ??
@@ -1311,22 +1317,32 @@ class UnitInferrer {
 class UnitNormalizer {
   static final Map<String, String> _aliases = {
     // English
-    'kilo': 'kg', 'kilogram': 'kg', 'kilograms': 'kg', 'kgs': 'kg',
-    'gram': 'g', 'grams': 'g', 'gm': 'g', 'grm': 'g',
-    'liter': 'L', 'litre': 'L', 'ltr': 'L', 'lt': 'L', 'ltrs': 'L',
-    'milliliter': 'mL', 'millilitre': 'mL', 'ml': 'mL',
-    'piece': 'pc', 'pieces': 'pc', 'pcs': 'pc', 'unit': 'pc', 'units': 'pc',
-    'packet': 'pkt', 'pack': 'pkt', 'packs': 'pkt', 'pkt': 'pkt', 'pct': 'pkt',
-    'bottle': 'btl', 'bottles': 'btl',
+    // The canonical short forms ('kg', 'g', 'l', 'pc', 'btl' ...) MUST be keys
+    // too. Without them isUnit('kg') was false, so "2 kg rice 50" was parsed
+    // as product "Kg Rice" with unit 'pc'.
+    'kg': 'kg', 'kilo': 'kg', 'kilos': 'kg', 'kilogram': 'kg',
+    'kilograms': 'kg', 'kgs': 'kg', 'kgm': 'kg',
+    'g': 'g', 'gram': 'g', 'grams': 'g', 'gm': 'g', 'gms': 'g', 'grm': 'g',
+    'gr': 'g',
+    'l': 'L', 'liter': 'L', 'liters': 'L', 'litre': 'L', 'litres': 'L',
+    'ltr': 'L', 'lt': 'L', 'ltrs': 'L',
+    'milliliter': 'mL', 'millilitre': 'mL', 'milliliters': 'mL',
+    'millilitres': 'mL', 'ml': 'mL', 'mls': 'mL',
+    'pc': 'pc', 'piece': 'pc', 'pieces': 'pc', 'pcs': 'pc', 'unit': 'pc',
+    'units': 'pc', 'nos': 'pc',
+    'packet': 'pkt', 'packets': 'pkt', 'pack': 'pkt', 'packs': 'pkt',
+    'pkt': 'pkt', 'pkts': 'pkt', 'pct': 'pkt',
+    'bottle': 'btl', 'bottles': 'btl', 'btl': 'btl', 'btls': 'btl',
     'box': 'box', 'boxes': 'box',
-    'dozen': 'doz', 'doz': 'doz',
+    'dozen': 'doz', 'dozens': 'doz', 'doz': 'doz',
     'bag': 'bag', 'bags': 'bag',
-    'tin': 'tin', 'can': 'tin',
-    'jar': 'jar',
-    'sachet': 'sachet', 'pouch': 'sachet', 'satchet': 'sachet',
-    'tube': 'tube',
-    'roll': 'roll',
-    'loaf': 'loaf',
+    'tin': 'tin', 'tins': 'tin', 'can': 'tin', 'cans': 'tin',
+    'jar': 'jar', 'jars': 'jar',
+    'sachet': 'sachet', 'sachets': 'sachet', 'pouch': 'sachet',
+    'pouches': 'sachet', 'satchet': 'sachet',
+    'tube': 'tube', 'tubes': 'tube',
+    'roll': 'roll', 'rolls': 'roll',
+    'loaf': 'loaf', 'loaves': 'loaf',
     'bunch': 'bunch', 'bunches': 'bunch',
     // Hindi / Hinglish (Devanagari — also covers Marathi)
     'किलो': 'kg', 'किलोग्राम': 'kg',
@@ -1421,6 +1437,9 @@ class PriceSanityValidator {
       final cn = (p['name'] ?? p['product_name'] ?? '')
           .toString()
           .toLowerCase();
+      // An empty catalog name would make nameLower.contains('') true and
+      // pull unrelated prices into the median.
+      if (cn.isEmpty || nameLower.isEmpty) continue;
       if (cn.contains(nameLower) || nameLower.contains(cn)) {
         final cp = double.tryParse(p['price']?.toString() ?? '');
         if (cp != null && cp > 0) similarPrices.add(cp);
@@ -1568,8 +1587,11 @@ class VoiceNlpEngineV2 {
     caseSensitive: false,
   );
 
+  // The ASCII currency words are word-bounded. Unbounded `rs` matched inside
+  // product names ("bars", "crackers", "wafers", "peppers" -> "ba", "cracke"),
+  // silently corrupting the item. "50rs" / "Rs50" / "Rs." still match.
   static final _currencyRe = RegExp(
-    r'(₹|rs\.?|rupees?|inr|रूप(?:या|ये)|ரூ|రూ|રૃ|ਰੁ)',
+    r'(₹|\brs(?![a-z])\.?|(?<=\d)rs(?![a-z])\.?|\brupees?\b|\binr(?![a-z])|रूप(?:या|ये)|ரூ|రూ|રૃ|ਰੁ)',
     caseSensitive: false,
   );
 
@@ -1583,8 +1605,12 @@ class VoiceNlpEngineV2 {
 
   // ── Item separators (expanded) ─────────────────────────────────────────────
 
+  // A '.' only separates items when it is NOT part of a decimal quantity
+  // ("0.5 kg", "2.5 kg") and NOT the dot of "Rs." / "Rs.50". Splitting on
+  // every dot turned "0.5 kg rice 50" into "0" + "5 kg rice 50" (5 kg billed
+  // instead of half a kilo).
   static final _separatorRe = RegExp(
-    r'[,।\.]+|\band\b|\bplus\b|\baur\b|\bthen\b|\bnext\b|\bitem\b'
+    r'[,।]+|(?<!\brs)\.+(?!\d)|\band\b|\bplus\b|\baur\b|\bthen\b|\bnext\b|\bitem\b'
     r'|और|तथा|एवं|ਅਤੇ|మరియు|ಮತ್ತು|மற்றும்|এবং|અને|आणि',
     caseSensitive: false,
   );
@@ -1665,8 +1691,11 @@ class VoiceNlpEngineV2 {
     // 3. Normalize common connectors and bad spacing
     text = text
         .replaceAll(
+          // NOTE: "gm" must NOT be stripped here — it is a real unit
+          // (UnitNormalizer maps it to 'g'). Removing it made
+          // "500 gm sugar 25" parse as 500 pieces of sugar.
           RegExp(
-            r'\bper\b|\bka\b|\bki\b|\bke\b|\bgm\b|\bpcs\b|\bpc\b',
+            r'\bper\b|\bka\b|\bki\b|\bke\b|\bpcs\b|\bpc\b',
             caseSensitive: false,
           ),
           ' ',
@@ -1743,6 +1772,8 @@ class VoiceNlpEngineV2 {
       }
 
       // 5. Resolve unit
+      // At this point rawUnit is non-empty only if it really is a unit word.
+      final bool unitWasSpoken = rawUnit.isNotEmpty;
       final String unit;
       bool unitInferred = false;
       if (rawUnit.isEmpty) {
@@ -1837,6 +1868,7 @@ class VoiceNlpEngineV2 {
         catalogPrice: catalogPrice,
         priceWasSpoken: priceWasSpoken,
         quantityPriceAmbiguous: quantityPriceAmbiguous,
+        unitWasSpoken: unitWasSpoken,
       );
     }
     return null;
