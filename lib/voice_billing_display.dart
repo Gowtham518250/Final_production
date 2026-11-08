@@ -51,6 +51,7 @@ class VoiceBillingDisplay {
     'onion': ['ఉల్లిపాయ', 'प्याज़', 'வெங்காயம்', 'ಈರುಳ್ಳಿ', 'ഉള്ളി', 'कांदा', 'পেঁয়াজ', 'ડુંગળી', 'ਪਿਆਜ਼'],
     'potato': ['బంగాళాదుంప', 'आलू', 'உருளைக்கிழங்கு', 'ಆಲೂಗಡ್ಡೆ', 'ഉരുളക്കിഴങ്ങ്', 'बटाटा', 'আলু', 'બટાકા', 'ਆਲੂ'],
     'tomato': ['టమాటా', 'टमाटर', 'தக்காளி', 'ಟೊಮೇಟೊ', 'തക്കാളി', 'टोमॅटो', 'টমেটো', 'ટામેટા', 'ਟਮਾਟਰ'],
+    'brinjal': ['వంకాయ', 'बैंगन', 'கத்தரிக்காய்', 'ಬದನೆಕಾಯಿ', 'വഴുതന', 'वांगी', 'বেগুন', 'રીંગણ', 'ਬੈਂਗਣ'],
     'ghee': ['నెయ్యి', 'घी', 'நெய்', 'ತುಪ್ಪ', 'നെയ്യ്', 'तूप', 'ঘি', 'ઘી', 'ਘਿਓ'],
     'butter': ['వెన్న', 'मक्खन', 'வெண்ணெய்', 'ಬೆಣ್ಣೆ', 'വെണ്ണ', 'लोणी', 'মাখন', 'માખણ', 'ਮੱਖਣ'],
     'bread': ['బ్రెడ్', 'ब्रेड', 'பிரெட்', 'ಬ್ರೆಡ್', 'ബ്രെഡ്', 'ब्रेड', 'পাউরুটি', 'બ્રેડ', 'ਬ੍ਰੈੱਡ'],
@@ -71,6 +72,13 @@ class VoiceBillingDisplay {
     'dosa': ['దోసె', 'डोसा', 'தோசை', 'ದೋಸೆ', 'ദോശ', 'डोसा', 'ডোসা', 'ઢોસા', 'ਡੋਸਾ'],
   };
 
+  /// Exact multi-word product phrases must be checked before token-by-token
+  /// translation so names such as "Bottle Gourds" remain natural in Telugu.
+  static const Map<String, List<String>> _productPhrases = {
+    'bottle gourd': ['సొరకాయ', 'लौकी', 'சுரைக்காய்', 'ಸೋರೆಕಾಯಿ', 'ചുരയ്ക്ക', 'दुधी भोपळा', 'লাউ', 'દૂધી', 'ਲੌਕੀ'],
+    'bottle gourds': ['సొరకాయలు', 'लौकियाँ', 'சுரைக்காய்கள்', 'ಸೋರೆಕಾಯಿಗಳು', 'ചുരയ്ക്കകൾ', 'दुधी भोपळे', 'লাউ', 'દૂધીઓ', 'ਲੌਕੀਆਂ'],
+  };
+
   /// Spelling variants and plurals that appear in AI / catalogue output.
   static const Map<String, String> _aliases = {
     'eggs': 'egg',
@@ -81,6 +89,9 @@ class VoiceBillingDisplay {
     'chili': 'chilli',
     'chillies': 'chilli',
     'tomatoes': 'tomato',
+    'brinjals': 'brinjal',
+    'eggplant': 'brinjal',
+    'eggplants': 'brinjal',
     'potatoes': 'potato',
     'onions': 'onion',
     'dhal': 'dal',
@@ -115,6 +126,10 @@ class VoiceBillingDisplay {
     if (column < 0) return null;
     final trimmed = canonical.trim();
     if (trimmed.isEmpty) return null;
+
+    final phraseKey = trimmed.toLowerCase().replaceAll(RegExp(r'\\s+'), ' ');
+    final phrase = _productPhrases[phraseKey];
+    if (phrase != null) return phrase[column];
 
     final tokens = trimmed
         .toLowerCase()
