@@ -24,6 +24,13 @@ void main() {
       }
     });
 
+    test('common vegetable names from voice billing are displayed in Telugu', () {
+      expect(VoiceBillingDisplay.productName('Tomatoes', 'te'), 'టమాటా');
+      expect(VoiceBillingDisplay.productName('Brinjals', 'te'), 'వంకాయ');
+      expect(VoiceBillingDisplay.productName('Bottle Gourds', 'te'), 'సొరకాయలు');
+      expect(VoiceBillingDisplay.productName('Chicken', 'te'), 'చికెన్');
+    });
+
     test('plurals, spelling variants and quantities', () {
       expect(VoiceBillingDisplay.productName('Eggs', 'hi'), 'अंडा');
       expect(VoiceBillingDisplay.productName('Chicken Biriyani', 'hi'), 'चिकन बिरयानी');
