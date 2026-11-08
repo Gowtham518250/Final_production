@@ -30,7 +30,8 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+# Temporarily allow build directory for web deployment
+# /build/
 /coverage/
 
 # Symbolication related
