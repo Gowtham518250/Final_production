@@ -51,7 +51,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
   String _message = '';
   String _goal = 'nearby';
   String _language = 'en';
-  String _template = 'bold';
+  String _template = 'smart';
   String _adFormat = 'feed';
   String? _selectedProductKey;
   String _campaignStorageKey = 'retailmind_growth_campaigns_v1_guest';
@@ -717,6 +717,16 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
       final now = DateTime.now();
       final code = GrowthAdCopy.offerCode(now);
       final offerText = _offerController.text.trim();
+      // Smart Design selects a composition from the campaign intent and verified
+      // price/offer data, rather than choosing a random colour variation.
+      final selectedTemplate = _template == 'smart'
+          ? (discountPrice != null || offerText.isNotEmpty
+              ? 'price_burst'
+              : _goal == 'clear_stock'
+                  ? 'market'
+                  : 'editorial')
+          : _template;
+      _template = selectedTemplate;
       var headline = GrowthAdCopy.headline(_goal, _language);
       var caption = GrowthAdCopy.caption(
         shopName: shop,
@@ -822,7 +832,7 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         'shop_details': authoritativeShopDetails,
         'goal': _goal,
         'language': _language,
-        'template': _template,
+        'template': selectedTemplate,
         'ad_format': _adFormat,
         'product_id': authoritativeProductId,
         'product_name': productName,
@@ -1789,6 +1799,12 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
         return const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)];
       case 'minimal':
         return const [Color(0xFFF8FAFC), Color(0xFFFFFFFF)];
+      case 'price_burst':
+        return const [Color(0xFF171717), Color(0xFF7F1D1D), Color(0xFFEA580C)];
+      case 'market':
+        return const [Color(0xFF064E3B), Color(0xFF0F766E), Color(0xFFF59E0B)];
+      case 'editorial':
+        return const [Color(0xFFFFF7ED), Color(0xFFFFEDD5), Color(0xFFF5F5F4)];
       default:
         return const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
     }
@@ -1796,10 +1812,14 @@ class _GrowthAgentPageState extends State<GrowthAgentPage> {
 
   Widget _buildTemplatePicker() {
     const templates = <Map<String, String>>[
-          {'id': 'bold', 'name': 'Bold gradient', 'subtitle': 'Big headline'},
-      {'id': 'festive', 'name': 'Festive offer', 'subtitle': 'Bright & punchy'},
+      {'id': 'smart', 'name': 'Smart auto', 'subtitle': 'Picks the best layout'},
+      {'id': 'price_burst', 'name': 'Price burst', 'subtitle': 'Big offer spotlight'},
+      {'id': 'market', 'name': 'Market fresh', 'subtitle': 'Local store energy'},
+      {'id': 'editorial', 'name': 'Editorial', 'subtitle': 'Premium magazine look'},
+      {'id': 'bold', 'name': 'Bold gradient', 'subtitle': 'Big headline'},
+      {'id': 'festive', 'name': 'Festive offer', 'subtitle': 'Celebration style'},
       {'id': 'fresh', 'name': 'Fresh & local', 'subtitle': 'Friendly colours'},
-          {'id': 'minimal', 'name': 'Clean minimal', 'subtitle': 'Product first'},
+      {'id': 'minimal', 'name': 'Clean minimal', 'subtitle': 'Product first'},
     ];
 
     return Column(
@@ -2361,36 +2381,46 @@ class _PosterArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFestive = template == 'festive';
-    final isFresh = template == 'fresh';
-    final isMinimal = template == 'minimal';
+    final isFresh = template == 'fresh' || template == 'market';
+    final isMinimal = template == 'minimal' || template == 'editorial';
+    final isPriceBurst = template == 'price_burst';
+    final isEditorial = template == 'editorial';
     final isStory = format == 'story';
     final isSquare = format == 'square';
     final hasProduct = productName.trim().isNotEmpty;
     final hasOffer = offer.trim().isNotEmpty || discountPrice != null;
-    final colors = isFestive
-        ? const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)]
-        : isFresh
-            ? const [Color(0xFF064E3B), Color(0xFF059669), Color(0xFF84CC16)]
-            : const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
+    final colors = isPriceBurst
+        ? const [Color(0xFF171717), Color(0xFF7F1D1D), Color(0xFFEA580C)]
+        : isEditorial
+            ? const [Color(0xFFFFF7ED), Color(0xFFFFEDD5), Color(0xFFF5F5F4)]
+            : isFestive
+                ? const [Color(0xFF7F1D1D), Color(0xFFDC2626), Color(0xFFF97316)]
+                : isFresh
+                    ? const [Color(0xFF064E3B), Color(0xFF0F766E), Color(0xFFF59E0B)]
+                    : const [Color(0xFF101638), Color(0xFF4C1D95), Color(0xFF7C3AED)];
     final textColor = isMinimal ? const Color(0xFF111827) : Colors.white;
     final mutedColor = isMinimal ? const Color(0xFF475569) : Colors.white70;
-    final accentColor = isFestive
-        ? const Color(0xFFFDE68A)
-        : isFresh
-            ? const Color(0xFFD9F99D)
-            : isMinimal
-                ? const Color(0xFFBE123C)
-                : const Color(0xFFFDE68A);
+    final accentColor = isPriceBurst
+        ? const Color(0xFFFBBF24)
+        : isFestive
+            ? const Color(0xFFFDE68A)
+            : isFresh
+                ? const Color(0xFFFDE68A)
+                : isMinimal
+                    ? const Color(0xFFBE123C)
+                    : const Color(0xFFFDE68A);
     final accentTextColor = isFestive || !isMinimal
         ? const Color(0xFF422006)
         : Colors.white;
     final cardColor = isMinimal
-        ? const Color(0xFFF8FAFC)
-        : Colors.white.withValues(alpha: 0.13);
+        ? (isEditorial ? const Color(0xFFFFFBF5) : const Color(0xFFF8FAFC))
+        : isPriceBurst
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.13);
     final cardBorder = isMinimal
         ? const Color(0xFFCBD5E1)
         : Colors.white.withValues(alpha: 0.28);
-    final cornerRadius = isFestive ? 8.0 : isMinimal ? 4.0 : 18.0;
+    final cornerRadius = isPriceBurst ? 26.0 : isFestive ? 8.0 : isMinimal ? 4.0 : 18.0;
     final visitLabel = language == 'te'
         ? 'ఈరోజే సందర్శించండి'
         : language == 'hi'
@@ -2432,7 +2462,9 @@ class _PosterArtwork extends StatelessWidget {
       borderRadius: BorderRadius.circular(22),
       child: Container(
         decoration: isMinimal
-            ? const BoxDecoration(color: Colors.white)
+            ? BoxDecoration(
+                color: isEditorial ? const Color(0xFFFFF7ED) : Colors.white,
+              )
             : BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -2442,6 +2474,22 @@ class _PosterArtwork extends StatelessWidget {
               ),
         child: Stack(
           children: [
+            if (isPriceBurst)
+              Positioned(
+                right: -36,
+                bottom: isStory ? 150 : 70,
+                child: Container(
+                  width: isStory ? 220 : 160,
+                  height: isStory ? 220 : 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.32),
+                      width: 18,
+                    ),
+                  ),
+                ),
+              ),
             if (!isMinimal)
               Positioned(
                 right: isStory ? -68 : -42,
@@ -2485,13 +2533,15 @@ class _PosterArtwork extends StatelessWidget {
                           borderRadius: BorderRadius.circular(isMinimal ? 8 : 13),
                         ),
                         child: Icon(
-                          isFresh
-                              ? Icons.eco_rounded
-                              : isFestive
-                                  ? Icons.celebration_rounded
-                                  : isMinimal
-                                      ? Icons.storefront_rounded
-                                      : Icons.shopping_bag_rounded,
+                          isPriceBurst
+                              ? Icons.local_offer_rounded
+                              : isFresh
+                                  ? Icons.eco_rounded
+                                  : isFestive
+                                      ? Icons.celebration_rounded
+                                      : isMinimal
+                                          ? Icons.storefront_rounded
+                                          : Icons.shopping_bag_rounded,
                           color: isMinimal ? Colors.white : accentColor,
                           size: isStory ? 28 : 24,
                         ),
@@ -2541,9 +2591,20 @@ class _PosterArtwork extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: textColor,
-                      height: 1.04,
-                      fontSize: isStory ? 34 : isSquare ? 21 : isMinimal ? 26 : 28,
+                      height: isEditorial ? 0.98 : 1.04,
+                      fontSize: isStory
+                          ? 34
+                          : isSquare
+                              ? 21
+                              : isPriceBurst
+                                  ? 32
+                                  : isEditorial
+                                      ? 31
+                                      : isMinimal
+                                          ? 26
+                                          : 28,
                       fontWeight: FontWeight.w900,
+                      letterSpacing: isEditorial ? -1.1 : isPriceBurst ? -0.8 : 0,
                     ),
                   ),
                   SizedBox(height: isStory ? 24 : isSquare ? 7 : 15),
