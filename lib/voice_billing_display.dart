@@ -229,6 +229,10 @@ class VoiceBillingDisplay {
       'ટામેટા',
       'ਟਮਾਟਰ',
     ],
+    'brinjal': [
+      'వంకాయ', 'बैंगन', 'கத்தரிக்காய்', 'ಬದನೆಕಾಯಿ', 'വഴുതന',
+      'वांगी', 'বেগুন', 'રીંગણ', 'ਬੈਂਗਣ',
+    ],
     'ghee': [
       'నెయ్యి',
       'घी',
@@ -429,6 +433,18 @@ class VoiceBillingDisplay {
     ],
   };
 
+  /// Exact multi-word product names are resolved before token translation.
+  static const Map<String, List<String>> _productPhrases = {
+    'bottle gourd': [
+      'సొరకాయ', 'लौकी', 'சுரைக்காய்', 'ಸೋರೆಕಾಯಿ', 'ചുരയ്ക്ക',
+      'दुधी भोपळा', 'লাউ', 'દૂધી', 'ਲੌਕੀ',
+    ],
+    'bottle gourds': [
+      'సొరకాయలు', 'लौकियाँ', 'சுரைக்காய்கள்', 'ಸೋರೆಕாயಿಗಳು', 'ചുരയ്ക്കകൾ',
+      'दुधी भोपळे', 'লাউ', 'દૂધીઓ', 'ਲੌકੀਆਂ',
+    ],
+  };
+
   /// Spelling variants and plurals that appear in AI / catalogue output.
   static const Map<String, String> _aliases = {
     'eggs': 'egg',
@@ -439,6 +455,9 @@ class VoiceBillingDisplay {
     'chili': 'chilli',
     'chillies': 'chilli',
     'tomatoes': 'tomato',
+    'brinjals': 'brinjal',
+    'eggplant': 'brinjal',
+    'eggplants': 'brinjal',
     'potatoes': 'potato',
     'onions': 'onion',
     'dhal': 'dal',
@@ -501,6 +520,8 @@ class VoiceBillingDisplay {
     if (trimmed.isEmpty) return null;
 
     final folded = trimmed.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    final exactPhrase = _productPhrases[folded];
+    if (exactPhrase != null) return exactPhrase[column];
     final phraseKey = _phraseAliases[folded] ?? _aliases[folded];
     if (phraseKey != null) {
       final row = _products[phraseKey];
