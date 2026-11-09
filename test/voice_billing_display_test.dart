@@ -17,6 +17,13 @@ void main() {
       );
     });
 
+    test('common detected products are displayed in Telugu', () {
+      expect(VoiceBillingDisplay.productName('Tomatoes', 'te'), 'టమాటా');
+      expect(VoiceBillingDisplay.productName('Brinjals', 'te'), 'వంకాయ');
+      expect(VoiceBillingDisplay.productName('Bottle Gourds', 'te'), 'సొరకాయలు');
+      expect(VoiceBillingDisplay.productName('Chicken', 'te'), 'చికెన్');
+    });
+
     test('every supported language gives a non-English result', () {
       for (final lang in _langs) {
         final t = VoiceBillingDisplay.productName('Chicken Biryani', lang);
