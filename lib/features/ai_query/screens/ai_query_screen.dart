@@ -783,7 +783,33 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
             !busy &&
             _currentResponse!.isSuccess) ...[
           const SizedBox(height: 18),
-          AIAnswerCard(response: _currentResponse!),
+          AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 420),
+            reverseDuration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final slide = Tween<Offset>(
+                begin: const Offset(0, 0.035),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              ));
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(position: slide, child: child),
+              );
+            },
+            child: AIAnswerCard(
+              key: ValueKey(
+                '${_currentResponse!.query ?? ''}-${_currentResponse!.timestamp.microsecondsSinceEpoch}',
+              ),
+              response: _currentResponse!,
+            ),
+          ),
           if (_currentResponse!.productDiscovery != null) ...[
             const SizedBox(height: 14),
             ProductDiscoveryCard(data: _currentResponse!.productDiscovery!),
