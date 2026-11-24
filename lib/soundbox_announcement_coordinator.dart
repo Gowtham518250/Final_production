@@ -189,9 +189,14 @@ class SoundboxAnnouncementCoordinator<TUi> {
     _flushHeld();
   }
 
+  /// Clear all transient announcement state, including recent echo memory.
+  /// This is used when the owning detector is reset so a prior test/session
+  /// cannot cause a new, independently referenced payment to be muted.
   void reset() {
     _held?.cancel();
     _held = null;
+    _recentlySpoken.clear();
+    _recentlySpokenEvents.clear();
   }
 
   static PaymentEvent enrich(PaymentEvent primary, PaymentEvent echo) {
