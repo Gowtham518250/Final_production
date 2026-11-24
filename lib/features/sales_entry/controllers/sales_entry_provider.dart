@@ -245,84 +245,36 @@ class SalesEntryProvider extends ChangeNotifier {
       // Offline fallback only processes English text. Unknown English products can
       // be added as custom lines, but only exact catalog matches get product IDs.
       try {
-        final rawInventory = await LocalStorageService.loadBackendProducts();
-        final inventory = rawInventory
-            .map((product) {
-              final name =
-                  (product['name'] ??
-                          product['product_name'] ??
-                          product['itemName'] ??
-                          '')
-                      .toString()
-                      .trim();
-              final price =
-                  product['price'] ??
-                  product['unit_price'] ??
-                  product['selling_price'] ??
-                  0;
-              return <String, dynamic>{
-                ...product,
-                'name': name,
-                'price': price,
-              };
-            })
-            .where((product) => (product['name'] ?? '').toString().isNotEmpty)
-            .toList();
-
-        final localParsed = VoiceNlpService.parseMultipleItems(
-          transcript,
-          knownInventory: inventory,
-        );
+        // The local fallback is deliberately catalogue-blind. It may create
+        // custom draft lines, but only a backend-authorized match may link stock.
+        final localParsed = VoiceNlpService.parseMultipleItems(transcript);
         final safeItems = <SalesItem>[];
-        String normalize(String value) =>
-            value.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
-
         final untrackedItems = <String>[];
         final missingPriceItems = <String>[];
+
         for (final item in localParsed) {
           final spokenName = (item['item'] ?? '').toString().trim();
           if (spokenName.isEmpty) continue;
-          final matchedInventory = inventory.where(
-            (product) =>
-                normalize((product['name'] ?? '').toString()) ==
-                normalize(spokenName),
-          );
-          final knownProduct = matchedInventory.isEmpty
-              ? null
-              : matchedInventory.first;
           final quantity = double.tryParse((item['qty'] ?? '').toString()) ?? 1;
           final parsedPrice =
               double.tryParse((item['price'] ?? '').toString()) ?? 0;
-          if (quantity <= 0 ||
-              !quantity.isFinite ||
-              parsedPrice < 0 ||
-              !parsedPrice.isFinite)
+          if (!quantity.isFinite ||
+              quantity <= 0 ||
+              !parsedPrice.isFinite ||
+              parsedPrice < 0) {
             continue;
-          final catalogPrice =
-              double.tryParse(
-                (knownProduct?['price'] ??
-                        knownProduct?['unit_price'] ??
-                        knownProduct?['selling_price'] ??
-                        '')
-                    .toString(),
-              ) ??
-              0;
-          final price = parsedPrice > 0
-              ? parsedPrice
-              : (catalogPrice > 0 ? catalogPrice : 0.0);
-          if (knownProduct == null) untrackedItems.add(spokenName);
+          }
+
+          final price = parsedPrice > 0 ? parsedPrice : 0.0;
+          untrackedItems.add(spokenName);
           if (price <= 0) missingPriceItems.add(spokenName);
 
           safeItems.add(
             SalesItem(
               id: _newEntryId(),
-              itemName: knownProduct?['name']?.toString() ?? spokenName,
-              productId: knownProduct == null
-                  ? null
-                  : int.tryParse(
-                      (knownProduct['id'] ?? knownProduct['product_id'] ?? '')
-                          .toString(),
-                    ),
+              itemName: spokenName,
+              productId: null,
+              catalogMatched: false,
               quantity: quantity,
               price: price,
             ),
@@ -492,16 +444,13 @@ class SalesEntryProvider extends ChangeNotifier {
 
         final price = parsedPrice ?? 0.0;
         final rawProductId = int.tryParse((raw['product_id'] ?? '').toString());
-        final declaredCatalogMatch = raw['catalog_matched'];
+        // A name or product_id alone is not catalogue authorization.
+        // Require the backend's explicit positive match and a valid ID.
         final isCatalogMatched =
-            declaredCatalogMatch == true ||
-            (declaredCatalogMatch == null &&
-                rawProductId != null &&
-                rawProductId > 0);
-        final productId =
-            isCatalogMatched && rawProductId != null && rawProductId > 0
-            ? rawProductId
-            : null;
+            raw['catalog_matched'] == true &&
+            rawProductId != null &&
+            rawProductId > 0;
+        final productId = isCatalogMatched ? rawProductId : null;
 
         if ((raw['price_warning'] ?? '').toString().trim().isNotEmpty) {
           priceWarningProducts.add(name);
@@ -517,6 +466,7 @@ class SalesEntryProvider extends ChangeNotifier {
             id: _newEntryId(),
             itemName: name,
             productId: productId,
+            catalogMatched: isCatalogMatched,
             quantity: quantity,
             price: price,
           ),
@@ -603,15 +553,25 @@ class SalesEntryProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> _buildSaleLinePayload(SalesItem entry) async {
-    final actualProductId = entry.productId != null && entry.productId! > 0
-        ? entry.productId!
-        : await _lookupProductIdByName(entry.itemName);
+    final int actualProductId;
+    if (!entry.isStockTracked) {
+      // An explicitly untracked voice line must remain a custom invoice line.
+      actualProductId = 0;
+    } else if (entry.catalogMatched == true) {
+      // Do not fall back to name matching if an authorized ID is invalid.
+      actualProductId = entry.catalogAuthorizedProductId ?? 0;
+    } else if (entry.productId != null && entry.productId! > 0) {
+      actualProductId = entry.productId!;
+    } else {
+      actualProductId = await _lookupProductIdByName(entry.itemName);
+    }
 
     final tax = withTax ? entry.totalGstAmount : 0.0;
     return <String, dynamic>{
       'itemName': entry.itemName.trim(),
       'product_name': entry.itemName.trim(),
       'product_id': actualProductId > 0 ? actualProductId : null,
+      'stock_tracked': entry.isStockTracked,
       'quantity': entry.billableQuantity,
       'price': entry.billablePrice,
       'gst': entry.effectiveGstRate,

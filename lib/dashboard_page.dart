@@ -1,5 +1,6 @@
 import 'live_translated_text.dart';
 import 'package:flutter/material.dart';
+import 'sale_date_parser.dart';
 import 'whatsapp_orders_page.dart';
 import 'marketing_page.dart';
 import 'package:retail_mind/premium_ui.dart';
@@ -490,45 +491,8 @@ class _DashboardPageState extends State<DashboardPage>
   StreamSubscription? _syncSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _durableEventsSubscription;
 
-  DateTime _getLocalDate(Map<String, dynamic> sale) {
-    final dateStr =
-        (sale['business_date'] ??
-                sale['sale_date'] ??
-                sale['invoice_date'] ??
-                sale['date'] ??
-                sale['created_at'] ??
-                sale['createdAt'])
-            ?.toString()
-            .trim() ??
-        '';
-    if (dateStr.isEmpty) return DateTime(1970);
-
-    try {
-      if (RegExp(r'^\d{4}-\d{2}-\d{2}\$').hasMatch(dateStr)) {
-        return DateTime.parse(dateStr);
-      }
-
-      final parsed = DateTime.parse(dateStr);
-      final hasExplicitZone =
-          dateStr.endsWith('Z') ||
-          RegExp(r'[+-]\d{2}:?\d{2}\$').hasMatch(dateStr);
-      return hasExplicitZone
-          ? parsed.toLocal()
-          : DateTime(
-              parsed.year,
-              parsed.month,
-              parsed.day,
-              parsed.hour,
-              parsed.minute,
-              parsed.second,
-              parsed.millisecond,
-              parsed.microsecond,
-            );
-    } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Invalid sale date format: $dateStr');
-      return DateTime(1970);
-    }
-  }
+  DateTime _getLocalDate(Map<String, dynamic> sale) =>
+      SaleDateParser.parse(sale);
 
   Future<void> _prefetchOwnerFeatureAccess() async {
     try {
