@@ -429,6 +429,28 @@ class RetailMindBillingService {
     return AiUsageSnapshot.fromJson(_decode(response));
   }
 
+  static Future<Map<String, dynamic>> reconcilePendingSubscription({
+    String? subscriptionId,
+  }) async {
+    final cleanId = subscriptionId?.trim();
+    final body = <String, dynamic>{
+      if (cleanId != null && cleanId.isNotEmpty) 'subscription_id': cleanId,
+    };
+    final response = await ApiClient.postJson(
+      '/api/billing/subscriptions/reconcile',
+      body,
+    ).timeout(const Duration(seconds: 25));
+    // Allow the mobile client to roll forward independently of the backend.
+    if (response.statusCode == 404) return const {};
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw RetailMindBillingException.fromResponse(
+        response,
+        fallback: 'Unable to reconcile Cashfree subscription status (' + response.statusCode.toString() + ').',
+      );
+    }
+    return _decode(response);
+  }
+
   static Future<Map<String, dynamic>> fetchCurrentSubscription() async {
     final response = await ApiClient.getJson(
       currentPath,
