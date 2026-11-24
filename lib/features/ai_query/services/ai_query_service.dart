@@ -29,6 +29,21 @@ class AIQueryVoiceResult {
       );
 }
 
+/// Result of the backend's guarded voice transcription endpoint.
+class AIQueryTranscription {
+  final String transcript;
+  final String? detectedLanguageCode;
+  final Map<String, dynamic> speechQuality;
+  final String asrModel;
+
+  const AIQueryTranscription({
+    required this.transcript,
+    this.detectedLanguageCode,
+    this.speechQuality = const <String, dynamic>{},
+    this.asrModel = '',
+  });
+}
+
 /// Service for executing AI-powered natural-language business queries against the
 /// Retail Mind backend (`POST /askquery`) and managing local query history.
 class AiQueryService {
@@ -105,7 +120,7 @@ class AiQueryService {
   /// This endpoint only returns text. The screen displays that text in the query
   /// box first, then submits it to /askquery with the same language code so the
   /// existing Groq text translator runs before business-data retrieval.
-  static Future<String> transcribeVoiceQuery({
+  static Future<AIQueryTranscription> transcribeVoiceQuery({
     required String audioPath,
     required String languageCode,
   }) async {
@@ -155,8 +170,20 @@ class AiQueryService {
       if (transcript.isEmpty) {
         throw Exception('No clear speech was detected. Please record your question again.');
       }
-      unawaited(saveQueryToHistory(transcript));
-      return transcript;
+      final rawQuality = decoded['speech_quality'];
+      final quality = rawQuality is Map
+          ? Map<String, dynamic>.from(rawQuality)
+          : const <String, dynamic>{};
+      final detectedLanguage = (decoded['detected_language'] ?? '')
+          .toString()
+          .trim();
+      return AIQueryTranscription(
+        transcript: transcript,
+        detectedLanguageCode:
+            detectedLanguage.isEmpty ? null : detectedLanguage,
+        speechQuality: quality,
+        asrModel: (decoded['asr_model'] ?? '').toString(),
+      );
     } on TimeoutException {
       throw Exception('Speech recognition timed out. Please try a shorter recording.');
     } on SocketException {

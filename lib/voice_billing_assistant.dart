@@ -1209,6 +1209,40 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           .toString()
           .trim();
 
+  Future<void> _recordShopVoiceAlias({
+    required String aliasText,
+    required String correctedProductName,
+  }) async {
+    final cleanAlias = aliasText.trim();
+    final cleanProductName = correctedProductName.trim();
+    if (cleanAlias.isEmpty || cleanProductName.isEmpty) return;
+
+    try {
+      final response = await ApiClient.postJson(
+        ApiClient.voiceBillingAliasesEndpoint,
+        {
+          'alias_text': cleanAlias,
+          'product_name': cleanProductName,
+          'language_code': _selectedLang.code,
+        },
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (kDebugMode) {
+          debugPrint(
+            'Shop voice alias was not saved (HTTP ${response.statusCode}).',
+          );
+        }
+      } else if (kDebugMode) {
+        debugPrint('Shop-scoped voice alias confirmation synced.');
+      }
+    } catch (error) {
+      // Learning is best-effort and must never block adding a reviewed bill.
+      if (kDebugMode) {
+        debugPrint('Shop voice-alias sync unavailable: ${error.runtimeType}');
+      }
+    }
+  }
+
   Set<String> _voiceCatalogTokens(String value) => value
       .toLowerCase()
       .replaceAll(
@@ -2013,28 +2047,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         transcript,
         _selectedLang.code,
       );
-      final correctedTranscript =
-          await VoiceFeedbackLearningService.applyLearnedCorrections(
-        transcript: phoneticTranscript,
-        languageCode: _selectedLang.code,
-      );
-      final correctedOrOriginal = correctedTranscript.trim().isNotEmpty
-          ? correctedTranscript
-          : phoneticTranscript;
+      // Learned pronunciations are now applied server-side using aliases scoped
+      // to the authenticated shop. Do not apply device-wide aliases here: the
+      // same tablet may be used by multiple shops.
       final cleanTranscript =
           RomanIndianVoiceNormalizer.normalizeSpokenScalePhrases(
-        correctedOrOriginal,
+        phoneticTranscript,
       );
       var parsedResult = parsed;
       // The audio endpoint already produced a draft. Re-run the text parser
-      // only when learned corrections or deterministic number normalization
-      // changed the transcript, avoiding an unnecessary second AI request.
-      if (correctedTranscript != phoneticTranscript ||
-          cleanTranscript != phoneticTranscript) {
+      // only when deterministic number normalization changed the transcript.
+      if (cleanTranscript != phoneticTranscript) {
         parsedResult = await _parseWithGroq(cleanTranscript);
       }
       parsedResult = await _applyDeterministicScaleCorrection(
-        transcriptBeforeNormalization: correctedOrOriginal,
+        transcriptBeforeNormalization: phoneticTranscript,
         normalizedTranscript: cleanTranscript,
         aiItems: parsedResult.items,
         aiWarnings: parsedResult.warnings,
@@ -2318,12 +2345,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         _selectedLang.code,
       );
 
-      if (commit) {
-        clean = await VoiceFeedbackLearningService.applyLearnedCorrections(
-          transcript: clean,
-          languageCode: _selectedLang.code,
-        );
-      }
+      // Do not apply device-wide learned aliases to a shop's transcript.
+      // Confirmed shop aliases are expanded by the authenticated backend parser.
       // Repair numbers the recogniser spelled by sound (Telugu "రేణు ఉందలు"
       // = 200) before the AI sees them. Every repair is reported below so the
       // shopkeeper verifies it; ordinary words are never converted.
@@ -2670,6 +2693,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   }
 
   void _confirmOrder() {
+    final pendingVoiceAliasCorrections = <Map<String, dynamic>>[];
+    final seenAliasCorrections = <String>{};
     for (int i = 0; i < ParsedItems.length; i++) {
       final m = _editControllers[i];
       if (m == null) continue;
@@ -2681,14 +2706,31 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       final editedName = m['name']!.text.trim();
       final originalName = ParsedItems[i].name;
 
-      if (editedName.isNotEmpty &&
+      if (ParsedItems[i].isConfirmed &&
+          editedName.isNotEmpty &&
           editedName.toLowerCase() != originalName.toLowerCase()) {
-        VoiceFeedbackLearningService.recordCorrection(
-          originalTranscript: originalName,
-          correctedItemName: editedName,
-          languageCode: _selectedLang.code,
-          originalConfidence: ParsedItems[i].confidence,
-        );
+        final alias = originalName.trim();
+        final canonicalName = editedName.trim();
+        final genericNames = {
+          'item',
+          'product',
+          'unknown',
+          'unknown item',
+          'unmatched product',
+          'unknown product',
+        };
+        final dedupeKey =
+            '${alias.toLowerCase()}::${canonicalName.toLowerCase()}';
+        if (alias.isNotEmpty &&
+            canonicalName.isNotEmpty &&
+            !genericNames.contains(alias.toLowerCase()) &&
+            seenAliasCorrections.add(dedupeKey)) {
+          pendingVoiceAliasCorrections.add({
+            'alias_text': alias,
+            'product_name': canonicalName,
+            'original_confidence': ParsedItems[i].confidence,
+          });
+        }
       }
 
       ParsedItems[i] = ParsedItem(
@@ -2742,6 +2784,31 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         ? 0.0
         : confirmed.map((e) => e.confidence).reduce((a, b) => a + b) /
             confirmed.length;
+
+    final confirmedNames = confirmed
+        .map((item) => item.name.trim().toLowerCase())
+        .toSet();
+    for (final correction in pendingVoiceAliasCorrections) {
+      final productName = (correction['product_name'] ?? '').trim();
+      if (!confirmedNames.contains(productName.toLowerCase())) continue;
+      final aliasText = (correction['alias_text'] ?? '').toString().trim();
+      final originalConfidence =
+          (correction['original_confidence'] as num?)?.toDouble() ?? 0.0;
+      unawaited(
+        VoiceFeedbackLearningService.recordCorrection(
+          originalTranscript: aliasText,
+          correctedItemName: productName,
+          languageCode: _selectedLang.code,
+          originalConfidence: originalConfidence,
+        ),
+      );
+      unawaited(
+        _recordShopVoiceAlias(
+          aliasText: aliasText,
+          correctedProductName: productName,
+        ),
+      );
+    }
 
     VoiceFeedbackLearningService.recordAccuracyMetrics(
       languageCode: _selectedLang.code,

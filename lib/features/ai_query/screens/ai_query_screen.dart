@@ -48,6 +48,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
   bool _isLoading = false;
   bool _isRecording = false;
   bool _isVoiceProcessing = false;
+  bool _voiceTranscriptNeedsReview = false;
   String _inputLanguageCode = 'en';
   bool _voiceLanguageManuallySelected = false;
   AIQueryResponse? _currentResponse;
@@ -166,6 +167,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
     _inputFocusNode.unfocus();
     setState(() {
       _isLoading = true;
+      _voiceTranscriptNeedsReview = false;
       _errorMessage = null;
       if (!preserveVoiceTranscript) {
         _originalTranscript = null;
@@ -233,6 +235,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
         _errorMessage = null;
         _originalTranscript = null;
         _translatedEnglish = null;
+        _voiceTranscriptNeedsReview = false;
         _currentResponse = null;
         _queryController.clear();
       });
@@ -291,21 +294,22 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
       });
 
       final spokenLanguageCode = _selectedLanguage.code;
-      final transcript = await AiQueryService.transcribeVoiceQuery(
+      final transcription = await AiQueryService.transcribeVoiceQuery(
         audioPath: audioPath,
         languageCode: spokenLanguageCode,
       );
       if (!mounted) return;
 
-      // Show the recognized words in the same editable query field before any
-      // business-data query starts. The next request uses the selected language,
-      // so /askquery translates this text with the existing Groq text model.
+      // Keep recognition separate from query execution. The user can correct
+      // recognition mistakes before any business data is queried.
+      final transcript = transcription.transcript;
       setState(() {
         _isVoiceProcessing = false;
         _inputLanguageCode = spokenLanguageCode;
         _currentResponse = null;
         _originalTranscript = transcript;
         _translatedEnglish = null;
+        _voiceTranscriptNeedsReview = true;
         _queryController.value = TextEditingValue(
           text: transcript,
           selection: TextSelection.collapsed(offset: transcript.length),
@@ -313,21 +317,12 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
         _errorMessage = null;
       });
       _scrollToBottom();
-
-      // Wait for a frame so the transcript is visible in the text box before
-      // automatically executing it through the normal /askquery endpoint.
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-      await _executeQuery(
-        transcript,
-        languageCode: spokenLanguageCode,
-        preserveVoiceTranscript: true,
-      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isRecording = false;
         _isVoiceProcessing = false;
+        _voiceTranscriptNeedsReview = false;
         _errorMessage = error
             .toString()
             .replaceFirst(RegExp(r'^Exception:\s*'), '')
@@ -1272,7 +1267,13 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
 
     Widget askButton({required bool fullWidth}) {
       final button = ElevatedButton.icon(
-        onPressed: canAsk ? () => _executeQuery(_queryController.text, languageCode: _inputLanguageCode) : null,
+        onPressed: canAsk
+            ? () => _executeQuery(
+                  _queryController.text,
+                  languageCode: _inputLanguageCode,
+                  preserveVoiceTranscript: _originalTranscript != null,
+                )
+            : null,
         icon: const Icon(Icons.auto_awesome_rounded, size: 19),
         label: const LiveTranslatedText('Ask Retail Mind'),
         style: ElevatedButton.styleFrom(
@@ -1326,7 +1327,7 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
             maxLines: 5,
             textInputAction: TextInputAction.newline,
             onChanged: (_) => setState(() {}),
-            onSubmitted: (_) => _executeQuery(_queryController.text, languageCode: _inputLanguageCode),
+            onSubmitted: (_) => _inputFocusNode.unfocus(),
             style: GoogleFonts.inter(fontSize: 14, height: 1.5, color: const Color(0xFF17264A), fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               hint: LiveTranslatedText('Ask about sales, revenue, customers, stock…'),
@@ -1340,6 +1341,27 @@ class _AiQueryScreenState extends State<AiQueryScreen> {
               focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF7287F8), width: 1.5)),
             ),
           ),
+          if (_voiceTranscriptNeedsReview) ...[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.fact_check_outlined, size: 15, color: Color(0xFF2563EB)),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: LiveTranslatedText(
+                    'Voice transcript is ready. Review and correct the text, then tap Ask Retail Mind to run your query.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      height: 1.4,
+                      color: const Color(0xFF3157A4),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {

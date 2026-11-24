@@ -148,6 +148,8 @@ class ApiClient {
       '/api/inventory/voice-billing/parse';
   static const String voiceBillingAudioEndpoint =
       '/api/inventory/voice-billing/parse-audio';
+  static const String voiceBillingAliasesEndpoint =
+      '/api/inventory/voice-billing/aliases';
   static const String inventoryStockMovement = '/api/inventory/stock-movement';
   static const String inventoryLowStock = '/api/inventory/low-stock';
   static const String inventoryStockAlerts = '/api/inventory/stock-alerts';
