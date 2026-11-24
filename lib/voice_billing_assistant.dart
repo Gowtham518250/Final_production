@@ -1432,16 +1432,20 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           detectedPrice: spokenPrice,
           cataloguePrice: catalogPrice,
           productName: canonicalName,
+          spokenPriceNeedsConfirmation:
+              raw['price_needs_confirmation'] == true ||
+              raw['needs_confirmation'] == true,
         );
-        if (!priceResolution.hasPrice) {
-          final warning =
-              'No valid selling price is saved for $canonicalName. Update its price or speak a selling price before billing.';
-          if (!warnings.contains(warning)) warnings.add(warning);
-          continue;
-        }
 
         String? priceWarning =
             (raw['price_warning'] ?? '').toString().trim();
+        if (!priceResolution.hasPrice) {
+          priceWarning = priceWarning.isNotEmpty
+              ? priceWarning
+              : priceResolution.warning ??
+                  'Enter or confirm the selling price before billing.';
+          if (!warnings.contains(priceWarning)) warnings.add(priceWarning);
+        }
         final resolutionWarning = priceResolution.warning;
         if (resolutionWarning != null && resolutionWarning.isNotEmpty) {
           priceWarning = priceWarning.isEmpty
@@ -1491,7 +1495,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             name: canonicalName,
             qty: quantity,
             unit: unit,
-            price: priceResolution.price!,
+            price: priceResolution.price ?? 0.0,
             confidence: confidence,
             catalogMatched: true,
             productId: productId,
