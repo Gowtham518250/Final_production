@@ -66,11 +66,13 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
-      find.text(
-        AppLocalizations(languageProvider.locale).translate('signInGuidance'),
-      ),
+    final signInGuidance = find.text(
+      AppLocalizations(languageProvider.locale).translate('signInGuidance'),
     );
+    // This control may be below the initial viewport on a smaller test device.
+    await tester.ensureVisible(signInGuidance);
+    await tester.pumpAndSettle();
+    await tester.tap(signInGuidance);
     await tester.pumpAndSettle();
 
     expect(speechCount, 2);

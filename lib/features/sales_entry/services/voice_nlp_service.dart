@@ -242,16 +242,10 @@ class VoiceNlpService {
         } else if (hasQuantityMarker) {
           qty = value;
         } else {
-          // Natural speech heuristics:
-          // If value is small (<= 25), it's almost always quantity (e.g. "2 soap", "3 milk", "bread 1")
-          // If value is larger (> 25), it's likely a unit price (e.g. "biryani 180", "tea 30")
-          if (value <= 25) {
-            qty = value;
-            price = 0.0;
-          } else {
-            price = value;
-            qty = 1.0;
-          }
+          // Without an explicit price or quantity marker, a lone number is
+          // ambiguous. Do not infer meaning from magnitude or product name.
+          // Leave the line out so the cashier can repeat it with a unit/price.
+          return null;
         }
       } else if (numMatches.length >= 2) {
         // Multi-number phrases follow the documented local format:

@@ -267,6 +267,7 @@ class SharedPageTranslations {
           "✅ Day closed! WhatsApp summary sent.",
       "✅ Matched Transactions": "✅ Matched Transactions",
       "✓ Welcome back, Owner!": "✓ Welcome back, Owner!",
+      "Owner Mode is active again": "Owner Mode is active again",
       "❌ Invalid Staff PIN": "❌ Invalid Staff PIN",
     },
     "te": {
