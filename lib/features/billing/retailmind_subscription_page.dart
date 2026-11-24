@@ -37,38 +37,106 @@ class _RetailMindSubscriptionPageState
     _reload();
   }
 
-  void _reload({String? subscriptionId}) {
+  bool _isVerifyingSubscription = false;
+
+  void _reload({
+    String? subscriptionId,
+    bool retryPendingAuthorization = false,
+  }) {
     _plansFuture = RetailMindBillingService.fetchPlans();
-    _subscriptionFuture = _loadReconciledSubscription(subscriptionId: subscriptionId);
+    _subscriptionFuture = _loadReconciledSubscription(
+      subscriptionId: subscriptionId,
+      retryPendingAuthorization: retryPendingAuthorization,
+    );
     _usageFuture = RetailMindBillingService.fetchUsage();
   }
 
   Future<Map<String, dynamic>> _loadReconciledSubscription({
     String? subscriptionId,
+    bool retryPendingAuthorization = false,
   }) async {
-    try {
-      await RetailMindBillingService.reconcilePendingSubscription(
-        subscriptionId: subscriptionId,
-      );
-    } catch (error) {
-      // A missing/temporarily unavailable reconciliation endpoint must not
-      // hide the last server-known subscription snapshot from the owner.
-      if (kDebugMode) {
-        debugPrint('Cashfree subscription reconciliation deferred: $error');
+    // The Cashfree SDK can return before its subscription-status API has
+    // propagated the authorization. Reconcile again with bounded backoff so
+    // successful mandates do not remain visually pending until a manual retry.
+    const retryDelays = [
+      Duration(seconds: 2),
+      Duration(seconds: 4),
+      Duration(seconds: 6),
+    ];
+    final attempts = retryPendingAuthorization ? retryDelays.length + 1 : 1;
+    Map<String, dynamic>? latestSnapshot;
+    Object? lastSnapshotError;
+
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      Map<String, dynamic> reconciliation = const {};
+      var reconciliationSucceeded = false;
+      try {
+        reconciliation = await RetailMindBillingService.reconcilePendingSubscription(
+          subscriptionId: subscriptionId,
+        );
+        reconciliationSucceeded = true;
+      } catch (error) {
+        // A provider/API error is not evidence of authorization. Keep the
+        // last server snapshot visible and let the owner retry later.
+        if (kDebugMode) {
+          debugPrint('Cashfree subscription reconciliation deferred: $error');
+        }
       }
+
+      try {
+        latestSnapshot =
+            await RetailMindBillingService.fetchCurrentSubscription();
+        lastSnapshotError = null;
+      } catch (error) {
+        lastSnapshotError = error;
+      }
+
+      final stillPending =
+          RetailMindBillingService.shouldRetrySubscriptionReconciliation(
+            reconciliation,
+          ) ||
+          RetailMindBillingService.shouldRetrySubscriptionReconciliation(
+            latestSnapshot ?? const <String, dynamic>{},
+          );
+      if (!retryPendingAuthorization ||
+          !reconciliationSucceeded ||
+          !stillPending ||
+          attempt == attempts - 1) {
+        if (latestSnapshot != null) return latestSnapshot!;
+        if (lastSnapshotError != null) throw lastSnapshotError!;
+        return const {};
+      }
+
+      await Future<void>.delayed(retryDelays[attempt]);
     }
-    return RetailMindBillingService.fetchCurrentSubscription();
+
+    if (latestSnapshot != null) return latestSnapshot!;
+    if (lastSnapshotError != null) throw lastSnapshotError!;
+    return const {};
   }
 
-  Future<void> _refresh({String? subscriptionId}) async {
+  Future<void> _refresh({
+    String? subscriptionId,
+    bool retryPendingAuthorization = false,
+  }) async {
     if (!mounted) return;
     await RetailMindBillingService.invalidateFeatureAccessCache();
     if (!mounted) return;
-    setState(() => _reload(subscriptionId: subscriptionId));
+    setState(() {
+      _isVerifyingSubscription = retryPendingAuthorization;
+      _reload(
+        subscriptionId: subscriptionId,
+        retryPendingAuthorization: retryPendingAuthorization,
+      );
+    });
     try {
       await Future.wait([_plansFuture, _subscriptionFuture, _usageFuture]);
     } catch (_) {
       // Each FutureBuilder renders its own error state; keep pull-to-refresh usable.
+    } finally {
+      if (mounted && retryPendingAuthorization) {
+        setState(() => _isVerifyingSubscription = false);
+      }
     }
   }
 
@@ -120,7 +188,9 @@ class _RetailMindSubscriptionPageState
         ],
       ),
     );
-    if (refresh == true && mounted) await _refresh();
+    if (refresh == true && mounted) {
+      await _refresh(retryPendingAuthorization: true);
+    }
   }
 
   void _onSubscriptionVerify(String subscriptionId) {
@@ -132,7 +202,10 @@ class _RetailMindSubscriptionPageState
         ),
       ),
     );
-    _refresh(subscriptionId: subscriptionId);
+    _refresh(
+      subscriptionId: subscriptionId,
+      retryPendingAuthorization: true,
+    );
   }
 
   void _onSubscriptionFailure(CFErrorResponse errorResponse, String data) {
@@ -147,7 +220,7 @@ class _RetailMindSubscriptionPageState
     );
     // A failed/closed SDK callback can race with a successful provider update.
     // Reconcile once so the UI reflects Cashfree's final state, not only the SDK.
-    _refresh();
+    _refresh(retryPendingAuthorization: true);
   }
 
   Future<void> _selectPlan(RetailMindSubscriptionPlan plan) async {
@@ -257,7 +330,7 @@ class _RetailMindSubscriptionPageState
         title: const LiveTranslatedText('Retail Mind Plans'),
         actions: [
           IconButton(
-            onPressed: _refresh,
+            onPressed: () => _refresh(retryPendingAuthorization: true),
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh billing',
           ),
@@ -501,7 +574,11 @@ class _RetailMindSubscriptionPageState
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               SizedBox(width: 12),
-              Text('Loading subscription status...'),
+              Text(
+                _isVerifyingSubscription
+                    ? 'Verifying mandate with Cashfree...'
+                    : 'Loading subscription status...',
+              ),
             ],
           ),
         );
