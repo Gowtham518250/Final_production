@@ -182,15 +182,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
 
   Future<void> _startAgentRecording() async {
     if (!_voiceEnabled || _isSending || _isRecording) return;
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice recording is currently supported in the Android app. Use text input on web.'),
-        ),
-      );
-      return;
-    }
-
     String? pendingPath;
     try {
       final hasPermission = await _audioRecorder.hasPermission();
@@ -199,14 +190,18 @@ class _ChatbotPageState extends State<ChatbotPage> {
           'Microphone permission is required for voice input.',
         );
       }
-      final directory = await getTemporaryDirectory();
-      pendingPath = p.join(
-        directory.path,
-        'retail_mind_agent_${DateTime.now().microsecondsSinceEpoch}.m4a',
-      );
+      // Native recorders write to a temporary file. The record package's
+      // Web implementation returns an in-memory blob URL from stop(), so it
+      // must not be given a path_provider filesystem path in the browser.
+      if (!kIsWeb) {
+        final directory = await getTemporaryDirectory();
+        pendingPath = p.join(
+          directory.path,
+          'retail_mind_agent_${DateTime.now().microsecondsSinceEpoch}.m4a',
+        );
+      }
       await _audioRecorder.start(
         path: pendingPath,
-        encoder: audio.AudioEncoder.aacLc,
         bitRate: 96000,
       );
       if (!mounted) {
