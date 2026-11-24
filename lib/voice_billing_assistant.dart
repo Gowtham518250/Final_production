@@ -1433,8 +1433,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           cataloguePrice: catalogPrice,
           productName: canonicalName,
           spokenPriceNeedsConfirmation:
-              raw['price_needs_confirmation'] == true ||
-              raw['needs_confirmation'] == true,
+              raw['price_needs_confirmation'] == true,
         );
 
         String? priceWarning =
