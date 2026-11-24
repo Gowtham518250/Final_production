@@ -180,6 +180,20 @@ class AgentAssistantService {
     );
   }
 
+  static Future<List<Map<String, dynamic>>> getPendingActions() async {
+    final response = await ApiClient.getJson('$_base/actions/pending');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponseError(response);
+    }
+    final payload = _decodeMap(response);
+    final actions = payload['actions'];
+    if (actions is! List) return const [];
+    return actions
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
   static Future<Map<String, dynamic>> confirmAction({
     required String actionId,
     required String previewHash,
