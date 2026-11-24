@@ -54,13 +54,22 @@ class AgentAssistantService {
 
   static Never _throwResponseError(http.Response response) {
     final payload = _decodeMap(response);
-    final detail = (payload['detail'] ?? payload['message'] ?? payload['error'])
-        ?.toString()
-        .trim();
+    final rawDetail = payload['detail'] ?? payload['message'] ?? payload['error'];
+    final detail = rawDetail is Map
+        ? (rawDetail['message'] ?? rawDetail['detail'])?.toString().trim()
+        : rawDetail?.toString().trim();
 
-    if (response.statusCode == 401 || response.statusCode == 403) {
+    if (response.statusCode == 401) {
       throw AgentAssistantException(
         'Your owner session may have expired. Sign in again and retry.',
+        statusCode: response.statusCode,
+      );
+    }
+    if (response.statusCode == 403) {
+      throw AgentAssistantException(
+        detail?.isNotEmpty == true
+            ? detail!
+            : 'This assistant feature is not available on your current plan or settings.',
         statusCode: response.statusCode,
       );
     }
@@ -90,6 +99,27 @@ class AgentAssistantService {
 
   static Future<Map<String, dynamic>> getCapabilities() async {
     final response = await ApiClient.getJson(capabilitiesPath);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponseError(response);
+    }
+    return _decodeMap(response);
+  }
+
+  static Future<Map<String, dynamic>> getControlCenter() async {
+    final response = await ApiClient.getJson('$_base/control-center');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponseError(response);
+    }
+    return _decodeMap(response);
+  }
+
+  static Future<Map<String, dynamic>> updateSettings(
+    Map<String, bool> settings,
+  ) async {
+    if (settings.isEmpty) {
+      throw const AgentAssistantException('Choose at least one setting to update.');
+    }
+    final response = await ApiClient.putJson('$_base/settings', settings);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwResponseError(response);
     }

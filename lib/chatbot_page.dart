@@ -52,6 +52,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
   bool _isSending = false;
   bool _isLoadingAgent = true;
   bool _agentEnabled = false;
+  bool _voiceEnabled = false;
+  bool _actionsEnabled = false;
   String? _conversationId;
   String? _agentStatusMessage;
   bool _hasRestoredConversation = false;
@@ -73,13 +75,40 @@ class _ChatbotPageState extends State<ChatbotPage> {
     try {
       final capabilities = await AgentAssistantService.getCapabilities();
       final enabled = capabilities['execution_enabled'] == true;
+      final access = capabilities['access'] is Map
+          ? Map<String, dynamic>.from(capabilities['access'] as Map)
+          : <String, dynamic>{};
+      final voiceEnabled = access['voice_enabled'] == true;
+      final actionsEnabled = access['actions_enabled'] == true;
+      final status = (capabilities['status'] ?? '').toString();
+      final plan = capabilities['plan'] is Map
+          ? Map<String, dynamic>.from(capabilities['plan'] as Map)
+          : <String, dynamic>{};
+      final planName = (plan['plan_name'] ?? 'your current plan').toString();
+      String? statusMessage;
+      if (!enabled) {
+        if (status == 'platform_disabled') {
+          statusMessage = 'Retail Mind AI is not enabled by the platform yet. Your saved shop preferences will take effect once platform setup is complete.';
+        } else if (status == 'provider_configuration_missing') {
+          statusMessage = 'The Retail Mind AI provider is not configured on the platform yet.';
+        } else if (status == 'plan_required') {
+          statusMessage = 'The shop assistant is not included in $planName. Open Agent Control Center to review your plan.';
+        } else if (status == 'owner_disabled') {
+          statusMessage = 'The AI assistant is switched off for this shop. Open Agent Control Center to enable it.';
+        } else {
+          statusMessage = 'The Retail Mind AI assistant is currently unavailable.';
+        }
+      }
+
       var pending = <Map<String, dynamic>>[];
       Map<String, dynamic>? latestConversation;
       if (enabled) {
-        try {
-          pending = await AgentAssistantService.getPendingActions();
-        } catch (_) {
-          // The chat remains usable if the pending-action list is temporarily unavailable.
+        if (actionsEnabled) {
+          try {
+            pending = await AgentAssistantService.getPendingActions();
+          } catch (_) {
+            // The chat remains usable if the pending-action list is temporarily unavailable.
+          }
         }
         try {
           latestConversation = await AgentAssistantService.getLatestConversation();
@@ -114,15 +143,17 @@ class _ChatbotPageState extends State<ChatbotPage> {
           }
         }
         _agentEnabled = enabled;
+        _voiceEnabled = voiceEnabled;
+        _actionsEnabled = actionsEnabled;
         _isLoadingAgent = false;
-        _agentStatusMessage = enabled
-            ? null
-            : 'The Retail Mind Agent is not enabled on this backend yet. The owner app will connect automatically after the backend deployment and agent feature flag are enabled.';
+        _agentStatusMessage = statusMessage;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _agentEnabled = false;
+        _voiceEnabled = false;
+        _actionsEnabled = false;
         _isLoadingAgent = false;
         _agentStatusMessage = error.toString();
       });
@@ -150,7 +181,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _startAgentRecording() async {
-    if (!_agentEnabled || _isSending || _isRecording) return;
+    if (!_voiceEnabled || _isSending || _isRecording) return;
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -324,6 +355,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _speakAgentMessage(String text) async {
+    if (!_voiceEnabled) return;
     final cleanText = text.trim();
     if (cleanText.isEmpty) return;
     if (_speakingMessage == cleanText) {
@@ -353,6 +385,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _confirmPendingAction(Map<String, dynamic> action) async {
+    if (!_actionsEnabled) return;
     final actionId = action['action_id']?.toString() ?? '';
     final previewHash = action['preview_hash']?.toString() ?? '';
     if (actionId.isEmpty || previewHash.isEmpty ||
@@ -588,7 +621,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
               const SizedBox(width: 9),
               Expanded(
                 child: FilledButton(
-                  onPressed: isBusy ? null : () => _confirmPendingAction(action),
+                  onPressed: isBusy || !_actionsEnabled
+                      ? null
+                      : () => _confirmPendingAction(action),
                   style: FilledButton.styleFrom(
                     backgroundColor: _primary,
                     foregroundColor: Colors.white,
@@ -718,10 +753,17 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.verified_user_outlined,
-                  color: Colors.white70,
-                  size: 19,
+                IconButton(
+                  tooltip: 'Agent Control Center',
+                  onPressed: () async {
+                    await Navigator.of(context).pushNamed('/agent-control-center');
+                    if (mounted) _loadAgentCapabilities();
+                  },
+                  icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 21),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    shape: const CircleBorder(),
+                  ),
                 ),
               ],
             ),
@@ -914,6 +956,16 @@ class _ChatbotPageState extends State<ChatbotPage> {
               color: const Color(0xFF92400E),
               visualDensity: VisualDensity.compact,
             ),
+          if (!_isLoadingAgent)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pushNamed('/agent-control-center'),
+              icon: const Icon(Icons.tune_rounded, size: 16),
+              label: const Text('Manage'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF92400E),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
         ],
       ),
     );
@@ -980,7 +1032,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                       ),
                     ),
                   ),
-                  if (!isMe && _agentEnabled)
+                  if (!isMe && _voiceEnabled)
                     IconButton(
                       tooltip: _speakingMessage == message['msg'].toString()
                           ? 'Playing assistant response'
@@ -1124,10 +1176,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
               width: 43,
               height: 47,
               child: IconButton.filledTonal(
-                onPressed: (_isSending || !_agentEnabled)
+                onPressed: (_isSending || !_voiceEnabled)
                     ? null
                     : (_isRecording ? _stopAgentRecording : _startAgentRecording),
-                tooltip: _isRecording ? 'Stop voice recording' : 'Record voice request',
+                tooltip: _isRecording
+                    ? 'Stop voice recording'
+                    : (_voiceEnabled
+                        ? 'Record voice request'
+                        : 'Enable Voice conversations in Agent Control Center'),
                 style: IconButton.styleFrom(
                   foregroundColor: _isRecording ? Colors.white : _primary,
                   backgroundColor: _isRecording ? Colors.redAccent : const Color(0xFFEEF2FF),

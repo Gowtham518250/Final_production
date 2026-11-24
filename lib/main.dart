@@ -82,6 +82,7 @@ import 'screens/customer/order_history_page.dart';
 import 'khata_page.dart';
 import 'invoices_page.dart' hide Expanded;
 import 'chatbot_page.dart';
+import 'agent_control_center_page.dart';
 import 'worker_management_page.dart';
 import 'gift_card_page.dart';
 import 'otp_verification_page.dart';
@@ -2098,6 +2099,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         // one. Removed here so the synced page is what actually loads.
                         '/profit-loss': (context) => const ProfitLossPage(),
                         '/chatbot-help': (context) => const ChatbotPage(),
+                        '/agent-control-center': (context) => const AgentControlCenterPage(),
                         '/worker-management': (context) {
                           final args = ModalRoute.of(
                             context,
