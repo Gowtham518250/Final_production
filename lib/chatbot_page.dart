@@ -239,6 +239,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
         languageCode: languageCode,
       );
       if (!mounted) return;
+      final assistantReply = response.answer.trim().isEmpty
+          ? 'I could not complete that voice request. Please try again.'
+          : response.answer.trim();
       setState(() {
         _conversationId = response.conversationId.isEmpty
             ? _conversationId
@@ -248,9 +251,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
           _messages.add({'msg': '🎙️ ' + transcript, 'isMe': true});
         }
         _messages.add({
-          'msg': response.answer.isEmpty
-              ? 'I could not complete that voice request. Please try again.'
-              : response.answer,
+          'msg': assistantReply,
           'isMe': false,
         });
         for (final action in response.pendingActions) {
@@ -262,6 +263,13 @@ class _ChatbotPageState extends State<ChatbotPage> {
           }
         }
       });
+
+      // Voice conversations should feel like a spoken back-and-forth:
+      // automatically play the answer in the same account-selected language.
+      // Typed chat remains silent; the user can still tap the speaker icon.
+      if (mounted && assistantReply.isNotEmpty) {
+        await _speakAgentMessage(assistantReply);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
