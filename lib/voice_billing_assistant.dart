@@ -1389,8 +1389,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               : unknownProductId
                   ? 'The AI returned an unknown catalogue ID for "$name". Select the correct item manually; no stock will be deducted.'
                   : hasSpokenPrice
-                      ? '"$name" is not in this shop catalogue. It can be billed as a custom item with no stock deduction; verify its name and price.'
-                      : '"$name" is not in this shop catalogue and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
+                      ? 'The backend did not verify a unique stock-backed match for "$name". It remains a custom bill line with no stock deduction; review its name and price.'
+                      : 'The backend did not verify a unique stock-backed match for "$name" and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
           if (!warnings.contains(warning)) warnings.add(warning);
           items.add(
             ParsedItem(
