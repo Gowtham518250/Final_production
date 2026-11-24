@@ -107,5 +107,45 @@ void main() {
         35,
       );
     });
+
+    test('does not substitute catalogue price for an unresolved spoken amount', () {
+      final result = VoiceBillingPricePolicy.resolveParsedPrice(
+        rawPriceSource: 'missing',
+        detectedPrice: 0,
+        cataloguePrice: 15,
+        productName: 'Coffee',
+        spokenPriceNeedsConfirmation: true,
+      );
+
+      expect(result.hasPrice, isFalse);
+      expect(result.price, isNull);
+      expect(result.source, 'missing');
+      expect(result.warning, contains('could not be verified'));
+    });
+
+    test('does not restore catalogue price at final billing for unresolved price', () {
+      expect(
+        VoiceBillingPricePolicy.resolveFinalPrice(
+          priceSource: 'missing',
+          itemPrice: 0,
+          cataloguePrice: 15,
+        ),
+        0,
+      );
+    });
+
+    test('catalogue price remains allowed when no price was spoken', () {
+      final result = VoiceBillingPricePolicy.resolveParsedPrice(
+        rawPriceSource: 'catalog',
+        detectedPrice: null,
+        cataloguePrice: 15,
+        productName: 'Coffee',
+      );
+
+      expect(result.price, 15);
+      expect(result.source, 'catalog');
+      expect(result.hasPrice, isTrue);
+    });
+
   });
 }
