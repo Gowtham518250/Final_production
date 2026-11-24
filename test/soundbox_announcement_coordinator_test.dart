@@ -117,4 +117,31 @@ void main() {
       expect(spoken, isEmpty);
     },
   );
+  test('reset clears recent cross-channel announcement memory', () {
+    final box = SoundboxAnnouncementCoordinator<String>(
+      speak: (_, _) {},
+      holdWindow: () => Duration.zero,
+    );
+    final earlierNotification = _credit(
+      id: 'earlier-no-utr',
+      source: 'notification',
+      payer: 'Ravi Kumar',
+    );
+    final laterSms = _credit(
+      id: 'later-with-utr',
+      source: 'sms',
+      reference: '412345678901',
+      payer: 'Ravi Kumar',
+    );
+
+    expect(box.notePrimary(earlierNotification, 'ui'), isFalse);
+    // A one-sided UTR may enrich a recent notification from the other channel.
+    expect(box.notePrimary(laterSms, 'ui'), isTrue);
+
+    box.reset();
+
+    // After reset, the later event is no longer shadowed by stale history.
+    expect(box.notePrimary(laterSms, 'ui'), isFalse);
+  });
+
 }
