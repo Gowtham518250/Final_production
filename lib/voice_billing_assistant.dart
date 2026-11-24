@@ -1355,6 +1355,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         );
         final confidence =
             double.tryParse((raw['confidence'] ?? '0').toString()) ?? 0;
+        const confidenceInferredWarning =
+            'The product phrase was found in the original speech, but the AI confidence score was missing or low. Verify the item.';
+        const quantityInferredWarning =
+            'Quantity was recovered from the spoken number and unit. Verify it before billing.';
+        if (raw['confidence_inferred'] == true &&
+            !warnings.contains(confidenceInferredWarning)) {
+          warnings.add(confidenceInferredWarning);
+        }
+        if (raw['quantity_inferred'] == true &&
+            !warnings.contains(quantityInferredWarning)) {
+          warnings.add(quantityInferredWarning);
+        }
         if (name.isEmpty ||
             quantity == null ||
             !quantity.isFinite ||
@@ -1485,8 +1497,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             warnings.add(resolutionWarning);
           }
         }
-        if (priceWarning.isNotEmpty && !warnings.contains(priceWarning)) {
-          warnings.add(priceWarning);
+        // The backend also carries the inferred-field flags separately.
+        // Remove their sentences from the combined price warning because they
+        // were already added above as independently localizable messages.
+        var remainingPriceWarning = priceWarning;
+        if (raw['confidence_inferred'] == true) {
+          remainingPriceWarning =
+              remainingPriceWarning.replaceAll(confidenceInferredWarning, '').trim();
+        }
+        if (raw['quantity_inferred'] == true) {
+          remainingPriceWarning =
+              remainingPriceWarning.replaceAll(quantityInferredWarning, '').trim();
+        }
+        if (remainingPriceWarning.isNotEmpty &&
+            !warnings.contains(remainingPriceWarning)) {
+          warnings.add(remainingPriceWarning);
         }
 
         if (raw['stock_warning'] == true) {
