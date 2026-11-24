@@ -5,7 +5,7 @@ on:
   push:
     branches: [ "clean-retailmind-20261023", "chore/**", "feature/**" ]
   pull_request:
-    branches: [ "clean-retailmind-20261023" ]
+    branches: [ "clean-retailmind-20261023", "chore/**" ]
 
 jobs:
   build:
