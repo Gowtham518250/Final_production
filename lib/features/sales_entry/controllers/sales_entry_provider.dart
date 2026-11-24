@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/sales_item.dart';
@@ -10,6 +10,7 @@ import '../services/voice_nlp_service.dart';
 import '../../../inventory_sync_service.dart';
 import '../../../local_storage_service.dart';
 import '../../../sale_service.dart';
+import '../../../sale_payment_policy.dart';
 import '../../../api_client.dart';
 import '../services/voice_billing_response_policy.dart';
 
@@ -17,6 +18,7 @@ class SalesEntryProvider extends ChangeNotifier {
   List<SalesItem> entries = [];
   bool withTax = true;
   double paidAmount = 0.0;
+  bool partialPaymentEnabled = false;
   bool isOnlinePayment = false;
   String? paymentStatus;
   String selectedPaymentMethod = 'Cash';
@@ -71,17 +73,25 @@ class SalesEntryProvider extends ChangeNotifier {
 
   Iterable<SalesItem> get _namedEntries => entries.where(_hasValidItemName);
 
-  double get subtotalAmount =>
-      _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.subtotal));
+  double get subtotalAmount => _money(
+    _namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.subtotal),
+  );
 
-  double get totalDiscountAmount =>
-      _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.discountAmount));
+  double get totalDiscountAmount => _money(
+    _namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.discountAmount),
+  );
 
-  double get taxableSubtotalAmount =>
-      _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.taxableAmount));
+  double get taxableSubtotalAmount => _money(
+    _namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.taxableAmount),
+  );
 
   double get taxAmount => withTax
-      ? _money(_namedEntries.fold<double>(0.0, (sum, entry) => sum + entry.totalGstAmount))
+      ? _money(
+          _namedEntries.fold<double>(
+            0.0,
+            (sum, entry) => sum + entry.totalGstAmount,
+          ),
+        )
       : 0.0;
 
   double get cgstAmount => _money(taxAmount / 2);
@@ -121,16 +131,43 @@ class SalesEntryProvider extends ChangeNotifier {
   bool _canUseOfflineVoiceFallback(String transcript, String languageCode) {
     final language = languageCode.trim().toLowerCase().replaceAll('_', '-');
     final baseLanguage = language.split('-').first;
-    if (baseLanguage.isNotEmpty && !{'auto', 'en', 'und'}.contains(baseLanguage)) {
+    if (baseLanguage.isNotEmpty &&
+        !{'auto', 'en', 'und'}.contains(baseLanguage)) {
       return false;
     }
     if (RegExp(r'[^\x00-\x7F]').hasMatch(transcript)) return false;
     const cues = {
-      'rendu', 'moodu', 'nalugu', 'biyyam', 'biyam', 'palu', 'paalu',
-      'noone', 'kavali', 'cheyyandi', 'yaabhai', 'iravai', 'chawal',
-      'chaval', 'doodh', 'dudh', 'cheeni', 'shakkar', 'pachaas',
-      'pachis', 'kilolu', 'rupay', 'paani', 'neeru', 'thanni', 'ennai',
-      'nenu', 'naaku', 'naku', 'ivvandi', 'cheppandi',
+      'rendu',
+      'moodu',
+      'nalugu',
+      'biyyam',
+      'biyam',
+      'palu',
+      'paalu',
+      'noone',
+      'kavali',
+      'cheyyandi',
+      'yaabhai',
+      'iravai',
+      'chawal',
+      'chaval',
+      'doodh',
+      'dudh',
+      'cheeni',
+      'shakkar',
+      'pachaas',
+      'pachis',
+      'kilolu',
+      'rupay',
+      'paani',
+      'neeru',
+      'thanni',
+      'ennai',
+      'nenu',
+      'naaku',
+      'naku',
+      'ivvandi',
+      'cheppandi',
     };
     final words = transcript.toLowerCase().split(RegExp(r'[^a-z0-9]+')).toSet();
     return words.intersection(cues).isEmpty;
@@ -159,32 +196,13 @@ class SalesEntryProvider extends ChangeNotifier {
     try {
       final response = await ApiClient.postJson(
         ApiClient.voiceBillingParseEndpoint,
-        {
-          'transcript': transcript,
-          'language_code': languageCode,
-        },
+        {'transcript': transcript, 'language_code': languageCode},
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        dynamic errorBody;
-        try {
-          errorBody = jsonDecode(response.body);
-        } catch (_) {
-          errorBody = null;
-        }
-        final detail = errorBody is Map
-            ? (errorBody['detail'] ?? errorBody['message'])?.toString().trim()
-            : null;
-        if (response.statusCode < 500) {
-          // Validation/authentication rejections must not fall through to the
-          // permissive local parser and turn rejected speech into bill lines.
-          lastVoiceMessage = detail?.isNotEmpty == true
-              ? detail!
-              : 'Voice billing rejected this request (HTTP ${response.statusCode}). Please correct the speech or enter the item manually.';
-          notifyListeners();
-          return;
-        }
-        throw Exception('Voice billing request failed (HTTP ${response.statusCode})');
+        throw Exception(
+          'Voice billing request failed (HTTP ${response.statusCode})',
+        );
       }
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) {
@@ -192,10 +210,11 @@ class SalesEntryProvider extends ChangeNotifier {
       }
       _applyVoiceBillingPayload(Map<String, dynamic>.from(decoded));
       return;
-
     } catch (error) {
       if (kDebugMode) {
-        debugPrint('Groq voice billing unavailable; considering safe local parsing: $error');
+        debugPrint(
+          'Groq voice billing unavailable; considering safe local parsing: $error',
+        );
       }
 
       if (!_canUseOfflineVoiceFallback(transcript, languageCode)) {
@@ -210,23 +229,36 @@ class SalesEntryProvider extends ChangeNotifier {
       // be added as custom lines, but only exact catalog matches get product IDs.
       try {
         final rawInventory = await LocalStorageService.loadBackendProducts();
-        final inventory = rawInventory.map((product) {
-          final name = (product['name'] ??
-                  product['product_name'] ??
-                  product['itemName'] ??
-                  '')
-              .toString()
-              .trim();
-          final price = product['price'] ?? product['unit_price'] ?? product['selling_price'] ?? 0;
-          return <String, dynamic>{...product, 'name': name, 'price': price};
-        }).where((product) => (product['name'] ?? '').toString().isNotEmpty).toList();
+        final inventory = rawInventory
+            .map((product) {
+              final name =
+                  (product['name'] ??
+                          product['product_name'] ??
+                          product['itemName'] ??
+                          '')
+                      .toString()
+                      .trim();
+              final price =
+                  product['price'] ??
+                  product['unit_price'] ??
+                  product['selling_price'] ??
+                  0;
+              return <String, dynamic>{
+                ...product,
+                'name': name,
+                'price': price,
+              };
+            })
+            .where((product) => (product['name'] ?? '').toString().isNotEmpty)
+            .toList();
 
         final localParsed = VoiceNlpService.parseMultipleItems(
           transcript,
           knownInventory: inventory,
         );
         final safeItems = <SalesItem>[];
-        String normalize(String value) => value.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
+        String normalize(String value) =>
+            value.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
 
         final untrackedItems = <String>[];
         final missingPriceItems = <String>[];
@@ -234,17 +266,33 @@ class SalesEntryProvider extends ChangeNotifier {
           final spokenName = (item['item'] ?? '').toString().trim();
           if (spokenName.isEmpty) continue;
           final matchedInventory = inventory.where(
-            (product) => normalize((product['name'] ?? '').toString()) == normalize(spokenName),
+            (product) =>
+                normalize((product['name'] ?? '').toString()) ==
+                normalize(spokenName),
           );
-          final knownProduct = matchedInventory.isEmpty ? null : matchedInventory.first;
+          final knownProduct = matchedInventory.isEmpty
+              ? null
+              : matchedInventory.first;
           final quantity = double.tryParse((item['qty'] ?? '').toString()) ?? 1;
-          final parsedPrice = double.tryParse((item['price'] ?? '').toString()) ?? 0;
-          if (quantity <= 0 || !quantity.isFinite || parsedPrice < 0 || !parsedPrice.isFinite) continue;
-          final catalogPrice = double.tryParse(
-                (knownProduct?['price'] ?? knownProduct?['unit_price'] ?? knownProduct?['selling_price'] ?? '').toString(),
+          final parsedPrice =
+              double.tryParse((item['price'] ?? '').toString()) ?? 0;
+          if (quantity <= 0 ||
+              !quantity.isFinite ||
+              parsedPrice < 0 ||
+              !parsedPrice.isFinite)
+            continue;
+          final catalogPrice =
+              double.tryParse(
+                (knownProduct?['price'] ??
+                        knownProduct?['unit_price'] ??
+                        knownProduct?['selling_price'] ??
+                        '')
+                    .toString(),
               ) ??
               0;
-          final price = parsedPrice > 0 ? parsedPrice : (catalogPrice > 0 ? catalogPrice : 0.0);
+          final price = parsedPrice > 0
+              ? parsedPrice
+              : (catalogPrice > 0 ? catalogPrice : 0.0);
           if (knownProduct == null) untrackedItems.add(spokenName);
           if (price <= 0) missingPriceItems.add(spokenName);
 
@@ -254,7 +302,10 @@ class SalesEntryProvider extends ChangeNotifier {
               itemName: knownProduct?['name']?.toString() ?? spokenName,
               productId: knownProduct == null
                   ? null
-                  : int.tryParse((knownProduct['id'] ?? knownProduct['product_id'] ?? '').toString()),
+                  : int.tryParse(
+                      (knownProduct['id'] ?? knownProduct['product_id'] ?? '')
+                          .toString(),
+                    ),
               quantity: quantity,
               price: price,
             ),
@@ -272,11 +323,14 @@ class SalesEntryProvider extends ChangeNotifier {
           ];
           lastVoiceMessage = notes.join(' ');
         } else {
-          lastVoiceMessage = 'Voice AI is temporarily unavailable, and no reliable product line was recognized. Please retry or enter it manually.';
+          lastVoiceMessage =
+              'Voice AI is temporarily unavailable, and no reliable product line was recognized. Please retry or enter it manually.';
         }
       } catch (fallbackError) {
-        if (kDebugMode) debugPrint('Local voice billing fallback failed: $fallbackError');
-        lastVoiceMessage = 'Voice billing could not process this request. Please retry or enter the item manually.';
+        if (kDebugMode)
+          debugPrint('Local voice billing fallback failed: $fallbackError');
+        lastVoiceMessage =
+            'Voice billing could not process this request. Please retry or enter the item manually.';
       }
       notifyListeners();
     } finally {
@@ -307,7 +361,9 @@ class SalesEntryProvider extends ChangeNotifier {
 
     try {
       if (!await File(audioPath).exists()) {
-        throw Exception('The recording file could not be found. Please record again.');
+        throw Exception(
+          'The recording file could not be found. Please record again.',
+        );
       }
       final filename = audioPath.split(Platform.pathSeparator).last;
       final multipartFile = await http.MultipartFile.fromPath(
@@ -329,7 +385,9 @@ class SalesEntryProvider extends ChangeNotifier {
         decoded = null;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final detail = decoded is Map ? (decoded['detail'] ?? decoded['message']) : null;
+        final detail = decoded is Map
+            ? (decoded['detail'] ?? decoded['message'])
+            : null;
         throw Exception(
           detail?.toString().trim().isNotEmpty == true
               ? detail.toString()
@@ -337,7 +395,9 @@ class SalesEntryProvider extends ChangeNotifier {
         );
       }
       if (decoded is! Map) {
-        throw const FormatException('Groq returned an invalid voice billing response.');
+        throw const FormatException(
+          'Groq returned an invalid voice billing response.',
+        );
       }
       _applyVoiceBillingPayload(Map<String, dynamic>.from(decoded));
     } catch (error) {
@@ -347,7 +407,8 @@ class SalesEntryProvider extends ChangeNotifier {
           .replaceFirst(RegExp(r'^Exception:\s*'), '')
           .trim();
       if (lastVoiceMessage == null || lastVoiceMessage!.isEmpty) {
-        lastVoiceMessage = 'Voice billing could not process the recording. Please retry.';
+        lastVoiceMessage =
+            'Voice billing could not process the recording. Please retry.';
       }
       notifyListeners();
     } finally {
@@ -362,11 +423,13 @@ class SalesEntryProvider extends ChangeNotifier {
     if (decodedTranscript.isNotEmpty) {
       lastVoiceTranscript = decodedTranscript;
     }
-    final interpreted = (decoded['interpreted_text_en'] ?? '').toString().trim();
+    final interpreted = (decoded['interpreted_text_en'] ?? '')
+        .toString()
+        .trim();
     lastVoiceInterpretation = interpreted.isEmpty ? null : interpreted;
 
-    // Backend safety flags are authoritative. Never add a bill line until
-    // all extracted product, quantity, unit and price fields are grounded.
+    // The backend's safety flags are authoritative. Do not auto-add any
+    // line from a response that requires product, unit, quantity or price review.
     if (voiceBillingResponseNeedsManualReview(decoded)) {
       lastVoiceDetectedItems = <SalesItem>[];
       lastVoiceMessage = voiceBillingManualReviewMessage(decoded);
@@ -384,13 +447,19 @@ class SalesEntryProvider extends ChangeNotifier {
     if (rawItems is List) {
       for (final raw in rawItems) {
         if (raw is! Map) continue;
-        final name = (raw['product_name_en'] ?? raw['product_name'] ?? raw['item'] ?? '')
-            .toString()
-            .trim();
-        final quantity = double.tryParse((raw['quantity'] ?? raw['qty'] ?? '').toString());
-        final parsedPrice = double.tryParse((raw['unit_price'] ?? raw['price'] ?? '').toString());
+        final name =
+            (raw['product_name_en'] ?? raw['product_name'] ?? raw['item'] ?? '')
+                .toString()
+                .trim();
+        final quantity = double.tryParse(
+          (raw['quantity'] ?? raw['qty'] ?? '').toString(),
+        );
+        final parsedPrice = double.tryParse(
+          (raw['unit_price'] ?? raw['price'] ?? '').toString(),
+        );
         final priceMissing = raw['price_missing'] == true;
-        final confidence = double.tryParse((raw['confidence'] ?? '1').toString()) ?? 0;
+        final confidence =
+            double.tryParse((raw['confidence'] ?? '1').toString()) ?? 0;
         if (name.isEmpty ||
             quantity == null ||
             !quantity.isFinite ||
@@ -398,7 +467,8 @@ class SalesEntryProvider extends ChangeNotifier {
             !confidence.isFinite ||
             confidence < 0.72 ||
             (parsedPrice == null && !priceMissing) ||
-            (parsedPrice != null && (!parsedPrice.isFinite || parsedPrice < 0)) ||
+            (parsedPrice != null &&
+                (!parsedPrice.isFinite || parsedPrice < 0)) ||
             (parsedPrice != null && parsedPrice <= 0 && !priceMissing)) {
           continue;
         }
@@ -406,9 +476,13 @@ class SalesEntryProvider extends ChangeNotifier {
         final price = parsedPrice ?? 0.0;
         final rawProductId = int.tryParse((raw['product_id'] ?? '').toString());
         final declaredCatalogMatch = raw['catalog_matched'];
-        final isCatalogMatched = declaredCatalogMatch == true ||
-            (declaredCatalogMatch == null && rawProductId != null && rawProductId > 0);
-        final productId = isCatalogMatched && rawProductId != null && rawProductId > 0
+        final isCatalogMatched =
+            declaredCatalogMatch == true ||
+            (declaredCatalogMatch == null &&
+                rawProductId != null &&
+                rawProductId > 0);
+        final productId =
+            isCatalogMatched && rawProductId != null && rawProductId > 0
             ? rawProductId
             : null;
 
@@ -436,7 +510,9 @@ class SalesEntryProvider extends ChangeNotifier {
     lastVoiceDetectedItems = List<SalesItem>.unmodifiable(parsedItems);
     if (parsedItems.isNotEmpty) _appendVoiceDraftItems(parsedItems);
 
-    final clarification = (decoded['clarification_question'] ?? '').toString().trim();
+    final clarification = (decoded['clarification_question'] ?? '')
+        .toString()
+        .trim();
     final needsClarification = decoded['needs_clarification'] == true;
     if (parsedItems.isNotEmpty) {
       final reviewNotes = <String>[
@@ -530,7 +606,8 @@ class SalesEntryProvider extends ChangeNotifier {
     };
   }
 
-  Future<bool> submitSale() async {
+  Future<bool> submitSale({bool refreshDashboard = true}) async {
+    if (isSaving) return false;
     if (entries.isEmpty) return false;
     if (!_validateSaleDraftPrices()) return false;
     if (totalAmount <= 0) return false;
@@ -561,11 +638,18 @@ class SalesEntryProvider extends ChangeNotifier {
       }
 
       final billNumber = await ensureDraftBillNumber();
+      final recordedPaid = SalePaymentPolicy.resolvePaidAmount(
+        totalAmount: totalAmount,
+        enteredPaidAmount: partialPaymentEnabled ? paidAmount : 0,
+        isBorrow: false,
+        isCashPayment: selectedPaymentMethod != 'UPI',
+        paymentConfirmed: selectedPaymentMethod != 'UPI' || isOnlinePayment,
+      );
       final result = await SaleService.submitSale(
         saleId: DateTime.now().millisecondsSinceEpoch.toString(),
         items: itemsPayload,
         grandTotal: totalAmount,
-        paidAmount: totalAmount,
+        paidAmount: recordedPaid,
         customerName: customerNameController.text.trim(),
         customerPhone: customerPhoneController.text.trim(),
         withTax: withTax,
@@ -578,16 +662,19 @@ class SalesEntryProvider extends ChangeNotifier {
         },
         paymentMethod: selectedPaymentMethod,
         invoiceNumber: billNumber,
+        refreshDashboard: refreshDashboard,
       );
 
       if (result['success'] == true) {
-        lastCompletedBillNumber = (result['invoiceNumber'] ?? result['invoice_number'] ?? billNumber).toString();
+        lastCompletedBillNumber =
+            (result['invoiceNumber'] ?? result['invoice_number'] ?? billNumber)
+                .toString();
         _clearForm();
         return true;
       }
       return false;
     } catch (e) {
-      print('Error submitting sale: ');
+      if (kDebugMode) debugPrint('Error submitting sale: $e');
       return false;
     } finally {
       isSaving = false;
@@ -609,7 +696,7 @@ class SalesEntryProvider extends ChangeNotifier {
     return digits;
   }
 
-  Future<bool> saveAsCredit() async {
+  Future<bool> saveAsCredit({bool refreshDashboard = true}) async {
     lastCreditError = null;
     if (isSaving) {
       lastCreditError = 'A sale is already being saved. Please wait.';
@@ -636,7 +723,8 @@ class SalesEntryProvider extends ChangeNotifier {
       return false;
     }
     if (rawPhone.isNotEmpty && normalizedPhone == null) {
-      lastCreditError = 'Enter a valid 10-digit Indian mobile number, or leave phone blank.';
+      lastCreditError =
+          'Enter a valid 10-digit Indian mobile number, or leave phone blank.';
       return false;
     }
     // Name-only customers are supported by Khata. When present, a phone is
@@ -664,7 +752,8 @@ class SalesEntryProvider extends ChangeNotifier {
       }
 
       if (itemsPayload.isEmpty) {
-        lastCreditError = 'Add a valid product with a positive price and quantity.';
+        lastCreditError =
+            'Add a valid product with a positive price and quantity.';
         return false;
       }
 
@@ -687,10 +776,13 @@ class SalesEntryProvider extends ChangeNotifier {
         paymentMethod: 'Credit',
         isBorrow: true,
         invoiceNumber: billNumber,
+        refreshDashboard: refreshDashboard,
       );
 
       if (result['success'] == true) {
-        lastCompletedBillNumber = (result['invoiceNumber'] ?? result['invoice_number'] ?? billNumber).toString();
+        lastCompletedBillNumber =
+            (result['invoiceNumber'] ?? result['invoice_number'] ?? billNumber)
+                .toString();
         // The invoice/sale record is the single source of truth for outstanding
         // credit. Do not also append the same debt to a separate local ledger:
         // that mirror could drift, inflate customer credit limits, or be counted
@@ -699,15 +791,19 @@ class SalesEntryProvider extends ChangeNotifier {
         return true;
       }
 
-      lastCreditError = (result['message'] ?? result['error'] ?? 'Credit sale could not be saved. Please try again.')
-          .toString()
-          .trim();
+      lastCreditError =
+          (result['message'] ??
+                  result['error'] ??
+                  'Credit sale could not be saved. Please try again.')
+              .toString()
+              .trim();
       if (lastCreditError!.isEmpty) {
         lastCreditError = 'Credit sale could not be saved. Please try again.';
       }
       return false;
     } catch (e) {
-      lastCreditError = 'Credit sale could not be saved. Check your connection and try again.';
+      lastCreditError =
+          'Credit sale could not be saved. Check your connection and try again.';
       if (kDebugMode) debugPrint('Error saving sale as credit: $e');
       return false;
     } finally {
@@ -720,6 +816,8 @@ class SalesEntryProvider extends ChangeNotifier {
     entries.clear();
     customerNameController.clear();
     customerPhoneController.clear();
+    paidAmount = 0.0;
+    partialPaymentEnabled = false;
     _draftBillNumber = null;
     _initializeEmptyRow();
   }
@@ -736,7 +834,10 @@ class SalesEntryProvider extends ChangeNotifier {
       final products = await LocalStorageService.loadBackendProducts();
 
       if (products == null || products.isEmpty) {
-        if (kDebugMode) debugPrint('⚠️ No products in local storage - product lookup will fail');
+        if (kDebugMode)
+          debugPrint(
+            '⚠️ No products in local storage - product lookup will fail',
+          );
         return 0;
       }
 
@@ -758,7 +859,10 @@ class SalesEntryProvider extends ChangeNotifier {
         }
       }
 
-      if (kDebugMode) debugPrint('⚠️ Could not find product_id for product name: $productName');
+      if (kDebugMode)
+        debugPrint(
+          '⚠️ Could not find product_id for product name: $productName',
+        );
       return 0;
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Error looking up product_id: $e');
@@ -770,7 +874,8 @@ class SalesEntryProvider extends ChangeNotifier {
     try {
       final products = await LocalStorageService.loadBackendProducts();
       if (products.isEmpty) {
-        if (kDebugMode) debugPrint('🔄 No products found, forcing inventory refresh...');
+        if (kDebugMode)
+          debugPrint('🔄 No products found, forcing inventory refresh...');
         await InventorySyncService.refreshAllInventory();
       }
     } catch (e) {
@@ -784,9 +889,27 @@ class SalesEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setPartialPaymentEnabled(bool value) {
+    partialPaymentEnabled = value;
+    if (!value) paidAmount = 0.0;
+    notifyListeners();
+  }
+
+  void setPaidAmount(double value) {
+    if (!value.isFinite || value < 0) {
+      paidAmount = 0.0;
+    } else {
+      paidAmount = _money(value.clamp(0.0, totalAmount).toDouble());
+    }
+    notifyListeners();
+  }
+
   /// Reuse the same customer-facing number for preview, saving, printing and sharing.
+  /// This calculates the next number without persisting it — the counter is only
+  /// incremented on successful save to prevent gaps when users cancel after preview.
   Future<String> ensureDraftBillNumber() async {
-    if (_draftBillNumber != null && _draftBillNumber!.isNotEmpty) return _draftBillNumber!;
+    if (_draftBillNumber != null && _draftBillNumber!.isNotEmpty)
+      return _draftBillNumber!;
 
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
@@ -798,8 +921,15 @@ class SalesEntryProvider extends ChangeNotifier {
       final sales = await LocalStorageService.loadSales();
       for (final raw in sales) {
         if (raw is! Map) continue;
-        final rawBill = raw['bill_number'] ?? raw['invoice_number'] ?? raw['invoice_display_number'] ?? '';
-        final match = RegExp(r'BILL-(\d+)', caseSensitive: false).firstMatch(rawBill.toString());
+        final rawBill =
+            raw['bill_number'] ??
+            raw['invoice_number'] ??
+            raw['invoice_display_number'] ??
+            '';
+        final match = RegExp(
+          r'BILL-(\d+)',
+          caseSensitive: false,
+        ).firstMatch(rawBill.toString());
         final sequence = int.tryParse(match?.group(1) ?? '') ?? 0;
         if (sequence > current) current = sequence;
       }
@@ -809,25 +939,53 @@ class SalesEntryProvider extends ChangeNotifier {
 
     // The backend sequence wins when reachable; local/offline billing still works if it is not.
     try {
-      final response = await ApiClient.getJson('/api/invoices/next-bill-number');
+      final response = await ApiClient.getJson(
+        '/api/invoices/next-bill-number',
+      );
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map) {
-          final sequence = int.tryParse(decoded['highest_bill_number']?.toString() ?? '0') ?? 0;
+          final sequence =
+              int.tryParse(decoded['highest_bill_number']?.toString() ?? '0') ??
+              0;
           if (sequence > current) current = sequence;
         }
       }
     } catch (error) {
-      if (kDebugMode) debugPrint('Backend bill sequence unavailable; using local sequence: $error');
+      if (kDebugMode)
+        debugPrint(
+          'Backend bill sequence unavailable; using local sequence: $error',
+        );
     }
 
+    // Calculate next number but do NOT persist it — persist only on successful save
     final next = current + 1;
-    await prefs.setInt(key, next);
-    if (userId <= 0) await prefs.setInt('last_bill_number', next);
     _draftBillNumber = 'BILL-' + next.toString().padLeft(4, '0');
     notifyListeners();
     return _draftBillNumber!;
   }
+
+  /// Commit the draft bill number to persistent storage after successful save.
+  /// Call this only after the sale is durably saved locally to prevent gaps.
+  Future<void> commitBillNumber() async {
+    if (_draftBillNumber == null || _draftBillNumber!.isEmpty) return;
+
+    final match = RegExp(r'BILL-(\d+)').firstMatch(_draftBillNumber!);
+    if (match == null) return;
+
+    final sequence = int.tryParse(match.group(1) ?? '') ?? 0;
+    if (sequence <= 0) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id') ?? prefs.getInt('userId') ?? 0;
+    final key = userId > 0 ? 'last_bill_number_$userId' : 'last_bill_number';
+
+    await prefs.setInt(key, sequence);
+    if (userId <= 0) {
+      await prefs.setInt('last_bill_number', sequence);
+    }
+  }
+
 
   Future<void> generateBillPreview() async {
     isGeneratingBill = true;
