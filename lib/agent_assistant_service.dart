@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
 import 'package:http/http.dart' as http;
 
 import 'api_client.dart';
@@ -18,11 +20,13 @@ class AgentChatResponse {
   final String conversationId;
   final String answer;
   final List<Map<String, dynamic>> pendingActions;
+  final String? transcript;
 
   const AgentChatResponse({
     required this.conversationId,
     required this.answer,
     required this.pendingActions,
+    this.transcript,
   });
 }
 
@@ -118,6 +122,55 @@ class AgentAssistantService {
       conversationId: (payload['conversation_id'] ?? conversationId ?? '')
           .toString(),
       answer: (payload['answer'] ?? '').toString(),
+      pendingActions: actions is List
+          ? actions
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList(growable: false)
+          : const [],
+    );
+  }
+
+  static Future<AgentChatResponse> sendVoice(
+    String audioPath, {
+    String? conversationId,
+    String languageCode = 'auto',
+  }) async {
+    final file = await http.MultipartFile.fromPath(
+      'audio',
+      audioPath,
+      filename: p.basename(audioPath),
+    );
+    final responseStream = await ApiClient.postMultipart(
+      '$_base/voice',
+      {
+        'language_code':
+            languageCode.trim().isEmpty ? 'auto' : languageCode,
+        if (conversationId != null && conversationId.isNotEmpty)
+          'conversation_id': conversationId,
+      },
+      files: [file],
+      timeout: const Duration(seconds: 90),
+    );
+    final response = http.Response(
+      await responseStream.stream.bytesToString(),
+      responseStream.statusCode,
+      headers: responseStream.headers,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponseError(response);
+    }
+    final payload = _decodeMap(response);
+    final actions = payload['pending_actions'];
+    final transcription = payload['transcription'];
+    final transcript = transcription is Map
+        ? transcription['transcript']?.toString()
+        : null;
+    return AgentChatResponse(
+      conversationId: (payload['conversation_id'] ?? conversationId ?? '')
+          .toString(),
+      answer: (payload['answer'] ?? '').toString(),
+      transcript: transcript,
       pendingActions: actions is List
           ? actions
               .whereType<Map>()
