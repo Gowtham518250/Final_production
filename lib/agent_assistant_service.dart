@@ -184,7 +184,7 @@ class AgentAssistantService {
       file = http.MultipartFile.fromBytes(
         'audio',
         blobResponse.bodyBytes,
-        filename: 'retail-mind-owner-voice.webm',
+        filename: 'retail-mind-owner-voice.ogg',
       );
     } else {
       file = await http.MultipartFile.fromPath(
