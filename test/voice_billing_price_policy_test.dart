@@ -147,5 +147,29 @@ void main() {
       expect(result.hasPrice, isTrue);
     });
 
+    test('catalogue name match cannot create stock identity without backend approval', () {
+      expect(
+        VoiceBillingPricePolicy.serverAllowsCatalogLink(
+          catalogMatched: false,
+          productId: null,
+        ),
+        isFalse,
+      );
+      expect(
+        VoiceBillingPricePolicy.serverAllowsCatalogLink(
+          catalogMatched: true,
+          productId: '',
+        ),
+        isFalse,
+      );
+      expect(
+        VoiceBillingPricePolicy.serverAllowsCatalogLink(
+          catalogMatched: true,
+          productId: 42,
+        ),
+        isTrue,
+      );
+    });
+
   });
 }
