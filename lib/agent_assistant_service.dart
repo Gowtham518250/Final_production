@@ -181,10 +181,19 @@ class AgentAssistantService {
       if (blobResponse.bodyBytes.isEmpty) {
         throw const AgentAssistantException('The voice recording is empty.');
       }
+      final contentType =
+          (blobResponse.headers['content-type'] ?? '').toLowerCase();
+      final extension = contentType.contains('webm')
+          ? 'webm'
+          : contentType.contains('mp4')
+              ? 'm4a'
+              : contentType.contains('wav')
+                  ? 'wav'
+                  : 'ogg';
       file = http.MultipartFile.fromBytes(
         'audio',
         blobResponse.bodyBytes,
-        filename: 'retail-mind-owner-voice.ogg',
+        filename: 'retail-mind-owner-voice.$extension',
       );
     } else {
       file = await http.MultipartFile.fromPath(
