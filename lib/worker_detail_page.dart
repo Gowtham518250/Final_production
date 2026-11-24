@@ -323,10 +323,10 @@ class _WorkerDetailPageState extends State<WorkerDetailPage> {
     final position = _worker['position']?.toString() ?? 'Staff';
     final salary = double.tryParse(_worker['salary']?.toString() ?? '') ?? 0.0;
 
-    return WillPopScope(
-      onWillPop: () async {
-        Navigator.pop(context, _dirty);
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) Navigator.pop(context, _dirty);
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),

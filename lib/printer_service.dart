@@ -105,7 +105,7 @@ class PrinterService {
         await connect(device);
       }
     } catch (e) {
-      // ignore
+      debugPrint('[PrinterService] Auto-reconnect failed: $e');
     }
   }
 
@@ -115,7 +115,9 @@ class PrinterService {
       await bluetooth.disconnect();
       _selectedDevice = null;
       _isConnected = false;
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[PrinterService] Disconnect error: $e');
+    }
   }
 
   /// Print bill receipt
@@ -241,9 +243,9 @@ class PrinterService {
               price * itemQty * itemGstRate / 100;
         }
 
-        // Handle long names
-        if (name.length > 20) {
-          bluetooth.printCustom(name.substring(0, 20), 1, 0);
+        // Handle long names safely without splitting Unicode surrogate pairs
+        if (name.characters.length > 20) {
+          bluetooth.printCustom(name.characters.take(20).toString(), 1, 0);
           bluetooth.printNewLine();
           bluetooth.printLeftRight(
             "",

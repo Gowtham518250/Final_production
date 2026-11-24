@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../local_storage_service.dart';
 import '../../premium_ui.dart';
+import '../../visual_widgets.dart';
 import '../../screens/owner/online_store_hub_page.dart';
 
 class ShopModulesSection extends StatefulWidget {
@@ -38,7 +39,9 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
       try {
         final prods = await LocalStorageService.loadBackendProducts();
         _inventoryCount = prods.length;
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[ShopModules] Failed to load inventory: $e');
+      }
 
       // 2. Invoices Count
       try {
@@ -53,7 +56,9 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
               s['payment_status']?.toString().toUpperCase() ?? 'PAID';
           return status == 'UNPAID' || status == 'PARTIAL';
         }).length;
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[ShopModules] Failed to load invoices: $e');
+      }
 
       // 3. Attendance Count
       try {
@@ -66,10 +71,14 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
         final workersJson = prefs.getString(workerKey) ?? '[]';
         final List<dynamic> workers = json.decode(workersJson);
         _attendanceCount = workers.length;
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[ShopModules] Failed to load workers: $e');
+      }
 
       if (mounted) setState(() {});
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[ShopModules] Error loading shop metrics: $e');
+    }
   }
 
   void _showShopModulesSheet(BuildContext context) {
@@ -103,7 +112,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                 children: [
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFFEA580C),
+                    color: AppColors.brandEmerald,
                     icon: Icons.inventory_2_rounded,
                     label: 'Stock',
                     onTap: () {
@@ -116,7 +125,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFF10B981),
+                    color: AppColors.brandEmerald,
                     icon: Icons.fact_check_rounded,
                     label: 'Attendance',
                     onTap: () {
@@ -129,7 +138,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFFF59E0B),
+                    color: AppColors.upiBlue,
                     icon: Icons.groups_rounded,
                     label: 'Customers',
                     onTap: () {
@@ -142,7 +151,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFF2563EB),
+                    color: AppColors.kiranaAmber,
                     icon: Icons.menu_book_rounded,
                     label: 'Khata',
                     onTap: () {
@@ -155,7 +164,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFF7C3AED),
+                    color: AppColors.primaryNavy,
                     icon: Icons.badge_rounded,
                     label: 'Workers',
                     onTap: () async {
@@ -171,7 +180,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFF0D9488),
+                    color: AppColors.kiranaAmber,
                     icon: Icons.menu_book_rounded,
                     label: 'Khata\nLedger',
                     onTap: () {
@@ -184,7 +193,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFFE11D48),
+                    color: AppColors.danger,
                     icon: Icons.account_balance_wallet_rounded,
                     label: 'Expense\nTracker',
                     onTap: () {
@@ -197,7 +206,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFF059669),
+                    color: AppColors.upiBlue,
                     icon: Icons.account_balance_rounded,
                     label: 'Bank\nRecon',
                     onTap: () {
@@ -221,7 +230,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   ),
                   _buildSheetItem(
                     ctx,
-                    color: const Color(0xFF2563EB),
+                    color: AppColors.upiBlue,
                     icon: Icons.storefront_rounded,
                     label: 'Online\nStore',
                     subtitle: 'Marketplace & orders',
@@ -323,12 +332,12 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
+                      color: AppColors.primaryNavy.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
                       Icons.layers_rounded,
-                      color: Color(0xFF4F46E5),
+                      color: AppColors.primaryNavy,
                       size: 20,
                     ),
                   ),
@@ -338,7 +347,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1F2937),
+                      color: AppColors.primaryNavy,
                     ),
                   ),
                 ],
@@ -346,7 +355,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
               TextButton(
                 onPressed: () => _showShopModulesSheet(context),
                 style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: AppColors.upiBlue,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 3,
@@ -375,7 +384,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
             children: [
               Expanded(
                 child: _buildOwnerQuickTile(
-                  color: const Color.fromARGB(255, 12, 234, 149),
+                  color: AppColors.brandEmerald,
                   icon: Icons.inventory_2_outlined,
                   label: 'Stock',
                   subtitle:
@@ -389,7 +398,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
               const SizedBox(width: 6),
               Expanded(
                 child: _buildOwnerQuickTile(
-                  color: const Color(0xFF16836B),
+                  color: AppColors.kiranaAmber,
                   icon: Icons.menu_book_rounded,
                   label: 'Khata',
                   subtitle:
@@ -403,7 +412,7 @@ class _ShopModulesSectionState extends State<ShopModulesSection> {
               const SizedBox(width: 6),
               Expanded(
                 child: _buildOwnerQuickTile(
-                  color: const Color(0xFF9A6700),
+                  color: AppColors.brandEmerald,
                   icon: Icons.fact_check_rounded,
                   label: 'Attendance',
                   subtitle:

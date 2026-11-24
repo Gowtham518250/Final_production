@@ -4675,7 +4675,7 @@ class AppLocalizations {
       'voiceInstructionsLanguage': 'మీ భాషలో వాయిస్ సూచనలు పొందండి',
       'playVoiceGuidance': 'మార్గదర్శకత్వాన్ని వినండి',
       'stopVoiceGuidance': 'మాట్లాడటం ఆపు',
-      'welcomeBackHeading': 'మళ్ళీ స్వాగతం',
+      'welcomeBackHeading': 'మిమ్మల్ని మళ్లీ చూడటం ఆనందంగా ఉంది!',
       'Welcome to AI Shop Pro! 👋': 'AI Shop Pro కి స్వాగతం! 👋',
       'Welcome! Start with these 3 quick actions:':
           'స్వాగతం! ఈ 3 తక్షణ చర్యలతో ప్రారంభించండి:',
@@ -4746,7 +4746,7 @@ class AppLocalizations {
       'help': 'సహాయం',
       'profile': 'ప్రొఫైల్',
       'forgotPassword': 'పాస్‌వర్డ్ మర్చిపోయారా?',
-      'welcomeBack': 'మళ్ళీ స్వాగతం,',
+      'welcomeBack': 'మిమ్మల్ని మళ్లీ చూడటం ఆనందంగా ఉంది,',
       'salesByMonth': 'నెలవారీ అమ్మకాలు',
       'salesByWeek': 'వారపు అమ్మకాలు',
       'salesByYear': 'సంవత్సరపు అమ్మకాలు',
@@ -4955,7 +4955,7 @@ class AppLocalizations {
       'passwordUpdatedLogin':
           "పాస్‌వర్డ్ నవీకరించబడింది. కొత్త పాస్‌వర్డ్‌తో లాగిన్ అవ్వండి.",
       'registrationSuccessLogin': "నమోదు విజయవంతమైంది! దయచేసి లాగిన్ అవ్వండి.",
-      'welcomeBackShopper': "మళ్లీ స్వాగతం!",
+      'welcomeBackShopper': "మిమ్మల్ని మళ్లీ చూడటం చాలా ఆనందంగా ఉంది!",
       'createYourAccount': "మీ ఖాతాను సృష్టించండి",
       'phoneTenDigits': "ఫోన్ (10 అంకెలు)",
       'needAccountRegister': "ఖాతా లేదా? నమోదు చేయండి",

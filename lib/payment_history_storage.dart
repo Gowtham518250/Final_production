@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,7 +56,7 @@ class PaymentHistoryStorage {
           .toList()
         ..sort((a, b) => b.date.compareTo(a.date));
     } catch (e) {
-      print('❌ Error fetching payment history: $e');
+      debugPrint('❌ Error fetching payment history: $e');
       return [];
     }
   }
@@ -81,7 +82,7 @@ class PaymentHistoryStorage {
         jsonEncode(all.map((p) => p.toJson()).toList()),
       );
     } catch (e) {
-      print('❌ Error saving payment: $e');
+      debugPrint('❌ Error saving payment: $e');
     }
   }
 
@@ -95,7 +96,7 @@ class PaymentHistoryStorage {
         jsonEncode(all.map((p) => p.toJson()).toList()),
       );
     } catch (e) {
-      print('❌ Error deleting payment: $e');
+      debugPrint('❌ Error deleting payment: $e');
     }
   }
 

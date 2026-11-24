@@ -213,7 +213,7 @@ class _CustomerForgotPasswordPageState extends State<CustomerForgotPasswordPage>
               hint: LiveTranslatedText('Email Address'),
               hintStyle: const TextStyle(color: Colors.white38),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
+              fillColor: Colors.white.withValues(alpha: 0.08),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -281,7 +281,7 @@ class _CustomerForgotPasswordPageState extends State<CustomerForgotPasswordPage>
                   decoration: InputDecoration(
                     counterText: '',
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.08),
+                    fillColor: Colors.white.withValues(alpha: 0.08),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -384,7 +384,7 @@ class _CustomerForgotPasswordPageState extends State<CustomerForgotPasswordPage>
               hint: LiveTranslatedText('New Password'),
               hintStyle: const TextStyle(color: Colors.white38),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
+              fillColor: Colors.white.withValues(alpha: 0.08),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
@@ -472,10 +472,10 @@ class _CustomerForgotPasswordPageState extends State<CustomerForgotPasswordPage>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.redAccent.withOpacity(0.1),
+                        color: Colors.redAccent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.redAccent.withOpacity(0.5),
+                          color: Colors.redAccent.withValues(alpha: 0.5),
                         ),
                       ),
                       child: LiveTranslatedText(

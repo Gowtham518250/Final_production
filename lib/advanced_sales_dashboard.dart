@@ -130,7 +130,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.purple.withOpacity(0.3),
+                color: Colors.purple.withValues(alpha: 0.3),
               ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 100, sigmaY: 100),
@@ -146,7 +146,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.blue.withOpacity(0.2),
+                color: Colors.blue.withValues(alpha: 0.2),
               ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 100, sigmaY: 100),
@@ -169,13 +169,13 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
                               Icon(
                                 Icons.shopping_cart_outlined,
                                 size: 80,
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                               ),
                               const SizedBox(height: 16),
                               LiveTranslatedText(
                                 'Cart is empty',
                                 style: GoogleFonts.inter(
-                                  color: Colors.white.withOpacity(0.5),
+                                  color: Colors.white.withValues(alpha: 0.5),
                                   fontSize: 18,
                                 ),
                               ),
@@ -208,7 +208,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
               children: [
                 FloatingActionButton.small(
                   heroTag: 'add_manual',
-                  backgroundColor: Colors.white.withOpacity(0.1),
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
                   elevation: 0,
                   onPressed: _addNewItem,
                   child: const Icon(Icons.add, color: Colors.white),
@@ -249,7 +249,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.redAccent.withOpacity(0.8),
+          color: Colors.redAccent.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(16),
         ),
         alignment: Alignment.centerRight,
@@ -259,9 +259,9 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -276,7 +276,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.2),
+                      color: Colors.blueAccent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -305,7 +305,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
                             LiveTranslatedText(
                               '\u20B9${item.price} / ${item.unit}',
                               style: GoogleFonts.inter(
-                                color: Colors.white.withOpacity(0.6),
+                                color: Colors.white.withValues(alpha: 0.6),
                                 fontSize: 13,
                               ),
                             ),
@@ -371,7 +371,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: Colors.white, size: 16),
@@ -382,12 +382,12 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
   Widget _buildGlassBottomPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B).withOpacity(0.8),
+        color: const Color(0xFF1E293B).withValues(alpha: 0.8),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(32),
           topRight: Radius.circular(32),
         ),
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
       ),
       child: ClipRRect(
         borderRadius: const BorderRadius.only(
@@ -407,7 +407,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
                     LiveTranslatedText(
                       'Total Amount',
                       style: GoogleFonts.inter(
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 16,
                       ),
                     ),
@@ -428,7 +428,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
                       child: ElevatedButton(
                         onPressed: () {},
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.1),
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
@@ -458,7 +458,7 @@ class _AdvancedSalesDashboardState extends State<AdvancedSalesDashboard>
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.purpleAccent.withOpacity(0.4),
+                              color: Colors.purpleAccent.withValues(alpha: 0.4),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),

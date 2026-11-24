@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../local_storage_service.dart';
 import '../../premium_ui.dart';
+import '../../visual_widgets.dart';
 
 class OperationsReportsSection extends StatefulWidget {
   final VoidCallback onShareDailyReport;
@@ -47,7 +48,9 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
           final status = o['status']?.toString().toUpperCase() ?? 'PENDING';
           return status == 'PENDING' || status == 'UNPAID';
         }).length;
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[OperationsReport] Failed to load purchase orders: $e');
+      }
 
       // 2. All Transactions
       try {
@@ -58,7 +61,9 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
             '[]';
         final List<dynamic> sales = json.decode(rawSales);
         _allTransactions = sales.length;
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[OperationsReport] Failed to load sales transactions: $e');
+      }
 
       // 3. Expenses
       try {
@@ -81,10 +86,14 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                   sum +
                   (double.tryParse(e['amount']?.toString() ?? '0') ?? 0.0),
             );
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[OperationsReport] Failed to load expenses: $e');
+      }
 
       if (mounted) setState(() {});
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[OperationsReport] Error loading operations metrics: $e');
+    }
   }
 
   void _showOperationsSheet(BuildContext context) {
@@ -130,12 +139,12 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
+                        color: AppColors.primaryNavy.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.layers_rounded,
-                        color: Color(0xFF4F46E5),
+                        color: AppColors.primaryNavy,
                         size: 20,
                       ),
                     ),
@@ -148,7 +157,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
                         style: GoogleFonts.poppins(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1F2937),
+                          color: AppColors.primaryNavy,
                         ),
                       ),
                     ),
@@ -159,7 +168,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
               TextButton(
                 onPressed: () => _showOperationsSheet(context),
                 style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF4F46E5),
+                  foregroundColor: AppColors.upiBlue,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 4,
                     vertical: 3,
@@ -190,7 +199,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
             children: [
               Expanded(
                 child: _buildOwnerQuickTile(
-                  color: const Color(0xFF4F46E5),
+                  color: AppColors.upiBlue,
                   icon: Icons.local_shipping,
                   label: 'Purchases',
                   subtitle:
@@ -201,7 +210,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
               const SizedBox(width: 6),
               Expanded(
                 child: _buildOwnerQuickTile(
-                  color: const Color(0xFFE11D48),
+                  color: AppColors.danger,
                   icon: Icons.money_off_rounded,
                   label: 'Expenses',
                   subtitle: '₹${_monthlyExpenses.toStringAsFixed(0)}',
@@ -211,7 +220,7 @@ class _OperationsReportsSectionState extends State<OperationsReportsSection> {
               const SizedBox(width: 6),
               Expanded(
                 child: _buildOwnerQuickTile(
-                  color: const Color(0xFF8B5CF6),
+                  color: AppColors.upiBlue,
                   icon: Icons.account_balance_wallet,
                   label: 'History',
                   subtitle:
@@ -345,7 +354,7 @@ class _OperationsSheet extends StatelessWidget {
               children: [
                 _buildSheetItem(
                   context,
-                  color: const Color(0xFF4F46E5),
+                  color: AppColors.upiBlue,
                   icon: Icons.local_shipping_rounded,
                   label: 'Purchase\nOrders',
                   subtitle:
@@ -367,7 +376,7 @@ class _OperationsSheet extends StatelessWidget {
                 ),
                 _buildSheetItem(
                   context,
-                  color: const Color(0xFF7C3AED),
+                  color: AppColors.primaryNavy,
                   icon: Icons.groups_rounded,
                   label: 'Worker\nManagement',
                   onTap: () async {
@@ -383,7 +392,7 @@ class _OperationsSheet extends StatelessWidget {
                 ),
                 _buildSheetItem(
                   context,
-                  color: const Color(0xFFEF4444),
+                  color: AppColors.danger,
                   icon: Icons.money_off_rounded,
                   label: 'Expense\nTracker',
                   subtitle: '₹${monthlyExpenses.toStringAsFixed(0)}',
@@ -394,7 +403,7 @@ class _OperationsSheet extends StatelessWidget {
                 ),
                 _buildSheetItem(
                   context,
-                  color: const Color(0xFF8B5CF6),
+                  color: AppColors.upiBlue,
                   icon: Icons.receipt_long_rounded,
                   label: 'All\nTransactions',
                   subtitle:
@@ -406,7 +415,7 @@ class _OperationsSheet extends StatelessWidget {
                 ),
                 _buildSheetItem(
                   context,
-                  color: const Color(0xFF0D9488),
+                  color: AppColors.brandEmerald,
                   icon: Icons.trending_up_rounded,
                   label: 'Enterprise\nTracker',
                   onTap: () {

@@ -33,7 +33,7 @@ class PaymentDetectionSystem {
     _onPaymentDetected = onPaymentDetected;
     _onError = onError;
 
-    if (kDebugMode) print('$_tag System initialized');
+    if (kDebugMode) debugPrint('$_tag System initialized');
   }
 
   /// Simulate SMS Reception (for testing / real SMS would come from platform channel)
@@ -43,7 +43,7 @@ class PaymentDetectionSystem {
     String senderName,
   ) async {
     if (kDebugMode)
-      print('$_tag SMS received from $senderName ($senderAddress)');
+      debugPrint('$_tag SMS received from $senderName ($senderAddress)');
 
     try {
       // Parse SMS to transaction
@@ -59,7 +59,7 @@ class PaymentDetectionSystem {
       }
     } catch (e) {
       _onError?.call('SMS Parsing Error: $e');
-      if (kDebugMode) print('$_tag Error: $e');
+      if (kDebugMode) debugPrint('$_tag Error: $e');
     }
   }
 
@@ -69,7 +69,7 @@ class PaymentDetectionSystem {
     String body,
     String packageName,
   ) async {
-    if (kDebugMode) print('$_tag Notification from $packageName');
+    if (kDebugMode) debugPrint('$_tag Notification from $packageName');
 
     try {
       final transaction = await _parseAndCreateTransaction(
@@ -84,7 +84,7 @@ class PaymentDetectionSystem {
       }
     } catch (e) {
       _onError?.call('Notification Parse Error: $e');
-      if (kDebugMode) print('$_tag Error: $e');
+      if (kDebugMode) debugPrint('$_tag Error: $e');
     }
   }
 
@@ -99,7 +99,7 @@ class PaymentDetectionSystem {
     if (_pendingPayments.isEmpty) return;
 
     if (kDebugMode)
-      print('$_tag Processing ${_pendingPayments.length} pending payments');
+      debugPrint('$_tag Processing ${_pendingPayments.length} pending payments');
 
     try {
       // Get today's sales from local storage (real sales data)
@@ -119,7 +119,7 @@ class PaymentDetectionSystem {
       _pendingPayments.clear();
     } catch (e) {
       _onError?.call('Processing Error: $e');
-      if (kDebugMode) print('$_tag Error: $e');
+      if (kDebugMode) debugPrint('$_tag Error: $e');
     }
   }
 
@@ -174,7 +174,7 @@ class PaymentDetectionSystem {
     String source,
     String senderName,
   ) async {
-    if (kDebugMode) print('$_tag Parsing as Bank SMS');
+    if (kDebugMode) debugPrint('$_tag Parsing as Bank SMS');
 
     try {
       // Amount extraction: ₹5000 or Rs.5000 or INR 5000
@@ -235,12 +235,12 @@ class PaymentDetectionSystem {
       );
 
       if (kDebugMode) {
-        print('$_tag Bank parse: $name - ₹$amount ($type)');
+        debugPrint('$_tag Bank parse: $name - ₹$amount ($type)');
       }
 
       return transaction;
     } catch (e) {
-      if (kDebugMode) print('$_tag Bank parse error: $e');
+      if (kDebugMode) debugPrint('$_tag Bank parse error: $e');
       return null;
     }
   }
@@ -281,7 +281,7 @@ class PaymentDetectionSystem {
     String source,
     String senderName,
   ) async {
-    if (kDebugMode) print('$_tag Parsing as UPI Notification');
+    if (kDebugMode) debugPrint('$_tag Parsing as UPI Notification');
 
     try {
       // Amount: "₹500" or "Rs 500"
@@ -328,12 +328,12 @@ class PaymentDetectionSystem {
       );
 
       if (kDebugMode) {
-        print('$_tag UPI parse: $name - ₹$amount ($type)');
+        debugPrint('$_tag UPI parse: $name - ₹$amount ($type)');
       }
 
       return transaction;
     } catch (e) {
-      if (kDebugMode) print('$_tag UPI parse error: $e');
+      if (kDebugMode) debugPrint('$_tag UPI parse error: $e');
       return null;
     }
   }

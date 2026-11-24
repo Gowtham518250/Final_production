@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:flutter/foundation.dart' as foundation;
+import 'package:flutter/foundation.dart';
 import 'transaction_service.dart';
 import 'local_storage_service.dart';
 
@@ -40,8 +40,8 @@ class SmartPaymentMatcherService {
     Transaction payment,
     List<Map<String, dynamic>> todaySales,
   ) async {
-    if (foundation.kDebugMode)
-      print('$_tag Processing payment: ${payment.name} - ₹${payment.amount}');
+    if (kDebugMode)
+      debugPrint('$_tag Processing payment: ${payment.name} - ₹${payment.amount}');
 
     if (!TransactionService.isEligibleForMerchantConfirmation(payment)) {
       return PaymentConfidence(
@@ -156,8 +156,8 @@ class SmartPaymentMatcherService {
         }
       } else if (fuzzyMatches.length > 1) {
         // CONFLICT: Multiple possible matches with same/similar amount at same time
-        if (foundation.kDebugMode)
-          print('$_tag ⚠️ CONFLICT: ${fuzzyMatches.length} possible matches');
+        if (kDebugMode)
+          debugPrint('$_tag ⚠️ CONFLICT: ${fuzzyMatches.length} possible matches');
 
         for (var match in fuzzyMatches) {
           conflicts.add(
@@ -225,10 +225,10 @@ class SmartPaymentMatcherService {
       scoreDetails,
     );
 
-    if (foundation.kDebugMode) {
-      print('$_tag Result: $status (${confidenceScore.toStringAsFixed(0)}%)');
-      print('$_tag Breakdown: $scoreDetails');
-      if (conflicts.isNotEmpty) print('$_tag Conflicts: ${conflicts.length}');
+    if (kDebugMode) {
+      debugPrint('$_tag Result: $status (${confidenceScore.toStringAsFixed(0)}%)');
+      debugPrint('$_tag Breakdown: $scoreDetails');
+      if (conflicts.isNotEmpty) debugPrint('$_tag Conflicts: ${conflicts.length}');
     }
 
     return PaymentConfidence(
@@ -399,7 +399,7 @@ class SmartPaymentMatcherService {
 
       await prefs.setString(_matchKey, jsonEncode(matches));
     } catch (e) {
-      if (foundation.kDebugMode) print('$_tag Error saving match: $e');
+      if (kDebugMode) debugPrint('$_tag Error saving match: $e');
     }
   }
 

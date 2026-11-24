@@ -59,10 +59,10 @@ class _EnterprisePnlPageState extends State<EnterprisePnlPage>
         decoration: BoxDecoration(
           color: _card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -145,7 +145,7 @@ class _EnterprisePnlPageState extends State<EnterprisePnlPage>
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: Colors.tealAccent.withOpacity(0.1),
+                      color: Colors.tealAccent.withValues(alpha: 0.1),
                     ),
                   ),
                   LineChartBarData(
@@ -157,7 +157,7 @@ class _EnterprisePnlPageState extends State<EnterprisePnlPage>
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: Colors.redAccent.withOpacity(0.1),
+                      color: Colors.redAccent.withValues(alpha: 0.1),
                     ),
                   ),
                 ],
@@ -316,7 +316,7 @@ class _EnterprisePnlPageState extends State<EnterprisePnlPage>
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: (isCredit ? Colors.greenAccent : Colors.redAccent)
-                      .withOpacity(0.1),
+                      .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -408,7 +408,7 @@ class _EnterprisePnlPageState extends State<EnterprisePnlPage>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.tealAccent.withOpacity(0.1),
+                      color: Colors.tealAccent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: LiveTranslatedText(

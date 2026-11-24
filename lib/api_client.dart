@@ -56,7 +56,7 @@ class ApiClient {
     const prodUrl = String.fromEnvironment('API_BASE_URL');
     final selectedUrl = prodUrl.isNotEmpty
         ? prodUrl
-        : 'https://retail-mind-hpx3.onrender.com';
+        : 'https://retail-mind-d0mw.onrender.com';
     return [_normalizeBaseUrl(selectedUrl)];
   }
 

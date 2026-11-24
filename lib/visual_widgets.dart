@@ -12,57 +12,68 @@ import 'package:google_fonts/google_fonts.dart';
 
 // ── PRIMARY COLOR PALETTE ─────────────────────────────────────────────────
 class AppColors {
+  // ── Fintech Startup Design System Tokens ─────────────────────────
+  static const primaryNavy = Color(0xFF0F172A); // #0F172A - Deep SaaS/Fintech Navy
+  static const primaryNavyDark = Color(0xFF1E293B); // #1E293B - Dark Slate/Card Surface
+  static const brandEmerald = Color(0xFF059669); // #059669 - Payment success, primary actions
+  static const brandEmeraldLight = Color(0xFF10B981); // #10B981 - Voice active, confirmed badge
+  static const upiBlue = Color(0xFF2563EB); // #2563EB - Digital UPI payments, banking sync
+  static const kiranaAmber = Color(0xFFD97706); // #D97706 - Low stock alerts, credit/udhaar
+  static const kiranaAmberLight = Color(0xFFF59E0B); // #F59E0B - Caution / unconfirmed items
+  static const surfaceOffWhite = Color(0xFFF8FAFC); // #F8FAFC - Anti-glare background
+  static const cardBorder = Color(0xFFE2E8F0); // #E2E8F0 - Crisp subtle card border
+
   // Semantic tokens for SalesEntryPage
-  static const brand = Color(0xFF6366F1);
-  static const brandLight = Color(0xFFEEF2FF);
-  static const brandHover = Color(0xFF4F46E5);
-  static const brandSubtle = Color(0xFF818CF8);
-  static const positive = Color(0xFF10B981);
-  static const listening = Color(0xFF22C55E);
-  static const caution = Color(0xFFF59E0B);
+  static const brand = Color(0xFF2563EB); // Modernized to UPI Blue
+  static const brandLight = Color(0xFFEFF6FF);
+  static const brandHover = Color(0xFF1D4ED8);
+  static const brandSubtle = Color(0xFF60A5FA);
+  static const positive = brandEmerald;
+  static const listening = brandEmeraldLight;
+  static const caution = kiranaAmber;
   static const critical = Color(0xFFEF4444);
-  static const rowSurface = Color(0xFFF9FAFB);
-  static const rowBorder = Color(0xFFE5E7EB);
+  static const rowSurface = surfaceOffWhite;
+  static const rowBorder = cardBorder;
   static const subtotalSurface = Color(0xFFF1F5F9);
-  static const subtotalText = Color(0xFF0F172A);
+  static const subtotalText = primaryNavy;
 
   // Brand Colors (Professional Navy Theme)
-  static const primary = Color(0xFF1B3A6B); // Navy Blue - Main Brand
-  static const primaryHover = Color(0xFF142B52); // Darker Navy
-  static const primaryLight = Color(0xFFE8EEF8); // Navy Tint
+  static const primary = primaryNavy; // #0F172A - Main Brand
+  static const primaryHover = primaryNavyDark; // #1E293B - Darker Navy
+  static const primaryLight = Color(0xFFF1F5F9); // Navy Tint
 
   // Status Colors
-  static const success = Color(0xFF10B981); // Green
-  static const warning = Color(0xFFF59E0B); // Amber
+  static const success = brandEmerald; // #059669 - Green
+  static const warning = kiranaAmber; // #D97706 - Amber
   static const danger = Color(0xFFEF4444); // Red
-  static const info = Color(0xFF3B82F6); // Blue
+  static const info = upiBlue; // #2563EB - Blue
 
   // Background & Surface
-  static const background = Color(0xFFF8FAFC); // Light Slate Gray
+  static const background = surfaceOffWhite; // #F8FAFC - Light Slate Gray
   static const surface = Color(0xFFFFFFFF); // Pure White
   static const surfaceAlt = Color(0xFFF1F5F9); // Slate 100
-  static const surfaceHover = Color(0xFFE2E8F0); // Slate 200
+  static const surfaceHover = cardBorder; // #E2E8F0 - Slate 200
 
   // Text Colors
-  static const textPrimary = Color(0xFF0F172A); // Slate 900
+  static const textPrimary = primaryNavy; // #0F172A - Slate 900
   static const textSecondary = Color(0xFF475569); // Slate 600
   static const textTertiary = Color(0xFF94A3B8); // Slate 400
   static const textMuted = textTertiary;
   static const textInverse = Color(0xFFFFFFFF); // White Text
 
   // Borders & Dividers
-  static const border = Color(0xFFE5E7EB); // Light Border
-  static const borderDark = Color(0xFFD1D5DB); // Darker Border
-  static const divider = Color(0xFFF3F4F6); // Divider Color
+  static const border = cardBorder; // #E2E8F0 - Light Border
+  static const borderDark = Color(0xFFCBD5E1); // Darker Border
+  static const divider = cardBorder; // Divider Color
 
   // Legacy Aliases (for compatibility)
-  static const secondary = primary;
-  static const accent = primary;
+  static const secondary = upiBlue;
+  static const accent = brandEmerald;
   static const electric = primary;
   static const coral = danger;
-  static const cardDark = Color(0xFF1E293B); // Slate 800
-  static const surfaceDark = Color(0xFF0F172A); // Slate 900
-  static const surfaceDark2 = Color(0xFF1E293B); // Slate 800
+  static const cardDark = primaryNavyDark; // #1E293B - Slate 800
+  static const surfaceDark = primaryNavy; // #0F172A - Slate 900
+  static const surfaceDark2 = primaryNavyDark; // #1E293B - Slate 800
   static const borderDark2 = Color(0xFF334155); // Slate 700
   static const text1 = textPrimary;
   static const text2 = textSecondary;
@@ -81,6 +92,69 @@ class AppSpacing {
   static const EdgeInsets paddingSm = EdgeInsets.all(16);
   static const EdgeInsets paddingMd = EdgeInsets.all(24);
   static const EdgeInsets paddingLg = EdgeInsets.all(32);
+}
+
+// ── STANDARDIZED SEMANTIC ICON BADGE ─────────────────────────────────────────
+enum AppBadgeType { emerald, blue, amber, danger, navy }
+
+class AppIconBadge extends StatelessWidget {
+  final IconData icon;
+  final AppBadgeType type;
+  final double size;
+  final double iconSize;
+
+  const AppIconBadge({
+    super.key,
+    required this.icon,
+    this.type = AppBadgeType.blue,
+    this.size = 36.0,
+    this.iconSize = 18.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color iconColor;
+    Color bgColor;
+
+    switch (type) {
+      case AppBadgeType.emerald:
+        iconColor = AppColors.brandEmerald;
+        bgColor = const Color(0xFFECFDF5);
+        break;
+      case AppBadgeType.blue:
+        iconColor = AppColors.upiBlue;
+        bgColor = const Color(0xFFEFF6FF);
+        break;
+      case AppBadgeType.amber:
+        iconColor = AppColors.kiranaAmber;
+        bgColor = const Color(0xFFFEF3C7);
+        break;
+      case AppBadgeType.danger:
+        iconColor = AppColors.danger;
+        bgColor = const Color(0xFFFEF2F2);
+        break;
+      case AppBadgeType.navy:
+        iconColor = AppColors.primaryNavy;
+        bgColor = const Color(0xFFF1F5F9);
+        break;
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(size * 0.3),
+      ),
+      child: Center(
+        child: Icon(
+          icon,
+          color: iconColor,
+          size: iconSize,
+        ),
+      ),
+    );
+  }
 }
 
 // ── TYPOGRAPHY SYSTEM (Google Fonts Inter) ─────────────────────────────

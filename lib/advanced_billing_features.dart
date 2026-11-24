@@ -12,24 +12,48 @@ class AdvancedVoiceParser {
   static Map<String, dynamic>? parseVoiceCommand(String voiceText) {
     try {
       String text = voiceText.toLowerCase().trim();
-      final patterns = [
-        RegExp(
-          r'(\d+\.?\d*)\s*(?:kg|gm|ld|m|piece|pcs|units?)?\s*([a-zA-Zा-ह]+)\s*(\d+\.?\d*)',
-        ),
-        RegExp(r'([a-zA-Zा-ह]+)\s*(\d+\.?\d*)\s*rupees?'),
-      ];
-      Map<String, dynamic> result = {};
-      for (var pattern in patterns) {
-        final match = pattern.firstMatch(text);
-        if (match != null) {
-          if (pattern.pattern.contains('kg|gm')) {
-            result['quantity'] = double.tryParse(match.group(1) ?? '1') ?? 1;
-            result['product_name'] = match.group(2)?.trim();
-            result['price'] = double.tryParse(match.group(3) ?? '0') ?? 0;
-          }
-        }
+      final unitPattern = r'(?:kg|gm|gram|grams|kilo|kilos|l|lt|ltr|liter|liters|litre|litres|ml|piece|pieces|pcs|pc|packet|packets|pkt|bottle|box|units?)?';
+      final productCharPattern = r'[a-zA-Z\u0900-\u0D7F]+(?:\s+[a-zA-Z\u0900-\u0D7F]+)*';
+      
+      // Pattern 1: [qty] [unit] [product] [price] -> e.g. "2 kg sugar 60" or "2 sugar 60"
+      final p1 = RegExp(
+        '(\\d+\\.?\\d*)\\s*$unitPattern\\s*($productCharPattern)\\s+(\\d+\\.?\\d*)',
+      );
+      final m1 = p1.firstMatch(text);
+      if (m1 != null) {
+        return {
+          'quantity': double.tryParse(m1.group(1) ?? '1') ?? 1.0,
+          'product_name': m1.group(2)?.trim(),
+          'price': double.tryParse(m1.group(3) ?? '0') ?? 0.0,
+        };
       }
-      if (result.isNotEmpty && result['product_name'] != null) return result;
+
+      // Pattern 2: [product] [price] rupees? -> e.g. "sugar 60 rupees" or "masala dosa 150"
+      final p2 = RegExp(
+        '($productCharPattern)\\s+(\\d+\\.?\\d*)\\s*(?:rupees?|rs\\.?|inr)?',
+      );
+      final m2 = p2.firstMatch(text);
+      if (m2 != null) {
+        return {
+          'quantity': 1.0,
+          'product_name': m2.group(1)?.trim(),
+          'price': double.tryParse(m2.group(2) ?? '0') ?? 0.0,
+        };
+      }
+
+      // Pattern 3: [qty] [unit] [product] -> e.g. "2 kg sugar"
+      final p3 = RegExp(
+        '(\\d+\\.?\\d*)\\s*$unitPattern\\s*($productCharPattern)',
+      );
+      final m3 = p3.firstMatch(text);
+      if (m3 != null) {
+        return {
+          'quantity': double.tryParse(m3.group(1) ?? '1') ?? 1.0,
+          'product_name': m3.group(2)?.trim(),
+          'price': 0.0,
+        };
+      }
+
       return null;
     } catch (e) {
       return null;

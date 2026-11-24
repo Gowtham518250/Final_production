@@ -2099,16 +2099,6 @@ class PriorityVoiceQueue {
           reference != claimReference) {
         continue;
       }
-      // STRICT: Require at least one matching identity field (account OR payer OR reference)
-      // to consider this a likely echo. Two ₹500 payments with NO shared identity
-      // must both speak even if cross-channel.
-      final accountMatches = (account != null && claimAccount != null && account == claimAccount);
-      final payerMatches = (payer != null && claimPayer != null &&
-          (payer == claimPayer || payer.contains(claimPayer) || claimPayer.contains(payer)));
-      final referenceMatches = (reference != null && claimReference != null && reference == claimReference);
-      if (!accountMatches && !payerMatches && !referenceMatches) {
-        continue;
-      }
       // Conflicting account or payer => these are two different payments.
       if (account != null &&
           claimAccount != null &&
@@ -2120,6 +2110,22 @@ class PriorityVoiceQueue {
           payer != claimPayer &&
           !payer.contains(claimPayer) &&
           !claimPayer.contains(payer)) {
+        continue;
+      }
+      final accountMatches = (account != null && claimAccount != null && account == claimAccount);
+      final payerMatches = (payer != null && claimPayer != null &&
+          (payer == claimPayer || payer.contains(claimPayer) || claimPayer.contains(payer)));
+      final referenceMatches = (reference != null && claimReference != null && reference == claimReference);
+      // Cross-modality echo (app notification vs bank SMS / Truecaller):
+      // In Indian UPI, app notifications carry the payer name without an account suffix,
+      // while bank SMS carries the account suffix without a payer name. When they arrive
+      // within the weak window for the same amount and direction without any conflict,
+      // they represent the same real-world payment and must not be announced twice.
+      final isCrossModality = (origin.contains('notification') && claim.origin.contains('sms')) ||
+          (origin.contains('sms') && claim.origin.contains('notification')) ||
+          origin.contains('truecaller') || claim.origin.contains('truecaller');
+
+      if (!accountMatches && !payerMatches && !referenceMatches && !isCrossModality) {
         continue;
       }
       return true;

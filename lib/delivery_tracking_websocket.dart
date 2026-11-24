@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -85,7 +86,7 @@ class DeliveryTrackingWebSocket {
           break;
       }
     } catch (e) {
-      print('❌ Error handling WebSocket message: $e');
+      debugPrint('❌ Error handling WebSocket message: $e');
     }
   }
 
@@ -104,7 +105,7 @@ class DeliveryTrackingWebSocket {
       final lon = parseCoord(data['longitude']);
 
       if (lat == null || lon == null) {
-        print('❌ Missing or invalid coordinates in location update');
+        debugPrint('❌ Missing or invalid coordinates in location update');
         return;
       }
 
@@ -122,7 +123,7 @@ class DeliveryTrackingWebSocket {
         _locationStreamController.add(update);
       }
     } catch (e) {
-      print('❌ Error parsing location update: $e');
+      debugPrint('❌ Error parsing location update: $e');
     }
   }
 
@@ -139,7 +140,7 @@ class DeliveryTrackingWebSocket {
         _updateStreamController.add(update);
       }
     } catch (e) {
-      print('❌ Error parsing status change: $e');
+      debugPrint('❌ Error parsing status change: $e');
     }
   }
 
@@ -159,18 +160,18 @@ class DeliveryTrackingWebSocket {
         }
       }
     } catch (e) {
-      print('❌ Error parsing ETA update: $e');
+      debugPrint('❌ Error parsing ETA update: $e');
     }
   }
 
   void _handleError(dynamic error) {
-    print('❌ WebSocket error: $error');
+    debugPrint('❌ WebSocket error: $error');
     _isConnected = false;
   }
 
   void _handleConnectionClosed() {
     _isConnected = false;
-    print('🔌 WebSocket connection closed');
+    debugPrint('🔌 WebSocket connection closed');
 
     if (_currentOrderId != null) {
       // Auto-reconnect with exponential backoff
@@ -184,7 +185,7 @@ class DeliveryTrackingWebSocket {
       // Implement exponential backoff if needed
       if (!_isConnected) {
         // Retry connection would happen here in production
-        print('🔄 Attempting to reconnect...');
+        debugPrint('🔄 Attempting to reconnect...');
       }
     });
   }

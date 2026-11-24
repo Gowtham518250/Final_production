@@ -452,7 +452,8 @@ class SharedPageTranslations {
       "✅ Day closed! WhatsApp summary sent.":
           "✅ రోజు మూసివేయబడింది! WhatsApp సారాంశం పంపబడింది.",
       "✅ Matched Transactions": "✅ సరిపోలిన లావాదేవీలు",
-      "✓ Welcome back, Owner!": "✓ తిరిగి స్వాగతం, యజమాని!",
+      "✓ Welcome back, Owner!": "✓ యజమానిగారూ, మిమ్మల్ని మళ్లీ చూడటం ఆనందంగా ఉంది!",
+      "Owner Mode is active again": "యజమాని మోడ్ మళ్లీ ప్రారంభమైంది",
       "❌ Invalid Staff PIN": "❌ చెల్లని స్టాఫ్ పిన్",
     },
     "hi": {

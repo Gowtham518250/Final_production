@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../live_translated_text.dart';
+import '../../timeout_config.dart';
 import 'retailmind_billing_service.dart';
 import 'retailmind_subscription_page.dart';
 
 class RetailMindFeatureAccess {
-  static Future<bool> allows(String featureCode) =>
-      RetailMindBillingService.checkFeatureAccess(featureCode);
+  static Future<bool> allows(String featureCode, {bool forceRefresh = false}) =>
+      RetailMindBillingService.checkFeatureAccess(
+        featureCode,
+        forceRefresh: forceRefresh,
+      );
 }
 
 class RetailMindFeatureGate extends StatefulWidget {
@@ -26,6 +30,13 @@ class RetailMindFeatureGate extends StatefulWidget {
 }
 
 class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
+  static final _accessCheckTimeout = Duration(
+    seconds:
+        TimeoutConfig.defaultTimeout.inSeconds * 2 +
+        TimeoutConfig.authTimeout.inSeconds +
+        TimeoutConfig.quickTimeout.inSeconds,
+  );
+
   late Future<bool> _accessFuture;
 
   @override
@@ -35,7 +46,12 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
   }
 
   void _loadAccess() {
-    _accessFuture = RetailMindFeatureAccess.allows(widget.featureCode);
+    _accessFuture = RetailMindFeatureAccess.allows(
+      widget.featureCode,
+      // A stale "not included" result must not lock out a recently
+      // activated voice-billing plan.
+      forceRefresh: widget.featureCode == 'voice_billing',
+    ).timeout(_accessCheckTimeout);
   }
 
   Future<void> _retry() async {
@@ -60,7 +76,7 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
       }
     }
     if (error is TimeoutException) {
-      return 'The server did not respond in time. Check your internet connection and retry.';
+      return 'The billing service did not confirm plan access in time. Billing has not started. Please retry or go back.';
     }
     final message = error.toString().replaceFirst('Exception: ', '').trim();
     if (message.isEmpty || message == 'null') {
@@ -75,8 +91,26 @@ class _RetailMindFeatureGateState extends State<RetailMindFeatureGate> {
       future: _accessFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            appBar: AppBar(
+              title: const LiveTranslatedText('Verifying plan access'),
+            ),
+            body: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 20),
+                    LiveTranslatedText(
+                      'Checking your active plan. Billing stays locked until access is confirmed.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         }
 

@@ -25,8 +25,12 @@ void main() {
 
   test('builds a shop-specific customer storefront URL', () {
     expect(
+      AppEndpoints.customerStoreBaseUrl,
+      'https://retail-mind-1-8fpk.onrender.com',
+    );
+    expect(
       AppEndpoints.customerShopUrl(42),
-      '${AppEndpoints.customerStoreBaseUrl}/shop/42',
+      'https://retail-mind-1-8fpk.onrender.com/shop/42',
     );
     expect(() => AppEndpoints.customerShopUrl(0), throwsArgumentError);
   });

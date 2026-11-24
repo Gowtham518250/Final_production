@@ -129,7 +129,7 @@ class _LoyaltyProgramPageState extends State<LoyaltyProgramPage> {
                     gradient: LinearGradient(
                       colors: [
                         const Color(0xFF635BFF),
-                        const Color(0xFF635BFF).withOpacity(0.8),
+                        const Color(0xFF635BFF).withValues(alpha: 0.8),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),

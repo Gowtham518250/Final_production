@@ -1756,34 +1756,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     theme: ThemeData(
                       useMaterial3: true,
                       colorScheme: ColorScheme.fromSeed(
-                        seedColor: AppColors.primary,
+                        seedColor: AppColors.primaryNavy,
+                        primary: AppColors.primaryNavy,
+                        secondary: AppColors.brandEmerald,
+                        tertiary: AppColors.upiBlue,
                         brightness: Brightness.light,
                       ),
                       pageTransitionsTheme: kSmoothPageTransitionsTheme,
-                      scaffoldBackgroundColor: const Color(0xFFF7F9FC),
+                      scaffoldBackgroundColor: AppColors.surfaceOffWhite,
                       cardTheme: CardThemeData(
                         color: Colors.white,
                         surfaceTintColor: Colors.transparent,
-                        elevation: 2,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: const BorderSide(color: AppColors.cardBorder, width: 1),
+                        ),
                         margin: EdgeInsets.zero,
                       ),
                       appBarTheme: const AppBarTheme(
-                        backgroundColor: Color(0xFFF7F9FC),
-                        foregroundColor: Color(0xFF111827),
+                        backgroundColor: AppColors.primaryNavy,
+                        foregroundColor: Colors.white,
                         elevation: 0,
                       ),
                       elevatedButtonTheme: ElevatedButtonThemeData(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: AppColors.brandEmerald,
                           foregroundColor: Colors.white,
-                          elevation: 8,
-                          shadowColor: AppColors.primary.withValues(alpha: 0.6),
+                          elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(
-                              color: AppColors.primary.withValues(alpha: 0.3),
-                              width: 1,
-                            ),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
@@ -1792,16 +1794,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           textStyle: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            letterSpacing: 1.1,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
                       outlinedButtonTheme: OutlinedButtonThemeData(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.success,
-                          side: BorderSide(color: AppColors.success, width: 2),
+                          foregroundColor: AppColors.brandEmerald,
+                          side: const BorderSide(color: AppColors.brandEmerald, width: 1.5),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
@@ -1814,7 +1816,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       ),
                       textButtonTheme: TextButtonThemeData(
                         style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
+                          foregroundColor: AppColors.upiBlue,
                           textStyle: const TextStyle(
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.5,

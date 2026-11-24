@@ -1208,6 +1208,21 @@ class PhoneticProductResolver {
     final exact = _index[key];
     if (exact != null) return exact;
 
+    // Check after stripping Kirana size/variant modifiers
+    final variantCleaned = key
+        .replaceAll(
+          RegExp(
+            r'\b(bada wala|badi wali|chhota wala|chhoti wali|chhota|chhoti|bada|badi|khula|loose|family pack|wala|wali|packet wala)\b',
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (variantCleaned.isNotEmpty && variantCleaned != key) {
+      final variantHit = _index[variantCleaned];
+      if (variantHit != null) return variantHit;
+    }
+
     // Prefix matching is only safe for a single token. A compound phrase
     // such as "enna biryani" must NOT be converted to the product "Oil"
     // simply because "enna" is an alias of Oil.
@@ -1927,6 +1942,28 @@ class VoiceNlpEngineV2 {
             .toString(),
       );
       if (cn.isNotEmpty && cn == normalizedQuery) return p;
+    }
+
+    // 1b. Check after stripping Kirana size/packaging qualifiers (e.g. "bada wala", "loose", "chhota packet")
+    final variantStrippedQuery = normalizedQuery
+        .replaceAll(
+          RegExp(
+            r'\b(bada wala|badi wali|chhota wala|chhoti wali|bada|badi|chhota|chhoti|khula|loose|family pack|wala|wali|per packet|packet wala)\b',
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (variantStrippedQuery.isNotEmpty && variantStrippedQuery != normalizedQuery) {
+      for (final p in catalog) {
+        final cn = norm(
+          (p['name'] ?? p['product_name'] ?? p['canonical_name'] ?? '')
+              .toString(),
+        );
+        if (cn.isNotEmpty && (cn == variantStrippedQuery || cn.startsWith(variantStrippedQuery))) {
+          return p;
+        }
+      }
     }
 
     // 2. Compound product matching: "enna biryani" should be allowed to

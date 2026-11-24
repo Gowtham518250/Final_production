@@ -64,3 +64,19 @@
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# --- Bluetooth Thermal Printer: Keep reflection and JNI socket classes ---
+-keep class id.kakzaki.blue_thermal_printer.** { *; }
+-dontwarn id.kakzaki.blue_thermal_printer.**
+
+# --- Notification Listener Service: Keep background listener and reflection bridges ---
+-keep class com.notification.listener.** { *; }
+-keep class * extends android.service.notification.NotificationListenerService { *; }
+-dontwarn com.notification.listener.**
+
+# --- Flutter Background Service & Audio/TTS isolates ---
+-keep class id.flutter.flutter_background_service.** { *; }
+-dontwarn id.flutter.flutter_background_service.**
+-keep class xyz.luan.audioplayers.** { *; }
+-dontwarn xyz.luan.audioplayers.**
+

@@ -6392,8 +6392,8 @@ class _DashboardPageState extends State<DashboardPage>
       height: 68,
       padding: const EdgeInsets.symmetric(horizontal: 28),
       decoration: BoxDecoration(
-        color: const Color(0xAA03030D),
-        border: Border(bottom: BorderSide(color: border)),
+        color: AppColors.primaryNavy,
+        border: Border(bottom: BorderSide(color: AppColors.cardBorder)),
       ),
       child: Row(
         children: [
@@ -6413,7 +6413,7 @@ class _DashboardPageState extends State<DashboardPage>
                 ),
                 label: const LiveTranslatedText('Close Day'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
+                  backgroundColor: AppColors.brandEmerald,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -6739,12 +6739,12 @@ class _DashboardPageState extends State<DashboardPage>
                     );
                 },
               ),
-            if (!_isStaffMode)
+            if (_staffModeLoaded)
               _compactIconButton(
                 _isStaffMode
                     ? Icons.admin_panel_settings_rounded
-                    : Icons.storefront_rounded,
-                _isStaffMode ? 'Owner Login' : 'Staff Mode',
+                    : Icons.badge_outlined,
+                _isStaffMode ? 'Switch to Owner' : 'Switch to Worker',
                 _toggleStaffMode,
                 isPrimary: _isStaffMode,
               ),
@@ -12873,195 +12873,168 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  void _toggleStaffMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_isStaffMode) {
-      // Trying to exit Staff Mode, prompt for authentication if PIN is set
-      final pinIsSet = await SecurityService.isPinSet();
-      if (pinIsSet) {
-        bool authenticated = false;
+  Future<void> _toggleStaffMode() async {
+    try {
+      final isStaffMode =
+          await ScopedSharedPreferences.getBool('is_staff_mode') ??
+          _isStaffMode;
+      if (!mounted) return;
 
-        // Check if biometric is enabled
-        final bool biometricEnabled =
-            await SecurityService.isBiometricEnabled();
-        if (biometricEnabled) {
-          // Try biometric first
-          try {
-            authenticated = await SecurityService.authenticateBiometrically(
-              reason: 'Authenticate to exit Owner Mode',
-            );
-          } catch (e) {
-            debugPrint("Biometric error: $e");
-          }
-        }
+      final prefs = await SharedPreferences.getInstance();
+      final email = [
+        prefs.getString('user_email'),
+        prefs.getString('email'),
+        prefs.getString('owner_email'),
+      ].map((value) => value?.trim() ?? '').firstWhere(
+        (value) => value.isNotEmpty,
+        orElse: () => '',
+      );
 
-        if (authenticated) {
-          await prefs.setBool('is_staff_mode', false);
-          setState(() => _isStaffMode = false);
-          if (mounted)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: LiveTranslatedText('Welcome back, Owner'),
-              ),
-            );
-          return;
-        }
-
-        // Fall back to PIN if biometric fails or is not enabled
-        _showPinPromptDialog((success) async {
-          if (success) {
-            await prefs.setBool('is_staff_mode', false);
-            setState(() => _isStaffMode = false);
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: LiveTranslatedText('Welcome back, Owner'),
-                ),
-              );
-          }
-        });
-        return;
-      }
-      // If no custom pin set, just exit
-      await prefs.setBool('is_staff_mode', false);
-      setState(() => _isStaffMode = false);
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: LiveTranslatedText('Switched back to Owner Mode'),
+      if (!isStaffMode) {
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => RoleSelectionPage(email: email),
           ),
         );
-    } else {
-      // Trying to enter Owner Mode (Owner Login clicked)
-      // Since we want email-based PIN for security, we redirect to selection or verification
-      final email = prefs.getString('email') ?? '';
-      if (email.isNotEmpty) {
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (c) => RoleSelectionPage(email: email)),
+        return;
+      }
+
+      await _requestOwnerModeAuthentication(
+        ownerEmail: email,
+      );
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('Owner mode switch failed: $error');
+        debugPrint(stackTrace.toString());
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: LiveTranslatedText(
+              'Could not verify owner access. Please try again.',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
         );
-      } else {
-        // Fallback if no email is stored
-        _showPinPromptDialog((success) async {
-          if (success) {
-            await prefs.setBool('is_staff_mode', false);
-            setState(() => _isStaffMode = false);
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: LiveTranslatedText('Welcome back, Owner'),
-                ),
-              );
-          }
-        });
       }
     }
   }
 
-  void _showPinPromptDialog(void Function(bool) onResult) async {
-    final controller = TextEditingController();
-    final bool biometricEnabled = await SecurityService.isBiometricEnabled();
+  Future<void> _requestOwnerModeAuthentication({
+    required String ownerEmail,
+  }) async {
+    final biometricEnabled = await SecurityService.isBiometricEnabled();
+    final biometricAvailable =
+        biometricEnabled && await SecurityService.isBiometricHardwareAvailable();
+    final pinIsSet = await SecurityService.isPinSet();
 
-    showDialog(
+    if (!mounted) return;
+    if (!biometricAvailable && !pinIsSet && ownerEmail.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: LiveTranslatedText(
+            'Set up a Master PIN or add your owner email before switching to Owner Mode.',
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final method = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: LiveTranslatedText(
-            'Enter Master PIN',
-            style: GoogleFonts.poppins(color: Colors.white),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                maxLength: 4,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  label: LiveTranslatedText('PIN'),
-                  labelStyle: TextStyle(color: Colors.white60),
-                ),
+      builder: (dialogContext) => AlertDialog(
+        title: const LiveTranslatedText('Verify Owner Access'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (biometricAvailable)
+              ListTile(
+                leading: const Icon(Icons.fingerprint_rounded),
+                title: const LiveTranslatedText('Fingerprint / Face'),
+                onTap: () => Navigator.pop(dialogContext, 'biometric'),
               ),
-              if (biometricEnabled) ...[
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    try {
-                      final bool authenticated =
-                          await SecurityService.authenticateBiometrically(
-                            reason: 'Authenticate to access Owner Mode',
-                          );
-                      if (authenticated) {
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        onResult(true);
-                      }
-                    } catch (e) {
-                      if (ctx.mounted) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(
-                            content: LiveTranslatedText('Biometric failed: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  icon: const Icon(
-                    Icons.fingerprint_rounded,
-                    semanticLabel: 'Fingerprint Rounded',
-                  ),
-                  label: LiveTranslatedText(
-                    'Or Use Biometric',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    minimumSize: const Size(double.infinity, 40),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                onResult(false);
-              },
-              child: const LiveTranslatedText('CANCEL'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final masterPin = await SecurityService.getMasterPin();
-                final inputHash = sha256
-                    .convert(utf8.encode(controller.text))
-                    .toString();
-                if (inputHash == masterPin) {
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  onResult(true);
-                } else {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: LiveTranslatedText(
-                          'Incorrect PIN',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const LiveTranslatedText('UNLOCK'),
-            ),
+            if (pinIsSet)
+              ListTile(
+                leading: const Icon(Icons.lock_outline_rounded),
+                title: const LiveTranslatedText('Master PIN'),
+                onTap: () => Navigator.pop(dialogContext, 'pin'),
+              ),
+            if (ownerEmail.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.email_outlined),
+                title: const LiveTranslatedText('Email verification'),
+                onTap: () => Navigator.pop(dialogContext, 'email'),
+              ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const LiveTranslatedText('CANCEL'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || method == null) return;
+    switch (method) {
+      case 'biometric':
+        final authenticated = await SecurityService.authenticateBiometrically(
+          reason: 'Verify to switch back to Owner Mode',
+        );
+        if (!mounted) return;
+        if (authenticated) {
+          await _completeOwnerModeSwitch();
+        } else {
+          _showOwnerAuthenticationFailure();
+        }
+        break;
+      case 'pin':
+        final authenticated = await SecurityService.verifyMasterPin(context);
+        if (!mounted) return;
+        if (authenticated) {
+          await _completeOwnerModeSwitch();
+        } else {
+          _showOwnerAuthenticationFailure();
+        }
+        break;
+      case 'email':
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => RoleSelectionPage(email: ownerEmail),
+          ),
+        );
+        break;
+    }
+  }
+
+  Future<void> _completeOwnerModeSwitch() async {
+    await ScopedSharedPreferences.setBool('is_staff_mode', false);
+    await ScopedSharedPreferences.remove('active_staff_name');
+    await ScopedSharedPreferences.remove('active_staff_worker_id');
+    if (!mounted) return;
+
+    setState(() => _isStaffMode = false);
+    unawaited(_loadSales());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: LiveTranslatedText('Owner Mode is active again'),
+        backgroundColor: Color(0xFF059669),
+      ),
+    );
+  }
+
+  void _showOwnerAuthenticationFailure() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: LiveTranslatedText(
+          'Owner verification was not completed. You are still in Worker Mode.',
+        ),
+        backgroundColor: Colors.redAccent,
       ),
     );
   }
@@ -13409,6 +13382,48 @@ class _DashboardPageState extends State<DashboardPage>
                   color: Color(0xFF4F46E5),
                 ),
               ),
+              if (_staffModeLoaded)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Tooltip(
+                    message: _isStaffMode
+                        ? 'Switch to Owner Mode'
+                        : 'Switch to Worker Mode',
+                    child: TextButton.icon(
+                      onPressed: _toggleStaffMode,
+                      icon: Icon(
+                        _isStaffMode
+                            ? Icons.badge_outlined
+                            : Icons.admin_panel_settings_rounded,
+                        size: 17,
+                      ),
+                      label: LiveTranslatedText(
+                        _isStaffMode ? 'Worker' : 'Owner',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: _isStaffMode
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
+                        backgroundColor: _isStaffMode
+                            ? const Color(0xFF4F46E5)
+                            : const Color(0xFFE0E7FF),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 7,
+                        ),
+                        minimumSize: const Size(0, 38),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               _buildUserAvatar(),
             ],
           ),
@@ -13500,9 +13515,9 @@ class _DashboardPageState extends State<DashboardPage>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -16381,34 +16396,34 @@ class _DashboardPageState extends State<DashboardPage>
       DashboardActionItem(
         icon: Icons.add_shopping_cart_rounded,
         label: 'Sale',
-        color: const Color(0xFF4F46E5),
+        color: AppColors.brandEmerald,
         primary: true,
         onTap: () => _openSalesEntryFromCoach(),
       ),
       DashboardActionItem(
         icon: Icons.translate_rounded,
         label: 'Language',
-        color: const Color(0xFF2563EB),
+        color: AppColors.upiBlue,
         onTap: _showLanguageDialog,
       ),
       DashboardActionItem(
-        icon: Icons.mic_none_rounded,
+        icon: Icons.mic_rounded,
         label: 'Voice bill',
-        color: const Color(0xFF0F766E),
+        color: AppColors.brandEmerald,
         targetKey: _voiceBillCoachKey,
         onTap: () => _openSalesEntryFromCoach(openVoice: true),
       ),
       DashboardActionItem(
         icon: Icons.headset_mic_outlined,
         label: 'Help & Support',
-        color: const Color(0xFF0891B2),
+        color: AppColors.upiBlue,
         onTap: () => Navigator.pushNamed(context, '/chatbot-help'),
       ),
       if (_staffModeLoaded && !_isStaffMode) ...[
         DashboardActionItem(
           icon: Icons.local_shipping_outlined,
           label: 'Online orders',
-          color: const Color(0xFFD97706),
+          color: AppColors.kiranaAmber,
           badgeCount: _onlinePendingOrders,
           onTap: () => Navigator.pushNamed(context, '/online-orders'),
         ),
@@ -16421,7 +16436,7 @@ class _DashboardPageState extends State<DashboardPage>
         DashboardActionItem(
           icon: Icons.receipt_long_outlined,
           label: 'Khata',
-          color: const Color(0xFFEA580C),
+          color: AppColors.kiranaAmber,
           onTap: () => Navigator.pushNamed(context, '/invoices'),
         ),
         DashboardActionItem(
@@ -16433,14 +16448,14 @@ class _DashboardPageState extends State<DashboardPage>
         DashboardActionItem(
           icon: Icons.more_horiz_rounded,
           label: 'More',
-          color: const Color(0xFF475569),
+          color: AppColors.primaryNavy,
           onTap: () => Navigator.pushNamed(context, '/more'),
         ),
       ],
       DashboardActionItem(
         icon: Icons.logout_rounded,
         label: 'Logout',
-        color: const Color(0xFFDC2626),
+        color: AppColors.danger,
         onTap: () => _performLogout(context),
       ),
     ];

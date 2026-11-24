@@ -242,7 +242,16 @@ class VoiceNlpService {
         } else if (hasQuantityMarker) {
           qty = value;
         } else {
-          return null;
+          // Natural speech heuristics:
+          // If value is small (<= 25), it's almost always quantity (e.g. "2 soap", "3 milk", "bread 1")
+          // If value is larger (> 25), it's likely a unit price (e.g. "biryani 180", "tea 30")
+          if (value <= 25) {
+            qty = value;
+            price = 0.0;
+          } else {
+            price = value;
+            qty = 1.0;
+          }
         }
       } else if (numMatches.length >= 2) {
         // Multi-number phrases follow the documented local format:
@@ -297,8 +306,9 @@ class VoiceNlpService {
   static String _expandSynonyms(String itemStr) {
     for (var entry in _productSynonyms.entries) {
       for (var synonym in entry.value) {
-        if (itemStr.contains(synonym)) {
-          itemStr = itemStr.replaceAll(synonym, entry.key);
+        final regex = RegExp('\\b${RegExp.escape(synonym)}\\b', caseSensitive: false);
+        if (regex.hasMatch(itemStr)) {
+          itemStr = itemStr.replaceAll(regex, entry.key);
         }
       }
     }

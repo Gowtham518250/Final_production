@@ -133,6 +133,17 @@ void main() {
     var listening = false;
     var processing = false;
     var taps = 0;
+    List<Color> micColors() {
+      final core = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byType(AnimatedMicButton),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      final decoration = core.decoration! as BoxDecoration;
+      return (decoration.gradient! as LinearGradient).colors;
+    }
+
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
@@ -163,16 +174,19 @@ void main() {
     );
 
     expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+    expect(micColors(), [const Color(0xFF4F46E5), const Color(0xFF7C3AED)]);
     await tester.tap(find.byType(AnimatedMicButton));
     expect(taps, 1);
 
     await tester.tap(find.text('toggle listening'));
     await tester.pump();
     expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+    expect(micColors(), [const Color(0xFF059669), const Color(0xFF14B8A6)]);
 
     await tester.tap(find.text('toggle processing'));
     await tester.pump();
     expect(find.byIcon(Icons.hourglass_empty_rounded), findsOneWidget);
+    expect(micColors(), [const Color(0xFFEA580C), const Color(0xFFF59E0B)]);
     expect(find.bySemanticsLabel('Processing voice billing'), findsOneWidget);
     expect(
       tester

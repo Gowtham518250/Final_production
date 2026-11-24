@@ -61,29 +61,48 @@ class VoiceBillingService {
 
     String normalized = text.toLowerCase().trim();
 
-    // Remove noise words
+    // ── PATTERN 3 FIRST: Multiple products separated by "and", "aur", or comma ──
+    final multiItemSplit = RegExp(r'\s+(?:and|aur|plus|\+)\s+|,\s*');
+    if (multiItemSplit.hasMatch(normalized)) {
+      final segments = normalized.split(multiItemSplit);
+      for (final segment in segments) {
+        final cleanSeg = segment.trim();
+        if (cleanSeg.isNotEmpty) {
+          final subResult = parseSpokenText(cleanSeg, language: language);
+          if (subResult['success'] == true && subResult['items'] is List) {
+            result['items'].addAll(subResult['items'] as List<Map<String, dynamic>>);
+            result['success'] = true;
+          }
+        }
+      }
+      if (result['success'] == true) {
+        return result;
+      }
+    }
+
+    // Remove noise words with word boundaries only (never strip letters within product names)
     final noiseWords = [
       'please add',
-      'add',
+      'please',
       'item',
       'product',
       'ok',
       'alright',
       'stop',
       'the',
-      'a',
-      'and',
       'next',
       'one more',
-      'one',
       'uhm',
       'uh',
       'ah',
       'like',
+      'bhaiya',
+      'kardo',
+      'karo',
     ];
 
     for (final noise in noiseWords) {
-      normalized = normalized.replaceAll(noise, '');
+      normalized = normalized.replaceAll(RegExp('\\b${RegExp.escape(noise)}\\b'), '');
     }
 
     normalized = normalized.replaceAll(RegExp(r'\s+'), ' ').trim();

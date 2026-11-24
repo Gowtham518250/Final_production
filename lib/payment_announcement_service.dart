@@ -19,6 +19,7 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logger/logger.dart';
 
@@ -96,6 +97,7 @@ class PaymentAnnouncementService {
   DateTime? _lastSpeakTime;
   double? _lastAmount;
   bool? _lastIsPartial;
+  String? _lastPayer;
   String? _lastSpokenEvent;
 
   static const _minSpeakInterval = Duration(seconds: 3);
@@ -364,11 +366,14 @@ class PaymentAnnouncementService {
             onTimeout: () {},
           );
         },
-        task: () => _voice.speakRaw(
-          message,
-          lang.locale,
-          priority: SpeechPriority.critical,
-        ),
+        task: () {
+          HapticFeedback.heavyImpact();
+          return _voice.speakRaw(
+            message,
+            lang.locale,
+            priority: SpeechPriority.critical,
+          );
+        },
       ),
     );
 
@@ -468,19 +473,31 @@ class PaymentAnnouncementService {
   ) {
     final now = DateTime.now();
 
-    // ── VOICE DEDUP CACHE: Avoid repeating same announcement within 3 seconds (Fix 8) ──
+    // ── VOICE DEDUP CACHE: Avoid repeating same announcement within 5 seconds ──
     final String eventKey =
         '${amount.toStringAsFixed(2)}_${payerName ?? "anon"}_${isPartial ? 'P' : 'F'}';
-    if (_lastSpokenEvent == eventKey &&
+    final bool isRecentSameAmount = _lastAmount != null &&
+        (_lastAmount! - amount).abs() < 0.01 &&
+        _lastIsPartial == isPartial &&
         _lastSpeakTime != null &&
-        now.difference(_lastSpeakTime!) < const Duration(seconds: 3)) {
-      print('🔊 Voice Dedup: skipping repeated announcement for $eventKey');
+        now.difference(_lastSpeakTime!) < const Duration(seconds: 5);
+    final bool payersCompatible = payerName == null ||
+        _lastPayer == null ||
+        payerName.toLowerCase() == _lastPayer!.toLowerCase() ||
+        payerName.toLowerCase().contains(_lastPayer!.toLowerCase()) ||
+        _lastPayer!.toLowerCase().contains(payerName.toLowerCase());
+
+    if ((_lastSpokenEvent == eventKey || (isRecentSameAmount && payersCompatible)) &&
+        _lastSpeakTime != null &&
+        now.difference(_lastSpeakTime!) < const Duration(seconds: 5)) {
+      debugPrint('🔊 Voice Dedup: skipping repeated announcement for amount ₹${amount.toStringAsFixed(2)} ($eventKey)');
       return;
     }
 
     _lastSpeakTime = now;
     _lastSpokenEvent = eventKey;
     _lastAmount = amount;
+    _lastPayer = payerName;
     _lastIsPartial = isPartial;
 
     final lang = _lang.resolve(language);

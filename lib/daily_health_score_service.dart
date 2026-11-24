@@ -17,6 +17,8 @@
 //  11. DailyHealthScoreServiceTests  – inline unit-test suite
 // ============================================================
 
+import 'package:flutter/foundation.dart';
+
 // ─────────────────────────────────────────────────────────
 // 1. HealthScoreBreakdown
 // ─────────────────────────────────────────────────────────
@@ -1218,27 +1220,27 @@ void _runTests() {
 
     if (ok) {
       passed++;
-      print('  ✅  ${t.name}  (score: $score)');
+      debugPrint('  ✅  ${t.name}  (score: $score)');
     } else {
       failed++;
       final msg = statusError != null
           ? '  ❌  ${t.name}  — $statusError'
           : '  ❌  ${t.name}  — got $score, expected $expected';
       failures.add(msg);
-      print(msg);
+      debugPrint(msg);
     }
   }
 
-  print('\n── Results ─────────────────────────────────────');
-  print('   Passed : $passed');
-  print('   Failed : $failed');
-  print('   Total  : ${tests.length}');
-  print('────────────────────────────────────────────────');
+  debugPrint('\n── Results ─────────────────────────────────────');
+  debugPrint('   Passed : $passed');
+  debugPrint('   Failed : $failed');
+  debugPrint('   Total  : ${tests.length}');
+  debugPrint('────────────────────────────────────────────────');
 
   if (failed > 0) {
-    print('\nFailing cases:');
+    debugPrint('\nFailing cases:');
     for (final f in failures) {
-      print(f);
+      debugPrint(f);
     }
     // Exit with non-zero code so CI pipelines detect the failure.
     // (Comment out the line below if you are running in a context
@@ -1252,13 +1254,13 @@ void _runTests() {
 // ─────────────────────────────────────────────────────────
 
 void main() {
-  print('\n══════════════════════════════════════════════════');
-  print('  DailyHealthScoreService — Unit Test Suite');
-  print('══════════════════════════════════════════════════\n');
+  debugPrint('\n══════════════════════════════════════════════════');
+  debugPrint('  DailyHealthScoreService — Unit Test Suite');
+  debugPrint('══════════════════════════════════════════════════\n');
   _runTests();
 
   // ── Quick breakdown demo ──────────────────────────────
-  print('\n── Breakdown Demo ──────────────────────────────');
+  debugPrint('\n── Breakdown Demo ──────────────────────────────');
   final breakdown = HealthScoreAnalyzer.computeWithBreakdown(
     dayClosed: false,
     unsyncedBills: 3,
@@ -1268,36 +1270,36 @@ void main() {
     yesterdaySalesAmount: 1000,
     overrideHour: 22, // simulate post-9 PM
   );
-  print(HealthScoreFormatter.formatBreakdown(breakdown));
+  debugPrint(HealthScoreFormatter.formatBreakdown(breakdown));
 
   // ── Recommendations demo ──────────────────────────────
-  print('\n── Recommendations ─────────────────────────────');
+  debugPrint('\n── Recommendations ─────────────────────────────');
   final recs = HealthScoreRecommendationEngine.generate(breakdown);
   for (final r in recs) {
-    print('[P${r.priority}] ${r.title}');
-    print('    ${r.body}\n');
+    debugPrint('[P${r.priority}] ${r.title}');
+    debugPrint('    ${r.body}\n');
   }
 
   // ── Sales trend demo ──────────────────────────────────
-  print('── Sales Trend Analysis ─────────────────────────');
+  debugPrint('── Sales Trend Analysis ─────────────────────────');
   final trend = HealthScoreAnalyzer.evaluateSalesTrend(
     todaySalesAmount: 400,
     yesterdaySalesAmount: 1000,
   );
-  print(trend);
+  debugPrint(trend.toString());
 
   // ── History demo ─────────────────────────────────────
-  print('\n── 5-Day Score History Demo ─────────────────────');
+  debugPrint('\n── 5-Day Score History Demo ─────────────────────');
   final history = HealthScoreHistory(maxEntries: 7);
   for (final s in [88, 75, 62, 90, 55]) {
     history.record(s);
   }
-  print('Average : ${history.averageScore?.toStringAsFixed(1)}');
-  print('Highest : ${history.highestScore}');
-  print('Lowest  : ${history.lowestScore}');
-  print('Δ Today : ${history.latestDelta}');
-  print('Badge   : ${HealthScoreFormatter.asBadge(history.latestScore!)}');
-  print(
+  debugPrint('Average : ${history.averageScore?.toStringAsFixed(1)}');
+  debugPrint('Highest : ${history.highestScore}');
+  debugPrint('Lowest  : ${history.lowestScore}');
+  debugPrint('Δ Today : ${history.latestDelta}');
+  debugPrint('Badge   : ${HealthScoreFormatter.asBadge(history.latestScore!)}');
+  debugPrint(
     'Colour  : ${HealthScoreAnalyzer.getScoreColourHex(history.latestScore!)}',
   );
 }

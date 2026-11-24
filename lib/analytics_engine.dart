@@ -178,20 +178,6 @@ class AnalyticsEngine {
     return salesByMonthCache[currentMon] ?? 0.0;
   }
 
-  String _transactionKey(Map<String, dynamic> sale) {
-    for (final field in const [
-      'invoice_id',
-      'backend_id',
-      'sale_id',
-      'invoice_number',
-      'id',
-    ]) {
-      final value = sale[field]?.toString().trim().toLowerCase() ?? '';
-      if (value.isNotEmpty && value != 'null') return value;
-    }
-    return '';
-  }
-
   // FIX-A: Filter-aware display getters for KPI cards
   /// Period-filtered metrics for analytics screens.
   double get displayRevenue {
@@ -396,9 +382,7 @@ class AnalyticsEngine {
     return DateTime.parse('${trimmed}Z').toLocal();
   }
 
-  DateTime? _parseFlexibleDate(String str) => _parseBackendTimestamp(str);
-
-  DateTime? _tryGetBusinessDate(Map<String, dynamic> sale) {
+DateTime? _tryGetBusinessDate(Map<String, dynamic> sale) {
     final value =
         sale['business_date'] ??
         sale['sale_date'] ??

@@ -493,6 +493,21 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   }
 
   Future<void> _openVoiceBillingAssistant() async {
+    try {
+      final catalogLoad = _productCatalogLoadFuture;
+      if (catalogLoad != null) await catalogLoad;
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        _styledSnackBar(
+          'Could not load the product catalog: $error',
+          isError: true,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => RetailMindFeatureGate(
@@ -711,7 +726,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     // 1. Convert to lowercase for matching
     String text = input.toLowerCase();
 
-    // 2. Remove common filler words & noise (Expanded for Indian Context)
+    // 2. Remove common filler words & noise (Only true conversational fillers; never products or numbers)
     final List<String> noise = [
       'uhm',
       'uh',
@@ -722,6 +737,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       'basically',
       'actually',
       'please add',
+      'please',
       'add',
       'item',
       'product',
@@ -730,28 +746,21 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       'stop',
       'the',
       'a',
-      'and',
       'next',
       'then',
       'sir',
-      'ek',
-      'do',
-      'aur',
       'kardo',
       'bhaiya',
       'bhai',
       'karo',
       'kar',
       'de',
-      'do',
       'le lo',
       'daal do',
-      'sugar',
-      'patti',
     ];
 
     for (var word in noise) {
-      text = text.replaceAll(RegExp('\\b$word\\b'), '');
+      text = text.replaceAll(RegExp('\\b${RegExp.escape(word)}\\b'), '');
     }
 
     // 3. Trim extra whitespace
@@ -897,9 +906,9 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.08),
+                color: Colors.blue.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -944,6 +953,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   bool _hasNotifPermission = true;
   bool _hasSmsPermission = true;
   double _paidAmount = 0.0; // Actual amount received via UPI/Cash
+  double _cashTendered = 0.0; // Cash given by customer for change calculation
   double? _pendingDetectedPaymentAmount;
   Uint8List? _paymentQrBytes; // QR image from SharedPreferences
   String? _upiId; // Textual UPI ID for dynamic QR
@@ -1229,7 +1239,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.1),
+                color: const Color(0xFF6366F1).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -1287,7 +1297,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.08),
+                color: const Color(0xFF6366F1).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: LiveTranslatedText(
@@ -1696,7 +1706,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                 padding: const EdgeInsets.all(12),
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
@@ -3388,6 +3398,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_speakSaleGuideOncePerAccount());
       unawaited(_loadPosContrastPref());
+      unawaited(_checkAndOfferDraftRecovery());
       if (widget.openVoiceOnStart) {
         _openVoiceBillingAssistant();
       } else {
@@ -4720,9 +4731,11 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       if (grand > 0) {
         PaymentDetectionService().setBillExpected(grand);
         unawaited(syncExpectedPaymentBill(grand));
+        unawaited(_autoSaveBillDraft());
       } else {
         PaymentDetectionService().clearBill();
         unawaited(syncExpectedPaymentBill(null));
+        unawaited(_clearBillDraft());
       }
     }
 
@@ -4737,9 +4750,133 @@ class _SalesEntryPageState extends State<SalesEntryPage>
     };
   }
 
+  static const String _draftKey = 'retail_mind_active_bill_draft';
+
+  Future<void> _autoSaveBillDraft() async {
+    try {
+      final validEntries = entries
+          .where((e) => e['item']?.text.trim().isNotEmpty ?? false)
+          .map((e) => {
+                'item': e['item']?.text ?? '',
+                'qty': e['qty']?.text ?? '',
+                'price': e['price']?.text ?? '',
+                'gst': e['gst']?.text ?? '18',
+                'barcode': e['barcode']?.text ?? '',
+              })
+          .toList();
+      final prefs = await SharedPreferences.getInstance();
+      if (validEntries.isEmpty) {
+        await prefs.remove(_draftKey);
+      } else {
+        await prefs.setString(
+          _draftKey,
+          jsonEncode({
+            'timestamp': DateTime.now().toIso8601String(),
+            'entries': validEntries,
+            'customer_name': customerNameController.text.trim(),
+            'customer_phone': customerPhoneController.text.trim(),
+          }),
+        );
+      }
+    } catch (e) {
+      debugPrint('[DraftSave] Failed to auto-save draft: $e');
+    }
+  }
+
+  Future<void> _clearBillDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
+  }
+
+  Future<void> _checkAndOfferDraftRecovery() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.isEmpty) return;
+
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final rawEntries = data['entries'] as List<dynamic>?;
+      if (rawEntries == null || rawEntries.isEmpty) return;
+
+      final currentHasItems =
+          entries.any((e) => e['item']?.text.trim().isNotEmpty ?? false);
+      if (currentHasItems) return;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: LiveTranslatedText(
+            'Unfinished bill found (${rawEntries.length} items). Restore?',
+          ),
+          backgroundColor: AppColors.primaryNavy,
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Restore',
+            textColor: AppColors.brandEmeraldLight,
+            onPressed: () {
+              setState(() {
+                for (final e in entries) {
+                  e['item']?.dispose();
+                  e['qty']?.dispose();
+                  e['price']?.dispose();
+                  e['gst']?.dispose();
+                  e['barcode']?.dispose();
+                }
+                entries.clear();
+
+                for (final item in rawEntries) {
+                  final row = item as Map<String, dynamic>;
+                  final itemCtrl = TextEditingController(text: row['item']?.toString() ?? '');
+                  final qtyCtrl = TextEditingController(text: row['qty']?.toString() ?? '1');
+                  final priceCtrl = TextEditingController(text: row['price']?.toString() ?? '');
+                  final gstCtrl = TextEditingController(text: row['gst']?.toString() ?? '18');
+                  final barcodeCtrl = TextEditingController(text: row['barcode']?.toString() ?? '');
+
+                  itemCtrl.addListener(() {
+                    calculateTotal();
+                    _autoSaveBillDraft();
+                  });
+                  qtyCtrl.addListener(() {
+                    calculateTotal();
+                    _autoSaveBillDraft();
+                  });
+                  priceCtrl.addListener(() {
+                    calculateTotal();
+                    _autoSaveBillDraft();
+                  });
+
+                  entries.add({
+                    'item': itemCtrl,
+                    'qty': qtyCtrl,
+                    'price': priceCtrl,
+                    'gst': gstCtrl,
+                    'barcode': barcodeCtrl,
+                  });
+                }
+                if (data['customer_name'] != null && customerNameController.text.isEmpty) {
+                  customerNameController.text = data['customer_name'].toString();
+                }
+                if (data['customer_phone'] != null && customerPhoneController.text.isEmpty) {
+                  customerPhoneController.text = data['customer_phone'].toString();
+                }
+                calculateTotal();
+              });
+              HapticFeedback.mediumImpact();
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[DraftRecovery] Error offering draft recovery: $e');
+    }
+  }
+
   void _clearSaleInterface() {
     if (!mounted) return;
 
+    unawaited(_clearBillDraft());
     PaymentDetectionService.isActiveSalesBill = false;
     unawaited(syncExpectedPaymentBill(null));
     setState(() {
@@ -4759,6 +4896,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
       _currentCustomerAddress = '';
       _borrowWaitingForCustomer = false;
       _paidAmount = 0;
+      _cashTendered = 0;
       _pendingDetectedPaymentAmount = null;
       _paymentConfirmed = false;
       _cashierManualOverride = false;
@@ -5439,10 +5577,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: Colors.indigo.withOpacity(0.15),
+                          color: Colors.indigo.withValues(alpha: 0.15),
                         ),
                         borderRadius: BorderRadius.circular(16),
-                        color: Colors.indigo.withOpacity(0.03),
+                        color: Colors.indigo.withValues(alpha: 0.03),
                       ),
                       child: Column(
                         children: [
@@ -6356,8 +6494,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withOpacity(0.85),
-                              Colors.black.withOpacity(0.95),
+                              Colors.black.withValues(alpha: 0.85),
+                              Colors.black.withValues(alpha: 0.95),
                             ],
                           ),
                         ),
@@ -6385,12 +6523,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                                               decoration: BoxDecoration(
                                                 color: const Color(
                                                   0xFF6366F1,
-                                                ).withOpacity(0.3),
+                                                ).withValues(alpha: 0.3),
                                                 shape: BoxShape.circle,
                                                 border: Border.all(
                                                   color: const Color(
                                                     0xFF6366F1,
-                                                  ).withOpacity(0.6),
+                                                  ).withValues(alpha: 0.6),
                                                   width: 3,
                                                 ),
                                               ),
@@ -6417,7 +6555,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                                         BoxShadow(
                                           color: const Color(
                                             0xFF6366F1,
-                                          ).withOpacity(0.5),
+                                          ).withValues(alpha: 0.5),
                                           blurRadius: 30,
                                           spreadRadius: 5,
                                         ),
@@ -6443,10 +6581,10 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                                   vertical: 16,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
+                                  color: Colors.white.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.white.withValues(alpha: 0.2),
                                     width: 1,
                                   ),
                                 ),
@@ -6476,8 +6614,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                                           color: _voiceConfidence > 0.7
                                               ? const Color(
                                                   0xFF10B981,
-                                                ).withOpacity(0.2)
-                                              : Colors.orange.withOpacity(0.2),
+                                                ).withValues(alpha: 0.2)
+                                              : Colors.orange.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(
                                             12,
                                           ),
@@ -6504,7 +6642,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                                   borderRadius: BorderRadius.circular(30),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.red.withOpacity(0.3),
+                                      color: Colors.red.withValues(alpha: 0.3),
                                       blurRadius: 15,
                                       spreadRadius: 2,
                                     ),
@@ -7624,6 +7762,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                               fontSize: _posHighContrast ? 24 : 16,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
+                              fontFeatures: const [ui.FontFeature.tabularFigures()],
                             ),
                           ),
                         ],
@@ -7651,6 +7790,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                               fontSize: _posHighContrast ? 22 : 16,
                               fontWeight: FontWeight.bold,
                               color: const Color(0xFF059669),
+                              fontFeatures: const [ui.FontFeature.tabularFigures()],
                             ),
                           ),
                         ],
@@ -7679,7 +7819,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                               style: GoogleFonts.spaceMono(
                                 fontSize: _posHighContrast ? 22 : 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.redAccent.withOpacity(
+                                fontFeatures: const [ui.FontFeature.tabularFigures()],
+                                color: Colors.redAccent.withValues(alpha: 
                                   _paidAmount > 0 && !_paymentConfirmed
                                       ? 0.5 + (0.5 * _totalPulse.value)
                                       : 1.0,
@@ -7697,30 +7838,62 @@ class _SalesEntryPageState extends State<SalesEntryPage>
             if (_pendingDetectedPaymentAmount != null)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.amber.withValues(alpha: 0.45),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
                   ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.hourglass_top_rounded,
-                      size: 18,
-                      color: Colors.orange,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFD97706),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.record_voice_over_rounded,
+                        size: 20,
+                        color: Colors.white,
+                      ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: LiveTranslatedText(
-                        'Payment detected: ₹${_pendingDetectedPaymentAmount!.toStringAsFixed(2)} — verifying. It is not included in received amount yet.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange.shade900,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          LiveTranslatedText(
+                            'SOUNDBOX PAYMENT DETECTED',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF92400E),
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          LiveTranslatedText(
+                            '₹${_pendingDetectedPaymentAmount!.toStringAsFixed(2)} is being verified via SMS/UPI channel.',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF78350F),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -7837,6 +8010,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                         entry['barcode']?.clear();
                       }
                       _paidAmount = 0;
+                      _cashTendered = 0;
                       _pendingDetectedPaymentAmount = null;
                       _paymentConfirmed = false;
                       _cashierManualOverride = false;
@@ -8037,12 +8211,12 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                          color: AppColors.upiBlue.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
                           Icons.qr_code_scanner_rounded,
-                          color: Color(0xFF4F46E5),
+                          color: AppColors.upiBlue,
                           size: 42,
                         ),
                       ),
@@ -8066,18 +8240,18 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                           decoration: BoxDecoration(
                             color: const Color(
                               0xFF22C55E,
-                            ).withOpacity(0.06 + (0.06 * _totalPulse.value)),
+                            ).withValues(alpha: 0.06 + (0.06 * _totalPulse.value)),
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
                               color: const Color(
                                 0xFF22C55E,
-                              ).withOpacity(0.2 + (0.2 * _totalPulse.value)),
+                              ).withValues(alpha: 0.2 + (0.2 * _totalPulse.value)),
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
                                   0xFF22C55E,
-                                ).withOpacity(0.15 * _totalPulse.value),
+                                ).withValues(alpha: 0.15 * _totalPulse.value),
                                 blurRadius: 16,
                                 spreadRadius: 2,
                               ),
@@ -8097,7 +8271,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                                   decoration: BoxDecoration(
                                     color: const Color(
                                       0xFF22C55E,
-                                    ).withOpacity(v),
+                                    ).withValues(alpha: v),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -8134,7 +8308,7 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                           ),
                           label: const LiveTranslatedText('SET UPI ID NOW'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4F46E5),
+                            backgroundColor: AppColors.upiBlue,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -8237,6 +8411,55 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                       ),
                     ),
                   ],
+                  if (!kIsWeb && !_paymentConfirmed && _isOnlinePayment)
+                    FutureBuilder<bool>(
+                      future: PaymentDetectionService.isIgnoringBatteryOptimizations(),
+                      builder: (context, snapshot) {
+                        final isIgnored = snapshot.data ?? true;
+                        if (isIgnored) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: GestureDetector(
+                            onTap: () async {
+                              await PaymentDetectionService.requestIgnoreBatteryOptimization();
+                              setState(() {});
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFFF59E0B),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.battery_alert_rounded,
+                                    color: Color(0xFFD97706),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  LiveTranslatedText(
+                                    'Disable Battery Saver for 24/7 Soundbox Alerts [Fix]',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 11,
+                                      color: const Color(0xFF92400E),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 12),
                   GestureDetector(
                     onTap: () async {
@@ -8470,9 +8693,227 @@ class _SalesEntryPageState extends State<SalesEntryPage>
                   ],
                 ),
               ),
+          ] else ...[
+            _buildCashPaymentSection(),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildCashPaymentSection() {
+    final double changeToReturn = math.max(0.0, _cashTendered - totalAmount);
+    final List<int> quickNotes = <int>[];
+    if (totalAmount > 0) {
+      for (final note in [50, 100, 200, 500]) {
+        if (note >= totalAmount && !quickNotes.contains(note)) {
+          quickNotes.add(note);
+        }
+      }
+      if (quickNotes.isEmpty && totalAmount > 500) {
+        final nextHundred = (totalAmount / 100).ceil() * 100;
+        final nextFiveHundred = (totalAmount / 500).ceil() * 500;
+        if (nextHundred > totalAmount) quickNotes.add(nextHundred);
+        if (nextFiveHundred > nextHundred) quickNotes.add(nextFiveHundred);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _paymentConfirmed
+                ? const Color(0xFF10B981).withValues(alpha: 0.08)
+                : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _paymentConfirmed
+                  ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                  : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LiveTranslatedText(
+                        'CASH TENDERED',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF6B7280),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      LiveTranslatedText(
+                        '₹${(_cashTendered > 0 ? _cashTendered : _paidAmount).toStringAsFixed(0)}',
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF111827),
+                          fontFeatures: const [ui.FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (changeToReturn > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF22C55E).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          LiveTranslatedText(
+                            'CHANGE TO RETURN',
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF15803D),
+                            ),
+                          ),
+                          LiveTranslatedText(
+                            '₹${changeToReturn.toStringAsFixed(0)}',
+                            style: GoogleFonts.spaceMono(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF15803D),
+                              fontFeatures: const [ui.FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              if (_paymentConfirmed) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 16),
+                    const SizedBox(width: 6),
+                    LiveTranslatedText(
+                      'Cash Payment Confirmed',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF047857),
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _paidAmount = 0.0;
+                          _cashTendered = 0.0;
+                          _paymentConfirmed = false;
+                        });
+                        HapticFeedback.selectionClick();
+                      },
+                      child: LiveTranslatedText(
+                        'Reset',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (totalAmount > 0) ...[
+          const SizedBox(height: 12),
+          LiveTranslatedText(
+            'QUICK CASH CHIPS',
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF9CA3AF),
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.flash_on_rounded, size: 14, color: Color(0xFF059669)),
+                  label: LiveTranslatedText('Exact ₹${totalAmount.toStringAsFixed(0)}'),
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF059669),
+                  ),
+                  backgroundColor: const Color(0xFFECFDF5),
+                  side: const BorderSide(color: Color(0xFFA7F3D0)),
+                  onPressed: () {
+                    setState(() {
+                      _paidAmount = totalAmount;
+                      _cashTendered = totalAmount;
+                      _paymentConfirmed = true;
+                    });
+                    HapticFeedback.mediumImpact();
+                  },
+                ),
+                for (final note in quickNotes) ...[
+                  const SizedBox(width: 8),
+                  ActionChip(
+                    label: LiveTranslatedText('₹$note'),
+                    labelStyle: GoogleFonts.spaceMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1E293B),
+                      fontFeatures: const [ui.FontFeature.tabularFigures()],
+                    ),
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    onPressed: () {
+                      setState(() {
+                        _cashTendered = note.toDouble();
+                        _paidAmount = totalAmount;
+                        _paymentConfirmed = true;
+                      });
+                      HapticFeedback.mediumImpact();
+                    },
+                  ),
+                ],
+                const SizedBox(width: 8),
+                ActionChip(
+                  avatar: const Icon(Icons.edit_note_rounded, size: 14, color: Color(0xFF4B5563)),
+                  label: const LiveTranslatedText('Custom'),
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF4B5563),
+                  ),
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  onPressed: _showPartialCashDialog,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -8529,8 +8970,8 @@ class _SalesEntryPageState extends State<SalesEntryPage>
   }) {
     final bool selected = _isOnlinePayment == isOnline;
     final Color activeColor = isOnline
-        ? const Color(0xFF22C55E)
-        : const Color(0xFF4F46E5);
+        ? AppColors.upiBlue
+        : AppColors.brandEmerald;
     return GestureDetector(
       onTap: () => setState(() {
         _isOnlinePayment = isOnline;

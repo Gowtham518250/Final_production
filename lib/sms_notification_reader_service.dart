@@ -12,14 +12,14 @@ class SmsNotificationReaderService {
     String senderAddress,
   ) async {
     try {
-      if (kDebugMode) print('$_tag Parsing: $smsBody from $senderAddress');
+      if (kDebugMode) debugPrint('$_tag Parsing: $smsBody from $senderAddress');
 
       // Check if it's a bank SMS (typically from short codes like 9000, 9898, etc.)
       if (_isBankSms(senderAddress)) {
         final txn = TransactionService.parseSmsBanking(smsBody);
         if (txn != null) {
           if (kDebugMode) {
-            print(
+            debugPrint(
               '$_tag Bank transaction parsed for review: ${txn.name} - ₹${txn.amount}',
             );
           }
@@ -34,7 +34,7 @@ class SmsNotificationReaderService {
         final txn = TransactionService.parseUpiNotification(smsBody, source);
         if (txn != null) {
           if (kDebugMode) {
-            print(
+            debugPrint(
               '$_tag UPI transaction parsed for review: ${txn.name} - ₹${txn.amount}',
             );
           }
@@ -42,10 +42,10 @@ class SmsNotificationReaderService {
         }
       }
 
-      if (kDebugMode) print('$_tag ⚠️ Could not parse: $smsBody');
+      if (kDebugMode) debugPrint('$_tag ⚠️ Could not parse: $smsBody');
       return null;
     } catch (e) {
-      if (kDebugMode) print('$_tag ❌ Error: $e');
+      if (kDebugMode) debugPrint('$_tag ❌ Error: $e');
       return null;
     }
   }
@@ -143,7 +143,7 @@ class SmsNotificationReaderService {
   ) async {
     try {
       if (kDebugMode)
-        print('$_tag Parsing WhatsApp: "$message" from $senderName');
+        debugPrint('$_tag Parsing WhatsApp: "$message" from $senderName');
 
       // Pattern: "sent ₹500" or "paid ₹1000"
       final amountRegex = RegExp(r'₹\s*([\d,]+\.?\d*)');
@@ -172,13 +172,13 @@ class SmsNotificationReaderService {
       );
 
       if (kDebugMode) {
-        print(
+        debugPrint(
           '$_tag WhatsApp transaction parsed for review: $senderName - ₹$amount',
         );
       }
       return txn;
     } catch (e) {
-      if (kDebugMode) print('$_tag ❌ WhatsApp parse error: $e');
+      if (kDebugMode) debugPrint('$_tag ❌ WhatsApp parse error: $e');
       return null;
     }
   }

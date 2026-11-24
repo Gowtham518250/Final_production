@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "295199056762-3pfr5n8bnd8t2knagbvib1j8l4sdbjb4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.retailmind.app",
+            "certificate_hash": "86eaf8eb8cf43b81ba5bff344662c2155d560c20"
+          }
+        },
+        {
           "client_id": "295199056762-qgttn8cog3aio71fbq6i45aj51svvq6h.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

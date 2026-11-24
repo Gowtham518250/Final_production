@@ -28,6 +28,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'language_provider.dart';
 import 'package:flutter/foundation.dart';
@@ -49,8 +50,6 @@ import 'voice_nlp_engine.dart';
 import 'voice_item_confirmation.dart';
 import 'voice_feedback_learning_service.dart';
 import 'language_detection_visualizer.dart';
-import 'product_catalog_service.dart';
-import 'production_voice_billing_service.dart';
 import 'stt_accuracy_config.dart';
 import 'speech_locale_policy.dart';
 import 'voice_billing_price_policy.dart';
@@ -867,30 +866,46 @@ class MultiLangVoiceParser {
 
     // Patterns tried in order of specificity (higher index = lower confidence):
     // [qty] [unit?] [name] [price]
+    // Indian scripts character class + English
+    const indianChar = r'[a-z\u0900-\u097f\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\u0980-\u09ff\u0a80-\u0aff\u0a00-\u0a7f]';
+    const prodName = '$indianChar+(?:\\s+$indianChar+)*';
+    const unitWord = r'(?:kg|kilo|kilos|kilogram|kilograms|g|gm|gram|grams|l|lt|ltr|liter|liters|litre|litres|ml|packet|packets|pkt|pkts|piece|pieces|pcs|pc|dozen|doz|box|boxes|bottle|bottles|pau|pav|can|cans|tin|tins|bar|bars|किलो|ग्राम|लीटर|पैकेट|पीस|டஜன்|கிலோ|லிட்டர்|కిలో|లీటరు|లీటర్లు|ಬೀಸ|ಲೀಟರ್)';
+
+    // Patterns tried in order of specificity (higher index = lower confidence):
     final patterns = [
-      // 0: "2 kg sugar 60"  /  "2 sugar 60"
+      // 0: "2 kg sugar 60" (qty + explicit unit + name + price)
       RegExp(
-        r'(\d+\.?\d*)\s*(\w+)?\s+([a-z\u0900-\u097f\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\u0980-\u09ff\u0a80-\u0aff\u0a00-\u0a7f]+(?:\s+[a-z\u0900-\u097f\u0b80-\u0bff]+)?)\s+(\d+\.?\d*)',
+        '(\\d+\\.?\\d*)\\s*($unitWord)\\s+($prodName)\\s+(\\d+\\.?\\d*)',
         caseSensitive: false,
       ),
-      // 1: "sugar 2 60" (name first)
+      // 1: "2 sugar 60" (qty + name + price, no unit)
       RegExp(
-        r'([a-z\u0900-\u097f\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\u0980-\u09ff\u0a80-\u0aff\u0a00-\u0a7f]+)\s+(\d+\.?\d*)\s+(\d+\.?\d*)',
+        '(\\d+\\.?\\d*)\\s+($prodName)\\s+(\\d+\\.?\\d*)',
         caseSensitive: false,
       ),
-      // 2: "2 kg sugar" / "2 sugar" (no price)
+      // 2: "sugar 2 60" (name first + qty + price)
       RegExp(
-        r'(\d+\.?\d*)\s*(\w+)?\s+([a-z\u0900-\u097f\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\u0980-\u09ff\u0a80-\u0aff\u0a00-\u0a7f]+(?:\s+[a-z\u0900-\u097f\u0b80-\u0bff]+)?)',
+        '($prodName)\\s+(\\d+\\.?\\d*)\\s+(\\d+\\.?\\d*)',
         caseSensitive: false,
       ),
-      // 3: "sugar 60" or "sugar 2" (name + one number)
+      // 3: "2 kg sugar" (qty + explicit unit + name, no price)
       RegExp(
-        r'([a-z\u0900-\u097f\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\u0980-\u09ff\u0a80-\u0aff\u0a00-\u0a7f]+)\s+(\d+\.?\d*)',
+        '(\\d+\\.?\\d*)\\s*($unitWord)\\s+($prodName)',
         caseSensitive: false,
       ),
-      // 4: "sugar" (just name)
+      // 4: "2 sugar" (qty + name, no price)
       RegExp(
-        r'([a-z\u0900-\u097f\u0b80-\u0bff\u0c00-\u0c7f\u0c80-\u0cff\u0d00-\u0d7f\u0980-\u09ff\u0a80-\u0aff\u0a00-\u0a7f]+)',
+        '(\\d+\\.?\\d*)\\s+($prodName)',
+        caseSensitive: false,
+      ),
+      // 5: "sugar 60" or "sugar 2" (name + one number)
+      RegExp(
+        '($prodName)\\s+(\\d+\\.?\\d*)\\s*(?:rupees?|rs\\.?|inr|rupya|rupaye)?',
+        caseSensitive: false,
+      ),
+      // 6: "sugar" (just name)
+      RegExp(
+        '($prodName)',
         caseSensitive: false,
       ),
     ];
@@ -909,25 +924,39 @@ class MultiLangVoiceParser {
         name = match.group(3) ?? '';
         price = double.tryParse(match.group(4) ?? '0') ?? 0;
       } else if (pi == 1) {
+        qty = double.tryParse(match.group(1) ?? '1') ?? 1;
+        name = match.group(2) ?? '';
+        price = double.tryParse(match.group(3) ?? '0') ?? 0;
+        rawUnit = '';
+      } else if (pi == 2) {
         name = match.group(1) ?? '';
         qty = double.tryParse(match.group(2) ?? '1') ?? 1;
         price = double.tryParse(match.group(3) ?? '0') ?? 0;
         rawUnit = '';
-      } else if (pi == 2) {
-        double val = double.tryParse(match.group(1) ?? '1') ?? 1;
+      } else if (pi == 3) {
+        qty = double.tryParse(match.group(1) ?? '1') ?? 1;
         rawUnit = match.group(2) ?? '';
         name = match.group(3) ?? '';
-        // Don't auto-determine price based on value - let product database decide
-        qty = val;
         price = 0.0;
-      } else if (pi == 3) {
-        name = match.group(1) ?? '';
-        // Don't auto-determine price based on value - let product database decide
-        double val = double.tryParse(match.group(2) ?? '1') ?? 1;
-        qty = val;
+      } else if (pi == 4) {
+        qty = double.tryParse(match.group(1) ?? '1') ?? 1;
+        name = match.group(2) ?? '';
         price = 0.0;
         rawUnit = '';
-        quantityPriceAmbiguous = true;
+      } else if (pi == 5) {
+        name = match.group(1) ?? '';
+        double val = double.tryParse(match.group(2) ?? '1') ?? 1;
+        // If > 25 or currency mentioned, likely price. Otherwise likely quantity
+        final bool hasCurrency = match.group(0)?.contains(RegExp(r'rupee|rs|inr|rup', caseSensitive: false)) ?? false;
+        if (val > 25 || hasCurrency) {
+          price = val;
+          qty = 1.0;
+        } else {
+          qty = val;
+          price = 0.0;
+        }
+        rawUnit = '';
+        quantityPriceAmbiguous = !hasCurrency && val > 10 && val <= 25;
       } else {
         name = match.group(1) ?? '';
         qty = 1.0;
@@ -1408,8 +1437,29 @@ class MultiLangVoiceParser {
 
     // If intelligent parsing found items, return in order
     if (items.isNotEmpty) {
-      items.sort((a, b) => a.name.compareTo(b.name)); // Stable sort
+      // Keep insertion order so the bill matches the shopkeeper's spoken sequence
       return items;
+    }
+
+    // Strategy 2: Quantity-first continuous speech (e.g. "2 milk 1 bread 3 eggs" without explicit prices)
+    if (numberMatches.length >= 2) {
+      final qtyItems = <ParsedItem>[];
+      for (int k = 0; k < numberMatches.length; k++) {
+        final start = numberMatches[k].start;
+        final end = (k < numberMatches.length - 1)
+            ? numberMatches[k + 1].start
+            : normalized.length;
+        final seg = normalized.substring(start, end).trim();
+        if (seg.isNotEmpty) {
+          final it = await _parseSegment(seg, lang, knownProducts: knownProducts);
+          if (it != null && it.name.isNotEmpty) {
+            qtyItems.add(it);
+          }
+        }
+      }
+      if (qtyItems.length >= 2) {
+        return qtyItems;
+      }
     }
 
     // Fallback: parse entire transcript as single item
@@ -1490,8 +1540,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   String _transcript = '';
   String _hint = '';
 
-  final _catalog = ProductCatalogService();
-
   _LangConfig _selectedLang = _languages[0]; // default English
   bool _voiceLanguageManuallySelected = false;
   List<ParsedItem> ParsedItems = [];
@@ -1537,13 +1585,11 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
   }
 
   bool _hasInitializedStt = false;
-  bool _catalogReady = false;
   bool _finalResultHandled = false;
   bool _usedCloudSTTForCurrentBill = false;
   bool _usedDeviceSTTForCurrentBill = false;
   final List<double> _sttConfidenceSamples = <double>[];
   String? _pendingSttWarning;
-  Future<void>? _catalogLoadFuture;
   List<String> _parseWarnings = [];
   String _interpretedText = '';
 
@@ -1868,17 +1914,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     _transcriptCtrl.text,
     _selectedLang.code,
   );
-
-  Future<void> _initializeCatalog() async {
-    try {
-      await _catalog.load(widget.knownProducts ?? const []);
-      _catalogReady = true;
-    } catch (e) {
-      _catalogReady = false;
-      if (kDebugMode)
-        debugPrint('🎙️ [VoiceBilling] Catalog initialization failed: $e');
-    }
-  }
 
   String _catalogKey(String value) =>
       value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
@@ -2391,8 +2426,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       duration: const Duration(seconds: 2),
     )..repeat();
 
-    _catalogLoadFuture = _initializeCatalog();
-
     if (widget.initialText != null && widget.initialText!.trim().isNotEmpty) {
       _transcript = widget.initialText!.trim();
       _transcriptCtrl.text = _transcript;
@@ -2403,10 +2436,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
-        await _catalogLoadFuture;
-        if (mounted) {
-          await _toggleListening();
-        }
+        await _toggleListening();
       });
     }
   }
@@ -2467,15 +2497,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     }
 
     _shouldRestartListening = false;
-    await (_catalogLoadFuture ?? Future<void>.value());
-
-    if (!_catalogReady && mounted) {
-      _showSnack(
-        'Product catalog is still loading. Please try again.',
-        isError: true,
-      );
-      return;
-    }
 
     // For Indian-language billing, prefer the cloud ASR path even when a
     // device locale is installed: local recognizers can return plausible but
@@ -2863,7 +2884,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
       if (cleanTranscript != phoneticTranscript) {
         parsedResult = await _parseWithGroq(cleanTranscript);
       }
-      parsedResult = await _applyDeterministicScaleCorrection(
+      parsedResult = _reviewScaleNormalizedResult(
         transcriptBeforeNormalization: phoneticTranscript,
         normalizedTranscript: cleanTranscript,
         aiItems: parsedResult.items,
@@ -3002,132 +3023,36 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
     } catch (_) {}
   }
 
-  Future<
-    ({List<ParsedItem> items, List<String> warnings, String interpretedText})
-  >
-  _applyDeterministicScaleCorrection({
+  ({
+    List<ParsedItem> items,
+    List<String> warnings,
+    String interpretedText,
+  })
+  _reviewScaleNormalizedResult({
     required String transcriptBeforeNormalization,
     required String normalizedTranscript,
     required List<ParsedItem> aiItems,
     required List<String> aiWarnings,
     required String interpretedText,
-  }) async {
-    final unchanged = (
-      items: aiItems,
-      warnings: aiWarnings,
-      interpretedText: interpretedText,
-    );
+  }) {
     if (transcriptBeforeNormalization.trim() == normalizedTranscript.trim()) {
-      return unchanged;
+      return (
+        items: aiItems,
+        warnings: aiWarnings,
+        interpretedText: interpretedText,
+      );
     }
 
     const reviewWarning =
         'A spoken hundred-scale amount was normalized. Verify the product and price before adding it to the bill.';
-    final safeWarnings = <String>[
-      ...aiWarnings,
-      if (!aiWarnings.contains(reviewWarning)) reviewWarning,
-    ];
-
-    try {
-      final local = await ProductionVoiceBillingService.parse(
-        transcript: normalizedTranscript,
-        localeCode: _selectedLang.code,
-        catalogService: _catalog,
-        knownProducts: widget.knownProducts ?? const [],
-      );
-      if (local.lines.isEmpty || local.lines.length != aiItems.length) {
-        return (
-          items: aiItems,
-          warnings: safeWarnings,
-          interpretedText: interpretedText,
-        );
-      }
-
-      // Override AI values only when every local line maps to a product in
-      // this shop's inventory and the amount was explicitly recognized from
-      // the normalized transcript. Unknown or ambiguous lines remain the AI
-      // draft and must be reviewed by the merchant.
-      final corrected = <ParsedItem>[];
-      for (final line in local.lines) {
-        if (!line.catalogMatched ||
-            line.priceSource != 'spoken' ||
-            line.price <= 0 ||
-            !line.price.isFinite ||
-            line.quantity <= 0 ||
-            !line.quantity.isFinite) {
-          return (
-            items: aiItems,
-            warnings: safeWarnings,
-            interpretedText: interpretedText,
-          );
-        }
-
-        final product = _findKnownProduct(line.name);
-        if (product == null) {
-          return (
-            items: aiItems,
-            warnings: safeWarnings,
-            interpretedText: interpretedText,
-          );
-        }
-        final canonicalName =
-            (product['product_name'] ??
-                    product['name'] ??
-                    product['productName'] ??
-                    product['itemName'] ??
-                    line.name)
-                .toString()
-                .trim();
-        if (canonicalName.isEmpty) {
-          return (
-            items: aiItems,
-            warnings: safeWarnings,
-            interpretedText: interpretedText,
-          );
-        }
-
-        corrected.add(
-          ParsedItem(
-            name: canonicalName,
-            qty: line.quantity,
-            unit: line.unit,
-            price: line.price,
-            confidence: line.confidence.clamp(0.0, 1.0).toDouble(),
-            catalogMatched: true,
-            productId: (product['id'] ?? product['product_id'])?.toString(),
-            priceSource: 'spoken',
-            barcode: line.barcode ?? product['barcode']?.toString(),
-            gst:
-                line.gst ??
-                double.tryParse(
-                  (product['gst_percent'] ?? product['gst'] ?? '').toString(),
-                ),
-            priceWarning:
-                line.priceWarning ??
-                'Price recovered from the normalized spoken amount. Verify before billing.',
-            isConfirmed: false,
-          ),
-        );
-      }
-
-      return (
-        items: corrected,
-        warnings: <String>[
-          ...aiWarnings,
-          'Corrected a spoken hundred-scale amount using the local shop catalogue. Review each item before billing.',
-        ],
-        interpretedText: interpretedText,
-      );
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('Voice scale correction skipped safely: $error');
-      }
-      return (
-        items: aiItems,
-        warnings: safeWarnings,
-        interpretedText: interpretedText,
-      );
-    }
+    return (
+      items: aiItems,
+      warnings: <String>[
+        ...aiWarnings,
+        if (!aiWarnings.contains(reviewWarning)) reviewWarning,
+      ],
+      interpretedText: interpretedText,
+    );
   }
 
   Future<void> _doProcess(String text, {bool commit = false}) async {
@@ -3136,19 +3061,6 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
 
     if (mounted) {
       setState(() => _isProcessing = true);
-    }
-
-    await (_catalogLoadFuture ?? Future<void>.value());
-
-    if (!_catalogReady) {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
-      _showSnack(
-        'Product catalog could not be loaded. Please retry.',
-        isError: true,
-      );
-      return;
     }
 
     try {
@@ -3176,7 +3088,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         // each item only against this shop's authenticated product catalog.
         // This is a draft-only call; saving the sale remains a separate action.
         final groqResult = await _parseWithGroq(clean);
-        final correctedResult = await _applyDeterministicScaleCorrection(
+        final correctedResult = _reviewScaleNormalizedResult(
           transcriptBeforeNormalization: transcriptBeforeScaleNormalization,
           normalizedTranscript: clean,
           aiItems: groqResult.items,
@@ -3187,89 +3099,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         warnings = correctedResult.warnings;
         interpretedText = correctedResult.interpretedText;
       } catch (error) {
-        final errorText = error.toString().toLowerCase();
-        final isConfigurationError = errorText.contains('not configured') ||
-            errorText.contains('groq_api_key') ||
-            errorText.contains('groq api key');
-        final retryableApiFailure = error is VoiceBillingApiException &&
-            error.isTransient;
-        final transportFailure = error is SocketException ||
-            error is TimeoutException ||
-            error is http.ClientException;
-        final malformedResponse = error is FormatException;
-        final mayUseLocalFallback = !isConfigurationError &&
-            (retryableApiFailure ||
-                transportFailure ||
-                malformedResponse ||
-                (error is! StateError && error is! VoiceBillingApiException));
-
-        if (!mayUseLocalFallback) {
-          items = <ParsedItem>[];
-          warnings = <String>[
-            if (isConfigurationError)
-              'Groq voice billing is not configured on the backend. Set GROQ_API_KEY in Render → Environment, then retry. No items were added.'
-            else
-              'Cloud voice billing could not verify this request. No items were added; retry or enter the sale manually.',
-          ];
-          if (kDebugMode) {
-            debugPrint('🎙️ [VoiceBilling] cloud parser failure; no unsafe draft accepted: $error');
-          }
-        } else {
-          // Transient API/provider outages and transport failures may still
-          // produce a local draft. Every line remains unchecked for cashier review.
-          if (kDebugMode) {
-            debugPrint('🎙️ [VoiceBilling] cloud service unavailable; trying local draft: $error');
-          }
-          final fallback = await ProductionVoiceBillingService.parse(
-            transcript: clean,
-            localeCode: _selectedLang.code,
-            catalogService: _catalog,
-            knownProducts: widget.knownProducts ?? const [],
-          );
-          items = fallback.lines
-              .where((line) =>
-                  line.name.trim().isNotEmpty &&
-                  line.quantity.isFinite &&
-                  line.quantity > 0 &&
-                  line.price.isFinite &&
-                  line.price >= 0 &&
-                  VoiceBillingSafetyPolicy.hasValidConfidence(line.confidence))
-              .map((line) {
-                final knownProduct = line.catalogMatched
-                    ? _findKnownProduct(line.name)
-                    : null;
-                return ParsedItem(
-                  name: knownProduct == null
-                      ? line.name
-                      : (knownProduct['product_name'] ??
-                                knownProduct['name'] ??
-                                line.name)
-                            .toString(),
-                  qty: line.quantity,
-                  unit: line.unit,
-                  price: line.price,
-                  confidence: line.confidence,
-                  catalogMatched: knownProduct != null,
-                  productId:
-                      knownProduct?['id']?.toString() ??
-                      knownProduct?['product_id']?.toString(),
-                  priceSource: line.priceSource,
-                  barcode: knownProduct == null ? null : line.barcode,
-                  gst: knownProduct == null ? null : line.gst,
-                  priceWarning:
-                      line.priceWarning ??
-                      (knownProduct == null
-                          ? 'Custom bill item: no inventory stock will be deducted.'
-                          : null),
-                  isConfirmed: false,
-                );
-              })
-              .toList();
-          warnings = <String>[
-            ...fallback.warnings,
-            'Cloud voice billing is temporarily unavailable. This is a local draft only; verify every item name, quantity and price before confirming.',
-          ];
+        if (kDebugMode) {
+          debugPrint('🎙️ [VoiceBilling] cloud service unavailable or returned error: $error');
         }
+        items = <ParsedItem>[];
+        warnings = <String>[
+          if (error is VoiceBillingApiException && error.message.isNotEmpty)
+            error.message
+          else
+            'Cloud voice billing is unavailable. Check your internet connection and try again.',
+          'No voice items were added. Retry online or enter the sale manually.',
+        ];
+        interpretedText = '';
       }
 
       final speechWarning = _pendingSttWarning;
@@ -3307,11 +3148,15 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             isError: true,
           );
         } else {
+          HapticFeedback.mediumImpact();
           _showSnack(
             'Detected ${_committedItems.length} item${_committedItems.length == 1 ? '' : 's'}. Review before adding to the bill.',
           );
         }
       } else {
+        if (items.isNotEmpty) {
+          HapticFeedback.selectionClick();
+        }
         ParsedItems = List<ParsedItem>.from(items);
         if (items.isEmpty && warnings.isNotEmpty) {
           _showSnack(warnings.first, isError: true);
@@ -3870,7 +3715,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: _isListening
-              ? const Color(0xFF6366F1).withValues(alpha: 0.42)
+              ? const Color(0xFF10B981).withValues(alpha: 0.6) // Brand Emerald active listening border
               : const Color(0xFFE2E8F0),
           width: 1.2,
         ),
@@ -3910,12 +3755,12 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFEEF2FF),
+              color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.auto_awesome_rounded,
-              color: Color(0xFF4F46E5),
+              color: Color(0xFF0F172A),
               size: 20,
             ),
           ),
@@ -3949,8 +3794,9 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: const Color(0xFFEEF2FF),
+                color: const Color(0xFFECFDF5),
                 borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFFA7F3D0)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -3961,7 +3807,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                     _voiceBillingLabel('Listening'),
                     locale: _selectedDisplayLocale,
                     style: GoogleFonts.inter(
-                      color: const Color(0xFF4F46E5),
+                      color: const Color(0xFF059669),
                       fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                     ),
@@ -4164,7 +4010,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
                 msPerGlyph: 30,
                 maxLines: 2,
                 style: GoogleFonts.inter(
-                  color: const Color(0xFF4F46E5),
+                  color: const Color(0xFF2563EB),
                   fontSize: 11.5,
                   height: 1.35,
                   fontWeight: FontWeight.w700,

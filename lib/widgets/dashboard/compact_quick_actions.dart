@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import '../../commission_dashboard_page.dart';
 import '../../retail_intelligence_page.dart';
+import '../../visual_widgets.dart';
 
 /// 🚀 Compact Quick Actions Widget
 /// Premium glassmorphism horizontal quick actions section
@@ -70,7 +71,7 @@ class _CompactQuickActionsState extends State<CompactQuickActions>
                 _buildQuickActionChip(
                   icon: Icons.fingerprint,
                   label: 'Biometric',
-                  color: const Color(0xFF4F46E5),
+                  color: AppColors.upiBlue,
                   onTap: () {
                     _triggerHapticFeedback();
                     Navigator.pushNamed(
@@ -98,7 +99,7 @@ class _CompactQuickActionsState extends State<CompactQuickActions>
                 _buildQuickActionChip(
                   icon: Icons.attach_money,
                   label: 'Commission',
-                  color: const Color(0xFF10B981),
+                  color: AppColors.brandEmerald,
                   onTap: () {
                     _triggerHapticFeedback();
                     // ✅ PHASE 7 FIX: Navigate to actual Commission Dashboard

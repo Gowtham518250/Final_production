@@ -251,9 +251,7 @@ class RetailMindBillingService {
   }
 
   static Future<Map<String, bool>> _requestFeatureAccessSnapshot() async {
-    final response = await ApiClient.getJson(
-      featureAccessSnapshotPath,
-    ).timeout(const Duration(seconds: 15));
+    final response = await ApiClient.getJson(featureAccessSnapshotPath);
     if (response.statusCode == 404) return const {};
     if (response.statusCode != 200) {
       throw RetailMindBillingException.fromResponse(
@@ -361,9 +359,7 @@ class RetailMindBillingService {
     String featureCode, {
     required int? expectedOwnerId,
   }) async {
-    final response = await ApiClient.getJson(
-      featureAccessPath(featureCode),
-    ).timeout(const Duration(seconds: 15));
+    final response = await ApiClient.getJson(featureAccessPath(featureCode));
     if (response.statusCode != 200) {
       throw RetailMindBillingException.fromResponse(
         response,

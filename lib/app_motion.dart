@@ -180,8 +180,10 @@ class _AnimatedMicButtonState extends State<AnimatedMicButton>
     final size = widget.size;
     final listening = widget.listening;
     final processing = widget.processing;
-    final accent = listening
-        ? const Color(0xFF7C3AED)
+    final accent = processing
+        ? const Color(0xFFF59E0B)
+        : listening
+        ? const Color(0xFF10B981)
         : const Color(0xFF6366F1);
     final enabled = widget.onTap != null;
 
@@ -215,8 +217,10 @@ class _AnimatedMicButtonState extends State<AnimatedMicButton>
               animation: _loop,
               builder: (context, _) {
                 final t = _loop.value;
-                final breathe = listening && !_reduced
-                    ? 1 + 0.045 * math.sin(2 * math.pi * t)
+                final breathe = _active && !_reduced
+                    ? 1 +
+                          (listening ? 0.045 : 0.025) *
+                              math.sin(2 * math.pi * t)
                     : 1.0;
                 return Stack(
                   clipBehavior: Clip.none,
@@ -242,7 +246,7 @@ class _AnimatedMicButtonState extends State<AnimatedMicButton>
                       curve: Curves.easeOut,
                       child: Transform.scale(
                         scale: breathe,
-                        child: _buildCore(size, listening, accent),
+                        child: _buildCore(size, listening, processing, accent),
                       ),
                     ),
                   ],
@@ -255,10 +259,20 @@ class _AnimatedMicButtonState extends State<AnimatedMicButton>
     );
   }
 
-  Widget _buildCore(double size, bool listening, Color accent) {
+  Widget _buildCore(
+    double size,
+    bool listening,
+    bool processing,
+    Color accent,
+  ) {
     final duration = AppMotion.reduced(context)
         ? Duration.zero
         : AppMotion.medium;
+    final colors = processing
+        ? const [Color(0xFFEA580C), Color(0xFFF59E0B)]
+        : listening
+        ? const [Color(0xFF059669), Color(0xFF14B8A6)]
+        : const [Color(0xFF4F46E5), Color(0xFF7C3AED)];
     return AnimatedContainer(
       duration: duration,
       curve: Curves.easeOutCubic,
@@ -269,15 +283,17 @@ class _AnimatedMicButtonState extends State<AnimatedMicButton>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: listening
-              ? const [Color(0xFF7C3AED), Color(0xFF4F46E5)]
-              : const [Color(0xFF4F46E5), Color(0xFF6366F1)],
+          colors: colors,
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: listening ? 0.3 : 0.18),
-            blurRadius: listening ? 26 : 16,
-            spreadRadius: listening ? 2 : 0,
+            color: accent.withValues(alpha: _active ? 0.38 : 0.28),
+            blurRadius: _active ? 28 : 20,
+            spreadRadius: _active ? 3 : 1,
             offset: const Offset(0, 4),
           ),
         ],

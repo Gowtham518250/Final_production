@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:csv/csv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum AccountingSoftware { tally, quickBooks, gst, mitra, busy, fintech }
@@ -116,9 +115,15 @@ class AccountingIntegration {
     final gst18 = <Map<String, dynamic>>[];
 
     for (var sale in sales) {
-      final amount = sale['total'] as num? ?? 0;
-      // Default to 18% GST (can be customized based on product)
-      gst18.add(sale);
+      // Route to GST bucket based on the product's rate field (falls back to 18%)
+      final gstRate = (sale['gst_rate'] as num?)?.toDouble() ?? 18.0;
+      if (gstRate <= 5) {
+        gst5.add(sale);
+      } else if (gstRate <= 12) {
+        gst12.add(sale);
+      } else {
+        gst18.add(sale);
+      }
     }
 
     double calcTax(double amount, double rate) =>

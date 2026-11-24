@@ -8,7 +8,7 @@ class AppEndpoints {
   static const String _defaultCustomerWebSocketBaseUrl =
       'wss://retail-mind-vkbp.onrender.com/ws';
   static const String _defaultCustomerStoreBaseUrl =
-      'https://retail-mind-1.onrender.com';
+      'https://retail-mind-1-8fpk.onrender.com';
   static const String _defaultShopWebBaseUrl =
       'https://retail-mind-web.onrender.com';
 

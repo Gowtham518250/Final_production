@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart';
 import 'local_storage_service.dart';
 
 /// Comprehensive Error Logger - Logs all app errors for debugging
@@ -42,11 +42,11 @@ class ErrorLogger {
       await _storage.setString(_logsKey, jsonEncode(logs));
 
       if (kDebugMode) {
-        print('$_tag [$severity] $source: $message');
-        if (stackTrace != null) print(stackTrace);
+        debugPrint('$_tag [$severity] $source: $message');
+        if (stackTrace != null) debugPrint(stackTrace);
       }
     } catch (e) {
-      if (kDebugMode) print('$_tag ❌ Failed to log error: $e');
+      if (kDebugMode) debugPrint('$_tag ❌ Failed to log error: $e');
     }
   }
 
@@ -133,11 +133,11 @@ class ErrorLogger {
       await _storage.setString(_crashesKey, jsonEncode(crashes));
 
       if (kDebugMode) {
-        print('$_tag 💥 CRASH: $message');
-        print(stackTrace);
+        debugPrint('$_tag 💥 CRASH: $message');
+        debugPrint(stackTrace);
       }
     } catch (e) {
-      if (kDebugMode) print('$_tag ❌ Failed to log crash: $e');
+      if (kDebugMode) debugPrint('$_tag ❌ Failed to log crash: $e');
     }
   }
 
@@ -205,10 +205,13 @@ class ErrorLogger {
       }).toList();
 
       await _storage.setString(_logsKey, jsonEncode(recent));
-      if (kDebugMode)
-        print('$_tag ✅ Logs cleaned: ${logs.length} → ${recent.length}');
+      if (kDebugMode) {
+        debugPrint('$_tag ✅ Logs cleaned: ${logs.length} → ${recent.length}');
+      }
     } catch (e) {
-      if (kDebugMode) print('$_tag ❌ Failed to clean logs: $e');
+      if (kDebugMode) {
+        debugPrint('$_tag ❌ Failed to clean logs: $e');
+      }
     }
   }
 }

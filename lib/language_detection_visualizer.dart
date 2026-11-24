@@ -370,7 +370,7 @@ class _LanguageDetectionVisualizerState
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isMismatch
-                ? const Color(0xFFFFAB00).withOpacity(0.6)
+                ? const Color(0xFFFFAB00).withValues(alpha: 0.6)
                 : const Color(0xFF1E3A5F),
           ),
         ),
@@ -416,7 +416,7 @@ class _LanguageDetectionVisualizerState
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFAB00).withOpacity(0.12),
+                  color: const Color(0xFFFFAB00).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -518,10 +518,10 @@ class _LanguageDetectionVisualizerState
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: info.color.withOpacity(0.15),
+        color: info.color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: info.color.withOpacity(pulse ? 0.8 : 0.4),
+          color: info.color.withValues(alpha: pulse ? 0.8 : 0.4),
           width: pulse ? 1.5 : 1,
         ),
       ),
@@ -538,7 +538,7 @@ class _LanguageDetectionVisualizerState
                 label,
                 style: GoogleFonts.rajdhani(
                   fontSize: 9,
-                  color: info.color.withOpacity(0.7),
+                  color: info.color.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,
                 ),
@@ -571,9 +571,9 @@ class _LanguageDetectionVisualizerState
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: word.color.withOpacity(0.12),
+          color: word.color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: word.color.withOpacity(0.5)),
+          border: Border.all(color: word.color.withValues(alpha: 0.5)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -591,7 +591,7 @@ class _LanguageDetectionVisualizerState
                 word.native,
                 style: GoogleFonts.rajdhani(
                   fontSize: 9,
-                  color: word.color.withOpacity(0.7),
+                  color: word.color.withValues(alpha: 0.7),
                   letterSpacing: 0.3,
                 ),
               ),

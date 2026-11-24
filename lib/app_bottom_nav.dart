@@ -93,7 +93,7 @@ class _AppBottomNavState extends State<AppBottomNav> {
                 icon: Icons.storefront_rounded,
                 label: 'Store',
                 isActive: widget.currentIndex == 2,
-                activeColor: const Color(0xFFEA580C), // Orange
+                activeColor: AppColors.kiranaAmber, // Amber
                 onTap: () => _handleRestrictedTap(2),
               ),
 
@@ -197,12 +197,12 @@ class _CenterActionButton extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF16A34A), Color(0xFF22C55E)], // Green gradient
+                  colors: [AppColors.brandEmerald, AppColors.brandEmeraldLight],
                 ),
-                borderRadius: BorderRadius.all(Radius.circular(12)),
-                boxShadow: [
+                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                boxShadow: const [
                   BoxShadow(
-                    color: Color(0x4016A34A),
+                    color: Color(0x33059669),
                     blurRadius: 8,
                     offset: Offset(0, 2),
                   ),
@@ -220,7 +220,7 @@ class _CenterActionButton extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF16A34A),
+                color: AppColors.brandEmerald,
               ),
             ),
           ],
