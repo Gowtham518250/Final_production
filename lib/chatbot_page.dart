@@ -50,6 +50,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   bool _agentEnabled = false;
   String? _conversationId;
   String? _agentStatusMessage;
+  bool _hasRestoredConversation = false;
   final List<Map<String, dynamic>> _pendingActions = [];
   final Set<String> _busyActionIds = {};
 
@@ -67,11 +68,35 @@ class _ChatbotPageState extends State<ChatbotPage> {
       final pending = enabled
           ? await AgentAssistantService.getPendingActions()
           : const <Map<String, dynamic>>[];
+      final latestConversation = enabled
+          ? await AgentAssistantService.getLatestConversation()
+          : null;
       if (!mounted) return;
       setState(() {
         _pendingActions
           ..clear()
           ..addAll(pending);
+        if (latestConversation != null) {
+          _conversationId =
+              latestConversation['conversation_id']?.toString();
+          final history = latestConversation['messages'];
+          if (history is List) {
+            final restored = history
+                .whereType<Map>()
+                .map((item) => <String, dynamic>{
+                      'msg': (item['content'] ?? '').toString(),
+                      'isMe': item['role'] == 'user',
+                    })
+                .where((item) => (item['msg'] as String).isNotEmpty)
+                .toList();
+            if (restored.isNotEmpty) {
+              _messages
+                ..clear()
+                ..addAll(restored);
+              _hasRestoredConversation = true;
+            }
+          }
+        }
         _agentEnabled = enabled;
         _isLoadingAgent = false;
         _agentStatusMessage = enabled
@@ -91,6 +116,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   Future<void> _loadGreeting() async {
     final greeting = await ChatbotContextService.getPersonalizedGreeting();
     if (!mounted) return;
+    if (_hasRestoredConversation) return;
     setState(() {
       _messages[0] = {'msg': greeting, 'isMe': false};
     });
