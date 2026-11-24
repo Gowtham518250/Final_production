@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_cashfree_pg_sdk/api/cfpayment/cfsubscriptioncheckoutpayment.dart';
 import 'package:flutter_cashfree_pg_sdk/api/cfpaymentgateway/cfpaymentgatewayservice.dart';
 import 'package:flutter_cashfree_pg_sdk/api/cfsession/cfsubssession.dart';
@@ -37,17 +37,34 @@ class _RetailMindSubscriptionPageState
     _reload();
   }
 
-  void _reload() {
+  void _reload({String? subscriptionId}) {
     _plansFuture = RetailMindBillingService.fetchPlans();
-    _subscriptionFuture = RetailMindBillingService.fetchCurrentSubscription();
+    _subscriptionFuture = _loadReconciledSubscription(subscriptionId: subscriptionId);
     _usageFuture = RetailMindBillingService.fetchUsage();
   }
 
-  Future<void> _refresh() async {
+  Future<Map<String, dynamic>> _loadReconciledSubscription({
+    String? subscriptionId,
+  }) async {
+    try {
+      await RetailMindBillingService.reconcilePendingSubscription(
+        subscriptionId: subscriptionId,
+      );
+    } catch (error) {
+      // A missing/temporarily unavailable reconciliation endpoint must not
+      // hide the last server-known subscription snapshot from the owner.
+      if (kDebugMode) {
+        debugPrint('Cashfree subscription reconciliation deferred: $error');
+      }
+    }
+    return RetailMindBillingService.fetchCurrentSubscription();
+  }
+
+  Future<void> _refresh({String? subscriptionId}) async {
     if (!mounted) return;
     await RetailMindBillingService.invalidateFeatureAccessCache();
     if (!mounted) return;
-    setState(_reload);
+    setState(() => _reload(subscriptionId: subscriptionId));
     try {
       await Future.wait([_plansFuture, _subscriptionFuture, _usageFuture]);
     } catch (_) {
@@ -111,11 +128,11 @@ class _RetailMindSubscriptionPageState
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Mandate authorization completed. Retail Mind is confirming the subscription payment.',
+          'Mandate authorization completed. Retail Mind is verifying the Cashfree status.',
         ),
       ),
     );
-    _refresh();
+    _refresh(subscriptionId: subscriptionId);
   }
 
   void _onSubscriptionFailure(CFErrorResponse errorResponse, String data) {
@@ -128,6 +145,9 @@ class _RetailMindSubscriptionPageState
         ),
       ),
     );
+    // A failed/closed SDK callback can race with a successful provider update.
+    // Reconcile once so the UI reflects Cashfree's final state, not only the SDK.
+    _refresh();
   }
 
   Future<void> _selectPlan(RetailMindSubscriptionPlan plan) async {
@@ -537,7 +557,7 @@ class _RetailMindSubscriptionPageState
       switch (statusCode) {
         case 'PENDING_AUTH':
           statusMessage =
-              'A previous Cashfree checkout is awaiting authorization. When you retry a plan, Retail Mind will first try to close that pending checkout safely.';
+              'Cashfree has not confirmed this mandate yet. Approve it in the payment app, then tap Refresh. Retail Mind will verify the authorization before activating your plan.';
           break;
         case 'CREATING':
           statusMessage =
