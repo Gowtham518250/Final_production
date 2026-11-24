@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
@@ -216,6 +217,30 @@ class AgentAssistantService {
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList(growable: false);
+  }
+
+  static Future<Uint8List> synthesizeSpeech(
+    String text, {
+    String languageCode = 'en',
+  }) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) {
+      throw const AgentAssistantException('There is no assistant text to speak.');
+    }
+    final response = await ApiClient.postJson(
+      '$_base/speech',
+      {
+        'text': cleanText,
+        'language_code': languageCode.trim().isEmpty ? 'en' : languageCode,
+      },
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponseError(response);
+    }
+    if (response.bodyBytes.isEmpty) {
+      throw const AgentAssistantException('Sarvam returned an empty speech response.');
+    }
+    return response.bodyBytes;
   }
 
   static Future<Map<String, dynamic>> confirmAction({
