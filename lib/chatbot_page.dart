@@ -618,16 +618,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   bool get _showSuggestions =>
-      _agentEnabled &&
-      !_messages.any((entry) => entry['isMe'] == true) &&
-      !_isSending;
+      !_messages.any((entry) => entry['isMe'] == true) && !_isSending;
 
   @override
   void dispose() {
     _recordingLimitTimer?.cancel();
-    unawaited(_audioRecorder.dispose());
     _speechCompleteSubscription?.cancel();
-    unawaited(_assistantAudioPlayer.dispose());
+    _assistantAudioPlayer.dispose();
+    _audioRecorder.dispose();
     _msgController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -659,7 +657,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 LiveTranslatedText(
-                  'Retail Mind Agent',
+                  'Help & Support',
                   style: GoogleFonts.poppins(
                     color: _ink,
                     fontSize: 15,
@@ -667,7 +665,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                   ),
                 ),
                 Text(
-                  'Your authenticated shop operations assistant',
+                  'Retail Mind AI assistant',
                   style: GoogleFonts.poppins(color: _muted, fontSize: 10),
                 ),
               ],
@@ -691,8 +689,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.auto_awesome_rounded,
-                    color: Colors.white, size: 26),
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -708,7 +709,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'Ask questions about live shop data and prepare operations for review.',
+                        'Get app guidance or ask about your shop data.',
                         style: GoogleFonts.poppins(
                           color: Colors.white.withValues(alpha: 0.88),
                           fontSize: 10.5,
@@ -717,8 +718,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     ],
                   ),
                 ),
-                const Icon(Icons.verified_user_outlined,
-                    color: Colors.white70, size: 19),
+                const Icon(
+                  Icons.verified_user_outlined,
+                  color: Colors.white70,
+                  size: 19,
+                ),
               ],
             ),
           ),
@@ -728,10 +732,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
               children: [
                 _buildPromoCard(context),
-                if (!_agentEnabled) _buildAgentStatusBanner(),
                 for (final message in _messages) _buildMessageBubble(message),
-                for (final action in _pendingActions)
-                  _buildPendingActionCard(action),
                 if (_showSuggestions) _buildSuggestions(),
                 if (_isSending) _buildTypingIndicator(),
               ],
@@ -876,52 +877,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
     );
   }
 
-  Widget _buildAgentStatusBanner() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFFDE68A)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFF92400E)),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              _isLoadingAgent
-                  ? 'Checking Retail Mind Agent availability…'
-                  : (_agentStatusMessage ?? 'The Retail Mind Agent is currently unavailable.'),
-              style: GoogleFonts.poppins(
-                color: const Color(0xFF78350F),
-                fontSize: 10,
-                height: 1.45,
-              ),
-            ),
-          ),
-          if (!_isLoadingAgent)
-            IconButton(
-              onPressed: _loadAgentCapabilities,
-              tooltip: 'Retry connection',
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              color: const Color(0xFF92400E),
-              visualDensity: VisualDensity.compact,
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMessageBubble(Map<String, dynamic> message) {
     final isMe = message['isMe'] == true;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe)
@@ -933,8 +896,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 color: _primary.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.auto_awesome_rounded,
-                  size: 17, color: _primary),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                size: 17,
+                color: _primary,
+              ),
             ),
           Flexible(
             child: Container(
@@ -955,49 +921,21 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     : Border.all(color: const Color(0xFFE5EAF3)),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF172554)
-                        .withValues(alpha: isMe ? 0.08 : 0.035),
+                    color: const Color(
+                      0xFF172554,
+                    ).withValues(alpha: isMe ? 0.08 : 0.035),
                     blurRadius: 10,
                     offset: const Offset(0, 3),
                   ),
                 ],
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: SelectableText(
-                      message['msg'].toString(),
-                      style: GoogleFonts.poppins(
-                        color: isMe ? Colors.white : _ink,
-                        fontSize: 12,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                  if (!isMe && _agentEnabled)
-                    IconButton(
-                      tooltip: _speakingMessage == message['msg'].toString()
-                          ? 'Playing assistant response'
-                          : 'Speak this response',
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 30,
-                        minHeight: 30,
-                      ),
-                      onPressed: () =>
-                          _speakAgentMessage(message['msg'].toString()),
-                      icon: Icon(
-                        _speakingMessage == message['msg'].toString()
-                            ? Icons.volume_up_rounded
-                            : Icons.volume_down_rounded,
-                        size: 17,
-                        color: _primary,
-                      ),
-                    ),
-                ],
+              child: SelectableText(
+                message['msg'].toString(),
+                style: GoogleFonts.poppins(
+                  color: isMe ? Colors.white : _ink,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
               ),
             ),
           ),
@@ -1037,7 +975,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                   ),
                   backgroundColor: Colors.white,
                   side: const BorderSide(color: Color(0xFFDDE3F0)),
-                  onPressed: (_isSending || !_agentEnabled)
+                  onPressed: _isSending
                       ? null
                       : () => _sendMessage(suggestedMessage: suggestion),
                 ),
@@ -1056,10 +994,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
           const SizedBox(
             width: 15,
             height: 15,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: _primary,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
           ),
           const SizedBox(width: 9),
           LiveTranslatedText(
@@ -1079,7 +1014,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border(
-            top: BorderSide(color: const Color(0xFFCBD5E1).withValues(alpha: 0.55)),
+            top: BorderSide(
+              color: const Color(0xFFCBD5E1).withValues(alpha: 0.55),
+            ),
           ),
         ),
         child: Row(
@@ -1087,7 +1024,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
           children: [
             Expanded(
               child: TextField(
-                enabled: _agentEnabled && !_isSending && !_isRecording,
                 controller: _msgController,
                 minLines: 1,
                 maxLines: 4,
@@ -1095,14 +1031,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _sendMessage(),
                 decoration: InputDecoration(
-                  hintText: _agentEnabled
-                      ? 'Ask Retail Mind to check or prepare an operation…'
-                      : 'Agent unavailable on this backend',
+                  hintText: 'Ask a question about Retail Mind…',
                   hintStyle: GoogleFonts.poppins(color: _muted, fontSize: 11),
                   filled: true,
                   fillColor: const Color(0xFFF4F7FC),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
                     borderSide: BorderSide.none,
@@ -1118,35 +1054,12 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 ),
               ),
             ),
-            const SizedBox(width: 7),
-            SizedBox(
-              width: 43,
-              height: 47,
-              child: IconButton.filledTonal(
-                onPressed: (_isSending || !_agentEnabled)
-                    ? null
-                    : (_isRecording ? _stopAgentRecording : _startAgentRecording),
-                tooltip: _isRecording ? 'Stop voice recording' : 'Record voice request',
-                style: IconButton.styleFrom(
-                  foregroundColor: _isRecording ? Colors.white : _primary,
-                  backgroundColor: _isRecording ? Colors.redAccent : const Color(0xFFEEF2FF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  padding: EdgeInsets.zero,
-                ),
-                icon: Icon(
-                  _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                  size: 19,
-                ),
-              ),
-            ),
-            const SizedBox(width: 7),
+            const SizedBox(width: 9),
             SizedBox(
               width: 47,
               height: 47,
               child: FilledButton(
-                onPressed: (_isSending || _isRecording || !_agentEnabled) ? null : _sendMessage,
+                onPressed: _isSending ? null : _sendMessage,
                 style: FilledButton.styleFrom(
                   backgroundColor: _primary,
                   foregroundColor: Colors.white,
