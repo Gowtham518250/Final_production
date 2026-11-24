@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 
 import 'package:http/http.dart' as http;
@@ -167,11 +168,31 @@ class AgentAssistantService {
     String? conversationId,
     String languageCode = 'auto',
   }) async {
-    final file = await http.MultipartFile.fromPath(
-      'audio',
-      audioPath,
-      filename: p.basename(audioPath),
-    );
+    late final http.MultipartFile file;
+    if (kIsWeb && audioPath.startsWith('blob:')) {
+      // record_web returns an in-memory browser blob URL rather than a local
+      // filesystem path. Fetch its bytes before building the multipart upload.
+      final blobResponse = await http.get(Uri.parse(audioPath));
+      if (blobResponse.statusCode < 200 || blobResponse.statusCode >= 300) {
+        throw const AgentAssistantException(
+          'The browser recording could not be read. Please record again.',
+        );
+      }
+      if (blobResponse.bodyBytes.isEmpty) {
+        throw const AgentAssistantException('The voice recording is empty.');
+      }
+      file = http.MultipartFile.fromBytes(
+        'audio',
+        blobResponse.bodyBytes,
+        filename: 'retail-mind-owner-voice.webm',
+      );
+    } else {
+      file = await http.MultipartFile.fromPath(
+        'audio',
+        audioPath,
+        filename: p.basename(audioPath),
+      );
+    }
     final responseStream = await ApiClient.postMultipart(
       '$_base/voice',
       {
