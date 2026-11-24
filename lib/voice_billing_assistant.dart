@@ -2159,6 +2159,18 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         );
         final confidence =
             double.tryParse((raw['confidence'] ?? '0').toString()) ?? 0;
+        const confidenceInferredWarning =
+            'The product phrase was found in the original speech, but the AI confidence score was missing or low. Verify the item.';
+        const quantityInferredWarning =
+            'Quantity was recovered from the spoken number and unit. Verify it before billing.';
+        if (raw['confidence_inferred'] == true &&
+            !warnings.contains(confidenceInferredWarning)) {
+          warnings.add(confidenceInferredWarning);
+        }
+        if (raw['quantity_inferred'] == true &&
+            !warnings.contains(quantityInferredWarning)) {
+          warnings.add(quantityInferredWarning);
+        }
         final quantityPriceAmbiguous =
             VoiceBillingSafetyPolicy.requiresManualReview(raw);
         if (quantityPriceAmbiguous) {
@@ -2317,8 +2329,21 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             warnings.add(resolutionWarning);
           }
         }
-        if (priceWarning.isNotEmpty && !warnings.contains(priceWarning)) {
-          warnings.add(priceWarning);
+        // The backend also reports these inferred fields separately.
+        // Keep them as individual warnings so offline language dictionaries
+        // can translate each message without losing either review reason.
+        var remainingPriceWarning = priceWarning;
+        if (raw['confidence_inferred'] == true) {
+          remainingPriceWarning =
+              remainingPriceWarning.replaceAll(confidenceInferredWarning, '').trim();
+        }
+        if (raw['quantity_inferred'] == true) {
+          remainingPriceWarning =
+              remainingPriceWarning.replaceAll(quantityInferredWarning, '').trim();
+        }
+        if (remainingPriceWarning.isNotEmpty &&
+            !warnings.contains(remainingPriceWarning)) {
+          warnings.add(remainingPriceWarning);
         }
 
         if (raw['stock_warning'] == true) {
