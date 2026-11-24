@@ -11,6 +11,7 @@ import '../../../inventory_sync_service.dart';
 import '../../../local_storage_service.dart';
 import '../../../sale_service.dart';
 import '../../../api_client.dart';
+import '../services/voice_billing_response_policy.dart';
 
 class SalesEntryProvider extends ChangeNotifier {
   List<SalesItem> entries = [];
@@ -165,6 +166,24 @@ class SalesEntryProvider extends ChangeNotifier {
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        dynamic errorBody;
+        try {
+          errorBody = jsonDecode(response.body);
+        } catch (_) {
+          errorBody = null;
+        }
+        final detail = errorBody is Map
+            ? (errorBody['detail'] ?? errorBody['message'])?.toString().trim()
+            : null;
+        if (response.statusCode < 500) {
+          // Validation/authentication rejections must not fall through to the
+          // permissive local parser and turn rejected speech into bill lines.
+          lastVoiceMessage = detail?.isNotEmpty == true
+              ? detail!
+              : 'Voice billing rejected this request (HTTP ${response.statusCode}). Please correct the speech or enter the item manually.';
+          notifyListeners();
+          return;
+        }
         throw Exception('Voice billing request failed (HTTP ${response.statusCode})');
       }
       final decoded = jsonDecode(response.body);
@@ -345,6 +364,15 @@ class SalesEntryProvider extends ChangeNotifier {
     }
     final interpreted = (decoded['interpreted_text_en'] ?? '').toString().trim();
     lastVoiceInterpretation = interpreted.isEmpty ? null : interpreted;
+
+    // Backend safety flags are authoritative. Never add a bill line until
+    // all extracted product, quantity, unit and price fields are grounded.
+    if (voiceBillingResponseNeedsManualReview(decoded)) {
+      lastVoiceDetectedItems = <SalesItem>[];
+      lastVoiceMessage = voiceBillingManualReviewMessage(decoded);
+      notifyListeners();
+      return;
+    }
 
     final rawItems = decoded['items'];
     final parsedItems = <SalesItem>[];
