@@ -182,15 +182,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
 
   Future<void> _startAgentRecording() async {
     if (!_voiceEnabled || _isSending || _isRecording) return;
-    if (kIsWeb) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice recording is currently supported in the Android app. Use text input on web.'),
-        ),
-      );
-      return;
-    }
-
     String? pendingPath;
     try {
       final hasPermission = await _audioRecorder.hasPermission();
@@ -199,14 +190,18 @@ class _ChatbotPageState extends State<ChatbotPage> {
           'Microphone permission is required for voice input.',
         );
       }
-      final directory = await getTemporaryDirectory();
-      pendingPath = p.join(
-        directory.path,
-        'retail_mind_agent_${DateTime.now().microsecondsSinceEpoch}.m4a',
-      );
+      // Native recorders write to a temporary file. The record package's
+      // Web implementation returns an in-memory blob URL from stop(), so it
+      // must not be given a path_provider filesystem path in the browser.
+      if (!kIsWeb) {
+        final directory = await getTemporaryDirectory();
+        pendingPath = p.join(
+          directory.path,
+          'retail_mind_agent_${DateTime.now().microsecondsSinceEpoch}.m4a',
+        );
+      }
       await _audioRecorder.start(
         path: pendingPath,
-        encoder: audio.AudioEncoder.aacLc,
         bitRate: 96000,
       );
       if (!mounted) {
@@ -270,6 +265,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
         languageCode: languageCode,
       );
       if (!mounted) return;
+      final assistantReply = response.answer.trim().isEmpty
+          ? 'I could not complete that voice request. Please try again.'
+          : response.answer.trim();
       setState(() {
         _conversationId = response.conversationId.isEmpty
             ? _conversationId
@@ -279,9 +277,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
           _messages.add({'msg': '🎙️ ' + transcript, 'isMe': true});
         }
         _messages.add({
-          'msg': response.answer.isEmpty
-              ? 'I could not complete that voice request. Please try again.'
-              : response.answer,
+          'msg': assistantReply,
           'isMe': false,
         });
         for (final action in response.pendingActions) {
@@ -293,6 +289,13 @@ class _ChatbotPageState extends State<ChatbotPage> {
           }
         }
       });
+
+      // Voice conversations should feel like a spoken back-and-forth:
+      // automatically play the answer in the same account-selected language.
+      // Typed chat remains silent; the user can still tap the speaker icon.
+      if (mounted && assistantReply.isNotEmpty) {
+        await _speakAgentMessage(assistantReply);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
