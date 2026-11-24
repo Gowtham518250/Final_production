@@ -16,6 +16,16 @@ class VoiceBillingPricePolicy {
   static bool isSpokenSource(String? source) =>
       _spokenSources.contains(_normalizeSource(source));
 
+  /// Stock linkage is authorized only by an explicit backend match and ID.
+  /// A matching local display name alone must never create stock identity.
+  static bool serverAllowsCatalogLink({
+    required Object? catalogMatched,
+    required Object? productId,
+  }) {
+    final id = (productId ?? '').toString().trim();
+    return catalogMatched == true && id.isNotEmpty;
+  }
+
   static double? positivePrice(Object? value) {
     final parsed = value is num
         ? value.toDouble()
