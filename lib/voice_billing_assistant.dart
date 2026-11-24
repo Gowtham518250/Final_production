@@ -1373,19 +1373,27 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         // not sufficient to authorize stock-backed billing.
         final rawProductId =
             (raw['product_id'] ?? '').toString().trim();
-        final idMatchedProduct = _findKnownProductById(rawProductId);
-        final exactNameProduct = _findKnownProduct(name);
+        final serverAuthorizedCatalogLink =
+            VoiceBillingPricePolicy.serverAllowsCatalogLink(
+          catalogMatched: raw['catalog_matched'],
+          productId: rawProductId,
+        );
+        final idMatchedProduct = serverAuthorizedCatalogLink
+            ? _findKnownProductById(rawProductId)
+            : null;
+        final exactNameProduct = serverAuthorizedCatalogLink
+            ? _findKnownProduct(name)
+            : null;
         final idNameMismatch = idMatchedProduct != null &&
             !_isProductNameConsistentWithCatalog(name, idMatchedProduct);
         final unknownProductId =
-            rawProductId.isNotEmpty && idMatchedProduct == null;
+            serverAuthorizedCatalogLink && idMatchedProduct == null;
 
-        // If the ID contradicts the AI's name, only recover through an exact
-        // local catalogue-name match. Never fuzzy-select a different product.
+        // The backend's tenant-scoped catalog decision is authoritative. A
+        // local name match must not upgrade a deliberate product_id=null into
+        // stock-linked billing on this device.
         final Map<String, dynamic>? knownProduct;
-        if (rawProductId.isEmpty) {
-          knownProduct = exactNameProduct;
-        } else if (idMatchedProduct == null) {
+        if (!serverAuthorizedCatalogLink || idMatchedProduct == null) {
           knownProduct = null;
         } else if (idNameMismatch) {
           knownProduct = exactNameProduct;
@@ -1415,8 +1423,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
               : unknownProductId
                   ? 'The AI returned an unknown catalogue ID for "$name". Select the correct item manually; no stock will be deducted.'
                   : hasSpokenPrice
-                      ? '"$name" is not in this shop catalogue. It can be billed as a custom item with no stock deduction; verify its name and price.'
-                      : '"$name" is not in this shop catalogue and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
+                      ? 'The backend did not verify a unique stock-backed match for "$name". It remains a custom bill line with no stock deduction; review its name and price.'
+                      : 'The backend did not verify a unique stock-backed match for "$name" and no price was detected. Review the name and enter a selling price; no stock will be deducted.';
           if (!warnings.contains(warning)) warnings.add(warning);
           items.add(
             ParsedItem(
@@ -1466,16 +1474,19 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           detectedPrice: spokenPrice,
           cataloguePrice: catalogPrice,
           productName: canonicalName,
+          spokenPriceNeedsConfirmation:
+              raw['price_needs_confirmation'] == true,
         );
-        if (!priceResolution.hasPrice) {
-          final warning =
-              'No valid selling price is saved for $canonicalName. Update its price or speak a selling price before billing.';
-          if (!warnings.contains(warning)) warnings.add(warning);
-          continue;
-        }
 
         String? priceWarning =
             (raw['price_warning'] ?? '').toString().trim();
+        if (!priceResolution.hasPrice) {
+          priceWarning = priceWarning.isNotEmpty
+              ? priceWarning
+              : priceResolution.warning ??
+                  'Enter or confirm the selling price before billing.';
+          if (!warnings.contains(priceWarning)) warnings.add(priceWarning);
+        }
         final resolutionWarning = priceResolution.warning;
         if (resolutionWarning != null && resolutionWarning.isNotEmpty) {
           priceWarning = priceWarning.isEmpty
@@ -1525,7 +1536,7 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
             name: canonicalName,
             qty: quantity,
             unit: unit,
-            price: priceResolution.price!,
+            price: priceResolution.price ?? 0.0,
             confidence: confidence,
             catalogMatched: true,
             productId: productId,
