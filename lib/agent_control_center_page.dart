@@ -164,7 +164,7 @@ class _AgentControlCenterPageState extends State<AgentControlCenterPage>
                     title: 'Voice conversations',
                     description: 'Speak naturally in supported Indian languages and hear spoken replies.',
                     value: _flag(settings, 'voice_enabled'),
-                    unlocked: voicePlan,
+                    unlocked: voicePlan && _flag(settings, 'assistant_enabled'),
                     busy: _saving,
                     tag: !voicePlan
                         ? 'PRO and above'
@@ -180,7 +180,7 @@ class _AgentControlCenterPageState extends State<AgentControlCenterPage>
                     title: 'Business operations',
                     description: 'Prepare bills, stock, attendance and order actions for your review.',
                     value: _flag(settings, 'actions_enabled'),
-                    unlocked: actionsPlan,
+                    unlocked: actionsPlan && _flag(settings, 'assistant_enabled'),
                     busy: _saving,
                     tag: actionsPlan ? 'Business plan access' : 'Business plan',
                     onChanged: (v) => _update('actions_enabled', v),
