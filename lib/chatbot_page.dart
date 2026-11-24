@@ -718,10 +718,17 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.verified_user_outlined,
-                  color: Colors.white70,
-                  size: 19,
+                IconButton(
+                  tooltip: 'Agent Control Center',
+                  onPressed: () async {
+                    await Navigator.of(context).pushNamed('/agent-control-center');
+                    if (mounted) _loadAgentCapabilities();
+                  },
+                  icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 21),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    shape: const CircleBorder(),
+                  ),
                 ),
               ],
             ),
@@ -913,6 +920,16 @@ class _ChatbotPageState extends State<ChatbotPage> {
               icon: const Icon(Icons.refresh_rounded, size: 18),
               color: const Color(0xFF92400E),
               visualDensity: VisualDensity.compact,
+            ),
+          if (!_isLoadingAgent)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pushNamed('/agent-control-center'),
+              icon: const Icon(Icons.tune_rounded, size: 16),
+              label: const Text('Manage'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF92400E),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
         ],
       ),
