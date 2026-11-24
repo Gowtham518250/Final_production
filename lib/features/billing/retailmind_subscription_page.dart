@@ -567,14 +567,14 @@ class _RetailMindSubscriptionPageState
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFFE3E8F2)),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
                 _isVerifyingSubscription
                     ? 'Verifying mandate with Cashfree...'
