@@ -73,6 +73,26 @@ class _ChatbotPageState extends State<ChatbotPage> {
     try {
       final capabilities = await AgentAssistantService.getCapabilities();
       final enabled = capabilities['execution_enabled'] == true;
+      final status = (capabilities['status'] ?? '').toString();
+      final plan = capabilities['plan'] is Map
+          ? Map<String, dynamic>.from(capabilities['plan'] as Map)
+          : <String, dynamic>{};
+      final planName = (plan['plan_name'] ?? 'your current plan').toString();
+      String? statusMessage;
+      if (!enabled) {
+        if (status == 'platform_disabled') {
+          statusMessage = 'Retail Mind AI is not enabled by the platform yet. Your saved shop preferences will take effect once platform setup is complete.';
+        } else if (status == 'provider_configuration_missing') {
+          statusMessage = 'The Retail Mind AI provider is not configured on the platform yet.';
+        } else if (status == 'plan_required') {
+          statusMessage = 'The shop assistant is not included in $planName. Open Agent Control Center to review your plan.';
+        } else if (status == 'owner_disabled') {
+          statusMessage = 'The AI assistant is switched off for this shop. Open Agent Control Center to enable it.';
+        } else {
+          statusMessage = 'The Retail Mind AI assistant is currently unavailable.';
+        }
+      }
+
       var pending = <Map<String, dynamic>>[];
       Map<String, dynamic>? latestConversation;
       if (enabled) {
@@ -115,9 +135,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
         }
         _agentEnabled = enabled;
         _isLoadingAgent = false;
-        _agentStatusMessage = enabled
-            ? null
-            : 'The Retail Mind Agent is not enabled on this backend yet. The owner app will connect automatically after the backend deployment and agent feature flag are enabled.';
+        _agentStatusMessage = statusMessage;
       });
     } catch (error) {
       if (!mounted) return;

@@ -103,7 +103,7 @@ class _AgentControlCenterPageState extends State<AgentControlCenterPage>
     final limit = (usage['daily_limit'] as num?)?.toInt() ?? 0;
     final used = (usage['used'] as num?)?.toInt() ?? 0;
     final reserved = (usage['reserved'] as num?)?.toInt() ?? 0;
-    final remaining = (usage['remaining'] as num?)?.toInt() ?? math.max(0, limit - used - reserved);
+    final remaining = (usage['remaining'] as num?)?.toInt() ?? math.max(0, limit - used - reserved).toInt();
     final progress = limit <= 0 ? 0.0 : ((used + reserved) / limit).clamp(0.0, 1.0).toDouble();
 
     return Scaffold(
@@ -166,7 +166,11 @@ class _AgentControlCenterPageState extends State<AgentControlCenterPage>
                     value: _flag(settings, 'voice_enabled'),
                     unlocked: voicePlan,
                     busy: _saving,
-                    tag: voicePlan ? 'Voice plan access' : 'PRO and above',
+                    tag: !voicePlan
+                        ? 'PRO and above'
+                        : (_flag(platform, 'sarvam_configured')
+                            ? 'Voice plan access'
+                            : 'Voice provider setup pending'),
                     onChanged: (v) => _update('voice_enabled', v),
                   ),
                   const SizedBox(height: 10),
@@ -181,6 +185,21 @@ class _AgentControlCenterPageState extends State<AgentControlCenterPage>
                     tag: actionsPlan ? 'Business plan access' : 'Business plan',
                     onChanged: (v) => _update('actions_enabled', v),
                   ),
+                  if (!assistantPlan || !voicePlan || !actionsPlan)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).pushNamed('/subscriptions'),
+                        icon: const Icon(Icons.workspace_premium_outlined),
+                        label: const Text('Explore plans and AI features'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: purple,
+                          side: const BorderSide(color: Color(0xFFC7C9F7)),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 19),
                   _heading('HOW ACCESS WORKS'),
                   const SizedBox(height: 8),
