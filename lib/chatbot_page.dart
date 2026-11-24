@@ -1,6 +1,13 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart' as audio;
 
 import 'agent_assistant_service.dart';
 import 'ai_features_service.dart';
@@ -36,6 +43,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
     'Show my sales today',
   ];
 
+  final audio.Record _audioRecorder = audio.Record();
+  Timer? _recordingLimitTimer;
+  bool _isRecording = false;
   bool _isSending = false;
   bool _isLoadingAgent = true;
   bool _agentEnabled = false;
@@ -90,6 +100,146 @@ class _ChatbotPageState extends State<ChatbotPage> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  Future<void> _startAgentRecording() async {
+    if (!_agentEnabled || _isSending || _isRecording) return;
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice recording is currently supported in the Android app. Use text input on web.'),
+        ),
+      );
+      return;
+    }
+
+    String? pendingPath;
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        throw const AgentAssistantException(
+          'Microphone permission is required for voice input.',
+        );
+      }
+      final directory = await getTemporaryDirectory();
+      pendingPath = p.join(
+        directory.path,
+        'retail_mind_agent_${DateTime.now().microsecondsSinceEpoch}.m4a',
+      );
+      await _audioRecorder.start(
+        path: pendingPath,
+        encoder: audio.AudioEncoder.aacLc,
+        bitRate: 96000,
+      );
+      if (!mounted) {
+        await _audioRecorder.stop();
+        return;
+      }
+      setState(() {
+        _isRecording = true;
+        _msgController.clear();
+      });
+      _recordingLimitTimer?.cancel();
+      _recordingLimitTimer = Timer(const Duration(seconds: 50), () {
+        if (mounted && _isRecording) {
+          _stopAgentRecording();
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Listening… tap the microphone again when you finish.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (error) {
+      if (pendingPath != null) {
+        try {
+          await File(pendingPath).delete();
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() => _isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString())),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopAgentRecording() async {
+    if (!_isRecording || _isSending) return;
+    _recordingLimitTimer?.cancel();
+    String? recordingPath;
+    try {
+      recordingPath = await _audioRecorder.stop();
+    } catch (_) {
+      recordingPath = null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isRecording = false;
+      _isSending = true;
+    });
+    _scrollToLatest();
+
+    try {
+      if (recordingPath == null) {
+        throw const AgentAssistantException(
+          'The voice recording could not be saved. Please try again.',
+        );
+      }
+      final file = File(recordingPath);
+      if (!await file.exists() || await file.length() == 0) {
+        throw const AgentAssistantException(
+          'No audio was captured. Please speak and try again.',
+        );
+      }
+      final languageCode =
+          context.read<LanguageProvider>().locale.languageCode;
+      final response = await AgentAssistantService.sendVoice(
+        recordingPath,
+        conversationId: _conversationId,
+        languageCode: languageCode,
+      );
+      if (!mounted) return;
+      setState(() {
+        _conversationId = response.conversationId.isEmpty
+            ? _conversationId
+            : response.conversationId;
+        final transcript = response.transcript?.trim() ?? '';
+        if (transcript.isNotEmpty) {
+          _messages.add({'msg': '🎙️ ' + transcript, 'isMe': true});
+        }
+        _messages.add({
+          'msg': response.answer.isEmpty
+              ? 'I could not complete that voice request. Please try again.'
+              : response.answer,
+          'isMe': false,
+        });
+        for (final action in response.pendingActions) {
+          final actionId = action['action_id']?.toString();
+          if (actionId != null &&
+              actionId.isNotEmpty &&
+              !_pendingActions.any((item) => item['action_id'] == actionId)) {
+            _pendingActions.add(action);
+          }
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add({'msg': error.toString(), 'isMe': false});
+      });
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+      if (recordingPath != null) {
+        try {
+          await File(recordingPath).delete();
+        } catch (_) {}
+      }
+      _scrollToLatest();
+    }
   }
 
   Future<void> _sendMessage({String? suggestedMessage}) async {
@@ -401,6 +551,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
 
   @override
   void dispose() {
+    _recordingLimitTimer?.cancel();
+    unawaited(_audioRecorder.dispose());
     _msgController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -831,7 +983,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
           children: [
             Expanded(
               child: TextField(
-                enabled: _agentEnabled && !_isSending,
+                enabled: _agentEnabled && !_isSending && !_isRecording,
                 controller: _msgController,
                 minLines: 1,
                 maxLines: 4,
@@ -862,12 +1014,35 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 ),
               ),
             ),
-            const SizedBox(width: 9),
+            const SizedBox(width: 7),
+            SizedBox(
+              width: 43,
+              height: 47,
+              child: IconButton.filledTonal(
+                onPressed: (_isSending || !_agentEnabled)
+                    ? null
+                    : (_isRecording ? _stopAgentRecording : _startAgentRecording),
+                tooltip: _isRecording ? 'Stop voice recording' : 'Record voice request',
+                style: IconButton.styleFrom(
+                  foregroundColor: _isRecording ? Colors.white : _primary,
+                  backgroundColor: _isRecording ? Colors.redAccent : const Color(0xFFEEF2FF),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  padding: EdgeInsets.zero,
+                ),
+                icon: Icon(
+                  _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                  size: 19,
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
             SizedBox(
               width: 47,
               height: 47,
               child: FilledButton(
-                onPressed: (_isSending || !_agentEnabled) ? null : _sendMessage,
+                onPressed: (_isSending || _isRecording || !_agentEnabled) ? null : _sendMessage,
                 style: FilledButton.styleFrom(
                   backgroundColor: _primary,
                   foregroundColor: Colors.white,
