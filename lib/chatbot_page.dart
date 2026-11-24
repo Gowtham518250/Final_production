@@ -52,6 +52,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
   bool _isSending = false;
   bool _isLoadingAgent = true;
   bool _agentEnabled = false;
+  bool _voiceEnabled = false;
+  bool _actionsEnabled = false;
   String? _conversationId;
   String? _agentStatusMessage;
   bool _hasRestoredConversation = false;
@@ -73,6 +75,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
     try {
       final capabilities = await AgentAssistantService.getCapabilities();
       final enabled = capabilities['execution_enabled'] == true;
+      final access = capabilities['access'] is Map
+          ? Map<String, dynamic>.from(capabilities['access'] as Map)
+          : <String, dynamic>{};
+      final voiceEnabled = access['voice_enabled'] == true;
+      final actionsEnabled = access['actions_enabled'] == true;
       final status = (capabilities['status'] ?? '').toString();
       final plan = capabilities['plan'] is Map
           ? Map<String, dynamic>.from(capabilities['plan'] as Map)
@@ -96,10 +103,12 @@ class _ChatbotPageState extends State<ChatbotPage> {
       var pending = <Map<String, dynamic>>[];
       Map<String, dynamic>? latestConversation;
       if (enabled) {
-        try {
-          pending = await AgentAssistantService.getPendingActions();
-        } catch (_) {
-          // The chat remains usable if the pending-action list is temporarily unavailable.
+        if (actionsEnabled) {
+          try {
+            pending = await AgentAssistantService.getPendingActions();
+          } catch (_) {
+            // The chat remains usable if the pending-action list is temporarily unavailable.
+          }
         }
         try {
           latestConversation = await AgentAssistantService.getLatestConversation();
@@ -134,6 +143,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
           }
         }
         _agentEnabled = enabled;
+        _voiceEnabled = voiceEnabled;
+        _actionsEnabled = actionsEnabled;
         _isLoadingAgent = false;
         _agentStatusMessage = statusMessage;
       });
@@ -141,6 +152,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
       if (!mounted) return;
       setState(() {
         _agentEnabled = false;
+        _voiceEnabled = false;
+        _actionsEnabled = false;
         _isLoadingAgent = false;
         _agentStatusMessage = error.toString();
       });
@@ -168,7 +181,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _startAgentRecording() async {
-    if (!_agentEnabled || _isSending || _isRecording) return;
+    if (!_voiceEnabled || _isSending || _isRecording) return;
     if (kIsWeb) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -342,6 +355,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _speakAgentMessage(String text) async {
+    if (!_voiceEnabled) return;
     final cleanText = text.trim();
     if (cleanText.isEmpty) return;
     if (_speakingMessage == cleanText) {
@@ -371,6 +385,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _confirmPendingAction(Map<String, dynamic> action) async {
+    if (!_actionsEnabled) return;
     final actionId = action['action_id']?.toString() ?? '';
     final previewHash = action['preview_hash']?.toString() ?? '';
     if (actionId.isEmpty || previewHash.isEmpty ||
@@ -606,7 +621,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
               const SizedBox(width: 9),
               Expanded(
                 child: FilledButton(
-                  onPressed: isBusy ? null : () => _confirmPendingAction(action),
+                  onPressed: isBusy || !_actionsEnabled
+                      ? null
+                      : () => _confirmPendingAction(action),
                   style: FilledButton.styleFrom(
                     backgroundColor: _primary,
                     foregroundColor: Colors.white,
@@ -1015,7 +1032,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                       ),
                     ),
                   ),
-                  if (!isMe && _agentEnabled)
+                  if (!isMe && _voiceEnabled)
                     IconButton(
                       tooltip: _speakingMessage == message['msg'].toString()
                           ? 'Playing assistant response'
@@ -1159,10 +1176,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
               width: 43,
               height: 47,
               child: IconButton.filledTonal(
-                onPressed: (_isSending || !_agentEnabled)
+                onPressed: (_isSending || !_voiceEnabled)
                     ? null
                     : (_isRecording ? _stopAgentRecording : _startAgentRecording),
-                tooltip: _isRecording ? 'Stop voice recording' : 'Record voice request',
+                tooltip: _isRecording
+                    ? 'Stop voice recording'
+                    : (_voiceEnabled
+                        ? 'Record voice request'
+                        : 'Enable Voice conversations in Agent Control Center'),
                 style: IconButton.styleFrom(
                   foregroundColor: _isRecording ? Colors.white : _primary,
                   backgroundColor: _isRecording ? Colors.redAccent : const Color(0xFFEEF2FF),
