@@ -433,6 +433,11 @@ class _ChatbotPageState extends State<ChatbotPage> {
     const visibleFields = [
       'invoice_number',
       'customer_name',
+      'employee_name',
+      'worker_id',
+      'attendance_date',
+      'status_before',
+      'status_after',
       'customer_phone_last4',
       'invoice_id',
       'order_id',
