@@ -641,6 +641,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ मिलान किए गए लेनदेन",
       "✓ Welcome back, Owner!": "✓ पुनः स्वागत है, मालिक!",
       "❌ Invalid Staff PIN": "❌अमान्य स्टाफ पिन",
+      "Owner Mode is active again": "मालिक मोड फिर से सक्रिय है",
     },
     "ta": {
       "+ ₹": "+ ₹",
@@ -835,6 +836,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ பொருந்திய பரிவர்த்தனைகள்",
       "✓ Welcome back, Owner!": "✓ மீண்டும் வரவேற்கிறோம், உரிமையாளர்!",
       "❌ Invalid Staff PIN": "❌ தவறான பணியாளர் பின்",
+      "Owner Mode is active again": "உரிமையாளர் பயன்முறை மீண்டும் செயல்பாட்டில் உள்ளது",
     },
     "kn": {
       "+ ₹": "+ ₹",
@@ -1022,6 +1024,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ ಹೊಂದಾಣಿಕೆಯ ವಹಿವಾಟುಗಳು",
       "✓ Welcome back, Owner!": "✓ ಮರಳಿ ಸ್ವಾಗತ, ಮಾಲೀಕರೇ!",
       "❌ Invalid Staff PIN": "❌ ಅಮಾನ್ಯ ಸಿಬ್ಬಂದಿ ಪಿನ್",
+      "Owner Mode is active again": "ಮಾಲೀಕ ಮೋಡ್ ಮತ್ತೆ ಸಕ್ರಿಯವಾಗಿದೆ",
     },
     "ml": {
       "+ ₹": "+ ₹",
@@ -1210,6 +1213,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ പൊരുത്തപ്പെടുന്ന ഇടപാടുകൾ",
       "✓ Welcome back, Owner!": "✓ തിരികെ സ്വാഗതം, ഉടമ!",
       "❌ Invalid Staff PIN": "❌ സ്റ്റാഫ് പിൻ അസാധുവാണ്",
+      "Owner Mode is active again": "ഉടമ മോഡ് വീണ്ടും സജീവമായി",
     },
     "mr": {
       "+ ₹": "+ ₹",
@@ -1396,6 +1400,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ जुळलेले व्यवहार",
       "✓ Welcome back, Owner!": "✓ परत स्वागत आहे, मालक!",
       "❌ Invalid Staff PIN": "❌ अवैध कर्मचारी पिन",
+      "Owner Mode is active again": "मालक मोड पुन्हा सक्रिय झाला आहे",
     },
     "gu": {
       "+ ₹": "+ ₹",
@@ -1581,6 +1586,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ મેળ ખાતા વ્યવહારો",
       "✓ Welcome back, Owner!": "✓ ફરી સ્વાગત છે, માલિક!",
       "❌ Invalid Staff PIN": "❌ અમાન્ય સ્ટાફ પિન",
+      "Owner Mode is active again": "માલિક મોડ ફરી સક્રિય થયો છે",
     },
     "pa": {
       "+ ₹": "+ ₹",
@@ -1765,6 +1771,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ ਮੇਲ ਖਾਂਦਾ ਲੈਣ-ਦੇਣ",
       "✓ Welcome back, Owner!": "✓ ਵਾਪਸ ਸੁਆਗਤ ਹੈ, ਮਾਲਕ!",
       "❌ Invalid Staff PIN": "❌ ਅਵੈਧ ਸਟਾਫ ਪਿੰਨ",
+      "Owner Mode is active again": "ਮਾਲਕ ਮੋਡ ਮੁੜ ਸਰਗਰਮ ਹੋ ਗਿਆ ਹੈ",
     },
     "bn": {
       "+ ₹": "+ ₹",
@@ -1952,6 +1959,7 @@ class SharedPageTranslations {
       "✅ Matched Transactions": "✅ মিলে যাওয়া লেনদেন",
       "✓ Welcome back, Owner!": "✓ আবার স্বাগতম, মালিক!",
       "❌ Invalid Staff PIN": "❌ অবৈধ স্টাফ পিন",
+      "Owner Mode is active again": "মালিক মোড আবার সক্রিয় হয়েছে",
     },
   };
 
