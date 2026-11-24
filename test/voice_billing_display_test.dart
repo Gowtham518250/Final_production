@@ -103,6 +103,8 @@ void main() {
         'Review "Sugar" and its price before adding it as a custom bill item.',
         'Custom bill item: no inventory stock will be deducted.',
         'Price recovered from the normalized spoken amount. Verify before billing.',
+        'The product phrase was found in the original speech, but the AI confidence score was missing or low. Verify the item.',
+        'Quantity was recovered from the spoken number and unit. Verify it before billing.',
       ];
       for (final lang in _langs) {
         for (final s in samples) {
