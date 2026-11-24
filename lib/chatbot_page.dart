@@ -63,9 +63,15 @@ class _ChatbotPageState extends State<ChatbotPage> {
   Future<void> _loadAgentCapabilities() async {
     try {
       final capabilities = await AgentAssistantService.getCapabilities();
-      if (!mounted) return;
       final enabled = capabilities['execution_enabled'] == true;
+      final pending = enabled
+          ? await AgentAssistantService.getPendingActions()
+          : const <Map<String, dynamic>>[];
+      if (!mounted) return;
       setState(() {
+        _pendingActions
+          ..clear()
+          ..addAll(pending);
         _agentEnabled = enabled;
         _isLoadingAgent = false;
         _agentStatusMessage = enabled
