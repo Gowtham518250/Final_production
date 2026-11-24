@@ -180,6 +180,30 @@ class AgentAssistantService {
     );
   }
 
+  static Future<Map<String, dynamic>?> getLatestConversation() async {
+    final response = await ApiClient.getJson('$_base/conversations?limit=1');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwResponseError(response);
+    }
+    final payload = _decodeMap(response);
+    final conversations = payload['conversations'];
+    if (conversations is! List || conversations.isEmpty) return null;
+    final latest = conversations.first;
+    if (latest is! Map) return null;
+    final conversationId =
+        latest['conversation_id']?.toString().trim() ?? '';
+    if (conversationId.isEmpty) return null;
+
+    final historyResponse = await ApiClient.getJson(
+      '$_base/conversations/$conversationId/messages?limit=50',
+    );
+    if (historyResponse.statusCode < 200 ||
+        historyResponse.statusCode >= 300) {
+      _throwResponseError(historyResponse);
+    }
+    return _decodeMap(historyResponse);
+  }
+
   static Future<List<Map<String, dynamic>>> getPendingActions() async {
     final response = await ApiClient.getJson('$_base/actions/pending');
     if (response.statusCode < 200 || response.statusCode >= 300) {
