@@ -288,8 +288,7 @@ class VoiceBillingDisplay {
       'price_recovered',
     ),
     _WarningRule(
-      RegExp(
-        r'^The product phrase was found in the original speech, but the AI confidence score was missing or low\\. Verify the item\\.  ];
+      RegExp(r'^The product phrase was found in the original speech, but the AI confidence score was missing or low\\. Verify the item\\.
 
   /// Order: te, hi, ta, kn, ml, mr, bn, gu, pa.
   static const Map<String, List<String>> _warningTemplates = {
@@ -489,13 +488,11 @@ class _WarningRule {
   /// shown as heard instead of being looked up in the product dictionary.
   final bool rawName;
 }
-,
-      ),
+),
       'confidence_inferred',
     ),
     _WarningRule(
-      RegExp(
-        r'^Quantity was recovered from the spoken number and unit\\. Verify it before billing\\.  ];
+      RegExp(r'^Quantity was recovered from the spoken number and unit\\. Verify it before billing\\.
 
   /// Order: te, hi, ta, kn, ml, mr, bn, gu, pa.
   static const Map<String, List<String>> _warningTemplates = {
@@ -673,8 +670,7 @@ class _WarningRule {
   /// shown as heard instead of being looked up in the product dictionary.
   final bool rawName;
 }
-,
-      ),
+),
       'quantity_inferred',
     ),
   ];
