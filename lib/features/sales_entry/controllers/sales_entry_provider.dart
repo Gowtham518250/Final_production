@@ -12,6 +12,7 @@ import '../../../local_storage_service.dart';
 import '../../../sale_service.dart';
 import '../../../sale_payment_policy.dart';
 import '../../../api_client.dart';
+import '../services/voice_billing_response_policy.dart';
 
 class SalesEntryProvider extends ChangeNotifier {
   List<SalesItem> entries = [];
@@ -199,6 +200,23 @@ class SalesEntryProvider extends ChangeNotifier {
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        dynamic errorBody;
+        try {
+          errorBody = jsonDecode(response.body);
+        } catch (_) {
+          errorBody = null;
+        }
+        final detail = errorBody is Map
+            ? (errorBody['detail'] ?? errorBody['message'])?.toString().trim()
+            : null;
+        if (response.statusCode < 500) {
+          // Do not feed rejected speech into the permissive offline parser.
+          lastVoiceMessage = detail?.isNotEmpty == true
+              ? detail!
+              : 'Voice billing rejected this request (HTTP ${response.statusCode}). Please correct the speech or enter the item manually.';
+          notifyListeners();
+          return;
+        }
         throw Exception(
           'Voice billing request failed (HTTP ${response.statusCode})',
         );
@@ -426,6 +444,15 @@ class SalesEntryProvider extends ChangeNotifier {
         .toString()
         .trim();
     lastVoiceInterpretation = interpreted.isEmpty ? null : interpreted;
+
+    // The backend's safety flags are authoritative. Do not auto-add any
+    // line from a response that requires product, unit, quantity or price review.
+    if (voiceBillingResponseNeedsManualReview(decoded)) {
+      lastVoiceDetectedItems = <SalesItem>[];
+      lastVoiceMessage = voiceBillingManualReviewMessage(decoded);
+      notifyListeners();
+      return;
+    }
 
     final rawItems = decoded['items'];
     final parsedItems = <SalesItem>[];

@@ -13,6 +13,15 @@ class VoiceBillingPricePolicy {
   static String _normalizeSource(String? source) =>
       (source ?? '').trim().toLowerCase();
 
+  /// Stock linkage is authorized only by an explicit backend match and ID.
+  static bool serverAllowsCatalogLink({
+    required Object? catalogMatched,
+    required Object? productId,
+  }) {
+    final id = (productId ?? '').toString().trim();
+    return catalogMatched == true && id.isNotEmpty;
+  }
+
   static bool isSpokenSource(String? source) =>
       _spokenSources.contains(_normalizeSource(source));
 
@@ -52,10 +61,22 @@ class VoiceBillingPricePolicy {
     required double? detectedPrice,
     required double? cataloguePrice,
     required String productName,
+    bool spokenPriceNeedsConfirmation = false,
   }) {
     final source = _normalizeSource(rawPriceSource);
     final spoken = isSpokenSource(source) ? positivePrice(detectedPrice) : null;
     final catalogue = positivePrice(cataloguePrice);
+
+    // Never substitute a catalog value for an amount the cashier said but
+    // the backend could not verify.
+    if (spokenPriceNeedsConfirmation || source == 'missing') {
+      return VoiceBillingPriceResolution(
+        price: null,
+        source: 'missing',
+        warning:
+            'The spoken price for $productName could not be verified. Enter or confirm it before billing.',
+      );
+    }
 
     if (spoken != null) {
       String? warning;
@@ -99,6 +120,9 @@ class VoiceBillingPricePolicy {
     }
     if (isSpokenSource(source)) {
       return positivePrice(itemPrice) ?? positivePrice(cataloguePrice) ?? 0.0;
+    }
+    if (source == 'missing') {
+      return positivePrice(itemPrice) ?? 0.0;
     }
     return positivePrice(cataloguePrice) ?? 0.0;
   }

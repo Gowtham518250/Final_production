@@ -2194,21 +2194,29 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
         // catalogue evidence check succeeds. Require that ID to exist in this
         // device's shop catalogue too; a similar name or high AI confidence is
         // not sufficient to authorize stock-backed billing.
-        final rawProductId = (raw['product_id'] ?? '').toString().trim();
-        final idMatchedProduct = _findKnownProductById(rawProductId);
-        final exactNameProduct = _findKnownProduct(name);
-        final idNameMismatch =
-            idMatchedProduct != null &&
+        final rawProductId =
+            (raw['product_id'] ?? '').toString().trim();
+        final serverAuthorizedCatalogLink =
+            VoiceBillingPricePolicy.serverAllowsCatalogLink(
+          catalogMatched: raw['catalog_matched'],
+          productId: rawProductId,
+        );
+        final idMatchedProduct = serverAuthorizedCatalogLink
+            ? _findKnownProductById(rawProductId)
+            : null;
+        final exactNameProduct = serverAuthorizedCatalogLink
+            ? _findKnownProduct(name)
+            : null;
+        final idNameMismatch = idMatchedProduct != null &&
             !_isProductNameConsistentWithCatalog(name, idMatchedProduct);
         final unknownProductId =
-            rawProductId.isNotEmpty && idMatchedProduct == null;
+            serverAuthorizedCatalogLink && idMatchedProduct == null;
 
-        // If the ID contradicts the AI's name, only recover through an exact
-        // local catalogue-name match. Never fuzzy-select a different product.
+        // The backend's tenant-scoped catalog decision is authoritative. A
+        // local name match must not upgrade a deliberate product_id=null into
+        // stock-linked billing on this device.
         final Map<String, dynamic>? knownProduct;
-        if (rawProductId.isEmpty) {
-          knownProduct = exactNameProduct;
-        } else if (idMatchedProduct == null) {
+        if (!serverAuthorizedCatalogLink || idMatchedProduct == null) {
           knownProduct = null;
         } else if (idNameMismatch) {
           knownProduct = exactNameProduct;
@@ -2289,6 +2297,8 @@ class _VoiceBillingAssistantState extends State<VoiceBillingAssistant>
           detectedPrice: spokenPrice,
           cataloguePrice: catalogPrice,
           productName: canonicalName,
+          spokenPriceNeedsConfirmation:
+              raw['price_needs_confirmation'] == true,
         );
         if (!priceResolution.hasPrice) {
           final warning =
