@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -152,11 +151,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
         ),
       );
     } catch (error) {
-      if (pendingPath != null) {
-        try {
-          await File(pendingPath).delete();
-        } catch (_) {}
-      }
       if (mounted) {
         setState(() => _isRecording = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -187,12 +181,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
       if (recordingPath == null) {
         throw const AgentAssistantException(
           'The voice recording could not be saved. Please try again.',
-        );
-      }
-      final file = File(recordingPath);
-      if (!await file.exists() || await file.length() == 0) {
-        throw const AgentAssistantException(
-          'No audio was captured. Please speak and try again.',
         );
       }
       final languageCode =
@@ -233,11 +221,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
       });
     } finally {
       if (mounted) setState(() => _isSending = false);
-      if (recordingPath != null) {
-        try {
-          await File(recordingPath).delete();
-        } catch (_) {}
-      }
       _scrollToLatest();
     }
   }
