@@ -46,6 +46,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   final audio.Record _audioRecorder = audio.Record();
   final AudioPlayer _assistantAudioPlayer = AudioPlayer();
   String? _speakingMessage;
+  StreamSubscription<void>? _speechCompleteSubscription;
   Timer? _recordingLimitTimer;
   bool _isRecording = false;
   bool _isSending = false;
@@ -60,6 +61,10 @@ class _ChatbotPageState extends State<ChatbotPage> {
   @override
   void initState() {
     super.initState();
+    _speechCompleteSubscription =
+        _assistantAudioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _speakingMessage = null);
+    });
     _loadGreeting();
     _loadAgentCapabilities();
   }
@@ -321,27 +326,29 @@ class _ChatbotPageState extends State<ChatbotPage> {
   Future<void> _speakAgentMessage(String text) async {
     final cleanText = text.trim();
     if (cleanText.isEmpty) return;
-    if (_speakingMessage != null) {
+    if (_speakingMessage == cleanText) {
       await _assistantAudioPlayer.stop();
+      if (mounted) setState(() => _speakingMessage = null);
+      return;
     }
-    if (!mounted) return;
-    setState(() => _speakingMessage = cleanText);
     try {
+      await _assistantAudioPlayer.stop();
+      if (!mounted) return;
+      setState(() => _speakingMessage = cleanText);
       final languageCode =
           context.read<LanguageProvider>().locale.languageCode;
       final bytes = await AgentAssistantService.synthesizeSpeech(
         cleanText,
         languageCode: languageCode,
       );
-      if (!mounted) return;
+      if (!mounted || _speakingMessage != cleanText) return;
       await _assistantAudioPlayer.play(BytesSource(bytes));
     } catch (error) {
       if (!mounted) return;
+      setState(() => _speakingMessage = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Speech playback is unavailable: $error')),
       );
-    } finally {
-      if (mounted) setState(() => _speakingMessage = null);
     }
   }
 
@@ -606,6 +613,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   void dispose() {
     _recordingLimitTimer?.cancel();
     unawaited(_audioRecorder.dispose());
+    _speechCompleteSubscription?.cancel();
     unawaited(_assistantAudioPlayer.dispose());
     _msgController.dispose();
     _scrollController.dispose();
