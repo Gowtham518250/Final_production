@@ -65,12 +65,20 @@ class _ChatbotPageState extends State<ChatbotPage> {
     try {
       final capabilities = await AgentAssistantService.getCapabilities();
       final enabled = capabilities['execution_enabled'] == true;
-      final pending = enabled
-          ? await AgentAssistantService.getPendingActions()
-          : const <Map<String, dynamic>>[];
-      final latestConversation = enabled
-          ? await AgentAssistantService.getLatestConversation()
-          : null;
+      var pending = <Map<String, dynamic>>[];
+      Map<String, dynamic>? latestConversation;
+      if (enabled) {
+        try {
+          pending = await AgentAssistantService.getPendingActions();
+        } catch (_) {
+          // The chat remains usable if the pending-action list is temporarily unavailable.
+        }
+        try {
+          latestConversation = await AgentAssistantService.getLatestConversation();
+        } catch (_) {
+          // A failed history restore must not disable new assistant requests.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _pendingActions
