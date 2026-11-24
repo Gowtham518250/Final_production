@@ -80,5 +80,35 @@ void main() {
         isTrue,
       );
     });
+    test('retries only transitional Cashfree subscription states', () {
+      expect(
+        RetailMindBillingService.shouldRetrySubscriptionReconciliation({
+          'status': 'PENDING_AUTH',
+        }),
+        isTrue,
+      );
+      expect(
+        RetailMindBillingService.shouldRetrySubscriptionReconciliation({
+          'subscription_status': 'CREATING',
+        }),
+        isTrue,
+      );
+      for (final status in [
+        'ACTIVE',
+        'PAYMENT_FAILED',
+        'CANCELLED',
+        'NO_PENDING_CHECKOUT',
+        '',
+      ]) {
+        expect(
+          RetailMindBillingService.shouldRetrySubscriptionReconciliation({
+            'status': status,
+          }),
+          isFalse,
+          reason: 'Terminal/non-pending status $status must not be retried',
+        );
+      }
+    });
+
   });
 }

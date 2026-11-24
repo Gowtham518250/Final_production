@@ -494,6 +494,19 @@ class RetailMindBillingService {
     return _decode(response);
   }
 
+  /// Whether Cashfree reconciliation should be checked again shortly.
+  /// Only provider-confirmed transitional states are retried; failures and
+  /// terminal states are surfaced instead of being kept pending indefinitely.
+  static bool shouldRetrySubscriptionReconciliation(
+    Map<String, dynamic> result,
+  ) {
+    final status = (result['status'] ?? result['subscription_status'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    return status == 'PENDING_AUTH' || status == 'CREATING';
+  }
+
   static bool shouldOpenCashfreeCheckout(Map<String, dynamic> result) {
     final planChanged =
         result['plan_changed'] == true || result['planChanged'] == true;
