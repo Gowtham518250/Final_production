@@ -150,11 +150,10 @@ class PaymentIdentityMatcher {
   PaymentIdentityMatcher._();
 
   /// Amount/direction alone is weak evidence, so a weak pair is only MUTED and
-  /// flagged "possible repeat" (never merged). Bank SMS routinely arrives
-  /// minutes after the payment-app notification, so 60s let the late SMS be
-  /// announced as a second payment. Three minutes covers normal SMS delay while
-  /// ambiguity (several candidates) still keeps real payments separate.
-  static const Duration weakModalityWindow = Duration(minutes: 3);
+  /// flagged "possible repeat" (never merged). The signal-only fallback is
+  /// limited to 60 seconds; later SMS needs stronger shared identity such as a
+  /// matching payer/account or reference. Ambiguous candidates stay separate.
+  static const Duration weakModalityWindow = Duration(seconds: 60);
   static const String weakModalityReason = 'weak_modality_pair';
 
   /// Same notification slot, amount and direction can be an update/repost even
