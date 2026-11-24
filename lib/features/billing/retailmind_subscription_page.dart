@@ -71,9 +71,10 @@ class _RetailMindSubscriptionPageState
       Map<String, dynamic> reconciliation = const {};
       var reconciliationSucceeded = false;
       try {
-        reconciliation = await RetailMindBillingService.reconcilePendingSubscription(
-          subscriptionId: subscriptionId,
-        );
+        reconciliation =
+            await RetailMindBillingService.reconcilePendingSubscription(
+              subscriptionId: subscriptionId,
+            );
         reconciliationSucceeded = true;
       } catch (error) {
         // A provider/API error is not evidence of authorization. Keep the
@@ -219,7 +220,7 @@ class _RetailMindSubscriptionPageState
       ),
     );
     // A failed/closed SDK callback can race with a successful provider update.
-    // Reconcile once so the UI reflects Cashfree's final state, not only the SDK.
+    // Reconcile with bounded retries; the provider remains authoritative.
     _refresh(retryPendingAuthorization: true);
   }
 
