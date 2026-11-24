@@ -200,6 +200,23 @@ class SalesEntryProvider extends ChangeNotifier {
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        dynamic errorBody;
+        try {
+          errorBody = jsonDecode(response.body);
+        } catch (_) {
+          errorBody = null;
+        }
+        final detail = errorBody is Map
+            ? (errorBody['detail'] ?? errorBody['message'])?.toString().trim()
+            : null;
+        if (response.statusCode < 500) {
+          // Do not feed rejected speech into the permissive offline parser.
+          lastVoiceMessage = detail?.isNotEmpty == true
+              ? detail!
+              : 'Voice billing rejected this request (HTTP ${response.statusCode}). Please correct the speech or enter the item manually.';
+          notifyListeners();
+          return;
+        }
         throw Exception(
           'Voice billing request failed (HTTP ${response.statusCode})',
         );
