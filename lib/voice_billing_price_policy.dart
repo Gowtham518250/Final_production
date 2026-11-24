@@ -16,27 +16,14 @@ class VoiceBillingPricePolicy {
   static bool isSpokenSource(String? source) =>
       _spokenSources.contains(_normalizeSource(source));
 
-  static bool canMergeLines({
-    required String currentName,
-    required String currentUnit,
-    required double currentPrice,
-    required String incomingName,
-    required String incomingUnit,
-    required double incomingPrice,
+  /// Stock linkage is authorized only by an explicit backend match and ID.
+  /// A matching local display name alone must never create stock identity.
+  static bool serverAllowsCatalogLink({
+    required Object? catalogMatched,
+    required Object? productId,
   }) {
-    if (currentName.trim().toLowerCase() != incomingName.trim().toLowerCase() ||
-        currentUnit.trim().toLowerCase() != incomingUnit.trim().toLowerCase() ||
-        !currentPrice.isFinite ||
-        !incomingPrice.isFinite ||
-        currentPrice < 0 ||
-        incomingPrice < 0) {
-      return false;
-    }
-
-    if (currentPrice == 0 || incomingPrice == 0) {
-      return currentPrice == 0 && incomingPrice == 0;
-    }
-    return (currentPrice - incomingPrice).abs() < 0.01;
+    final id = (productId ?? '').toString().trim();
+    return catalogMatched == true && id.isNotEmpty;
   }
 
   static double? positivePrice(Object? value) {
@@ -52,10 +39,22 @@ class VoiceBillingPricePolicy {
     required double? detectedPrice,
     required double? cataloguePrice,
     required String productName,
+    bool spokenPriceNeedsConfirmation = false,
   }) {
     final source = _normalizeSource(rawPriceSource);
     final spoken = isSpokenSource(source) ? positivePrice(detectedPrice) : null;
     final catalogue = positivePrice(cataloguePrice);
+
+    // The backend explicitly marks a heard-but-unclear amount as "missing".
+    // Never convert that into a confident-looking catalogue price.
+    if (spokenPriceNeedsConfirmation || source == 'missing') {
+      return VoiceBillingPriceResolution(
+        price: null,
+        source: 'missing',
+        warning:
+            'The spoken price for $productName could not be verified. Enter or confirm it before billing.',
+      );
+    }
 
     if (spoken != null) {
       String? warning;
@@ -98,7 +97,10 @@ class VoiceBillingPricePolicy {
       return positivePrice(itemPrice) ?? 0.0;
     }
     if (isSpokenSource(source)) {
-      return positivePrice(itemPrice) ?? positivePrice(cataloguePrice) ?? 0.0;
+      return positivePrice(itemPrice) ?? 0.0;
+    }
+    if (source == 'missing') {
+      return positivePrice(itemPrice) ?? 0.0;
     }
     return positivePrice(cataloguePrice) ?? 0.0;
   }
