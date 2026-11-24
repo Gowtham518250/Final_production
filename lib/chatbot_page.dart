@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
@@ -43,6 +44,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
   ];
 
   final audio.Record _audioRecorder = audio.Record();
+  final AudioPlayer _assistantAudioPlayer = AudioPlayer();
+  String? _speakingMessage;
   Timer? _recordingLimitTimer;
   bool _isRecording = false;
   bool _isSending = false;
@@ -315,6 +318,33 @@ class _ChatbotPageState extends State<ChatbotPage> {
     _scrollToLatest();
   }
 
+  Future<void> _speakAgentMessage(String text) async {
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) return;
+    if (_speakingMessage != null) {
+      await _assistantAudioPlayer.stop();
+    }
+    if (!mounted) return;
+    setState(() => _speakingMessage = cleanText);
+    try {
+      final languageCode =
+          context.read<LanguageProvider>().locale.languageCode;
+      final bytes = await AgentAssistantService.synthesizeSpeech(
+        cleanText,
+        languageCode: languageCode,
+      );
+      if (!mounted) return;
+      await _assistantAudioPlayer.play(BytesSource(bytes));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Speech playback is unavailable: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _speakingMessage = null);
+    }
+  }
+
   Future<void> _confirmPendingAction(Map<String, dynamic> action) async {
     final actionId = action['action_id']?.toString() ?? '';
     final previewHash = action['preview_hash']?.toString() ?? '';
@@ -576,6 +606,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   void dispose() {
     _recordingLimitTimer?.cancel();
     unawaited(_audioRecorder.dispose());
+    unawaited(_assistantAudioPlayer.dispose());
     _msgController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -910,13 +941,42 @@ class _ChatbotPageState extends State<ChatbotPage> {
                   ),
                 ],
               ),
-              child: SelectableText(
-                message['msg'].toString(),
-                style: GoogleFonts.poppins(
-                  color: isMe ? Colors.white : _ink,
-                  fontSize: 12,
-                  height: 1.5,
-                ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: SelectableText(
+                      message['msg'].toString(),
+                      style: GoogleFonts.poppins(
+                        color: isMe ? Colors.white : _ink,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  if (!isMe && _agentEnabled)
+                    IconButton(
+                      tooltip: _speakingMessage == message['msg'].toString()
+                          ? 'Playing assistant response'
+                          : 'Speak this response',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 30,
+                      ),
+                      onPressed: () =>
+                          _speakAgentMessage(message['msg'].toString()),
+                      icon: Icon(
+                        _speakingMessage == message['msg'].toString()
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_down_rounded,
+                        size: 17,
+                        color: _primary,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
