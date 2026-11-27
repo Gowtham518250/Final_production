@@ -102,6 +102,13 @@ class SyncService {
 
       if (kDebugMode) debugPrint('✅ SyncService initialized successfully');
     } catch (e) {
+      // Allow a later init() retry after a transient bootstrap/network failure.
+      // The old state left _initialized=true, preventing all future retries.
+      _initialized = false;
+      _pulseTimer?.cancel();
+      _pulseTimer = null;
+      await _connectivitySub?.cancel();
+      _connectivitySub = null;
       await ErrorLogHelper.logException(
         e,
         StackTrace.current,
@@ -382,12 +389,10 @@ class SyncService {
     _connectivitySub = null;
     _initialized = false;
 
-    try {
-      await _syncStatusController.close();
-      await _refreshNotifier.close();
-    } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Error closing streams: $e');
-    }
+    // These controllers are static process-wide streams. Closing them here
+    // makes every later init() permanently unusable because a closed
+    // StreamController cannot be reopened. Keep them alive across login/logout
+    // and app service lifecycle transitions.
   }
 
   static Future<bool> checkInWorker(String workerId) async {
