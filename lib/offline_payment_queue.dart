@@ -38,9 +38,20 @@ class OfflinePaymentQueue {
           throw const FormatException('Offline payment queue must be a JSON list.');
         }
         final List<dynamic> queue = decoded;
-        if (!payment.amount.isFinite || payment.amount <= 0 ||
-            payment.isFailed || payment.isDuplicate || payment.hasReferenceConflict) {
-          throw const FormatException('Only valid, non-duplicate payment events can be queued.');
+        // This legacy queue is eventually replayed as a financial ledger write.
+        // A notification alone is not proof of settlement: require an explicitly
+        // merchant-confirmed incoming credit and a matched invoice before enqueue.
+        if (!payment.amount.isFinite ||
+            payment.amount <= 0 ||
+            payment.isFailed ||
+            payment.isDuplicate ||
+            payment.hasReferenceConflict ||
+            !payment.isMerchantConfirmed ||
+            payment.direction != PaymentTransactionDirection.incomingCredit ||
+            (payment.saleId?.trim().isNotEmpty ?? false) == false) {
+          throw const FormatException(
+            'Only unique merchant-confirmed incoming credits matched to an invoice can be queued.',
+          );
         }
         final idempotencyKey = payment.fingerprint.trim();
         final alreadyQueued = queue.whereType<Map>().any((entry) {
@@ -78,6 +89,7 @@ class OfflinePaymentQueue {
           'detectionSource': payment.detectionSource,
           'rawText': payment.rawText,
           'decision': payment.decision.toString(),
+          'verification_status': payment.verificationStatus.toString(),
           'timestamp': payment.timestamp.toIso8601String(),
           'queuedAt': DateTime.now().toIso8601String(),
           'retryCount': 0,
