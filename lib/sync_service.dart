@@ -33,6 +33,9 @@ class SyncService {
 
   // 🔒 Use Lock for atomic operations (prevents race conditions)
   static final _syncLock = Lock();
+  // Serialize init/dispose so overlapping lifecycle calls cannot create
+  // duplicate workers or leave the service half-initialized.
+  static final _lifecycleLock = Lock();
 
   static final _refreshNotifier = StreamController<void>.broadcast();
   static Stream<void> get refreshStream => _refreshNotifier.stream;
@@ -63,7 +66,7 @@ class SyncService {
   static bool _durableChangesPollInProgress = false;
 
   /// Initialize and start periodic sync workers
-  static Future<void> init() async {
+  static Future<void> init() => _lifecycleLock.synchronized(() async {
     if (_initialized) {
       if (kDebugMode)
         debugPrint('⚠️ SyncService already initialized, skipping...');
@@ -81,7 +84,7 @@ class SyncService {
 
       // Listen for connectivity changes after the initial bootstrap so a
       // reconnect callback cannot start a competing full refresh mid-bootstrap.
-      _connectivitySub?.cancel();
+      await _connectivitySub?.cancel();
       bool? previousOfflineState;
       _connectivitySub = Connectivity().onConnectivityChanged.listen((
         ConnectivityResult result,
@@ -103,13 +106,20 @@ class SyncService {
 
       if (kDebugMode) debugPrint('✅ SyncService initialized successfully');
     } catch (e) {
+      // A failed bootstrap must remain retryable. Do not leave the service
+      // marked initialized without its connectivity listener and pulse timer.
+      _pulseTimer?.cancel();
+      _pulseTimer = null;
+      await _connectivitySub?.cancel();
+      _connectivitySub = null;
+      _initialized = false;
       await ErrorLogHelper.logException(
         e,
         StackTrace.current,
         context: 'SyncService.init',
       );
     }
-  }
+  });
 
   /// Keep queued writes responsive without repeatedly downloading the full
   /// invoice dataset. Queue flushing is lightweight when empty; cloud data pulls
@@ -373,7 +383,7 @@ class SyncService {
   }
 
   /// Dispose all resources
-  static Future<void> dispose() async {
+  static Future<void> dispose() => _lifecycleLock.synchronized(() async {
     if (kDebugMode) debugPrint('🛑 Disposing SyncService...');
     _pulseTimer?.cancel();
     _pulseTimer = null;
@@ -382,13 +392,10 @@ class SyncService {
     _connectivitySub = null;
     _initialized = false;
 
-    try {
-      await _syncStatusController.close();
-      await _refreshNotifier.close();
-    } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Error closing streams: $e');
-    }
-  }
+    // These controllers are process-wide static streams used by screens that
+    // may outlive a service restart. Closing them here makes every later init
+    // permanently unable to publish sync status or dashboard refresh events.
+  });
 
   static Future<bool> checkInWorker(String workerId) async {
     try {
