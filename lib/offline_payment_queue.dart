@@ -12,8 +12,9 @@ class OfflinePaymentQueue {
   
   final LocalStorageService _storage = LocalStorageService();
   
-  // Future chain used to serialize all queue modification actions and prevent race conditions.
-  Future<void> _writeLock = Future.value();
+  // Shared across instances: multiple screens/services can enqueue the same event.
+  // An instance-local lock allowed concurrent writers to overwrite each other's queue.
+  static Future<void> _writeLock = Future<void>.value();
 
   Future<T> _synchronized<T>(Future<T> Function() action) async {
     final completer = Completer<void>();
@@ -32,8 +33,39 @@ class OfflinePaymentQueue {
     return _synchronized(() async {
       try {
         final queueJson = await _storage.getString(_queueKey) ?? '[]';
-        final List<dynamic> queue = jsonDecode(queueJson);
-        
+        final decoded = jsonDecode(queueJson);
+        if (decoded is! List) {
+          throw const FormatException('Offline payment queue must be a JSON list.');
+        }
+        final List<dynamic> queue = decoded;
+        // This legacy queue is eventually replayed as a financial ledger write.
+        // A notification alone is not proof of settlement: require an explicitly
+        // merchant-confirmed incoming credit and a matched invoice before enqueue.
+        if (!payment.amount.isFinite ||
+            payment.amount <= 0 ||
+            payment.isFailed ||
+            payment.isDuplicate ||
+            payment.hasReferenceConflict ||
+            !payment.isMerchantConfirmed ||
+            payment.direction != PaymentTransactionDirection.incomingCredit ||
+            (payment.saleId?.trim().isNotEmpty ?? false) == false) {
+          throw const FormatException(
+            'Only unique merchant-confirmed incoming credits matched to an invoice can be queued.',
+          );
+        }
+        final idempotencyKey = payment.fingerprint.trim();
+        final alreadyQueued = queue.whereType<Map>().any((entry) {
+          final oldId = (entry['id'] ?? '').toString();
+          final oldKey = (entry['idempotency_key'] ?? '').toString();
+          return oldId == payment.id ||
+              (idempotencyKey.isNotEmpty && oldKey == idempotencyKey);
+        });
+        if (alreadyQueued) {
+          if (foundation.kDebugMode) {
+            print('$_tag ↩️ Duplicate payment ignored: ${payment.id}');
+          }
+          return;
+        }
         final paymentData = {
           'id': payment.id,
           'invoice_number': payment.saleId,
@@ -42,7 +74,9 @@ class OfflinePaymentQueue {
           'payerName': payment.payerName,
           'referenceId': payment.referenceId,
           'reference_id': payment.referenceId,
-          'idempotency_key': payment.fingerprint,
+          'idempotency_key': idempotencyKey.isEmpty ? payment.id : idempotencyKey,
+          'source_event_key': payment.sourceEventKey,
+          'direction': payment.direction.name,
           'payment_method': 'ONLINE',
           'source': payment.detectionSource,
           'payer_name': payment.payerName,
@@ -55,6 +89,7 @@ class OfflinePaymentQueue {
           'detectionSource': payment.detectionSource,
           'rawText': payment.rawText,
           'decision': payment.decision.toString(),
+          'verification_status': payment.verificationStatus.toString(),
           'timestamp': payment.timestamp.toIso8601String(),
           'queuedAt': DateTime.now().toIso8601String(),
           'retryCount': 0,
@@ -77,7 +112,9 @@ class OfflinePaymentQueue {
   Future<List<Map<String, dynamic>>> getQueuedPayments() async {
     try {
       final queueJson = await _storage.getString(_queueKey) ?? '[]';
-      return List<Map<String, dynamic>>.from(jsonDecode(queueJson));
+      final decoded = jsonDecode(queueJson);
+      if (decoded is! List) throw const FormatException('Offline payment queue must be a JSON list.');
+      return decoded.whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
     } catch (e) {
       if (foundation.kDebugMode) print('$_tag ❌ Failed to get queue: $e');
       return [];
@@ -142,9 +179,11 @@ class OfflinePaymentQueue {
         
         final index = queue.indexWhere((p) => p['id'] == paymentId);
         if (index != -1) {
-          queue[index]['retryCount']++;
+          final currentRetries = (queue[index]['retryCount'] as num?)?.toInt() ?? 0;
+          final nextRetries = currentRetries + 1;
+          queue[index]['retryCount'] = nextRetries;
           
-          if (queue[index]['retryCount'] > maxRetries) {
+          if (nextRetries >= maxRetries) {
             queue[index]['status'] = 'FAILED';
             queue[index]['failedAt'] = DateTime.now().toIso8601String();
             await _storage.setString(_queueKey, jsonEncode(queue));
@@ -186,17 +225,32 @@ class OfflinePaymentQueue {
   Future<void> updateSyncStatus({
     int? synced,
     int? failed,
-  }) async {
-    try {
-      final status = await getSyncStatus();
-      if (synced != null) status['totalSynced'] = (status['totalSynced'] ?? 0) + synced;
-      if (failed != null) status['totalFailed'] = (status['totalFailed'] ?? 0) + failed;
-      status['lastSyncAt'] = DateTime.now().toIso8601String();
-      
-      await _storage.setString(_syncStatusKey, jsonEncode(status));
-    } catch (e) {
-      if (foundation.kDebugMode) print('$_tag ❌ Failed to update status: $e');
-    }
+  }) {
+    return _synchronized(() async {
+      try {
+        final raw = await _storage.getString(_syncStatusKey);
+        final decoded = raw == null ? null : jsonDecode(raw);
+        final status = decoded is Map
+            ? Map<String, dynamic>.from(decoded)
+            : <String, dynamic>{
+                'lastSyncAt': null,
+                'totalSynced': 0,
+                'totalFailed': 0,
+              };
+        if (synced != null) {
+          final current = (status['totalSynced'] as num?)?.toInt() ?? 0;
+          status['totalSynced'] = current + synced;
+        }
+        if (failed != null) {
+          final current = (status['totalFailed'] as num?)?.toInt() ?? 0;
+          status['totalFailed'] = current + failed;
+        }
+        status['lastSyncAt'] = DateTime.now().toIso8601String();
+        await _storage.setString(_syncStatusKey, jsonEncode(status));
+      } catch (e) {
+        if (foundation.kDebugMode) print('$_tag ❌ Failed to update status: $e');
+      }
+    });
   }
   
   /// FIX-5: Clear queue with audit trail — preserves failed payments for investigation
