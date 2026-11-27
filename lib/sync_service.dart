@@ -32,6 +32,8 @@ class SyncService {
 
   // 🔒 Use Lock for atomic operations (prevents race conditions)
   static final _syncLock = Lock();
+  // Serialize bootstrap so simultaneous callers wait for the same completed init.
+  static final _initLock = Lock();
 
   static final _refreshNotifier = StreamController<void>.broadcast();
   static Stream<void> get refreshStream => _refreshNotifier.stream;
@@ -63,51 +65,60 @@ class SyncService {
 
   /// Initialize and start periodic sync workers
   static Future<void> init() async {
-    if (_initialized) {
-      if (kDebugMode)
-        debugPrint('⚠️ SyncService already initialized, skipping...');
-      return;
-    }
-    _initialized = true;
-
-    try {
-      // Flush already-persisted offline actions first. Then establish the
-      // change-feed cursor before the initial full download so new installs
-      // do not replay the shop's entire historical event log.
-      await processQueueSafe();
-      await _initializeDurableSyncCursor();
-      await downloadUserDataSafe();
-
-      // Listen for connectivity changes after the initial bootstrap so a
-      // reconnect callback cannot start a competing full refresh mid-bootstrap.
-      _connectivitySub?.cancel();
-      bool? previousOfflineState;
-      _connectivitySub = Connectivity().onConnectivityChanged.listen((
-        ConnectivityResult result,
-      ) {
-        final isOffline = result == ConnectivityResult.none;
-        final justReconnected = previousOfflineState == true && !isOffline;
-        previousOfflineState = isOffline;
-
-        // Reconnects should flush queued writes immediately, but a network
-        // type change (Wi-Fi <-> mobile) must not force another full invoice pull.
-        if (justReconnected) {
-          unawaited(processQueueSafe());
-          unawaited(_downloadUserDataIfDue());
+    await _initLock.synchronized(() async {
+      if (_initialized) {
+        if (kDebugMode) {
+          debugPrint('⚠️ SyncService already initialized, skipping...');
         }
-      });
+        return;
+      }
+      _initialized = true;
 
-      // Start the throttled queue/data refresh pulse only after bootstrap.
-      _startPulseTimer();
+      try {
+        // Flush already-persisted offline actions first. Then establish the
+        // change-feed cursor before the initial full download so new installs
+        // do not replay the shop's entire historical event log.
+        await processQueueSafe();
+        await _initializeDurableSyncCursor();
+        await downloadUserDataSafe();
 
-      if (kDebugMode) debugPrint('✅ SyncService initialized successfully');
-    } catch (e) {
-      await ErrorLogHelper.logException(
-        e,
-        StackTrace.current,
-        context: 'SyncService.init',
-      );
-    }
+        // Listen for connectivity changes after the initial bootstrap so a
+        // reconnect callback cannot start a competing full refresh mid-bootstrap.
+        await _connectivitySub?.cancel();
+        bool? previousOfflineState;
+        _connectivitySub = Connectivity().onConnectivityChanged.listen((
+          ConnectivityResult result,
+        ) {
+          final isOffline = result == ConnectivityResult.none;
+          final justReconnected = previousOfflineState == true && !isOffline;
+          previousOfflineState = isOffline;
+
+          // Reconnects should flush queued writes immediately, but a network
+          // type change (Wi-Fi <-> mobile) must not force another full invoice pull.
+          if (justReconnected) {
+            unawaited(processQueueSafe());
+            unawaited(_downloadUserDataIfDue());
+          }
+        });
+
+        // Start the throttled queue/data refresh pulse only after bootstrap.
+        _startPulseTimer();
+
+        if (kDebugMode) debugPrint('✅ SyncService initialized successfully');
+      } catch (e) {
+        // Allow a later init() retry after a transient bootstrap/network failure.
+        _initialized = false;
+        _pulseTimer?.cancel();
+        _pulseTimer = null;
+        await _connectivitySub?.cancel();
+        _connectivitySub = null;
+        await ErrorLogHelper.logException(
+          e,
+          StackTrace.current,
+          context: 'SyncService.init',
+        );
+      }
+    });
   }
 
   /// Keep queued writes responsive without repeatedly downloading the full
@@ -382,12 +393,10 @@ class SyncService {
     _connectivitySub = null;
     _initialized = false;
 
-    try {
-      await _syncStatusController.close();
-      await _refreshNotifier.close();
-    } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ Error closing streams: $e');
-    }
+    // These controllers are static process-wide streams. Closing them here
+    // makes every later init() permanently unusable because a closed
+    // StreamController cannot be reopened. Keep them alive across login/logout
+    // and app service lifecycle transitions.
   }
 
   static Future<bool> checkInWorker(String workerId) async {
