@@ -214,7 +214,25 @@ class PaymentProcessingManager {
         final invoiceNumber = item['invoice_number']?.toString().trim() ?? '';
         final idempotencyKey =
             item['idempotency_key']?.toString().trim() ?? item['id']?.toString().trim() ?? '';
-        if (invoiceNumber.isEmpty || idempotencyKey.isEmpty) {
+
+        // Older queue rows may have been created from notification-only signals.
+        // Never replay them as settled money unless the original event explicitly
+        // carried both merchant confirmation and incoming-credit direction.
+        final confirmed =
+            item['decision']?.toString() == 'PaymentDecision.confirmed' &&
+            item['verification_status']?.toString() ==
+                'PaymentVerificationStatus.merchantConfirmed';
+        final incomingCredit =
+            item['direction']?.toString() == 'incomingCredit';
+        final amount = double.tryParse(item['amount']?.toString() ?? '');
+        if (!confirmed ||
+            !incomingCredit ||
+            amount == null ||
+            !amount.isFinite ||
+            amount <= 0 ||
+            invoiceNumber.isEmpty ||
+            idempotencyKey.isEmpty) {
+          await _offlineQueue.markAsFailed(item['id'].toString());
           failed++;
           continue;
         }
